@@ -4,14 +4,24 @@
     <meta charset="UTF-8">
     <title>Line Counter</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Include OpenDyslexic font for better readability -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=OpenDyslexic&display=swap">
     <style>
         /* General Styles */
         body {
-            font-family: 'Arial', sans-serif;
+            font-family: 'OpenDyslexic', Arial, sans-serif;
             background-color: #f4f4f4;
             margin: 0;
             padding: 0;
             color: #333;
+            line-height: 1.6;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        /* Dark Mode Styles */
+        body.dark-mode {
+            background-color: #121212;
+            color: #e0e0e0;
         }
 
         /* Header Styles */
@@ -88,6 +98,46 @@
             border-radius: 5px;
             resize: vertical;
             font-family: 'Courier New', monospace;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        /* Dark Mode Textarea Styles */
+        body.dark-mode textarea {
+            background-color: #1e1e1e;
+            color: #e0e0e0;
+            border-color: #555;
+        }
+
+        /* Explanation Styles */
+        .explanations {
+            margin-top: 20px;
+            font-size: 1em;
+            background-color: #e9ecef;
+            padding: 15px;
+            border-radius: 5px;
+        }
+
+        /* Dark Mode Explanation Styles */
+        body.dark-mode .explanations {
+            background-color: #2c2c2c;
+            color: #e0e0e0;
+        }
+
+        .explanations h2 {
+            margin-top: 0;
+        }
+
+        /* Accessibility and Narcolepsy Options */
+        .accessibility-options {
+            margin-top: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .accessibility-options label {
+            font-size: 1em;
         }
 
         /* Footer Styles */
@@ -144,7 +194,9 @@
                 <div id="line-count">Lines (incl. empty): 0</div>
                 <div id="non-empty-line-count">Lines (non-empty): 0</div>
                 <div id="word-count">Words: 0</div>
-                <div id="char-count">Characters: 0</div>
+                <div id="char-count">Characters (Total): 0</div>
+                <div id="visible-char-count">Characters (Visible): 0</div>
+                <div id="invisible-char-count">Characters (Invisible): 0</div>
                 <div id="read-time">Estimated Reading Time: 0 min</div>
             </div>
             <div class="buttons">
@@ -157,6 +209,35 @@
 
         <label for="text-input">Enter your text below:</label>
         <textarea id="text-input" placeholder="Type or paste your text here..."></textarea>
+
+        <div class="accessibility-options">
+            <label for="font-size">Text Size:</label>
+            <input type="range" id="font-size" min="14" max="24" value="16">
+            <label for="background-color">Background Color:</label>
+            <select id="background-color">
+                <option value="#f4f4f4">Default</option>
+                <option value="#ffffff">White</option>
+                <option value="#ffffe0">Light Yellow</option>
+                <option value="#e6ffe6">Light Green</option>
+                <option value="#e6f7ff">Light Blue</option>
+            </select>
+            <label for="dark-mode">Dark Mode:</label>
+            <input type="checkbox" id="dark-mode">
+            <label for="focus-timer">Focus Timer (minutes):</label>
+            <input type="number" id="focus-timer" min="1" max="120" value="25">
+            <button id="start-timer">Start Timer</button>
+        </div>
+
+        <div class="explanations">
+            <h2>Explanation of Terms:</h2>
+            <p><strong>Lines (incl. empty):</strong> Total number of lines, including empty ones.</p>
+            <p><strong>Lines (non-empty):</strong> Number of lines containing at least one visible character.</p>
+            <p><strong>Words:</strong> Total number of words in the text.</p>
+            <p><strong>Characters (Total):</strong> All characters including spaces, tabs, and newlines.</p>
+            <p><strong>Characters (Visible):</strong> Characters that are not spaces, tabs, or newlines.</p>
+            <p><strong>Characters (Invisible):</strong> Spaces, tabs, newlines, and other whitespace characters.</p>
+            <p><strong>Estimated Reading Time:</strong> Approximate time to read the text aloud.</p>
+        </div>
     </main>
 
     <footer>
@@ -172,19 +253,31 @@
         const nonEmptyLineCountDisplay = document.getElementById('non-empty-line-count');
         const wordCountDisplay = document.getElementById('word-count');
         const charCountDisplay = document.getElementById('char-count');
+        const visibleCharCountDisplay = document.getElementById('visible-char-count');
+        const invisibleCharCountDisplay = document.getElementById('invisible-char-count');
         const readTimeDisplay = document.getElementById('read-time');
         const copyCountsBtn = document.getElementById('copy-counts');
         const exportReportBtn = document.getElementById('export-report');
         const playTextBtn = document.getElementById('play-text');
         const stopTextBtn = document.getElementById('stop-text');
 
+        const fontSizeSlider = document.getElementById('font-size');
+        const backgroundColorSelect = document.getElementById('background-color');
+        const darkModeToggle = document.getElementById('dark-mode');
+        const focusTimerInput = document.getElementById('focus-timer');
+        const startTimerBtn = document.getElementById('start-timer');
+
         let utterance;
+        let focusTimer;
+        let focusInterval;
 
         // Variables to store counts
         let totalLines = 0;
         let nonEmptyLines = 0;
         let wordsCount = 0;
         let charsCount = 0;
+        let visibleCharsCount = 0;
+        let invisibleCharsCount = 0;
         let readTime = 0;
 
         function updateCounts() {
@@ -192,15 +285,27 @@
             const lines = text === '' ? [] : text.split(/\r\n|\r|\n/);
             totalLines = lines.length;
             nonEmptyLines = lines.filter(line => line.trim().length > 0).length;
-            wordsCount = text.trim().split(/\s+/).filter(word => word.length > 0 && word !== '').length;
+            const wordsArray = text.trim().split(/\s+/).filter(word => word.length > 0);
+            wordsCount = wordsArray.length;
             charsCount = text.length;
+
+            // Calculate visible and invisible characters
+            const visibleChars = text.replace(/\s/g, '');
+            visibleCharsCount = visibleChars.length;
+            invisibleCharsCount = charsCount - visibleCharsCount;
+
             readTime = Math.ceil(wordsCount / 200); // Average reading speed: 200 WPM
 
             lineCountDisplay.textContent = `Lines (incl. empty): ${totalLines}`;
             nonEmptyLineCountDisplay.textContent = `Lines (non-empty): ${nonEmptyLines}`;
             wordCountDisplay.textContent = `Words: ${wordsCount}`;
-            charCountDisplay.textContent = `Characters: ${charsCount}`;
+            charCountDisplay.textContent = `Characters (Total): ${charsCount}`;
+            visibleCharCountDisplay.textContent = `Characters (Visible): ${visibleCharsCount}`;
+            invisibleCharCountDisplay.textContent = `Characters (Invisible): ${invisibleCharsCount}`;
             readTimeDisplay.textContent = `Estimated Reading Time: ${readTime} min`;
+
+            // Auto-save the text
+            localStorage.setItem('savedText', text);
         }
 
         textarea.addEventListener('input', updateCounts);
@@ -209,7 +314,9 @@
             const countsText = `Lines (incl. empty): ${totalLines}
 Lines (non-empty): ${nonEmptyLines}
 Words: ${wordsCount}
-Characters: ${charsCount}
+Characters (Total): ${charsCount}
+Characters (Visible): ${visibleCharsCount}
+Characters (Invisible): ${invisibleCharsCount}
 Estimated Reading Time: ${readTime} min`;
             navigator.clipboard.writeText(countsText)
                 .then(() => {
@@ -225,7 +332,9 @@ Estimated Reading Time: ${readTime} min`;
             const countsText = `Lines (incl. empty): ${totalLines}
 Lines (non-empty): ${nonEmptyLines}
 Words: ${wordsCount}
-Characters: ${charsCount}
+Characters (Total): ${charsCount}
+Characters (Visible): ${visibleCharsCount}
+Characters (Invisible): ${invisibleCharsCount}
 Estimated Reading Time: ${readTime} min`;
 
             const report = `Text Analysis Report
@@ -250,7 +359,7 @@ ${text}
                 window.speechSynthesis.cancel();
             }
             utterance = new SpeechSynthesisUtterance(textarea.value);
-            // Adjust volume between 0.0 and 1.0 (cannot go below device minimum)
+            // Adjust volume between 0.0 and 1.0
             utterance.volume = 0.5;
             window.speechSynthesis.speak(utterance);
         });
@@ -261,8 +370,62 @@ ${text}
             }
         });
 
-        // Initialize counts on page load
+        // Accessibility and Narcolepsy Options
+        fontSizeSlider.addEventListener('input', () => {
+            const fontSize = fontSizeSlider.value + 'px';
+            document.body.style.fontSize = fontSize;
+            textarea.style.fontSize = fontSize;
+        });
+
+        backgroundColorSelect.addEventListener('change', () => {
+            const color = backgroundColorSelect.value;
+            if (!darkModeToggle.checked) {
+                document.body.style.backgroundColor = color;
+            }
+        });
+
+        darkModeToggle.addEventListener('change', () => {
+            document.body.classList.toggle('dark-mode');
+            // Update background color if dark mode is toggled off
+            if (!darkModeToggle.checked) {
+                const color = backgroundColorSelect.value;
+                document.body.style.backgroundColor = color;
+            }
+        });
+
+        startTimerBtn.addEventListener('click', () => {
+            if (focusInterval) {
+                clearInterval(focusInterval);
+            }
+            const minutes = parseInt(focusTimerInput.value);
+            const endTime = Date.now() + minutes * 60000;
+            focusInterval = setInterval(() => {
+                const remaining = endTime - Date.now();
+                if (remaining <= 0) {
+                    clearInterval(focusInterval);
+                    alert('Time is up! Consider taking a break or refocusing.');
+                }
+            }, 1000);
+        });
+
+        // Auto-Restore Text on Load
+        window.addEventListener('load', () => {
+            const savedText = localStorage.getItem('savedText');
+            if (savedText) {
+                textarea.value = savedText;
+                updateCounts();
+            }
+        });
+
+        // Auto-Save Text Every 5 Seconds
+        setInterval(() => {
+            localStorage.setItem('savedText', textarea.value);
+        }, 5000);
+
+        // Initialize counts and accessibility options on page load
         updateCounts();
+        fontSizeSlider.dispatchEvent(new Event('input'));
+        backgroundColorSelect.dispatchEvent(new Event('change'));
     </script>
 </body>
 </html>
