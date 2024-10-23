@@ -10,8 +10,10 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <!-- Include Satellite.js -->
     <script src="https://unpkg.com/satellite.js@4.0.0/dist/satellite.min.js"></script>
-    <!-- Include CesiumJS CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/cesium/Build/Cesium/Widgets/widgets.css">
+    <!-- Include Three.js -->
+    <script src="https://unpkg.com/three@0.143.0/build/three.min.js"></script>
+    <!-- Include OrbitControls.js -->
+    <script src="https://unpkg.com/three@0.143.0/examples/js/controls/OrbitControls.js"></script>
     <style>
         /* General Styles */
         body {
@@ -80,7 +82,7 @@
         }
 
         /* 3D Globe Styles */
-        #cesiumContainer {
+        #threejsContainer {
             width: 100%;
             height: 500px;
             margin-top: 20px;
@@ -130,8 +132,6 @@
     </style>
     <!-- Include Leaflet JS for the map -->
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-    <!-- Include CesiumJS -->
-    <script src="https://unpkg.com/cesium/Build/Cesium/Cesium.js"></script>
 </head>
 <body>
     <header>
@@ -160,8 +160,8 @@
             <div class="map-options">
                 <label for="map-type">Map Type:</label>
                 <select id="map-type">
+                    <option value="satellite" selected>Satellite Imagery</option>
                     <option value="osm">OpenStreetMap</option>
-                    <option value="satellite">Satellite Imagery</option>
                 </select>
             </div>
             <div id="map"></div>
@@ -177,7 +177,7 @@
         <!-- 3D Earth Simulation -->
         <div class="section">
             <h2>3D Earth Simulation with Satellites</h2>
-            <div id="cesiumContainer"></div>
+            <div id="threejsContainer"></div>
         </div>
 
         <!-- World Clocks -->
@@ -288,15 +288,17 @@
             if (mapType === 'osm') {
                 tileLayerUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
                 attribution = 'Map data © OpenStreetMap contributors';
+                subdomains = ['a', 'b', 'c'];
             } else if (mapType === 'satellite') {
                 tileLayerUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
                 attribution = 'Imagery © Esri, Maxar, Earthstar Geographics, and the GIS User Community';
+                subdomains = ['server'];
             }
 
             L.tileLayer(tileLayerUrl, {
                 maxZoom: 19,
                 attribution: attribution,
-                subdomains: ['a', 'b', 'c']
+                subdomains: subdomains
             }).addTo(map);
         }
 
@@ -403,43 +405,50 @@
             update3DGlobe();
         }
 
-        // Initialize CesiumJS 3D Globe
-        let viewer, satelliteEntities = [];
+        // Initialize Three.js 3D Globe
+        let scene, camera, renderer, globe, controls, satelliteObjects = [];
 
         function init3DGlobe() {
-            Cesium.Ion.defaultAccessToken = ''; // No token required for basic functionality
+            const width = document.getElementById('threejsContainer').clientWidth;
+            const height = document.getElementById('threejsContainer').clientHeight;
 
-            viewer = new Cesium.Viewer('cesiumContainer', {
-                imageryProvider: Cesium.createWorldImagery(),
-                baseLayerPicker: false,
-                geocoder: false,
-                homeButton: false,
-                sceneModePicker: false,
-                timeline: false,
-                animation: false,
-                fullscreenButton: false,
-                infoBox: false,
-                navigationHelpButton: false,
-                navigationInstructionsInitiallyVisible: false,
-                selectionIndicator: false
-            });
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
 
-            // Fly to user's location
-            if (userLat && userLon) {
-                viewer.camera.flyTo({
-                    destination: Cesium.Cartesian3.fromDegrees(userLon, userLat, 20000000)
-                });
-            }
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(width, height);
+            document.getElementById('threejsContainer').appendChild(renderer.domElement);
+
+            // Add lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 1);
+            scene.add(ambientLight);
+
+            // Create Earth
+            const geometry = new THREE.SphereGeometry(1, 32, 32);
+            const textureLoader = new THREE.TextureLoader();
+            const earthTexture = textureLoader.load('https://threejs.org/examples/textures/earth_atmos_2048.jpg');
+            const material = new THREE.MeshBasicMaterial({ map: earthTexture });
+            globe = new THREE.Mesh(geometry, material);
+            scene.add(globe);
+
+            // Position camera
+            camera.position.z = 3;
+
+            // Controls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+
+            animate();
         }
 
         function update3DGlobe() {
-            if (!viewer) return;
+            if (!scene) return;
 
-            // Remove existing satellite entities
-            satelliteEntities.forEach(entity => {
-                viewer.entities.remove(entity);
+            // Remove existing satellites
+            satelliteObjects.forEach(obj => {
+                scene.remove(obj);
             });
-            satelliteEntities = [];
+            satelliteObjects = [];
 
             satellites.forEach(sat => {
                 const positionAndVelocity = satellite.propagate(sat.satrec, new Date());
@@ -448,31 +457,31 @@
                 if (positionEci) {
                     const gmst = satellite.gstime(new Date());
                     const positionGd = satellite.eciToGeodetic(positionEci, gmst);
-                    const latitude = positionGd.latitude * (180 / Math.PI);
-                    const longitude = positionGd.longitude * (180 / Math.PI);
-                    const height = positionGd.height * 1000;
+                    const latitude = positionGd.latitude;
+                    const longitude = positionGd.longitude;
+                    const height = positionGd.height;
 
-                    // Create satellite entity
-                    const entity = viewer.entities.add({
-                        name: sat.name,
-                        position: Cesium.Cartesian3.fromDegrees(longitude, latitude, height),
-                        point: {
-                            pixelSize: 5,
-                            color: Cesium.Color.RED
-                        },
-                        label: {
-                            text: sat.name,
-                            font: '12px sans-serif',
-                            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-                            outlineWidth: 2,
-                            verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-                            pixelOffset: new Cesium.Cartesian2(0, -9)
-                        }
-                    });
+                    // Convert lat, lon, height to XYZ coordinates
+                    const radius = 1 + (height / 6371); // Earth radius scaled to 1
+                    const x = radius * Math.cos(latitude) * Math.cos(longitude);
+                    const y = radius * Math.sin(latitude);
+                    const z = radius * Math.cos(latitude) * Math.sin(longitude);
 
-                    satelliteEntities.push(entity);
+                    // Create satellite object
+                    const satelliteGeometry = new THREE.SphereGeometry(0.01, 8, 8);
+                    const satelliteMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+                    const satelliteMesh = new THREE.Mesh(satelliteGeometry, satelliteMaterial);
+                    satelliteMesh.position.set(x, y, z);
+                    scene.add(satelliteMesh);
+                    satelliteObjects.push(satelliteMesh);
                 }
             });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
         }
 
         function getSunriseSunset(lat, lon) {
