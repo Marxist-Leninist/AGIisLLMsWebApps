@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Time and GPS Tracker with Live Satellite Tracking and 3D Earth Simulation</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Include OpenDyslexic font for better readability -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=OpenDyslexic&display=swap">
+    <!-- Leaflet CSS for the map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <!-- Include Satellite.js -->
+    <script src="https://unpkg.com/satellite.js@4.0.0/dist/satellite.min.js"></script>
+    <!-- Include CesiumJS CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/cesium/Build/Cesium/Widgets/widgets.css">
+    <style>
+        /* General Styles */
+        body {
+            font-family: 'OpenDyslexic', Arial, sans-serif;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 0;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        /* Header Styles */
+        header {
+            background-color: #0066cc;
+            color: #fff;
+            padding: 20px;
+            text-align: center;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 2em;
+        }
+
+        /* Main Content Styles */
+        main {
+            max-width: 900px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }
+
+        .section {
+            background-color: #fff;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+
+        .section h2 {
+            margin-top: 0;
+        }
+
+        .stats div {
+            margin-bottom: 10px;
+        }
+
+        /* Map Styles */
+        #map {
+            height: 400px;
+            margin-top: 10px;
+        }
+
+        /* Map Options */
+        .map-options {
+            margin-bottom: 10px;
+        }
+
+        /* Satellite Data Styles */
+        .satellite-data ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+
+        .satellite-data li {
+            margin-bottom: 5px;
+        }
+
+        /* 3D Globe Styles */
+        #cesiumContainer {
+            width: 100%;
+            height: 500px;
+            margin-top: 20px;
+        }
+
+        /* World Clocks Styles */
+        .world-clocks {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .clock {
+            background-color: #e9ecef;
+            padding: 10px;
+            border-radius: 5px;
+            flex: 1 1 calc(33% - 30px);
+            box-sizing: border-box;
+        }
+
+        .clock h3 {
+            margin-top: 0;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 600px) {
+            .world-clocks {
+                flex-direction: column;
+            }
+
+            .clock {
+                flex: 1 1 100%;
+            }
+        }
+
+        /* Footer Styles */
+        footer {
+            background-color: #0066cc;
+            color: #fff;
+            text-align: center;
+            padding: 15px 0;
+            position: relative;
+            width: 100%;
+            bottom: 0;
+            margin-top: 20px;
+        }
+    </style>
+    <!-- Include Leaflet JS for the map -->
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <!-- Include CesiumJS -->
+    <script src="https://unpkg.com/cesium/Build/Cesium/Cesium.js"></script>
+</head>
+<body>
+    <header>
+        <h1>Time and GPS Tracker with Live Satellite Tracking and 3D Earth Simulation</h1>
+    </header>
+
+    <main>
+        <!-- Current Time and Time Zone -->
+        <div class="section">
+            <h2>Current Time and Time Zone</h2>
+            <div class="stats">
+                <div id="current-time">Current Time: --:--:--</div>
+                <div id="time-zone">Time Zone: Loading...</div>
+            </div>
+        </div>
+
+        <!-- GPS Coordinates and Map -->
+        <div class="section">
+            <h2>Your Location and Map</h2>
+            <div class="stats">
+                <div id="gps-coordinates">GPS Coordinates: Loading...</div>
+                <div id="sunrise-sunset">Sunrise/Sunset: Loading...</div>
+                <div id="day-length">Day Length: Loading...</div>
+                <div id="moon-phase">Moon Phase: Loading...</div>
+            </div>
+            <div class="map-options">
+                <label for="map-type">Map Type:</label>
+                <select id="map-type">
+                    <option value="osm">OpenStreetMap</option>
+                    <option value="satellite">Satellite Imagery</option>
+                </select>
+            </div>
+            <div id="map"></div>
+        </div>
+
+        <!-- Satellites Currently Overhead -->
+        <div class="section satellite-data">
+            <h2>Satellites Currently Overhead</h2>
+            <div id="satellite-count">Loading...</div>
+            <ul id="satellite-list">Loading satellite data...</ul>
+        </div>
+
+        <!-- 3D Earth Simulation -->
+        <div class="section">
+            <h2>3D Earth Simulation with Satellites</h2>
+            <div id="cesiumContainer"></div>
+        </div>
+
+        <!-- World Clocks -->
+        <div class="section">
+            <h2>World Clocks</h2>
+            <div class="world-clocks">
+                <div class="clock">
+                    <h3>New York, USA</h3>
+                    <div id="clock-nyc">--:--:--</div>
+                </div>
+                <div class="clock">
+                    <h3>London, UK</h3>
+                    <div id="clock-london">--:--:--</div>
+                </div>
+                <div class="clock">
+                    <h3>Tokyo, Japan</h3>
+                    <div id="clock-tokyo">--:--:--</div>
+                </div>
+                <div class="clock">
+                    <h3>Sydney, Australia</h3>
+                    <div id="clock-sydney">--:--:--</div>
+                </div>
+                <div class="clock">
+                    <h3>Mumbai, India</h3>
+                    <div id="clock-mumbai">--:--:--</div>
+                </div>
+                <div class="clock">
+                    <h3>São Paulo, Brazil</h3>
+                    <div id="clock-sao-paulo">--:--:--</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        &copy; <span id="current-year"></span> Your Name
+    </footer>
+
+    <script>
+        // Update the current year in the footer
+        document.getElementById('current-year').textContent = new Date().getFullYear();
+
+        const currentTimeDisplay = document.getElementById('current-time');
+        const timeZoneDisplay = document.getElementById('time-zone');
+        const gpsCoordinatesDisplay = document.getElementById('gps-coordinates');
+        const satelliteCountDisplay = document.getElementById('satellite-count');
+        const satelliteList = document.getElementById('satellite-list');
+        const sunriseSunsetDisplay = document.getElementById('sunrise-sunset');
+        const dayLengthDisplay = document.getElementById('day-length');
+        const moonPhaseDisplay = document.getElementById('moon-phase');
+        const mapTypeSelect = document.getElementById('map-type');
+
+        let map, userMarker, satelliteMarkers = [];
+        let userLat, userLon;
+
+        // Time and Time Zone Display
+        function updateTime() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString();
+            const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+            currentTimeDisplay.textContent = `Current Time: ${timeString}`;
+            timeZoneDisplay.textContent = `Time Zone: ${timeZone}`;
+        }
+
+        setInterval(updateTime, 1000); // Update every second
+        updateTime(); // Initial call
+
+        // World Clocks
+        const worldClocks = [
+            { elementId: 'clock-nyc', timeZone: 'America/New_York' },
+            { elementId: 'clock-london', timeZone: 'Europe/London' },
+            { elementId: 'clock-tokyo', timeZone: 'Asia/Tokyo' },
+            { elementId: 'clock-sydney', timeZone: 'Australia/Sydney' },
+            { elementId: 'clock-mumbai', timeZone: 'Asia/Kolkata' },
+            { elementId: 'clock-sao-paulo', timeZone: 'America/Sao_Paulo' },
+        ];
+
+        function updateWorldClocks() {
+            const now = new Date();
+            worldClocks.forEach(clock => {
+                const timeString = now.toLocaleTimeString('en-US', { timeZone: clock.timeZone });
+                document.getElementById(clock.elementId).textContent = timeString;
+            });
+        }
+
+        setInterval(updateWorldClocks, 1000);
+        updateWorldClocks();
+
+        // Initialize Map
+        function initMap(lat, lon) {
+            if (map) {
+                map.remove();
+            }
+
+            map = L.map('map').setView([lat, lon], 5);
+
+            addTileLayer();
+
+            userMarker = L.marker([lat, lon]).addTo(map);
+            userMarker.bindPopup("<b>You are here!</b>").openPopup();
+        }
+
+        function addTileLayer() {
+            let tileLayerUrl;
+            const mapType = mapTypeSelect.value;
+
+            if (mapType === 'osm') {
+                tileLayerUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+                attribution = 'Map data © OpenStreetMap contributors';
+            } else if (mapType === 'satellite') {
+                tileLayerUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+                attribution = 'Imagery © Esri, Maxar, Earthstar Geographics, and the GIS User Community';
+            }
+
+            L.tileLayer(tileLayerUrl, {
+                maxZoom: 19,
+                attribution: attribution,
+                subdomains: ['a', 'b', 'c']
+            }).addTo(map);
+        }
+
+        mapTypeSelect.addEventListener('change', () => {
+            addTileLayer();
+        });
+
+        // Fetch Satellite Data and Update Positions
+        let satellites = [];
+
+        function getSatelliteData() {
+            // Fetch TLE data from Celestrak (using GPS satellites as an example)
+            fetch('https://celestrak.com/NORAD/elements/gp.php?GROUP=gps-ops&FORMAT=tle')
+                .then(response => response.text())
+                .then(tleData => {
+                    const tleLines = tleData.trim().split('\n');
+                    satellites = [];
+
+                    // Parse TLE data
+                    for (let i = 0; i < tleLines.length; i += 3) {
+                        const name = tleLines[i].trim();
+                        const tleLine1 = tleLines[i + 1].trim();
+                        const tleLine2 = tleLines[i + 2].trim();
+
+                        const satrec = satellite.twoline2satrec(tleLine1, tleLine2);
+
+                        satellites.push({
+                            name: name,
+                            satrec: satrec
+                        });
+                    }
+
+                    updateSatellites();
+                    setInterval(updateSatellites, 10000); // Update every 10 seconds
+                })
+                .catch(error => {
+                    satelliteCountDisplay.textContent = `Satellites Overhead: Error fetching data`;
+                    satelliteList.innerHTML = '<li>Error fetching satellite data.</li>';
+                });
+        }
+
+        function updateSatellites() {
+            if (!userLat || !userLon) return;
+
+            const overheadSatellites = [];
+            const observerGd = {
+                latitude: userLat * (Math.PI / 180),
+                longitude: userLon * (Math.PI / 180),
+                height: 0
+            };
+
+            // Remove existing satellite markers
+            satelliteMarkers.forEach(marker => {
+                map.removeLayer(marker);
+            });
+            satelliteMarkers = [];
+
+            satellites.forEach(sat => {
+                const positionAndVelocity = satellite.propagate(sat.satrec, new Date());
+                const positionEci = positionAndVelocity.position;
+
+                if (positionEci) {
+                    const gmst = satellite.gstime(new Date());
+                    const positionEcf = satellite.eciToEcf(positionEci, gmst);
+                    const lookAngles = satellite.ecfToLookAngles(observerGd, positionEcf);
+                    const elevation = lookAngles.elevation * (180 / Math.PI);
+
+                    // Satellite is considered overhead if elevation > 0 degrees
+                    if (elevation > 0) {
+                        overheadSatellites.push(sat.name);
+
+                        // Get geographic coordinates
+                        const positionGd = satellite.eciToGeodetic(positionEci, gmst);
+                        const latitude = positionGd.latitude * (180 / Math.PI);
+                        const longitude = positionGd.longitude * (180 / Math.PI);
+
+                        // Create marker on the map
+                        const marker = L.circleMarker([latitude, longitude], {
+                            radius: 5,
+                            color: 'red',
+                            fillColor: 'red',
+                            fillOpacity: 0.8
+                        }).addTo(map);
+
+                        marker.bindPopup(`<b>${sat.name}</b>`);
+                        satelliteMarkers.push(marker);
+                    }
+                }
+            });
+
+            satelliteCountDisplay.textContent = `Satellites Overhead: ${overheadSatellites.length}`;
+            if (overheadSatellites.length > 0) {
+                satelliteList.innerHTML = '';
+                overheadSatellites.forEach(satName => {
+                    const listItem = document.createElement('li');
+                    listItem.textContent = satName;
+                    satelliteList.appendChild(listItem);
+                });
+            } else {
+                satelliteList.innerHTML = '<li>No satellites overhead at this time.</li>';
+            }
+
+            // Update 3D Globe with Satellite Positions
+            update3DGlobe();
+        }
+
+        // Initialize CesiumJS 3D Globe
+        let viewer, satelliteEntities = [];
+
+        function init3DGlobe() {
+            Cesium.Ion.defaultAccessToken = ''; // No token required for basic functionality
+
+            viewer = new Cesium.Viewer('cesiumContainer', {
+                imageryProvider: Cesium.createWorldImagery(),
+                baseLayerPicker: false,
+                geocoder: false,
+                homeButton: false,
+                sceneModePicker: false,
+                timeline: false,
+                animation: false,
+                fullscreenButton: false,
+                infoBox: false,
+                navigationHelpButton: false,
+                navigationInstructionsInitiallyVisible: false,
+                selectionIndicator: false
+            });
+
+            // Fly to user's location
+            if (userLat && userLon) {
+                viewer.camera.flyTo({
+                    destination: Cesium.Cartesian3.fromDegrees(userLon, userLat, 20000000)
+                });
+            }
+        }
+
+        function update3DGlobe() {
+            if (!viewer) return;
+
+            // Remove existing satellite entities
+            satelliteEntities.forEach(entity => {
+                viewer.entities.remove(entity);
+            });
+            satelliteEntities = [];
+
+            satellites.forEach(sat => {
+                const positionAndVelocity = satellite.propagate(sat.satrec, new Date());
+                const positionEci = positionAndVelocity.position;
+
+                if (positionEci) {
+                    const gmst = satellite.gstime(new Date());
+                    const positionGd = satellite.eciToGeodetic(positionEci, gmst);
+                    const latitude = positionGd.latitude * (180 / Math.PI);
+                    const longitude = positionGd.longitude * (180 / Math.PI);
+                    const height = positionGd.height * 1000;
+
+                    // Create satellite entity
+                    const entity = viewer.entities.add({
+                        name: sat.name,
+                        position: Cesium.Cartesian3.fromDegrees(longitude, latitude, height),
+                        point: {
+                            pixelSize: 5,
+                            color: Cesium.Color.RED
+                        },
+                        label: {
+                            text: sat.name,
+                            font: '12px sans-serif',
+                            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                            outlineWidth: 2,
+                            verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                            pixelOffset: new Cesium.Cartesian2(0, -9)
+                        }
+                    });
+
+                    satelliteEntities.push(entity);
+                }
+            });
+        }
+
+        function getSunriseSunset(lat, lon) {
+            // Use Sunrise-Sunset API (no API key required)
+            const url = `https://api.sunrise-sunset.org/json?lat=${lat}&lng=${lon}&formatted=0`;
+
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'OK') {
+                        const sunrise = new Date(data.results.sunrise).toLocaleTimeString();
+                        const sunset = new Date(data.results.sunset).toLocaleTimeString();
+                        const dayLength = new Date(data.results.day_length * 1000).toISOString().substr(11, 8);
+
+                        sunriseSunsetDisplay.textContent = `Sunrise: ${sunrise} | Sunset: ${sunset}`;
+                        dayLengthDisplay.textContent = `Day Length: ${dayLength}`;
+                    } else {
+                        sunriseSunsetDisplay.textContent = 'Sunrise/Sunset: Unable to retrieve data';
+                    }
+                })
+                .catch(error => {
+                    sunriseSunsetDisplay.textContent = 'Sunrise/Sunset: Error fetching data';
+                });
+        }
+
+        function getMoonPhase() {
+            // Simple moon phase calculation
+            const now = new Date();
+            const synodicMonth = 29.530588853;
+            const newMoon = new Date('2020-12-14T16:16:00Z'); // Known new moon date
+            const daysSinceNew = (now - newMoon) / 86400000;
+            const currentPhase = daysSinceNew % synodicMonth;
+            const phaseIndex = Math.floor((currentPhase / synodicMonth) * 8);
+            const phases = [
+                'New Moon',
+                'Waxing Crescent',
+                'First Quarter',
+                'Waxing Gibbous',
+                'Full Moon',
+                'Waning Gibbous',
+                'Last Quarter',
+                'Waning Crescent'
+            ];
+            moonPhaseDisplay.textContent = `Moon Phase: ${phases[phaseIndex]}`;
+        }
+
+        function getLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(position => {
+                    userLat = position.coords.latitude;
+                    userLon = position.coords.longitude;
+                    gpsCoordinatesDisplay.textContent = `GPS Coordinates: ${userLat.toFixed(5)}, ${userLon.toFixed(5)}`;
+                    initMap(userLat, userLon);
+                    getSatelliteData();
+                    getSunriseSunset(userLat, userLon);
+                    getMoonPhase();
+                    init3DGlobe();
+                }, error => {
+                    gpsCoordinatesDisplay.textContent = `GPS Coordinates: Unable to retrieve location.`;
+                    document.getElementById('map').innerHTML = '<p>Map cannot be displayed without location access.</p>';
+                    satelliteCountDisplay.textContent = `Satellites Overhead: Unable to retrieve location.`;
+                    satelliteList.innerHTML = '<li>Cannot get satellite data without location access.</li>';
+                });
+            } else {
+                gpsCoordinatesDisplay.textContent = `GPS Coordinates: Geolocation is not supported by this browser.`;
+                document.getElementById('map').innerHTML = '<p>Geolocation is not supported by your browser.</p>';
+                satelliteCountDisplay.textContent = `Satellites Overhead: Geolocation not supported.`;
+                satelliteList.innerHTML = '<li>Geolocation is not supported by your browser.</li>';
+            }
+        }
+
+        getLocation(); // Get GPS coordinates and satellite data on page load
+    </script>
+</body>
+</html>
