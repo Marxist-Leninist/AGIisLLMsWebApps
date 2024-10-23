@@ -37,6 +37,25 @@
             background-color: #cc0000;
         }
 
+        #action-buttons {
+            margin-top: 20px;
+        }
+
+        .action-btn {
+            padding: 8px 15px;
+            font-size: 1em;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+            margin-right: 10px;
+        }
+
+        .action-btn:hover {
+            background-color: #0056b3;
+        }
+
         #status {
             margin-top: 20px;
             font-weight: bold;
@@ -63,8 +82,16 @@
     <button id="fetch-btn">Fetch HTML</button>
     <div id="status"></div>
     <div id="html-content"></div>
+    <div id="action-buttons" style="display: none;">
+        <button id="copy-btn" class="action-btn">Copy to Clipboard</button>
+        <button id="download-btn" class="action-btn">Download HTML</button>
+        <button id="share-btn" class="action-btn">Share Content</button>
+    </div>
 
     <script>
+        let fetchedHTML = '';
+        let fetchedURL = '';
+
         document.getElementById('fetch-btn').addEventListener('click', function () {
             const url = document.getElementById('url-input').value.trim();
             if (!url) {
@@ -82,6 +109,9 @@
 
             document.getElementById('status').textContent = 'Fetching HTML content...';
             document.getElementById('html-content').textContent = '';
+            document.getElementById('action-buttons').style.display = 'none';
+            fetchedHTML = '';
+            fetchedURL = url;
 
             // First attempt: Direct fetch
             fetch(url)
@@ -94,6 +124,8 @@
                 .then(html => {
                     document.getElementById('status').textContent = 'HTML content fetched successfully (Direct fetch)!';
                     document.getElementById('html-content').textContent = html;
+                    fetchedHTML = html;
+                    document.getElementById('action-buttons').style.display = 'block';
                 })
                 .catch(error => {
                     console.warn('Direct fetch failed, attempting with CORS proxy:', error);
@@ -112,12 +144,65 @@
                         .then(html => {
                             document.getElementById('status').textContent = 'HTML content fetched successfully (Via CORS proxy)!';
                             document.getElementById('html-content').textContent = html;
+                            fetchedHTML = html;
+                            document.getElementById('action-buttons').style.display = 'block';
                         })
                         .catch(proxyError => {
                             console.error('CORS proxy fetch failed:', proxyError);
                             document.getElementById('status').textContent = 'An error occurred: ' + proxyError.message;
                         });
                 });
+        });
+
+        // Copy to Clipboard
+        document.getElementById('copy-btn').addEventListener('click', function () {
+            if (!fetchedHTML) {
+                alert('No content to copy.');
+                return;
+            }
+            navigator.clipboard.writeText(fetchedHTML)
+                .then(() => {
+                    alert('Content copied to clipboard!');
+                })
+                .catch(err => {
+                    console.error('Failed to copy: ', err);
+                    alert('Failed to copy content.');
+                });
+        });
+
+        // Download HTML
+        document.getElementById('download-btn').addEventListener('click', function () {
+            if (!fetchedHTML) {
+                alert('No content to download.');
+                return;
+            }
+            const blob = new Blob([fetchedHTML], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'fetched_content.html';
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        // Share Content
+        document.getElementById('share-btn').addEventListener('click', function () {
+            if (!fetchedHTML) {
+                alert('No content to share.');
+                return;
+            }
+            if (navigator.share) {
+                navigator.share({
+                    title: 'Fetched HTML Content',
+                    text: fetchedHTML,
+                    url: fetchedURL
+                })
+                .then(() => console.log('Content shared successfully.'))
+                .catch((error) => console.error('Error sharing:', error));
+            } else {
+                // Fallback for browsers that do not support the Web Share API
+                alert('Web Share API is not supported in your browser. You can copy the content and share it manually.');
+            }
         });
     </script>
 </body>
