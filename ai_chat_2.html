@@ -73,7 +73,7 @@
             }
 
             const userApiKey = document.getElementById('api-key').value.trim();
-            let apiKey = ''; // Default API key (leave empty for free access)
+            let apiKey = '0000000000'; // Default API key
 
             // Use user's API key if provided
             if (userApiKey) {
@@ -82,33 +82,36 @@
 
             const requestHeaders = {
                 'Content-Type': 'application/json',
+                'apikey': apiKey
             };
-            if (apiKey) {
-                requestHeaders['apikey'] = apiKey;
-            }
 
             const payload = {
                 "prompt": prompt,
                 "params": {
-                    "max_length": 150,
+                    "max_new_tokens": 150,
                     "temperature": 0.7,
                     "top_p": 0.9,
-                    "model": "PygmalionAI/pygmalion-6b"
-                }
+                    "do_sample": true
+                },
+                "models": ["PygmalionAI/pygmalion-6b"]
             };
 
             document.getElementById('status').textContent = 'Submitting request...';
             document.getElementById('generated-text').textContent = '';
 
-            fetch('https://aihorde.net/api/v1/text/generate/async', {
+            fetch('https://horde.textgenerationwebui.site/api/v2/generate/text/async', {
                 method: 'POST',
                 headers: requestHeaders,
                 body: JSON.stringify(payload)
             })
             .then(response => response.json())
             .then(data => {
-                const requestId = data.id;
-                checkStatus(requestId);
+                if (data.id) {
+                    const requestId = data.id;
+                    checkStatus(requestId);
+                } else {
+                    document.getElementById('status').textContent = 'Error: ' + (data.message || 'Unknown error');
+                }
             })
             .catch(error => {
                 console.error('Error:', error);
@@ -116,17 +119,17 @@
             });
 
             function checkStatus(requestId) {
-                fetch(`https://aihorde.net/api/v1/text/status/${requestId}`, {
+                fetch(`https://horde.textgenerationwebui.site/api/v2/generate/text/status/${requestId}`, {
                     headers: requestHeaders
                 })
                 .then(response => response.json())
                 .then(data => {
-                    if (data.done) {
-                        const generatedText = data.generated_text;
+                    if (data.finished) {
+                        const generatedText = data.generations[0].text;
                         document.getElementById('generated-text').textContent = generatedText;
                         document.getElementById('status').textContent = 'Text generated successfully!';
                     } else {
-                        document.getElementById('status').textContent = `Waiting for text generation... (Queue position: ${data.queue_position})`;
+                        document.getElementById('status').textContent = `Waiting for text generation... (Queue position: ${data.queue_position || 'N/A'})`;
                         setTimeout(() => checkStatus(requestId), 5000);
                     }
                 })
