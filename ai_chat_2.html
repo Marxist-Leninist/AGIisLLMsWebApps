@@ -2,28 +2,77 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>AI Horde Text Generator</title>
+    <title>AI Horde LLM Chatbot</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        /* Basic styling */
+        /* Styling */
         body {
             font-family: Arial, sans-serif;
-            padding: 20px;
             background-color: #f4f4f4;
+            padding: 20px;
         }
 
         h1 {
             color: #aa0000;
         }
 
-        #prompt, #api-key {
-            width: 100%;
-            padding: 10px;
-            font-size: 1em;
-            margin-bottom: 10px;
+        #chat-container {
+            max-width: 600px;
+            margin: 0 auto;
         }
 
-        #generate-btn {
+        #conversation {
+            background-color: #fff;
+            padding: 15px;
+            border: 1px solid #ccc;
+            height: 400px;
+            overflow-y: auto;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+
+        .message {
+            margin-bottom: 15px;
+        }
+
+        .user {
+            text-align: right;
+        }
+
+        .assistant {
+            text-align: left;
+        }
+
+        .message p {
+            display: inline-block;
+            padding: 10px;
+            border-radius: 10px;
+            max-width: 80%;
+        }
+
+        .user p {
+            background-color: #007bff;
+            color: #fff;
+        }
+
+        .assistant p {
+            background-color: #e9ecef;
+            color: #000;
+        }
+
+        #input-area {
+            display: flex;
+        }
+
+        #user-input {
+            flex: 1;
+            padding: 10px;
+            font-size: 1em;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        #send-btn {
             padding: 10px 20px;
             font-size: 1em;
             background-color: #aa0000;
@@ -31,51 +80,82 @@
             border: none;
             cursor: pointer;
             border-radius: 5px;
+            margin-left: 10px;
         }
 
-        #generate-btn:hover {
+        #send-btn:hover {
             background-color: #cc0000;
         }
 
-        #status {
-            margin-top: 20px;
-            font-weight: bold;
-            color: #aa0000;
-        }
-
-        #generated-text {
-            margin-top: 20px;
-            white-space: pre-wrap;
+        #api-key {
+            width: 100%;
             padding: 10px;
-            background-color: #fff;
+            font-size: 1em;
+            margin-bottom: 10px;
             border: 1px solid #ccc;
             border-radius: 5px;
+        }
+
+        #status {
+            margin-top: 10px;
+            font-weight: bold;
+            color: #aa0000;
         }
     </style>
 </head>
 <body>
-    <h1>AI Horde Text Generator</h1>
-    <p>Enter a prompt to generate text:</p>
-    <textarea id="prompt" rows="4" placeholder="Enter your prompt here"></textarea>
-    <p>If you have an AI Horde API key, you can enter it below (optional):</p>
-    <input type="text" id="api-key" placeholder="Enter your API key (optional)">
-    <br>
-    <button id="generate-btn">Generate Text</button>
-    <div id="status"></div>
-    <div id="generated-text"></div>
+    <div id="chat-container">
+        <h1>AI Horde LLM Chatbot</h1>
+        <p>Enter your message below:</p>
+        <div id="conversation"></div>
+        <div id="input-area">
+            <input type="text" id="user-input" placeholder="Type your message here">
+            <button id="send-btn">Send</button>
+        </div>
+        <p>If you have an AI Horde API key, you can enter it below (optional):</p>
+        <input type="text" id="api-key" placeholder="Enter your API key (optional)">
+        <div id="status"></div>
+    </div>
 
     <script>
-        document.getElementById('generate-btn').addEventListener('click', function() {
-            const prompt = document.getElementById('prompt').value.trim();
-            if (!prompt) {
-                alert('Please enter a prompt.');
+        let conversationHistory = '';
+        let requestActive = false;
+
+        document.getElementById('send-btn').addEventListener('click', function () {
+            sendMessage();
+        });
+
+        document.getElementById('user-input').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        function sendMessage() {
+            if (requestActive) {
+                alert('Please wait for the current response.');
                 return;
             }
+
+            const userInput = document.getElementById('user-input').value.trim();
+            if (!userInput) {
+                alert('Please enter a message.');
+                return;
+            }
+
+            const conversationDiv = document.getElementById('conversation');
+            addMessageToConversation('user', userInput);
+            document.getElementById('user-input').value = '';
+
+            // Update conversation history
+            conversationHistory += 'User: ' + userInput + '\n';
+
+            requestActive = true;
+            document.getElementById('status').textContent = 'Generating response...';
 
             const userApiKey = document.getElementById('api-key').value.trim();
             let apiKey = '0000000000'; // Default API key
 
-            // Use user's API key if provided
             if (userApiKey) {
                 apiKey = userApiKey;
             }
@@ -86,18 +166,18 @@
             };
 
             const payload = {
-                "prompt": prompt,
+                "prompt": conversationHistory + 'Assistant:',
                 "params": {
                     "max_new_tokens": 150,
                     "temperature": 0.7,
                     "top_p": 0.9,
-                    "do_sample": true
+                    "do_sample": true,
+                    "stop_sequence": ["User:", "Assistant:"]
                 },
-                "models": ["PygmalionAI/pygmalion-6b"]
+                "models": ["PygmalionAI/pygmalion-6b"],
+                "trusted_workers": false,
+                "use_priority": false
             };
-
-            document.getElementById('status').textContent = 'Submitting request...';
-            document.getElementById('generated-text').textContent = '';
 
             fetch('https://horde.textgenerationwebui.site/api/v2/generate/text/async', {
                 method: 'POST',
@@ -108,37 +188,60 @@
             .then(data => {
                 if (data.id) {
                     const requestId = data.id;
-                    checkStatus(requestId);
+                    checkStatus(requestId, apiKey);
                 } else {
                     document.getElementById('status').textContent = 'Error: ' + (data.message || 'Unknown error');
+                    requestActive = false;
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
                 document.getElementById('status').textContent = 'An error occurred while submitting the request.';
+                requestActive = false;
             });
+        }
 
-            function checkStatus(requestId) {
-                fetch(`https://horde.textgenerationwebui.site/api/v2/generate/text/status/${requestId}`, {
-                    headers: requestHeaders
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.finished) {
-                        const generatedText = data.generations[0].text;
-                        document.getElementById('generated-text').textContent = generatedText;
-                        document.getElementById('status').textContent = 'Text generated successfully!';
-                    } else {
-                        document.getElementById('status').textContent = `Waiting for text generation... (Queue position: ${data.queue_position || 'N/A'})`;
-                        setTimeout(() => checkStatus(requestId), 5000);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    document.getElementById('status').textContent = 'An error occurred while checking the status.';
-                });
-            }
-        });
+        function checkStatus(requestId, apiKey) {
+            const requestHeaders = {
+                'Content-Type': 'application/json',
+                'apikey': apiKey
+            };
+
+            fetch(`https://horde.textgenerationwebui.site/api/v2/generate/text/status/${requestId}`, {
+                headers: requestHeaders
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.finished) {
+                    const generatedText = data.generations[0].text;
+                    addMessageToConversation('assistant', generatedText.trim());
+                    conversationHistory += 'Assistant: ' + generatedText.trim() + '\n';
+                    document.getElementById('status').textContent = '';
+                    requestActive = false;
+                } else {
+                    document.getElementById('status').textContent = `Waiting for response... (Queue position: ${data.queue_position || 'N/A'})`;
+                    setTimeout(() => checkStatus(requestId, apiKey), 3000);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('status').textContent = 'An error occurred while checking the status.';
+                requestActive = false;
+            });
+        }
+
+        function addMessageToConversation(sender, message) {
+            const conversationDiv = document.getElementById('conversation');
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message', sender);
+
+            const messageContent = document.createElement('p');
+            messageContent.textContent = message;
+
+            messageDiv.appendChild(messageContent);
+            conversationDiv.appendChild(messageDiv);
+            conversationDiv.scrollTop = conversationDiv.scrollHeight;
+        }
     </script>
 </body>
 </html>
