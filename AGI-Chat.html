@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Stable Horde Image Generator</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        /* Basic styling */
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+
+        h1 {
+            color: #aa0000;
+        }
+
+        #prompt, #api-key {
+            width: 100%;
+            padding: 10px;
+            font-size: 1em;
+            margin-bottom: 10px;
+        }
+
+        #generate-btn {
+            padding: 10px 20px;
+            font-size: 1em;
+            background-color: #aa0000;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        #generate-btn:hover {
+            background-color: #cc0000;
+        }
+
+        #status {
+            margin-top: 20px;
+            font-weight: bold;
+            color: #aa0000;
+        }
+
+        #generated-image {
+            margin-top: 20px;
+            max-width: 100%;
+            border: 1px solid #ccc;
+        }
+    </style>
+</head>
+<body>
+    <h1>Stable Horde Image Generator</h1>
+    <p>Enter a prompt to generate an image:</p>
+    <input type="text" id="prompt" placeholder="Enter your prompt here">
+    <p>If you have a Stable Horde API key, you can enter it below (optional):</p>
+    <input type="text" id="api-key" placeholder="Enter your API key (optional)">
+    <br>
+    <button id="generate-btn">Generate Image</button>
+    <div id="status"></div>
+    <img id="generated-image" alt="Generated Image" src="" style="display:none;">
+
+    <script>
+        document.getElementById('generate-btn').addEventListener('click', function() {
+            const prompt = document.getElementById('prompt').value.trim();
+            if (!prompt) {
+                alert('Please enter a prompt.');
+                return;
+            }
+
+            const userApiKey = document.getElementById('api-key').value.trim();
+            let apiKey = ''; // Default API key (leave empty for free access)
+
+            // Use user's API key if provided
+            if (userApiKey) {
+                apiKey = userApiKey;
+            }
+
+            const requestHeaders = {
+                'Content-Type': 'application/json',
+            };
+            if (apiKey) {
+                requestHeaders['apikey'] = apiKey;
+            }
+
+            const payload = {
+                "prompt": prompt,
+                "params": {
+                    "sampler_name": "k_euler_ancestral",
+                    "steps": 30,
+                    "width": 512,
+                    "height": 512
+                },
+                "nsfw": false, // Ensure safe content
+                "censor_nsfw": true
+            };
+
+            document.getElementById('status').textContent = 'Submitting request...';
+            document.getElementById('generated-image').style.display = 'none';
+            document.getElementById('generated-image').src = '';
+
+            fetch('https://stablehorde.net/api/v2/generate/async', {
+                method: 'POST',
+                headers: requestHeaders,
+                body: JSON.stringify(payload)
+            })
+            .then(response => response.json())
+            .then(data => {
+                const requestId = data.id;
+                checkStatus(requestId);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('status').textContent = 'An error occurred while submitting the request.';
+            });
+
+            function checkStatus(requestId) {
+                fetch(`https://stablehorde.net/api/v2/generate/status/${requestId}`, {
+                    headers: requestHeaders
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.finished) {
+                        const generations = data.generations;
+                        if (generations && generations.length > 0) {
+                            const imageData = generations[0].img;
+                            document.getElementById('generated-image').src = 'data:image/png;base64,' + imageData;
+                            document.getElementById('generated-image').style.display = 'block';
+                            document.getElementById('status').textContent = 'Image generated successfully!';
+                        } else {
+                            document.getElementById('status').textContent = 'No image was generated.';
+                        }
+                    } else {
+                        document.getElementById('status').textContent = `Waiting for image generation... (Queue position: ${data.queue_position})`;
+                        setTimeout(() => checkStatus(requestId), 5000);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    document.getElementById('status').textContent = 'An error occurred while checking the status.';
+                });
+            }
+        });
+    </script>
+</body>
+</html>
