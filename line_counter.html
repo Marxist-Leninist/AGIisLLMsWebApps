@@ -141,7 +141,8 @@
     <main>
         <div class="controls">
             <div class="stats" id="stats">
-                <div id="line-count">Lines: 0</div>
+                <div id="line-count">Lines (incl. empty): 0</div>
+                <div id="non-empty-line-count">Lines (non-empty): 0</div>
                 <div id="word-count">Words: 0</div>
                 <div id="char-count">Characters: 0</div>
                 <div id="read-time">Estimated Reading Time: 0 min</div>
@@ -168,6 +169,7 @@
 
         const textarea = document.getElementById('text-input');
         const lineCountDisplay = document.getElementById('line-count');
+        const nonEmptyLineCountDisplay = document.getElementById('non-empty-line-count');
         const wordCountDisplay = document.getElementById('word-count');
         const charCountDisplay = document.getElementById('char-count');
         const readTimeDisplay = document.getElementById('read-time');
@@ -178,26 +180,37 @@
 
         let utterance;
 
+        // Variables to store counts
+        let totalLines = 0;
+        let nonEmptyLines = 0;
+        let wordsCount = 0;
+        let charsCount = 0;
+        let readTime = 0;
+
         function updateCounts() {
             const text = textarea.value;
             const lines = text === '' ? [] : text.split(/\r\n|\r|\n/);
-            const words = text.trim().split(/\s+/).filter(word => word.length > 0 && word !== '');
-            const chars = text.length;
-            const readTime = Math.ceil(words.length / 200); // Average reading speed: 200 WPM
+            totalLines = lines.length;
+            nonEmptyLines = lines.filter(line => line.trim().length > 0).length;
+            wordsCount = text.trim().split(/\s+/).filter(word => word.length > 0 && word !== '').length;
+            charsCount = text.length;
+            readTime = Math.ceil(wordsCount / 200); // Average reading speed: 200 WPM
 
-            lineCountDisplay.textContent = `Lines: ${lines.length}`;
-            wordCountDisplay.textContent = `Words: ${words.length}`;
-            charCountDisplay.textContent = `Characters: ${chars}`;
+            lineCountDisplay.textContent = `Lines (incl. empty): ${totalLines}`;
+            nonEmptyLineCountDisplay.textContent = `Lines (non-empty): ${nonEmptyLines}`;
+            wordCountDisplay.textContent = `Words: ${wordsCount}`;
+            charCountDisplay.textContent = `Characters: ${charsCount}`;
             readTimeDisplay.textContent = `Estimated Reading Time: ${readTime} min`;
         }
 
         textarea.addEventListener('input', updateCounts);
 
         copyCountsBtn.addEventListener('click', () => {
-            const countsText = `Lines: ${lineCountDisplay.textContent.split(': ')[1]}
-Words: ${wordCountDisplay.textContent.split(': ')[1]}
-Characters: ${charCountDisplay.textContent.split(': ')[1]}
-Estimated Reading Time: ${readTimeDisplay.textContent.split(': ')[1]}`;
+            const countsText = `Lines (incl. empty): ${totalLines}
+Lines (non-empty): ${nonEmptyLines}
+Words: ${wordsCount}
+Characters: ${charsCount}
+Estimated Reading Time: ${readTime} min`;
             navigator.clipboard.writeText(countsText)
                 .then(() => {
                     alert('Counts copied to clipboard!');
@@ -209,10 +222,11 @@ Estimated Reading Time: ${readTimeDisplay.textContent.split(': ')[1]}`;
 
         exportReportBtn.addEventListener('click', () => {
             const text = textarea.value;
-            const countsText = `Lines: ${lineCountDisplay.textContent.split(': ')[1]}
-Words: ${wordCountDisplay.textContent.split(': ')[1]}
-Characters: ${charCountDisplay.textContent.split(': ')[1]}
-Estimated Reading Time: ${readTimeDisplay.textContent.split(': ')[1]}`;
+            const countsText = `Lines (incl. empty): ${totalLines}
+Lines (non-empty): ${nonEmptyLines}
+Words: ${wordsCount}
+Characters: ${charsCount}
+Estimated Reading Time: ${readTime} min`;
 
             const report = `Text Analysis Report
 ---------------------
@@ -222,7 +236,6 @@ Text Content:
 ---------------------
 ${text}
 `;
-
             const blob = new Blob([report], { type: 'text/plain' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
