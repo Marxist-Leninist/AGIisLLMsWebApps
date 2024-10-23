@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Line Counter with Time, GPS, and Satellite Data</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Include OpenDyslexic font for better readability -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=OpenDyslexic&display=swap">
+    <!-- Leaflet CSS for the map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <!-- Include Satellite.js -->
+    <script src="https://unpkg.com/satellite.js@4.0.0/dist/satellite.min.js"></script>
+    <style>
+        /* General Styles */
+        body {
+            font-family: 'OpenDyslexic', Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        /* Header Styles */
+        header {
+            background-color: #aa0000;
+            color: #fff;
+            padding: 20px;
+            text-align: center;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 2em;
+        }
+
+        /* Main Content Styles */
+        main {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }
+
+        .controls {
+            margin-bottom: 20px;
+        }
+
+        .stats {
+            font-size: 1.1em;
+            color: #aa0000;
+            font-weight: bold;
+        }
+
+        .stats div {
+            margin-bottom: 10px;
+        }
+
+        .buttons {
+            margin-top: 10px;
+        }
+
+        .buttons button {
+            padding: 10px 15px;
+            font-size: 1em;
+            background-color: #aa0000;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        .buttons button:hover {
+            background-color: #cc0000;
+        }
+
+        label {
+            font-size: 1.2em;
+            display: block;
+            margin-bottom: 10px;
+        }
+
+        textarea {
+            width: 100%;
+            height: 150px;
+            padding: 10px;
+            font-size: 1em;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            resize: vertical;
+            font-family: 'Courier New', monospace;
+        }
+
+        /* Map Styles */
+        #map {
+            height: 300px;
+            margin-top: 20px;
+        }
+
+        /* Satellite Data Styles */
+        .satellite-data {
+            margin-top: 20px;
+            font-size: 1em;
+            background-color: #e9ecef;
+            padding: 15px;
+            border-radius: 5px;
+        }
+
+        /* Footer Styles */
+        footer {
+            background-color: #aa0000;
+            color: #fff;
+            text-align: center;
+            padding: 15px 0;
+            position: relative;
+            width: 100%;
+            bottom: 0;
+            margin-top: 40px;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 600px) {
+            header h1 {
+                font-size: 1.5em;
+            }
+
+            .stats {
+                font-size: 1em;
+            }
+
+            .buttons button {
+                width: 100%;
+            }
+
+            textarea {
+                height: 120px;
+            }
+
+            #map {
+                height: 200px;
+            }
+        }
+    </style>
+    <!-- Include Leaflet JS for the map -->
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+</head>
+<body>
+    <header>
+        <h1>Line Counter with Time, GPS, and Satellite Data</h1>
+    </header>
+
+    <main>
+        <div class="controls">
+            <div class="stats" id="stats">
+                <div id="current-time">Current Time: --:--:--</div>
+                <div id="time-zone">Time Zone: Loading...</div>
+                <div id="gps-coordinates">GPS Coordinates: Loading...</div>
+                <div id="satellite-count">Satellites Overhead: Loading...</div>
+                <div id="line-count">Lines (incl. empty): 0</div>
+                <div id="non-empty-line-count">Lines (non-empty): 0</div>
+                <div id="word-count">Words: 0</div>
+                <div id="char-count">Characters (Total): 0</div>
+                <div id="visible-char-count">Characters (Visible): 0</div>
+                <div id="invisible-char-count">Characters (Invisible): 0</div>
+                <div id="read-time">Estimated Reading Time: 0 min</div>
+            </div>
+            <div class="buttons">
+                <button id="copy-counts">Copy Counts</button>
+                <button id="export-report">Export Report</button>
+                <button id="play-text">Play Text</button>
+                <button id="stop-text">Stop</button>
+            </div>
+        </div>
+
+        <label for="text-input">Enter your text below:</label>
+        <textarea id="text-input" placeholder="Type or paste your text here..."></textarea>
+
+        <!-- Map Container -->
+        <div id="map"></div>
+
+        <!-- Satellite Data -->
+        <div class="satellite-data" id="satellite-data">
+            <h2>Satellites Currently Overhead</h2>
+            <ul id="satellite-list">Loading satellite data...</ul>
+        </div>
+    </main>
+
+    <footer>
+        &copy; <span id="current-year"></span> Your Name
+    </footer>
+
+    <script>
+        // Update the current year in the footer
+        document.getElementById('current-year').textContent = new Date().getFullYear();
+
+        const textarea = document.getElementById('text-input');
+        const lineCountDisplay = document.getElementById('line-count');
+        const nonEmptyLineCountDisplay = document.getElementById('non-empty-line-count');
+        const wordCountDisplay = document.getElementById('word-count');
+        const charCountDisplay = document.getElementById('char-count');
+        const visibleCharCountDisplay = document.getElementById('visible-char-count');
+        const invisibleCharCountDisplay = document.getElementById('invisible-char-count');
+        const readTimeDisplay = document.getElementById('read-time');
+        const copyCountsBtn = document.getElementById('copy-counts');
+        const exportReportBtn = document.getElementById('export-report');
+        const playTextBtn = document.getElementById('play-text');
+        const stopTextBtn = document.getElementById('stop-text');
+
+        const currentTimeDisplay = document.getElementById('current-time');
+        const timeZoneDisplay = document.getElementById('time-zone');
+        const gpsCoordinatesDisplay = document.getElementById('gps-coordinates');
+        const satelliteCountDisplay = document.getElementById('satellite-count');
+        const satelliteList = document.getElementById('satellite-list');
+
+        let utterance;
+
+        // Variables to store counts
+        let totalLines = 0;
+        let nonEmptyLines = 0;
+        let wordsCount = 0;
+        let charsCount = 0;
+        let visibleCharsCount = 0;
+        let invisibleCharsCount = 0;
+        let readTime = 0;
+
+        function updateCounts() {
+            const text = textarea.value;
+            const lines = text === '' ? [] : text.split(/\r\n|\r|\n/);
+            totalLines = lines.length;
+            nonEmptyLines = lines.filter(line => line.trim().length > 0).length;
+            const wordsArray = text.trim().split(/\s+/).filter(word => word.length > 0);
+            wordsCount = wordsArray.length;
+            charsCount = text.length;
+
+            // Calculate visible and invisible characters
+            const visibleChars = text.replace(/\s/g, '');
+            visibleCharsCount = visibleChars.length;
+            invisibleCharsCount = charsCount - visibleCharsCount;
+
+            readTime = Math.ceil(wordsCount / 200); // Average reading speed: 200 WPM
+
+            lineCountDisplay.textContent = `Lines (incl. empty): ${totalLines}`;
+            nonEmptyLineCountDisplay.textContent = `Lines (non-empty): ${nonEmptyLines}`;
+            wordCountDisplay.textContent = `Words: ${wordsCount}`;
+            charCountDisplay.textContent = `Characters (Total): ${charsCount}`;
+            visibleCharCountDisplay.textContent = `Characters (Visible): ${visibleCharsCount}`;
+            invisibleCharCountDisplay.textContent = `Characters (Invisible): ${invisibleCharsCount}`;
+            readTimeDisplay.textContent = `Estimated Reading Time: ${readTime} min`;
+        }
+
+        textarea.addEventListener('input', updateCounts);
+
+        copyCountsBtn.addEventListener('click', () => {
+            const countsText = `Lines (incl. empty): ${totalLines}
+Lines (non-empty): ${nonEmptyLines}
+Words: ${wordsCount}
+Characters (Total): ${charsCount}
+Characters (Visible): ${visibleCharsCount}
+Characters (Invisible): ${invisibleCharsCount}
+Estimated Reading Time: ${readTime} min`;
+            navigator.clipboard.writeText(countsText)
+                .then(() => {
+                    alert('Counts copied to clipboard!');
+                })
+                .catch(err => {
+                    alert('Failed to copy counts.');
+                });
+        });
+
+        exportReportBtn.addEventListener('click', () => {
+            const text = textarea.value;
+            const countsText = `Lines (incl. empty): ${totalLines}
+Lines (non-empty): ${nonEmptyLines}
+Words: ${wordsCount}
+Characters (Total): ${charsCount}
+Characters (Visible): ${visibleCharsCount}
+Characters (Invisible): ${invisibleCharsCount}
+Estimated Reading Time: ${readTime} min`;
+
+            const report = `Text Analysis Report
+---------------------
+${countsText}
+
+Text Content:
+---------------------
+${text}
+`;
+            const blob = new Blob([report], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'text_analysis_report.txt';
+            link.click();
+            URL.revokeObjectURL(url);
+        });
+
+        playTextBtn.addEventListener('click', () => {
+            if (utterance) {
+                window.speechSynthesis.cancel();
+            }
+            utterance = new SpeechSynthesisUtterance(textarea.value);
+            // Adjust volume between 0.0 and 1.0
+            utterance.volume = 0.5;
+            window.speechSynthesis.speak(utterance);
+        });
+
+        stopTextBtn.addEventListener('click', () => {
+            if (utterance) {
+                window.speechSynthesis.cancel();
+            }
+        });
+
+        // Time and Time Zone Display
+        function updateTime() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString();
+            const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+            currentTimeDisplay.textContent = `Current Time: ${timeString}`;
+            timeZoneDisplay.textContent = `Time Zone: ${timeZone}`;
+        }
+
+        setInterval(updateTime, 1000); // Update every second
+        updateTime(); // Initial call
+
+        // Geolocation and Map
+        let userLat, userLon;
+
+        function initMap(lat, lon) {
+            const map = L.map('map').setView([lat, lon], 13);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© OpenStreetMap'
+            }).addTo(map);
+
+            const marker = L.marker([lat, lon]).addTo(map);
+            marker.bindPopup("<b>You are here!</b>").openPopup();
+        }
+
+        function getSatelliteData(lat, lon) {
+            // Fetch TLE data from Celestrak
+            fetch('https://celestrak.com/NORAD/elements/gp.php?GROUP=active&FORMAT=tle')
+                .then(response => response.text())
+                .then(tleData => {
+                    const tleLines = tleData.trim().split('\n');
+                    const satellites = [];
+
+                    // Parse TLE data
+                    for (let i = 0; i < tleLines.length; i += 3) {
+                        const name = tleLines[i].trim();
+                        const tleLine1 = tleLines[i + 1].trim();
+                        const tleLine2 = tleLines[i + 2].trim();
+
+                        satellites.push({
+                            name: name,
+                            tleLine1: tleLine1,
+                            tleLine2: tleLine2
+                        });
+                    }
+
+                    // Calculate which satellites are overhead
+                    const overheadSatellites = [];
+                    const observerGd = {
+                        latitude: lat * (Math.PI / 180),
+                        longitude: lon * (Math.PI / 180),
+                        height: 0
+                    };
+                    const gmst = satellite.gstime(new Date());
+
+                    satellites.forEach(sat => {
+                        const satrec = satellite.twoline2satrec(sat.tleLine1, sat.tleLine2);
+                        const positionAndVelocity = satellite.propagate(satrec, new Date());
+                        const positionEci = positionAndVelocity.position;
+
+                        if (positionEci) {
+                            const positionGd = satellite.eciToGeodetic(positionEci, gmst);
+                            const lookAngles = satellite.ecfToLookAngles(observerGd, satellite.eciToEcf(positionEci, gmst));
+                            const elevation = lookAngles.elevation * (180 / Math.PI);
+
+                            // Satellite is considered overhead if elevation > 0 degrees
+                            if (elevation > 0) {
+                                overheadSatellites.push(sat.name);
+                            }
+                        }
+                    });
+
+                    satelliteCountDisplay.textContent = `Satellites Overhead: ${overheadSatellites.length}`;
+                    if (overheadSatellites.length > 0) {
+                        satelliteList.innerHTML = '';
+                        overheadSatellites.forEach(satName => {
+                            const listItem = document.createElement('li');
+                            listItem.textContent = satName;
+                            satelliteList.appendChild(listItem);
+                        });
+                    } else {
+                        satelliteList.innerHTML = '<li>No satellites overhead at this time.</li>';
+                    }
+                })
+                .catch(error => {
+                    satelliteCountDisplay.textContent = `Satellites Overhead: Error fetching data`;
+                    satelliteList.innerHTML = '<li>Error fetching satellite data.</li>';
+                });
+        }
+
+        function getLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(position => {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+                    userLat = lat;
+                    userLon = lon;
+                    gpsCoordinatesDisplay.textContent = `GPS Coordinates: ${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+                    initMap(lat, lon);
+                    getSatelliteData(lat, lon);
+                }, error => {
+                    gpsCoordinatesDisplay.textContent = `GPS Coordinates: Unable to retrieve location.`;
+                    document.getElementById('map').innerHTML = '<p>Map cannot be displayed without location access.</p>';
+                    satelliteCountDisplay.textContent = `Satellites Overhead: Unable to retrieve location.`;
+                    satelliteList.innerHTML = '<li>Cannot get satellite data without location access.</li>';
+                });
+            } else {
+                gpsCoordinatesDisplay.textContent = `GPS Coordinates: Geolocation is not supported by this browser.`;
+                document.getElementById('map').innerHTML = '<p>Geolocation is not supported by your browser.</p>';
+                satelliteCountDisplay.textContent = `Satellites Overhead: Geolocation not supported.`;
+                satelliteList.innerHTML = '<li>Geolocation is not supported by your browser.</li>';
+            }
+        }
+
+        getLocation(); // Get GPS coordinates and satellite data on page load
+
+        // Initialize counts on page load
+        updateCounts();
+    </script>
+</body>
+</html>
