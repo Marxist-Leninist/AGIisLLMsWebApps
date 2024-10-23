@@ -34,6 +34,45 @@
             padding: 0 20px;
         }
 
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .stats {
+            font-size: 1.1em;
+            color: #aa0000;
+            font-weight: bold;
+        }
+
+        .stats div {
+            margin-right: 15px;
+        }
+
+        .buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .buttons button {
+            padding: 10px 15px;
+            font-size: 1em;
+            background-color: #aa0000;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .buttons button:hover {
+            background-color: #cc0000;
+        }
+
         label {
             font-size: 1.2em;
             display: block;
@@ -49,13 +88,6 @@
             border-radius: 5px;
             resize: vertical;
             font-family: 'Courier New', monospace;
-        }
-
-        .result {
-            margin-top: 20px;
-            font-size: 1.2em;
-            color: #aa0000;
-            font-weight: bold;
         }
 
         /* Footer Styles */
@@ -76,8 +108,23 @@
                 font-size: 1.5em;
             }
 
-            label, .result {
+            .stats {
                 font-size: 1em;
+            }
+
+            .controls {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .buttons {
+                flex-direction: column;
+                align-items: stretch;
+                width: 100%;
+            }
+
+            .buttons button {
+                width: 100%;
             }
 
             textarea {
@@ -92,9 +139,23 @@
     </header>
 
     <main>
+        <div class="controls">
+            <div class="stats" id="stats">
+                <div id="line-count">Lines: 0</div>
+                <div id="word-count">Words: 0</div>
+                <div id="char-count">Characters: 0</div>
+                <div id="read-time">Estimated Reading Time: 0 min</div>
+            </div>
+            <div class="buttons">
+                <button id="copy-counts">Copy Counts</button>
+                <button id="export-report">Export Report</button>
+                <button id="play-text">Play Text</button>
+                <button id="stop-text">Stop</button>
+            </div>
+        </div>
+
         <label for="text-input">Enter your text below:</label>
         <textarea id="text-input" placeholder="Type or paste your text here..."></textarea>
-        <div class="result" id="line-count">Number of lines: 0</div>
     </main>
 
     <footer>
@@ -107,15 +168,88 @@
 
         const textarea = document.getElementById('text-input');
         const lineCountDisplay = document.getElementById('line-count');
+        const wordCountDisplay = document.getElementById('word-count');
+        const charCountDisplay = document.getElementById('char-count');
+        const readTimeDisplay = document.getElementById('read-time');
+        const copyCountsBtn = document.getElementById('copy-counts');
+        const exportReportBtn = document.getElementById('export-report');
+        const playTextBtn = document.getElementById('play-text');
+        const stopTextBtn = document.getElementById('stop-text');
 
-        function updateLineCount() {
+        let utterance;
+
+        function updateCounts() {
             const text = textarea.value;
             const lines = text.split(/\r\n|\r|\n/);
-            const count = lines.length;
-            lineCountDisplay.textContent = `Number of lines: ${count}`;
+            const words = text.trim().split(/\s+/).filter(word => word.length > 0);
+            const chars = text.length;
+            const readTime = Math.ceil(words.length / 200); // Average reading speed: 200 WPM
+
+            lineCountDisplay.textContent = `Lines: ${lines.length}`;
+            wordCountDisplay.textContent = `Words: ${words.length}`;
+            charCountDisplay.textContent = `Characters: ${chars}`;
+            readTimeDisplay.textContent = `Estimated Reading Time: ${readTime} min`;
         }
 
-        textarea.addEventListener('input', updateLineCount);
+        textarea.addEventListener('input', updateCounts);
+
+        copyCountsBtn.addEventListener('click', () => {
+            const countsText = `Lines: ${lineCountDisplay.textContent.split(': ')[1]}
+Words: ${wordCountDisplay.textContent.split(': ')[1]}
+Characters: ${charCountDisplay.textContent.split(': ')[1]}
+Estimated Reading Time: ${readTimeDisplay.textContent.split(': ')[1]}`;
+            navigator.clipboard.writeText(countsText)
+                .then(() => {
+                    alert('Counts copied to clipboard!');
+                })
+                .catch(err => {
+                    alert('Failed to copy counts.');
+                });
+        });
+
+        exportReportBtn.addEventListener('click', () => {
+            const text = textarea.value;
+            const countsText = `Lines: ${lineCountDisplay.textContent.split(': ')[1]}
+Words: ${wordCountDisplay.textContent.split(': ')[1]}
+Characters: ${charCountDisplay.textContent.split(': ')[1]}
+Estimated Reading Time: ${readTimeDisplay.textContent.split(': ')[1]}`;
+
+            const report = `Text Analysis Report
+---------------------
+${countsText}
+
+Text Content:
+---------------------
+${text}
+`;
+
+            const blob = new Blob([report], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'text_analysis_report.txt';
+            link.click();
+            URL.revokeObjectURL(url);
+        });
+
+        playTextBtn.addEventListener('click', () => {
+            if (utterance) {
+                window.speechSynthesis.cancel();
+            }
+            utterance = new SpeechSynthesisUtterance(textarea.value);
+            // Adjust volume between 0.0 and 1.0 (cannot go below device minimum)
+            utterance.volume = 0.5;
+            window.speechSynthesis.speak(utterance);
+        });
+
+        stopTextBtn.addEventListener('click', () => {
+            if (utterance) {
+                window.speechSynthesis.cancel();
+            }
+        });
+
+        // Initialize counts on page load
+        updateCounts();
     </script>
 </body>
 </html>
