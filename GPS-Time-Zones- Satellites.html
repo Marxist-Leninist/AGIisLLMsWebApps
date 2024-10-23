@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Time and GPS Tracker with Live Satellite Tracking and 3D Earth Simulation</title>
+    <title>Comprehensive Time and GPS Tracker with Live Satellite Tracking and UTC Calculator</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- Include OpenDyslexic font for better readability -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=OpenDyslexic&display=swap">
@@ -90,31 +90,60 @@
 
         /* World Clocks Styles */
         .world-clocks {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 15px;
+            max-height: 400px;
+            overflow-y: scroll;
         }
 
         .clock {
             background-color: #e9ecef;
             padding: 10px;
             border-radius: 5px;
-            flex: 1 1 calc(33% - 30px);
-            box-sizing: border-box;
+            margin-bottom: 10px;
         }
 
         .clock h3 {
             margin-top: 0;
         }
 
+        /* UTC Calculator Styles */
+        .utc-calculator {
+            margin-top: 20px;
+        }
+
+        .utc-calculator label {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .utc-calculator input, .utc-calculator select {
+            padding: 5px;
+            margin-bottom: 10px;
+            width: 100%;
+            max-width: 300px;
+        }
+
+        .utc-calculator button {
+            padding: 10px 15px;
+            font-size: 1em;
+            background-color: #0066cc;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .utc-calculator button:hover {
+            background-color: #004d99;
+        }
+
+        .utc-results {
+            margin-top: 20px;
+        }
+
         /* Responsive Design */
         @media (max-width: 600px) {
             .world-clocks {
-                flex-direction: column;
-            }
-
-            .clock {
-                flex: 1 1 100%;
+                max-height: 200px;
             }
         }
 
@@ -135,7 +164,7 @@
 </head>
 <body>
     <header>
-        <h1>Time and GPS Tracker with Live Satellite Tracking and 3D Earth Simulation</h1>
+        <h1>Comprehensive Time and GPS Tracker with Live Satellite Tracking and UTC Calculator</h1>
     </header>
 
     <main>
@@ -180,34 +209,29 @@
             <div id="threejsContainer"></div>
         </div>
 
-        <!-- World Clocks -->
+        <!-- All Time Zones -->
         <div class="section">
-            <h2>World Clocks</h2>
-            <div class="world-clocks">
-                <div class="clock">
-                    <h3>New York, USA</h3>
-                    <div id="clock-nyc">--:--:--</div>
-                </div>
-                <div class="clock">
-                    <h3>London, UK</h3>
-                    <div id="clock-london">--:--:--</div>
-                </div>
-                <div class="clock">
-                    <h3>Tokyo, Japan</h3>
-                    <div id="clock-tokyo">--:--:--</div>
-                </div>
-                <div class="clock">
-                    <h3>Sydney, Australia</h3>
-                    <div id="clock-sydney">--:--:--</div>
-                </div>
-                <div class="clock">
-                    <h3>Mumbai, India</h3>
-                    <div id="clock-mumbai">--:--:--</div>
-                </div>
-                <div class="clock">
-                    <h3>São Paulo, Brazil</h3>
-                    <div id="clock-sao-paulo">--:--:--</div>
-                </div>
+            <h2>All Time Zones with UTC Offsets</h2>
+            <div class="world-clocks" id="all-timezones">
+                Loading time zones...
+            </div>
+        </div>
+
+        <!-- UTC Calculator -->
+        <div class="section utc-calculator">
+            <h2>UTC Time Converter</h2>
+            <label for="utc-date">Select Date and Time:</label>
+            <input type="datetime-local" id="utc-date" />
+
+            <label for="utc-timezone">Select Time Zone:</label>
+            <select id="utc-timezone">
+                <!-- Time zones will be populated here -->
+            </select>
+
+            <button id="convert-utc">Convert to UTC and Local Time</button>
+
+            <div class="utc-results" id="utc-results">
+                <!-- Conversion results will be displayed here -->
             </div>
         </div>
     </main>
@@ -246,26 +270,68 @@
         setInterval(updateTime, 1000); // Update every second
         updateTime(); // Initial call
 
-        // World Clocks
-        const worldClocks = [
-            { elementId: 'clock-nyc', timeZone: 'America/New_York' },
-            { elementId: 'clock-london', timeZone: 'Europe/London' },
-            { elementId: 'clock-tokyo', timeZone: 'Asia/Tokyo' },
-            { elementId: 'clock-sydney', timeZone: 'Australia/Sydney' },
-            { elementId: 'clock-mumbai', timeZone: 'Asia/Kolkata' },
-            { elementId: 'clock-sao-paulo', timeZone: 'America/Sao_Paulo' },
-        ];
+        // All Time Zones with UTC Offsets
+        const allTimezonesDiv = document.getElementById('all-timezones');
+        const utcTimezoneSelect = document.getElementById('utc-timezone');
 
-        function updateWorldClocks() {
-            const now = new Date();
-            worldClocks.forEach(clock => {
-                const timeString = now.toLocaleTimeString('en-US', { timeZone: clock.timeZone });
-                document.getElementById(clock.elementId).textContent = timeString;
+        function loadTimeZones() {
+            let timeZones;
+            if (Intl.supportedValuesOf) {
+                timeZones = Intl.supportedValuesOf('timeZone');
+            } else {
+                // Fallback list of common time zones
+                timeZones = [
+                    'UTC', 'America/New_York', 'Europe/London', 'Asia/Tokyo', 'Australia/Sydney',
+                    'Asia/Kolkata', 'America/Sao_Paulo', 'Africa/Cairo', 'Europe/Berlin', 'Pacific/Auckland'
+                ];
+            }
+
+            allTimezonesDiv.innerHTML = '';
+            timeZones.forEach(tz => {
+                const now = new Date();
+                const timeInZone = now.toLocaleTimeString('en-US', { timeZone: tz });
+                const options = { timeZone: tz, timeZoneName: 'short' };
+                const offset = now.toLocaleTimeString('en-US', options).split(' ')[2];
+
+                const clockDiv = document.createElement('div');
+                clockDiv.className = 'clock';
+                clockDiv.innerHTML = `<h3>${tz}</h3><p>Current Time: ${timeInZone}</p><p>UTC Offset: ${offset}</p>`;
+                allTimezonesDiv.appendChild(clockDiv);
+
+                // Populate the timezone select dropdown
+                const option = document.createElement('option');
+                option.value = tz;
+                option.textContent = tz;
+                utcTimezoneSelect.appendChild(option);
             });
         }
 
-        setInterval(updateWorldClocks, 1000);
-        updateWorldClocks();
+        loadTimeZones();
+
+        // UTC Calculator
+        const convertUtcButton = document.getElementById('convert-utc');
+        const utcDateInput = document.getElementById('utc-date');
+        const utcResultsDiv = document.getElementById('utc-results');
+
+        convertUtcButton.addEventListener('click', () => {
+            const selectedDateTime = utcDateInput.value;
+            const selectedTimeZone = utcTimezoneSelect.value;
+
+            if (!selectedDateTime || !selectedTimeZone) {
+                utcResultsDiv.innerHTML = '<p>Please select both date/time and time zone.</p>';
+                return;
+            }
+
+            const dateInSelectedZone = new Date(selectedDateTime);
+            const utcDate = new Date(dateInSelectedZone.toLocaleString('en-US', { timeZone: 'UTC' }));
+            const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const dateInLocalZone = new Date(dateInSelectedZone.toLocaleString('en-US', { timeZone: localTimeZone }));
+
+            utcResultsDiv.innerHTML = `
+                <p>Time in UTC: ${utcDate.toLocaleString('en-US', { timeZone: 'UTC' })}</p>
+                <p>Time in Your Local Time Zone (${localTimeZone}): ${dateInLocalZone.toLocaleString()}</p>
+            `;
+        });
 
         // Initialize Map
         function initMap(lat, lon) {
@@ -409,15 +475,16 @@
         let scene, camera, renderer, globe, controls, satelliteObjects = [];
 
         function init3DGlobe() {
-            const width = document.getElementById('threejsContainer').clientWidth;
-            const height = document.getElementById('threejsContainer').clientHeight;
+            const container = document.getElementById('threejsContainer');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
 
             scene = new THREE.Scene();
             camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(width, height);
-            document.getElementById('threejsContainer').appendChild(renderer.domElement);
+            container.appendChild(renderer.domElement);
 
             // Add lights
             const ambientLight = new THREE.AmbientLight(0xffffff, 1);
@@ -426,7 +493,7 @@
             // Create Earth
             const geometry = new THREE.SphereGeometry(1, 32, 32);
             const textureLoader = new THREE.TextureLoader();
-            const earthTexture = textureLoader.load('https://threejs.org/examples/textures/earth_atmos_2048.jpg');
+            const earthTexture = textureLoader.load('https://threejs.org/examples/textures/land_ocean_ice_cloud_2048.jpg');
             const material = new THREE.MeshBasicMaterial({ map: earthTexture });
             globe = new THREE.Mesh(geometry, material);
             scene.add(globe);
@@ -439,6 +506,17 @@
             controls.enableDamping = true;
 
             animate();
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        function onWindowResize() {
+            const container = document.getElementById('threejsContainer');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
         }
 
         function update3DGlobe() {
