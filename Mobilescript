@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Interactive Bouncing Ball with MobileScript</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <style>
+        /* Styles for canvas and body */
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            height: 100%;
+            background-color: #000;
+        }
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+
+    <!-- MobileScript Code -->
+    <script type="text/mobilescript">
+component BouncingBall {
+    properties {
+        x = canvas.width / 2
+        y = canvas.height / 2
+        radius = 30
+        color = '#FFDD00'
+        vx = random(-5, 5)
+        vy = random(-5, 5)
+        isDragging = false
+        offsetX = 0
+        offsetY = 0
+    }
+
+    methods {
+        update() {
+            if !isDragging {
+                x += vx
+                y += vy
+
+                if x + radius > canvas.width or x - radius < 0 {
+                    vx = -vx
+                }
+                if y + radius > canvas.height or y - radius < 0 {
+                    vy = -vy
+                }
+            }
+        }
+
+        draw() {
+            context.beginPath()
+            context.arc(x, y, radius, 0, 2 * Math.PI)
+            context.fillStyle = color
+            context.fill()
+            context.closePath()
+        }
+
+        onTouchStart(event) {
+            if touchInside(event, x, y, radius) {
+                isDragging = true
+                const [touchX, touchY] = getTouchPosition(event)
+                offsetX = x - touchX
+                offsetY = y - touchY
+            }
+        }
+
+        onTouchMove(event) {
+            if isDragging {
+                const [touchX, touchY] = getTouchPosition(event)
+                x = touchX + offsetX
+                y = touchY + offsetY
+            }
+        }
+
+        onTouchEnd(event) {
+            if isDragging {
+                isDragging = false
+                const [touchX, touchY] = getTouchPosition(event)
+                vx = getVelocityX()
+                vy = getVelocityY()
+            }
+        }
+    }
+}
+
+app {
+    create BouncingBall
+    run
+}
+    </script>
+
+    <!-- Transpiler and Runtime -->
+    <script>
+(function() {
+    // Simplified Transpiler for MobileScript
+    function transpile(code) {
+        // Replace 'component' with 'class'
+        code = code.replace(/component\s+(\w+)\s*{([\s\S]*?)}\s*/g, function(match, className, classBody) {
+            let transpiledClass = `class ${className} {\n`;
+            // Transpile properties
+            const propertiesMatch = classBody.match(/properties\s*{([\s\S]*?)}\s*/);
+            if (propertiesMatch) {
+                const properties = propertiesMatch[1];
+                transpiledClass += 'constructor() {\n' + properties.replace(/^/gm, 'this.') + '\n}\n';
+            }
+            // Transpile methods
+            const methodsMatch = classBody.match(/methods\s*{([\s\S]*?)}\s*/);
+            if (methodsMatch) {
+                const methods = methodsMatch[1];
+                transpiledClass += methods.replace(/^(\w+)\s*\s*{([\s\S]*?)}\s*/gm, function(m, methodName, methodBody) {
+                    return `${methodName}() {\n${methodBody}\n}\n`;
+                });
+            }
+            transpiledClass += '}\n';
+            return transpiledClass;
+        });
+
+        // Transpile 'app' block
+        code = code.replace(/app\s*{([\s\S]*?)}\s*/g, function(match, appBody) {
+            return appBody;
+        });
+
+        // Replace custom syntax
+        code = code.replace(/\bor\b/g, '||');
+        code = code.replace(/\band\b/g, '&&');
+        code = code.replace(/\bnot\b/g, '!');
+        code = code.replace(/^\s*const\s+/gm, 'let ');
+        code = code.replace(/\bgetTouchPositionevent/g, 'runtime.getTouchPosition(event)');
+        code = code.replace(/\btouchInsideevent,\s*(.*?),\s*(.*?),\s*(.*?)/g, 'runtime.touchInside(event, $1, $2, $3)');
+        code = code.replace(/\brandom(.*?),\s*(.*?)/g, 'runtime.random($1, $2)');
+        code = code.replace(/\bcontext\b/g, 'runtime.context');
+        code = code.replace(/\bcanvas\b/g, 'runtime.canvas');
+        code = code.replace(/\bgetVelocityX/g, 'runtime.getVelocityX()');
+        code = code.replace(/\bgetVelocityY/g, 'runtime.getVelocityY()');
+
+        return code;
+    }
+
+    // MobileScript Code Extraction
+    const scriptTag = document.querySelector('script[type="text/mobilescript"]');
+    const mobileScriptCode = scriptTag.textContent;
+
+    // Transpile MobileScript to JavaScript
+    const jsCode = transpile(mobileScriptCode);
+
+    // Runtime Environment
+    const runtime = {
+        canvas: document.getElementById('canvas'),
+        context: null,
+        touchData: {},
+        init() {
+            this.canvas.width = window.innerWidth;
+            this.canvas.height = window.innerHeight;
+            this.context = this.canvas.getContext('2d');
+            window.addEventListener('resize', () => {
+                this.canvas.width = window.innerWidth;
+                this.canvas.height = window.innerHeight;
+            });
+        },
+        random(min, max) {
+            return Math.random() * (max - min) + min;
+        },
+        touchInside(event, x, y, radius) {
+            const [touchX, touchY] = this.getTouchPosition(event);
+            return Math.hypot(touchX - x, touchY - y) < radius;
+        },
+        getTouchPosition(event) {
+            const rect = this.canvas.getBoundingClientRect();
+            const touch = event.touches[0] || event.changedTouches[0];
+            const x = touch.clientX - rect.left;
+            const y = touch.clientY - rect.top;
+            return [x, y];
+        },
+        getVelocityX() {
+            return this.touchData.vx || 0;
+        },
+        getVelocityY() {
+            return this.touchData.vy || 0;
+        },
+        trackTouch(event) {
+            const touch = event.touches[0] || event.changedTouches[0];
+            const currentTime = Date.now();
+            if (event.type === 'touchstart') {
+                this.touchData.startX = touch.clientX;
+                this.touchData.startY = touch.clientY;
+                this.touchData.startTime = currentTime;
+            } else if (event.type === 'touchend') {
+                const deltaX = touch.clientX - this.touchData.startX;
+                const deltaY = touch.clientY - this.touchData.startY;
+                const deltaTime = currentTime - this.touchData.startTime;
+                this.touchData.vx = deltaX / deltaTime * 16; // Normalize to frame rate
+                this.touchData.vy = deltaY / deltaTime * 16;
+            }
+        }
+    };
+
+    // Initialize Runtime
+    runtime.init();
+
+    // Inject the transpiled code and runtime into the page
+    const scriptElement = document.createElement('script');
+    scriptElement.textContent = `
+        ${jsCode}
+
+        // Instantiate and run the application
+        const appInstance = new BouncingBall();
+
+        // Touch Event Handlers
+        runtime.canvas.addEventListener('touchstart', function(event) {
+            runtime.trackTouch(event);
+            appInstance.onTouchStart(event);
+        }, { passive: false });
+
+        runtime.canvas.addEventListener('touchmove', function(event) {
+            event.preventDefault();
+            appInstance.onTouchMove(event);
+        }, { passive: false });
+
+        runtime.canvas.addEventListener('touchend', function(event) {
+            runtime.trackTouch(event);
+            appInstance.onTouchEnd(event);
+        }, { passive: false });
+
+        // Animation Loop
+        function animate() {
+            runtime.context.clearRect(0, 0, runtime.canvas.width, runtime.canvas.height);
+            appInstance.update();
+            appInstance.draw();
+            requestAnimationFrame(animate);
+        }
+        animate();
+    `;
+    document.body.appendChild(scriptElement);
+})();
+    </script>
+</body>
+</html>
