@@ -103,6 +103,11 @@
             bottom: 0;
         }
 
+        footer a {
+            color: #f5f5f5;
+            text-decoration: underline;
+        }
+
         /* Responsive Design */
         @media (max-width: 600px) {
             header h1 {
@@ -160,54 +165,101 @@
     </main>
 
     <footer>
-        &copy; <span id="current-year"></span> Marxist-Leninist
+        &copy; <span id="current-year"></span> Marxist-Leninist |
+        <a href="https://github.com/Marxist-Leninist/AGIisLLMsWebApps" target="_blank">Original Source Page</a>
     </footer>
 
     <script>
         // Update the current year in the footer
         document.getElementById('current-year').textContent = new Date().getFullYear();
 
-        // Fetch the list of files from your GitHub repository
-        fetch('https://api.github.com/repos/marxist-leninist/WebAppAGIIsLLMs/contents/')
-            .then(response => response.json())
-            .then(data => {
-                const appList = document.getElementById('app-list');
-                const specialAppList = document.getElementById('special-app-list');
+        const GITHUB_API_URL = 'https://api.github.com/repos/Marxist-Leninist/AGIisLLMsWebApps/contents/';
 
-                data.forEach(item => {
-                    // Check if the item is a file ending with .html and not index.html
-                    if (item.type === 'file' && item.name.endsWith('.html') && item.name.toLowerCase() !== 'index.html') {
-                        const listItem = document.createElement('li');
-                        const link = document.createElement('a');
-                        link.href = item.name;
+        // List of special app base names (without .html)
+        const specialAppNames = ['AnAppForToday', 'howdoidothisproper'];
 
-                        // Process filename to create a display name
-                        let displayName = item.name.replace('.html', '');
+        const appList = document.getElementById('app-list');
+        const specialAppList = document.getElementById('special-app-list');
 
-                        // Recognize special files and split words accordingly
-                        if (displayName === 'AnAppForToday' || displayName === 'howdoidothisproper') {
-                            displayName = splitCamelCase(displayName);
-                            displayName = capitalizeWords(displayName);
-                            link.textContent = displayName;
-                            listItem.appendChild(link);
-                            specialAppList.appendChild(listItem);
-                        } else {
-                            // Replace hyphens and underscores with spaces in the display name
-                            displayName = displayName.replace(/[-_]/g, ' ');
-                            // Split camelCase or PascalCase into words
-                            displayName = splitCamelCase(displayName);
-                            // Capitalize each word
-                            displayName = capitalizeWords(displayName);
-                            link.textContent = displayName;
-                            listItem.appendChild(link);
-                            appList.appendChild(listItem);
-                        }
+        // Function to fetch file list from GitHub API
+        function fetchAppListFromGitHub() {
+            fetch(GITHUB_API_URL)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    const htmlFiles = data.filter(item => item.type === 'file' && item.name.endsWith('.html') && item.name.toLowerCase() !== 'index.html');
+                    if (htmlFiles.length === 0) {
+                        throw new Error('No HTML files found in the repository');
+                    }
+                    const appFilenames = htmlFiles.map(item => item.name);
+                    // Cache the app list in localStorage
+                    localStorage.setItem('appFilenames', JSON.stringify(appFilenames));
+                    populateAppLists(appFilenames);
+                })
+                .catch(error => {
+                    console.error('Error fetching file list from GitHub:', error);
+                    console.log('Attempting to load app list from cache.');
+                    // Use the cached list if available
+                    const cachedAppFilenames = localStorage.getItem('appFilenames');
+                    if (cachedAppFilenames) {
+                        const appFilenames = JSON.parse(cachedAppFilenames);
+                        populateAppLists(appFilenames);
+                    } else {
+                        displayOfflineMessage();
                     }
                 });
-            })
-            .catch(error => console.error('Error fetching file list:', error));
+        }
 
-        // Updated function to split camelCase and PascalCase into words
+        // Function to populate the app lists
+        function populateAppLists(appFilenames) {
+            appList.innerHTML = '';
+            specialAppList.innerHTML = '';
+
+            appFilenames.forEach(filename => {
+                const listItem = document.createElement('li');
+                const link = document.createElement('a');
+                link.href = filename;
+
+                // Process filename to create a display name
+                let displayName = filename.replace('.html', '');
+
+                // Check if the app is a special app
+                if (specialAppNames.includes(displayName)) {
+                    displayName = splitCamelCase(displayName);
+                    displayName = capitalizeWords(displayName);
+                    link.textContent = displayName;
+                    listItem.appendChild(link);
+                    specialAppList.appendChild(listItem);
+                } else {
+                    // Replace hyphens and underscores with spaces in the display name
+                    displayName = displayName.replace(/[-_]/g, ' ');
+                    // Split camelCase or PascalCase into words
+                    displayName = splitCamelCase(displayName);
+                    // Capitalize each word
+                    displayName = capitalizeWords(displayName);
+                    link.textContent = displayName;
+                    listItem.appendChild(link);
+                    appList.appendChild(listItem);
+                }
+            });
+        }
+
+        // Function to display an offline message
+        function displayOfflineMessage() {
+            const messageItem = document.createElement('li');
+            messageItem.textContent = 'App list unavailable offline. Please access this page online at least once to cache the app list.';
+            messageItem.style.backgroundColor = '#d5d5d5';
+            messageItem.style.color = '#000';
+            messageItem.style.textAlign = 'center';
+            messageItem.style.fontSize = '1.2em';
+            appList.appendChild(messageItem);
+        }
+
+        // Function to split camelCase and PascalCase into words
         function splitCamelCase(text) {
             return text
                 .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2') // Handle sequences like 'HTMLParser' ➔ 'HTML Parser'
@@ -219,6 +271,9 @@
         function capitalizeWords(text) {
             return text.replace(/\b\w/g, char => char.toUpperCase());
         }
+
+        // Attempt to fetch the app list from GitHub
+        fetchAppListFromGitHub();
     </script>
 </body>
 </html>
