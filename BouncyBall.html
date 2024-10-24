@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Bouncing Ball with Drag and Throw (Mobile-Friendly)</title>
+    <title>Bouncing Ball with Drag and Throw (Pointer Events)</title>
     <style>
         html, body {
             margin: 0;
@@ -14,7 +14,7 @@
             margin: 0 auto;
             background-color: #000;
             border: 1px solid #fff;
-            touch-action: none; /* Prevent default touch behaviors */
+            touch-action: none; /* Disable default touch actions */
         }
     </style>
 </head>
@@ -40,8 +40,8 @@
             isDragging: false,
             dragStartX: 0,
             dragStartY: 0,
-            lastMouseX: 0,
-            lastMouseY: 0,
+            lastPointerX: 0,
+            lastPointerY: 0,
             lastTime: 0
         };
 
@@ -49,44 +49,29 @@
         const gravity = 0.5;
         const friction = 0.99;
 
-        // Event listeners for mouse interactions
-        canvas.addEventListener('mousedown', pointerDownHandler);
-        canvas.addEventListener('mousemove', pointerMoveHandler);
-        canvas.addEventListener('mouseup', pointerUpHandler);
-        canvas.addEventListener('mouseleave', pointerUpHandler);
+        // Event listeners for pointer interactions
+        canvas.addEventListener('pointerdown', pointerDownHandler);
+        canvas.addEventListener('pointermove', pointerMoveHandler);
+        canvas.addEventListener('pointerup', pointerUpHandler);
+        canvas.addEventListener('pointercancel', pointerUpHandler);
+        canvas.addEventListener('pointerleave', pointerUpHandler);
 
-        // Event listeners for touch interactions
-        canvas.addEventListener('touchstart', pointerDownHandler);
-        canvas.addEventListener('touchmove', pointerMoveHandler);
-        canvas.addEventListener('touchend', pointerUpHandler);
-        canvas.addEventListener('touchcancel', pointerUpHandler);
-
-        function getPointerPosition(e) {
-            const rect = canvas.getBoundingClientRect();
-            let x, y;
-
-            if (e.type.startsWith('mouse')) {
-                x = e.clientX - rect.left;
-                y = e.clientY - rect.top;
-            } else if (e.type.startsWith('touch')) {
-                x = e.touches[0].clientX - rect.left;
-                y = e.touches[0].clientY - rect.top;
-            }
-
-            return { x, y };
-        }
-
+        // Set pointer capture to ensure pointer events are captured even when moving outside the canvas
         function pointerDownHandler(e) {
             e.preventDefault();
-            const { x: mouseX, y: mouseY } = getPointerPosition(e);
+            canvas.setPointerCapture(e.pointerId);
+
+            const rect = canvas.getBoundingClientRect();
+            const pointerX = e.clientX - rect.left;
+            const pointerY = e.clientY - rect.top;
 
             // Check if pointer is inside the ball
-            if (Math.hypot(mouseX - ball.x, mouseY - ball.y) < ball.radius) {
+            if (Math.hypot(pointerX - ball.x, pointerY - ball.y) < ball.radius) {
                 ball.isDragging = true;
-                ball.dragStartX = ball.x - mouseX;
-                ball.dragStartY = ball.y - mouseY;
-                ball.lastMouseX = mouseX;
-                ball.lastMouseY = mouseY;
+                ball.dragStartX = ball.x - pointerX;
+                ball.dragStartY = ball.y - pointerY;
+                ball.lastPointerX = pointerX;
+                ball.lastPointerY = pointerY;
                 ball.lastTime = Date.now();
                 ball.vx = 0;
                 ball.vy = 0;
@@ -96,22 +81,25 @@
         function pointerMoveHandler(e) {
             if (ball.isDragging) {
                 e.preventDefault();
-                const { x: mouseX, y: mouseY } = getPointerPosition(e);
+
+                const rect = canvas.getBoundingClientRect();
+                const pointerX = e.clientX - rect.left;
+                const pointerY = e.clientY - rect.top;
 
                 // Calculate velocity based on pointer movement
                 const currentTime = Date.now();
                 const deltaTime = currentTime - ball.lastTime;
                 if (deltaTime > 0) {
-                    ball.vx = (mouseX - ball.lastMouseX) / (deltaTime / 16); // Normalize to frame rate
-                    ball.vy = (mouseY - ball.lastMouseY) / (deltaTime / 16);
+                    ball.vx = (pointerX - ball.lastPointerX) / (deltaTime / 16); // Normalize to frame rate
+                    ball.vy = (pointerY - ball.lastPointerY) / (deltaTime / 16);
                 }
 
-                ball.lastMouseX = mouseX;
-                ball.lastMouseY = mouseY;
+                ball.lastPointerX = pointerX;
+                ball.lastPointerY = pointerY;
                 ball.lastTime = currentTime;
 
-                ball.x = mouseX + ball.dragStartX;
-                ball.y = mouseY + ball.dragStartY;
+                ball.x = pointerX + ball.dragStartX;
+                ball.y = pointerY + ball.dragStartY;
             }
         }
 
@@ -119,6 +107,7 @@
             if (ball.isDragging) {
                 e.preventDefault();
                 ball.isDragging = false;
+                canvas.releasePointerCapture(e.pointerId);
             }
         }
 
