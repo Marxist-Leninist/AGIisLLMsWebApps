@@ -2,106 +2,154 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Bouncing Ball Web App</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"> <!-- Prevent zooming -->
+    <title>Bouncing Ball with Drag and Throw</title>
     <style>
-        /* Eye-friendly styles */
-        body {
-            background-color: #333333;
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-            touch-action: manipulation; /* Improves touch performance */
-        }
         canvas {
             display: block;
-            background-color: #444444;
+            margin: 0 auto;
+            background-color: #000;
+            border: 1px solid #fff;
         }
     </style>
 </head>
 <body>
     <canvas id="canvas"></canvas>
+
     <script>
-        // Get the canvas element and set its size
         const canvas = document.getElementById('canvas');
         const context = canvas.getContext('2d');
 
-        let width, height;
-        let scaleFactor = window.devicePixelRatio || 1;
-
-        // Resize canvas to fill the window and handle high pixel density screens
-        function resizeCanvas() {
-            width = window.innerWidth;
-            height = window.innerHeight;
-            canvas.width = width * scaleFactor;
-            canvas.height = height * scaleFactor;
-            canvas.style.width = width + 'px';
-            canvas.style.height = height + 'px';
-            context.setTransform(scaleFactor, 0, 0, scaleFactor, 0, 0); // Reset transformations
-        }
-        window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
+        // Set canvas size
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
 
         // Ball properties
-        const ball = {
-            x: width / 2,
-            y: height / 2,
-            radius: 20,
-            color: '#FFDD00', // Golden yellow color
-            dx: 4, // Horizontal velocity
-            dy: 3  // Vertical velocity
+        let ball = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            radius: 30,
+            color: '#FFDD00',
+            vx: 2,
+            vy: 2,
+            isDragging: false,
+            dragStartX: 0,
+            dragStartY: 0,
+            lastMouseX: 0,
+            lastMouseY: 0,
+            lastTime: 0
         };
 
-        // Handle touch events to reposition the ball
-        canvas.addEventListener('touchstart', function(event) {
-            event.preventDefault(); // Prevent scrolling
-            const touch = event.touches[0];
+        // Gravity and friction
+        const gravity = 0.5;
+        const friction = 0.99;
+
+        // Event listeners for mouse interactions
+        canvas.addEventListener('mousedown', mouseDownHandler);
+        canvas.addEventListener('mousemove', mouseMoveHandler);
+        canvas.addEventListener('mouseup', mouseUpHandler);
+        canvas.addEventListener('mouseleave', mouseUpHandler); // To handle mouse leaving canvas
+
+        function mouseDownHandler(e) {
             const rect = canvas.getBoundingClientRect();
-            const x = (touch.clientX - rect.left) * (canvas.width / rect.width) / scaleFactor;
-            const y = (touch.clientY - rect.top) * (canvas.height / rect.height) / scaleFactor;
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
 
-            ball.x = x;
-            ball.y = y;
-        });
+            // Check if mouse is inside the ball
+            if (Math.hypot(mouseX - ball.x, mouseY - ball.y) < ball.radius) {
+                ball.isDragging = true;
+                ball.dragStartX = ball.x - mouseX;
+                ball.dragStartY = ball.y - mouseY;
+                ball.lastMouseX = mouseX;
+                ball.lastMouseY = mouseY;
+                ball.lastTime = Date.now();
+                ball.vx = 0;
+                ball.vy = 0;
+            }
+        }
 
-        // Animation loop with frame rate limiting
-        let lastTime = 0;
-        const fps = 60; // Desired frames per second
-        const frameDuration = 1000 / fps;
+        function mouseMoveHandler(e) {
+            if (ball.isDragging) {
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
 
-        function animate(time) {
-            if (time - lastTime >= frameDuration) {
-                context.clearRect(0, 0, width, height);
-
-                // Draw the ball
-                context.beginPath();
-                context.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-                context.fillStyle = ball.color;
-                context.fill();
-                context.closePath();
-
-                // Move the ball
-                ball.x += ball.dx;
-                ball.y += ball.dy;
-
-                // Bounce off the left and right walls
-                if (ball.x + ball.radius > width || ball.x - ball.radius < 0) {
-                    ball.dx = -ball.dx;
+                // Calculate velocity based on mouse movement
+                const currentTime = Date.now();
+                const deltaTime = currentTime - ball.lastTime;
+                if (deltaTime > 0) {
+                    ball.vx = (mouseX - ball.lastMouseX) / (deltaTime / 16); // Normalize to frame rate
+                    ball.vy = (mouseY - ball.lastMouseY) / (deltaTime / 16);
                 }
 
-                // Bounce off the top and bottom walls
-                if (ball.y + ball.radius > height || ball.y - ball.radius < 0) {
-                    ball.dy = -ball.dy;
+                ball.lastMouseX = mouseX;
+                ball.lastMouseY = mouseY;
+                ball.lastTime = currentTime;
+
+                ball.x = mouseX + ball.dragStartX;
+                ball.y = mouseY + ball.dragStartY;
+            }
+        }
+
+        function mouseUpHandler(e) {
+            if (ball.isDragging) {
+                ball.isDragging = false;
+            }
+        }
+
+        function drawBall() {
+            context.beginPath();
+            context.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            context.fillStyle = ball.color;
+            context.fill();
+            context.closePath();
+        }
+
+        function update() {
+            if (!ball.isDragging) {
+                // Apply gravity
+                ball.vy += gravity;
+                // Apply friction
+                ball.vx *= friction;
+                ball.vy *= friction;
+
+                // Move ball
+                ball.x += ball.vx;
+                ball.y += ball.vy;
+
+                // Collision detection with walls
+                if (ball.x + ball.radius > canvas.width) {
+                    ball.x = canvas.width - ball.radius;
+                    ball.vx *= -1;
+                } else if (ball.x - ball.radius < 0) {
+                    ball.x = ball.radius;
+                    ball.vx *= -1;
                 }
 
-                lastTime = time;
+                if (ball.y + ball.radius > canvas.height) {
+                    ball.y = canvas.height - ball.radius;
+                    ball.vy *= -1;
+                } else if (ball.y - ball.radius < 0) {
+                    ball.y = ball.radius;
+                    ball.vy *= -1;
+                }
             }
 
-            requestAnimationFrame(animate);
+            // Clear canvas
+            context.clearRect(0, 0, canvas.width, canvas.height);
+            // Draw ball
+            drawBall();
+
+            requestAnimationFrame(update);
         }
 
         // Start the animation
-        requestAnimationFrame(animate);
+        update();
+
+        // Adjust canvas size when the window is resized
+        window.addEventListener('resize', function() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
     </script>
 </body>
 </html>
