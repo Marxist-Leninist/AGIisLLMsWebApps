@@ -2,13 +2,19 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Bouncing Ball with Drag and Throw</title>
+    <title>Bouncing Ball with Drag and Throw (Mobile-Friendly)</title>
     <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Prevent scrolling on mobile */
+        }
         canvas {
             display: block;
             margin: 0 auto;
             background-color: #000;
             border: 1px solid #fff;
+            touch-action: none; /* Prevent default touch behaviors */
         }
     </style>
 </head>
@@ -44,17 +50,37 @@
         const friction = 0.99;
 
         // Event listeners for mouse interactions
-        canvas.addEventListener('mousedown', mouseDownHandler);
-        canvas.addEventListener('mousemove', mouseMoveHandler);
-        canvas.addEventListener('mouseup', mouseUpHandler);
-        canvas.addEventListener('mouseleave', mouseUpHandler); // To handle mouse leaving canvas
+        canvas.addEventListener('mousedown', pointerDownHandler);
+        canvas.addEventListener('mousemove', pointerMoveHandler);
+        canvas.addEventListener('mouseup', pointerUpHandler);
+        canvas.addEventListener('mouseleave', pointerUpHandler);
 
-        function mouseDownHandler(e) {
+        // Event listeners for touch interactions
+        canvas.addEventListener('touchstart', pointerDownHandler);
+        canvas.addEventListener('touchmove', pointerMoveHandler);
+        canvas.addEventListener('touchend', pointerUpHandler);
+        canvas.addEventListener('touchcancel', pointerUpHandler);
+
+        function getPointerPosition(e) {
             const rect = canvas.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
+            let x, y;
 
-            // Check if mouse is inside the ball
+            if (e.type.startsWith('mouse')) {
+                x = e.clientX - rect.left;
+                y = e.clientY - rect.top;
+            } else if (e.type.startsWith('touch')) {
+                x = e.touches[0].clientX - rect.left;
+                y = e.touches[0].clientY - rect.top;
+            }
+
+            return { x, y };
+        }
+
+        function pointerDownHandler(e) {
+            e.preventDefault();
+            const { x: mouseX, y: mouseY } = getPointerPosition(e);
+
+            // Check if pointer is inside the ball
             if (Math.hypot(mouseX - ball.x, mouseY - ball.y) < ball.radius) {
                 ball.isDragging = true;
                 ball.dragStartX = ball.x - mouseX;
@@ -67,13 +93,12 @@
             }
         }
 
-        function mouseMoveHandler(e) {
+        function pointerMoveHandler(e) {
             if (ball.isDragging) {
-                const rect = canvas.getBoundingClientRect();
-                const mouseX = e.clientX - rect.left;
-                const mouseY = e.clientY - rect.top;
+                e.preventDefault();
+                const { x: mouseX, y: mouseY } = getPointerPosition(e);
 
-                // Calculate velocity based on mouse movement
+                // Calculate velocity based on pointer movement
                 const currentTime = Date.now();
                 const deltaTime = currentTime - ball.lastTime;
                 if (deltaTime > 0) {
@@ -90,8 +115,9 @@
             }
         }
 
-        function mouseUpHandler(e) {
+        function pointerUpHandler(e) {
             if (ball.isDragging) {
+                e.preventDefault();
                 ball.isDragging = false;
             }
         }
