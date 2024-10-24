@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MobileScript IDE - Editor, Compiler, and Runner</title>
+    <title>MobileScript IDE - Hello World Example</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <style>
         /* Basic styles for the page */
@@ -72,71 +72,19 @@
     <!-- Editor Container -->
     <div id="editor-container">
         <textarea id="code-editor">// Write your MobileScript code here
-component BouncingBall {
-    properties {
-        x = canvas.width / 2
-        y = canvas.height / 2
-        radius = 30
-        color = '#FFDD00'
-        vx = random(-5, 5)
-        vy = random(-5, 5)
-        isDragging = false
-        offsetX = 0
-        offsetY = 0
-    }
-
+component HelloWorld {
     methods {
-        update() {
-            if !isDragging {
-                x += vx
-                y += vy
-
-                if x + radius > canvas.width or x - radius < 0 {
-                    vx = -vx
-                }
-                if y + radius > canvas.height or y - radius < 0 {
-                    vy = -vy
-                }
-            }
-        }
-
         draw() {
-            context.beginPath()
-            context.arc(x, y, radius, 0, 2 * Math.PI)
-            context.fillStyle = color
-            context.fill()
-            context.closePath()
-        }
-
-        onTouchStart(event) {
-            if touchInside(event, x, y, radius) {
-                isDragging = true
-                const [touchX, touchY] = getTouchPosition(event)
-                offsetX = x - touchX
-                offsetY = y - touchY
-            }
-        }
-
-        onTouchMove(event) {
-            if isDragging {
-                const [touchX, touchY] = getTouchPosition(event)
-                x = touchX + offsetX
-                y = touchY + offsetY
-            }
-        }
-
-        onTouchEnd(event) {
-            if isDragging {
-                isDragging = false
-                vx = getVelocityX()
-                vy = getVelocityY()
-            }
+            context.font = '48px Arial'
+            context.fillStyle = '#FFDD00'
+            context.textAlign = 'center'
+            context.fillText('Hello, World!', canvas.width / 2, canvas.height / 2)
         }
     }
 }
 
 app {
-    create BouncingBall
+    create HelloWorld
     run
 }</textarea>
         <button id="run-button">Run</button>
@@ -159,7 +107,6 @@ app {
             const runtime = {
                 canvas: canvas,
                 context: null,
-                touchData: {},
                 init() {
                     this.canvas.width = this.canvas.clientWidth;
                     this.canvas.height = this.canvas.clientHeight;
@@ -167,42 +114,9 @@ app {
                     window.addEventListener('resize', () => {
                         this.canvas.width = this.canvas.clientWidth;
                         this.canvas.height = this.canvas.clientHeight;
+                        this.context.font = '48px Arial';
+                        this.context.textAlign = 'center';
                     });
-                },
-                random(min, max) {
-                    return Math.random() * (max - min) + min;
-                },
-                touchInside(event, x, y, radius) {
-                    const [touchX, touchY] = this.getTouchPosition(event);
-                    return Math.hypot(touchX - x, touchY - y) < radius;
-                },
-                getTouchPosition(event) {
-                    const rect = this.canvas.getBoundingClientRect();
-                    const touch = event.touches[0] || event.changedTouches[0];
-                    const x = touch.clientX - rect.left;
-                    const y = touch.clientY - rect.top;
-                    return [x, y];
-                },
-                getVelocityX() {
-                    return this.touchData.vx || 0;
-                },
-                getVelocityY() {
-                    return this.touchData.vy || 0;
-                },
-                trackTouch(event) {
-                    const touch = event.touches[0] || event.changedTouches[0];
-                    const currentTime = Date.now();
-                    if (event.type === 'touchstart') {
-                        this.touchData.startX = touch.clientX;
-                        this.touchData.startY = touch.clientY;
-                        this.touchData.startTime = currentTime;
-                    } else if (event.type === 'touchend') {
-                        const deltaX = touch.clientX - this.touchData.startX;
-                        const deltaY = touch.clientY - this.touchData.startY;
-                        const deltaTime = currentTime - this.touchData.startTime;
-                        this.touchData.vx = deltaX / deltaTime * 16; // Normalize to frame rate
-                        this.touchData.vy = deltaY / deltaTime * 16;
-                    }
                 }
             };
 
@@ -216,6 +130,9 @@ app {
                     if (propertiesMatch) {
                         const properties = propertiesMatch[1];
                         transpiledClass += 'constructor() {\n' + properties.replace(/^/gm, 'this.') + '\n}\n';
+                    } else {
+                        // If no properties, add an empty constructor
+                        transpiledClass += 'constructor() {}\n';
                     }
                     // Transpile methods
                     const methodsMatch = classBody.match(/methods\s*{([\s\S]*?)}\s*/);
@@ -239,13 +156,8 @@ app {
                 code = code.replace(/\band\b/g, '&&');
                 code = code.replace(/\bnot\b/g, '!');
                 code = code.replace(/^\s*const\s+/gm, 'let ');
-                code = code.replace(/\bgetTouchPositionevent/g, 'runtime.getTouchPosition(event)');
-                code = code.replace(/\btouchInsideevent,\s*(.*?),\s*(.*?),\s*(.*?)/g, 'runtime.touchInside(event, $1, $2, $3)');
-                code = code.replace(/\brandom(.*?),\s*(.*?)/g, 'runtime.random($1, $2)');
                 code = code.replace(/\bcontext\b/g, 'runtime.context');
                 code = code.replace(/\bcanvas\b/g, 'runtime.canvas');
-                code = code.replace(/\bgetVelocityX/g, 'runtime.getVelocityX()');
-                code = code.replace(/\bgetVelocityY/g, 'runtime.getVelocityY()');
 
                 return code;
             }
@@ -262,6 +174,13 @@ app {
                     // Transpile the code
                     const jsCode = transpile(mobileScriptCode);
 
+                    // Extract the component name
+                    const componentNameMatch = mobileScriptCode.match(/component\s+(\w+)/);
+                    if (!componentNameMatch) {
+                        throw new Error('No component defined in the code.');
+                    }
+                    const componentName = componentNameMatch[1];
+
                     // Create a new script element
                     const scriptElement = document.createElement('script');
                     scriptElement.type = 'text/javascript';
@@ -273,44 +192,17 @@ app {
                             runtime.init();
 
                             // Instantiate and run the application
-                            const appInstance = new BouncingBall();
-
-                            // Touch Event Handlers
-                            runtime.canvas.addEventListener('touchstart', function(event) {
-                                runtime.trackTouch(event);
-                                appInstance.onTouchStart(event);
-                            }, { passive: false });
-
-                            runtime.canvas.addEventListener('touchmove', function(event) {
-                                event.preventDefault();
-                                appInstance.onTouchMove(event);
-                            }, { passive: false });
-
-                            runtime.canvas.addEventListener('touchend', function(event) {
-                                runtime.trackTouch(event);
-                                appInstance.onTouchEnd(event);
-                            }, { passive: false });
-
-                            // Mouse Event Handlers for Desktop
-                            runtime.canvas.addEventListener('mousedown', function(event) {
-                                runtime.trackMouse(event);
-                                appInstance.onTouchStart(event);
-                            });
-
-                            runtime.canvas.addEventListener('mousemove', function(event) {
-                                appInstance.onTouchMove(event);
-                            });
-
-                            runtime.canvas.addEventListener('mouseup', function(event) {
-                                runtime.trackMouse(event);
-                                appInstance.onTouchEnd(event);
-                            });
+                            const appInstance = new ${componentName}();
 
                             // Animation Loop
                             function animate() {
                                 runtime.context.clearRect(0, 0, runtime.canvas.width, runtime.canvas.height);
-                                appInstance.update();
-                                appInstance.draw();
+                                if (appInstance.update) {
+                                    appInstance.update();
+                                }
+                                if (appInstance.draw) {
+                                    appInstance.draw();
+                                }
                                 requestAnimationFrame(animate);
                             }
                             animate();
