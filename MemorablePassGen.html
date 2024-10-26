@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Customizable Memorable Password Generator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1 {
+            text-align: center;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
+        }
+        label {
+            display: block;
+            margin-top: 15px;
+        }
+        input[type="number"] {
+            width: 50px;
+        }
+        #password {
+            font-size: 24px;
+            margin-top: 20px;
+            color: #2c3e50;
+            word-break: break-all;
+        }
+        button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 18px;
+            cursor: pointer;
+            background-color: #3498db;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .options {
+            margin-top: 20px;
+        }
+        .option-group {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Customizable Memorable Password Generator</h1>
+    <div class="container">
+        <div class="options">
+            <div class="option-group">
+                <label for="numWords">Number of Words:</label>
+                <input type="number" id="numWords" value="2" min="1" max="10">
+            </div>
+            <div class="option-group">
+                <label>Include Word Types:</label>
+                <input type="checkbox" id="useAdjectives" checked> <label for="useAdjectives">Adjectives</label><br>
+                <input type="checkbox" id="useNouns" checked> <label for="useNouns">Nouns</label><br>
+                <input type="checkbox" id="useVerbs"> <label for="useVerbs">Verbs</label><br>
+                <input type="checkbox" id="useAdverbs"> <label for="useAdverbs">Adverbs</label>
+            </div>
+            <div class="option-group">
+                <label for="numNumbers">Number of Digits:</label>
+                <input type="number" id="numNumbers" value="2" min="0" max="10">
+            </div>
+            <div class="option-group">
+                <label for="numSymbols">Number of Symbols:</label>
+                <input type="number" id="numSymbols" value="1" min="0" max="10">
+            </div>
+            <div class="option-group">
+                <label>Letter Case:</label>
+                <select id="letterCase">
+                    <option value="capitalize">Capitalize Each Word</option>
+                    <option value="uppercase">UPPERCASE</option>
+                    <option value="lowercase">lowercase</option>
+                    <option value="random">rAnDoM cAsE</option>
+                </select>
+            </div>
+        </div>
+        <button onclick="generatePassword()">Generate Password</button>
+        <div id="password"></div>
+    </div>
+
+    <script>
+        function generatePassword() {
+            var numWords = parseInt(document.getElementById('numWords').value);
+            var useAdjectives = document.getElementById('useAdjectives').checked;
+            var useNouns = document.getElementById('useNouns').checked;
+            var useVerbs = document.getElementById('useVerbs').checked;
+            var useAdverbs = document.getElementById('useAdverbs').checked;
+            var numNumbers = parseInt(document.getElementById('numNumbers').value);
+            var numSymbols = parseInt(document.getElementById('numSymbols').value);
+            var letterCase = document.getElementById('letterCase').value;
+
+            var wordTypes = [];
+            if (useAdjectives) wordTypes.push('adj');
+            if (useNouns) wordTypes.push('n');
+            if (useVerbs) wordTypes.push('v');
+            if (useAdverbs) wordTypes.push('adv');
+
+            if (wordTypes.length === 0) {
+                alert('Please select at least one word type.');
+                return;
+            }
+
+            var symbols = ["!", "@", "#", "$", "%", "&", "*", "?", "~", "^", "+", "="];
+
+            var passwordWords = [];
+
+            // Fetch words from Datamuse API
+            var fetchPromises = [];
+            for (var i = 0; i < numWords; i++) {
+                var randomWordType = wordTypes[Math.floor(Math.random() * wordTypes.length)];
+                fetchPromises.push(
+                    fetch('https://api.datamuse.com/words?max=1000&md=p&max=1000')
+                        .then(response => response.json())
+                        .then(data => {
+                            // Filter words by part of speech
+                            var filteredWords = data.filter(wordObj => wordObj.tags && wordObj.tags.includes(randomWordType));
+                            if (filteredWords.length > 0) {
+                                var word = filteredWords[Math.floor(Math.random() * filteredWords.length)].word;
+                                passwordWords.push(word);
+                            }
+                        })
+                );
+            }
+
+            Promise.all(fetchPromises).then(() => {
+                var password = passwordWords.join('');
+
+                // Apply letter case
+                switch (letterCase) {
+                    case 'capitalize':
+                        password = passwordWords.map(capitalize).join('');
+                        break;
+                    case 'uppercase':
+                        password = password.toUpperCase();
+                        break;
+                    case 'lowercase':
+                        password = password.toLowerCase();
+                        break;
+                    case 'random':
+                        password = randomCase(password);
+                        break;
+                }
+
+                // Add numbers
+                var numbers = '';
+                for (var i = 0; i < numNumbers; i++) {
+                    numbers += Math.floor(Math.random() * 10);
+                }
+                password += numbers;
+
+                // Add symbols
+                for (var i = 0; i < numSymbols; i++) {
+                    var symbol = symbols[Math.floor(Math.random() * symbols.length)];
+                    password += symbol;
+                }
+
+                document.getElementById('password').innerText = password;
+            }).catch(error => {
+                console.error('Error fetching words:', error);
+                document.getElementById("password").innerText = 'Error generating password. Please try again.';
+            });
+        }
+
+        function capitalize(word) {
+            return word.charAt(0).toUpperCase() + word.slice(1);
+        }
+
+        function randomCase(str) {
+            return str.split('').map(function(c) {
+                return Math.random() < 0.5 ? c.toLowerCase() : c.toUpperCase();
+            }).join('');
+        }
+    </script>
+
+</body>
+</html>
