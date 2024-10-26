@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Secure Password Generator</title>
+    <title>Advanced Secure Password Generator</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         /* Dark Theme Styles */
@@ -25,7 +25,7 @@
             display: block;
             margin-top: 15px;
         }
-        input[type="number"] {
+        input[type="number"], input[type="text"] {
             width: 60px;
             padding: 5px;
             margin-top: 5px;
@@ -105,20 +105,30 @@
 </head>
 <body>
 
-    <h1>Secure Password Generator</h1>
+    <h1>Advanced Secure Password Generator</h1>
     <div class="container">
         <div class="options">
             <div class="option-group">
                 <label for="numWords">Number of Words:</label>
-                <input type="number" id="numWords" value="2" min="1" max="10">
+                <input type="text" id="numWords">
+            </div>
+            <div class="option-group">
+                <label for="separator">Separator:</label>
+                <select id="separator">
+                    <option value="">None</option>
+                    <option value="space">Space</option>
+                    <option value="-">Hyphen (-)</option>
+                    <option value="_">Underscore (_)</option>
+                    <option value=".">Dot (.)</option>
+                </select>
             </div>
             <div class="option-group">
                 <label for="numNumbers">Number of Digits:</label>
-                <input type="number" id="numNumbers" value="2" min="0" max="10">
+                <input type="text" id="numNumbers">
             </div>
             <div class="option-group">
                 <label for="numSymbols">Number of Symbols:</label>
-                <input type="number" id="numSymbols" value="1" min="0" max="10">
+                <input type="text" id="numSymbols">
             </div>
             <div class="option-group">
                 <label>Letter Case:</label>
@@ -146,6 +156,12 @@
     </div>
 
     <script>
+        // Initialize on page load
+        window.onload = function() {
+            randomizeSettings();
+            generatePassword();
+        };
+
         document.getElementById('toggleAdvanced').addEventListener('click', function() {
             var advOptions = document.getElementById('advancedOptions');
             if (advOptions.style.display === 'none' || advOptions.style.display === '') {
@@ -157,10 +173,51 @@
             }
         });
 
+        function randomizeSettings() {
+            // Randomize number of words (1-5)
+            document.getElementById('numWords').value = randomRange(1, 5);
+
+            // Randomize separator
+            var separators = ['', 'space', '-', '_', '.'];
+            document.getElementById('separator').value = separators[Math.floor(Math.random() * separators.length)];
+
+            // Randomize number of digits (0-5)
+            document.getElementById('numNumbers').value = randomRange(0, 5);
+
+            // Randomize number of symbols (0-5)
+            document.getElementById('numSymbols').value = randomRange(0, 5);
+
+            // Randomize letter case
+            var cases = ['capitalize', 'uppercase', 'lowercase', 'random'];
+            document.getElementById('letterCase').value = cases[Math.floor(Math.random() * cases.length)];
+
+            // Randomize word types
+            document.getElementById('useAdjectives').checked = Math.random() < 0.8;
+            document.getElementById('useNouns').checked = Math.random() < 0.8;
+            document.getElementById('useVerbs').checked = Math.random() < 0.8;
+            document.getElementById('useAdverbs').checked = Math.random() < 0.8;
+
+            // Ensure at least one word type is selected
+            if (!document.getElementById('useAdjectives').checked &&
+                !document.getElementById('useNouns').checked &&
+                !document.getElementById('useVerbs').checked &&
+                !document.getElementById('useAdverbs').checked) {
+                document.getElementById('useNouns').checked = true;
+            }
+        }
+
         function generatePassword() {
-            var numWords = parseInt(document.getElementById('numWords').value);
-            var numNumbers = parseInt(document.getElementById('numNumbers').value);
-            var numSymbols = parseInt(document.getElementById('numSymbols').value);
+            var numWordsInput = document.getElementById('numWords').value;
+            var numWords = parseRange(numWordsInput, 1, 10);
+
+            var numNumbersInput = document.getElementById('numNumbers').value;
+            var numNumbers = parseRange(numNumbersInput, 0, 10);
+
+            var numSymbolsInput = document.getElementById('numSymbols').value;
+            var numSymbols = parseRange(numSymbolsInput, 0, 10);
+
+            var separator = document.getElementById('separator').value;
+            if (separator === 'space') separator = ' ';
             var letterCase = document.getElementById('letterCase').value;
 
             // Word types from advanced options
@@ -180,7 +237,7 @@
                 return;
             }
 
-            var symbols = ["!", "@", "#", "$", "%", "&", "*", "?", "~", "^", "+", "=", "_", "-", "/", ":"];
+            var symbols = ["!", "@", "#", "$", "%", "&", "*", "?", "~", "^", "+", "=", "_", "-", "/", ":", "."];
             var passwordWords = [];
 
             // Fetch words from Datamuse API
@@ -204,12 +261,12 @@
             }
 
             Promise.all(fetchPromises).then(() => {
-                var password = passwordWords.join('');
+                var password = passwordWords.join(separator);
 
                 // Apply letter case
                 switch (letterCase) {
                     case 'capitalize':
-                        password = passwordWords.map(capitalize).join('');
+                        password = passwordWords.map(capitalize).join(separator);
                         break;
                     case 'uppercase':
                         password = password.toUpperCase();
@@ -261,7 +318,7 @@
         function calculateEntropy(numWords, numNumbers, numSymbols) {
             var wordEntropy = Math.log2(10000) * numWords; // Assuming a 10,000-word dictionary
             var numberEntropy = Math.log2(10) * numNumbers;
-            var symbolEntropy = Math.log2(17) * numSymbols; // 17 symbols in the array
+            var symbolEntropy = Math.log2(19) * numSymbols; // 19 symbols in the array
             return wordEntropy + numberEntropy + symbolEntropy;
         }
 
@@ -285,6 +342,25 @@
             } else {
                 return 'Millions of years';
             }
+        }
+
+        function parseRange(input, minValue, maxValue) {
+            if (input.includes('-')) {
+                var parts = input.split('-').map(Number);
+                var min = Math.max(parts[0], minValue);
+                var max = Math.min(parts[1], maxValue);
+                return randomRange(min, max);
+            } else {
+                var value = parseInt(input);
+                if (isNaN(value) || value < minValue || value > maxValue) {
+                    return minValue;
+                }
+                return value;
+            }
+        }
+
+        function randomRange(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
         }
     </script>
 
