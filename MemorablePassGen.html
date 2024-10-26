@@ -2,17 +2,23 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Customizable Memorable Password Generator</title>
+    <title>Secure Password Generator</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
+        /* Dark Theme Styles */
         body {
             font-family: Arial, sans-serif;
-            margin: 20px;
+            background-color: #2b2b2b;
+            color: #f1f1f1;
+            margin: 0;
+            padding: 20px;
         }
         h1 {
             text-align: center;
+            color: #ffcc00;
         }
         .container {
-            max-width: 600px;
+            max-width: 500px;
             margin: auto;
         }
         label {
@@ -20,26 +26,39 @@
             margin-top: 15px;
         }
         input[type="number"] {
-            width: 50px;
+            width: 60px;
+            padding: 5px;
+            margin-top: 5px;
+            background-color: #3c3c3c;
+            color: #f1f1f1;
+            border: none;
+            border-radius: 3px;
         }
         #password {
-            font-size: 24px;
+            font-size: 20px;
             margin-top: 20px;
-            color: #2c3e50;
             word-break: break-all;
+            background-color: #3c3c3c;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #strength {
+            margin-top: 10px;
+            font-size: 16px;
         }
         button {
             margin-top: 20px;
-            padding: 10px 20px;
+            padding: 12px 20px;
             font-size: 18px;
             cursor: pointer;
-            background-color: #3498db;
-            color: #fff;
+            background-color: #ffcc00;
+            color: #2b2b2b;
             border: none;
             border-radius: 5px;
+            width: 100%;
         }
         button:hover {
-            background-color: #2980b9;
+            background-color: #e6b800;
         }
         .options {
             margin-top: 20px;
@@ -47,11 +66,29 @@
         .option-group {
             margin-bottom: 10px;
         }
+        select, input[type="checkbox"] {
+            margin-top: 5px;
+        }
+        @media screen and (max-width: 600px) {
+            /* Mobile Styles */
+            body {
+                padding: 10px;
+            }
+            h1 {
+                font-size: 24px;
+            }
+            button {
+                font-size: 16px;
+            }
+            #password {
+                font-size: 18px;
+            }
+        }
     </style>
 </head>
 <body>
 
-    <h1>Customizable Memorable Password Generator</h1>
+    <h1>Secure Password Generator</h1>
     <div class="container">
         <div class="options">
             <div class="option-group">
@@ -85,6 +122,7 @@
         </div>
         <button onclick="generatePassword()">Generate Password</button>
         <div id="password"></div>
+        <div id="strength"></div>
     </div>
 
     <script>
@@ -109,7 +147,7 @@
                 return;
             }
 
-            var symbols = ["!", "@", "#", "$", "%", "&", "*", "?", "~", "^", "+", "="];
+            var symbols = ["!", "@", "#", "$", "%", "&", "*", "?", "~", "^", "+", "=", "_", "-", "/", ":"];
 
             var passwordWords = [];
 
@@ -118,7 +156,7 @@
             for (var i = 0; i < numWords; i++) {
                 var randomWordType = wordTypes[Math.floor(Math.random() * wordTypes.length)];
                 fetchPromises.push(
-                    fetch('https://api.datamuse.com/words?max=1000&md=p&max=1000')
+                    fetch('https://api.datamuse.com/words?md=p&max=1000')
                         .then(response => response.json())
                         .then(data => {
                             // Filter words by part of speech
@@ -126,6 +164,8 @@
                             if (filteredWords.length > 0) {
                                 var word = filteredWords[Math.floor(Math.random() * filteredWords.length)].word;
                                 passwordWords.push(word);
+                            } else {
+                                passwordWords.push('Word');
                             }
                         })
                 );
@@ -164,9 +204,15 @@
                 }
 
                 document.getElementById('password').innerText = password;
+
+                // Estimate password strength
+                var bitsOfEntropy = calculateEntropy(passwordWords.length, numNumbers, numSymbols);
+                var timeToCrack = estimateCrackTime(bitsOfEntropy);
+                document.getElementById('strength').innerText = 'Estimated time to crack: ' + timeToCrack;
             }).catch(error => {
                 console.error('Error fetching words:', error);
                 document.getElementById("password").innerText = 'Error generating password. Please try again.';
+                document.getElementById("strength").innerText = '';
             });
         }
 
@@ -178,6 +224,35 @@
             return str.split('').map(function(c) {
                 return Math.random() < 0.5 ? c.toLowerCase() : c.toUpperCase();
             }).join('');
+        }
+
+        function calculateEntropy(numWords, numNumbers, numSymbols) {
+            var wordEntropy = Math.log2(10000) * numWords; // Assuming a 10,000-word dictionary
+            var numberEntropy = Math.log2(10) * numNumbers;
+            var symbolEntropy = Math.log2(17) * numSymbols; // 17 symbols in the array
+            return wordEntropy + numberEntropy + symbolEntropy;
+        }
+
+        function estimateCrackTime(bits) {
+            var guessesPerSecond = 1e10; // 10 billion guesses per second (advanced attacker)
+            var totalGuesses = Math.pow(2, bits);
+            var seconds = totalGuesses / guessesPerSecond;
+
+            if (seconds < 60) {
+                return 'Less than a minute';
+            } else if (seconds < 3600) {
+                return Math.floor(seconds / 60) + ' minute(s)';
+            } else if (seconds < 86400) {
+                return Math.floor(seconds / 3600) + ' hour(s)';
+            } else if (seconds < 31536000) {
+                return Math.floor(seconds / 86400) + ' day(s)';
+            } else if (seconds < 3153600000) {
+                return Math.floor(seconds / 31536000) + ' year(s)';
+            } else if (seconds < 3153600000000) {
+                return Math.floor(seconds / 3153600000) + ' century(ies)';
+            } else {
+                return 'Millions of years';
+            }
         }
     </script>
 
