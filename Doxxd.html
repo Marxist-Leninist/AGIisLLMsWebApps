@@ -14,6 +14,11 @@
     h1 {
       text-align: center;
     }
+    #connectionStatus {
+      text-align: center;
+      margin-bottom: 20px;
+      font-weight: bold;
+    }
     #postForm {
       max-width: 600px;
       margin: 0 auto 20px;
@@ -69,11 +74,20 @@
     .action-button:hover {
       background-color: #218838;
     }
+    .connected {
+      color: green;
+    }
+    .disconnected {
+      color: red;
+    }
   </style>
 </head>
 <body>
 
   <h1>P2P Social Media App</h1>
+
+  <!-- Connection Status -->
+  <div id="connectionStatus">Connecting to server...</div>
 
   <!-- Download Button -->
   <p style="text-align: center;">
@@ -95,11 +109,41 @@
   <!-- Include Gun.js -->
   <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
   <script>
-    // Initialize Gun with a custom signaling server (doxx site)
+    // Initialize Gun with the coordinating server (doxx site)
     const gun = Gun(['https://doxx.autos/gun']);
 
     // Reference to the 'posts' node
     const posts = gun.get('posts');
+
+    // Connection status indicator
+    const connectionStatus = document.getElementById('connectionStatus');
+
+    // Update connection status
+    function updateConnectionStatus(isConnected) {
+      if (isConnected) {
+        connectionStatus.textContent = 'Connected to server';
+        connectionStatus.className = 'connected';
+      } else {
+        connectionStatus.textContent = 'Disconnected from server';
+        connectionStatus.className = 'disconnected';
+      }
+    }
+
+    // Initially set as disconnected
+    updateConnectionStatus(false);
+
+    // Monitor Gun.js connection events
+    gun.on('hi', function(peer) {
+      // Connected to a peer
+      console.log('Connected to peer:', peer);
+      updateConnectionStatus(true);
+    });
+
+    gun.on('bye', function(peer) {
+      // Disconnected from a peer
+      console.log('Disconnected from peer:', peer);
+      updateConnectionStatus(false);
+    });
 
     // Function to create a new post
     function createPost() {
@@ -184,7 +228,7 @@
   <!-- Server-side code enclosed in script type "text/server" -->
   <script type="text/server">
     /*
-    // Server-side code (Node.js) for the signaling server
+    // Server-side code (Node.js) for the coordinating server
     // This code will be ignored by browsers but can be extracted and run on the server
 
     // Extract and save this code as "server.js"
