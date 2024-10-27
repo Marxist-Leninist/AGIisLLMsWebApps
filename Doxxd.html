@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>P2P Social Media App</title>
+  <title>P2P Social Media App with Decentralized Signaling</title>
   <style>
     /* CSS Styles */
     body {
@@ -11,7 +11,7 @@
       padding: 20px;
       background-color: #f2f2f2;
     }
-    h1 {
+    h1, h2 {
       text-align: center;
     }
     #connectionStatus {
@@ -60,7 +60,7 @@
     .post small {
       color: #666;
     }
-    /* Styles for the download and connect buttons */
+    /* Styles for the action buttons */
     .action-button {
       padding: 10px 20px;
       background-color: #28a745;
@@ -80,6 +80,24 @@
     .disconnected {
       color: red;
     }
+    #usersList {
+      max-width: 600px;
+      margin: 0 auto 20px;
+      background-color: #fff;
+      padding: 10px;
+      border-radius: 5px;
+    }
+    #usersList ul {
+      list-style-type: none;
+      padding: 0;
+    }
+    #usersList li {
+      padding: 5px 0;
+      cursor: pointer;
+    }
+    #usersList li:hover {
+      background-color: #f2f2f2;
+    }
   </style>
 </head>
 <body>
@@ -87,30 +105,51 @@
   <h1>P2P Social Media App</h1>
 
   <!-- Connection Status -->
-  <div id="connectionStatus">Connecting to server...</div>
+  <div id="connectionStatus">Connecting to signaling server...</div>
 
   <!-- Download Button -->
   <p style="text-align: center;">
     <button onclick="downloadSelf()" class="action-button">Download the App</button>
   </p>
 
+  <!-- Users List -->
+  <div id="usersList" style="display: none;">
+    <h2>Available Users</h2>
+    <ul id="users"></ul>
+  </div>
+
   <!-- Post Creation -->
-  <div id="postForm">
+  <div id="postForm" style="display: none;">
     <input type="text" id="nickname" placeholder="Enter your nickname">
     <textarea id="postContent" placeholder="What's on your mind?" rows="4"></textarea><br>
     <button onclick="createPost()">Post</button>
   </div>
 
   <!-- Posts Display -->
-  <div id="posts">
+  <div id="posts" style="display: none;">
     <!-- Posts will be displayed here -->
   </div>
 
   <!-- Include Gun.js -->
   <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+  <!-- Include SimplePeer for WebRTC -->
+  <script src="https://cdn.jsdelivr.net/npm/simple-peer/simplepeer.min.js"></script>
   <script>
-    // Initialize Gun with the coordinating server (doxx site)
-    const gun = Gun(['https://doxx.autos/gun']);
+    // Client-side code
+
+    // Allow users to specify their preferred signaling server
+    let signalingServerUrl = prompt("Enter the signaling server URL:", "wss://doxx.autos/signaling");
+    if (!signalingServerUrl) {
+      signalingServerUrl = "wss://doxx.autos/signaling";
+    }
+
+    let socket;
+    let peer;
+    let clientId;
+    let connectedUserId;
+
+    // Initialize Gun without any peers
+    const gun = Gun({ peers: [] });
 
     // Reference to the 'posts' node
     const posts = gun.get('posts');
@@ -119,31 +158,149 @@
     const connectionStatus = document.getElementById('connectionStatus');
 
     // Update connection status
-    function updateConnectionStatus(isConnected) {
-      if (isConnected) {
-        connectionStatus.textContent = 'Connected to server';
-        connectionStatus.className = 'connected';
-      } else {
-        connectionStatus.textContent = 'Disconnected from server';
-        connectionStatus.className = 'disconnected';
-      }
+    function updateConnectionStatus(status) {
+      connectionStatus.textContent = status;
     }
 
-    // Initially set as disconnected
-    updateConnectionStatus(false);
+    // Function to download the page itself
+    function downloadSelf() {
+      const doctype = '<!DOCTYPE html>\n';
+      const htmlContent = doctype + document.documentElement.outerHTML;
+      const blob = new Blob([htmlContent], { type: 'text/html' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'p2p-social-media-app.html';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+    }
 
-    // Monitor Gun.js connection events
-    gun.on('hi', function(peer) {
-      // Connected to a peer
-      console.log('Connected to peer:', peer);
-      updateConnectionStatus(true);
-    });
+    // Function to initialize WebSocket connection to the signaling server
+    function initSignaling() {
+      socket = new WebSocket(signalingServerUrl);
 
-    gun.on('bye', function(peer) {
-      // Disconnected from a peer
-      console.log('Disconnected from peer:', peer);
-      updateConnectionStatus(false);
-    });
+      socket.onopen = () => {
+        updateConnectionStatus('Connected to signaling server');
+        document.getElementById('usersList').style.display = 'block';
+      };
+
+      socket.onmessage = (message) => {
+        const data = JSON.parse(message.data);
+        switch (data.type) {
+          case 'id':
+            clientId = data.id;
+            break;
+          case 'userlist':
+            updateUserList(data.users);
+            break;
+          case 'offer':
+            handleOffer(data.offer, data.from);
+            break;
+          case 'answer':
+            handleAnswer(data.answer);
+            break;
+          case 'candidate':
+            handleCandidate(data.candidate);
+            break;
+        }
+      };
+
+      socket.onclose = () => {
+        updateConnectionStatus('Disconnected from signaling server');
+      };
+    }
+
+    // Function to update the list of available users
+    function updateUserList(users) {
+      const usersUl = document.getElementById('users');
+      usersUl.innerHTML = '';
+      users.forEach((userId) => {
+        if (userId !== clientId) {
+          const li = document.createElement('li');
+          li.textContent = `User ${userId}`;
+          li.onclick = () => initiateCall(userId);
+          usersUl.appendChild(li);
+        }
+      });
+    }
+
+    // Function to initiate a call to another user
+    function initiateCall(userId) {
+      connectedUserId = userId;
+      peer = new SimplePeer({ initiator: true, trickle: false });
+
+      setupPeerEvents();
+
+      peer.on('signal', (data) => {
+        socket.send(JSON.stringify({
+          type: 'offer',
+          offer: data,
+          to: connectedUserId
+        }));
+      });
+    }
+
+    // Function to handle incoming offers
+    function handleOffer(offer, from) {
+      connectedUserId = from;
+      peer = new SimplePeer({ initiator: false, trickle: false });
+
+      setupPeerEvents();
+
+      peer.signal(offer);
+    }
+
+    // Function to handle incoming answers
+    function handleAnswer(answer) {
+      peer.signal(answer);
+    }
+
+    // Function to handle ICE candidates (not used with trickle: false)
+    function handleCandidate(candidate) {
+      // Not needed since we're using trickle: false
+    }
+
+    // Function to set up peer events
+    function setupPeerEvents() {
+      peer.on('signal', (data) => {
+        socket.send(JSON.stringify({
+          type: 'answer',
+          answer: data,
+          to: connectedUserId
+        }));
+      });
+
+      peer.on('connect', () => {
+        updateConnectionStatus('Connected to peer');
+        document.getElementById('postForm').style.display = 'block';
+        document.getElementById('posts').style.display = 'block';
+        document.getElementById('usersList').style.display = 'none';
+        // Send existing posts to the peer
+        posts.map().once(post => {
+          if (post && post.id) {
+            peer.send(JSON.stringify({ type: 'post', data: post }));
+          }
+        });
+      });
+
+      peer.on('data', (data) => {
+        const message = JSON.parse(data);
+        if (message.type === 'post') {
+          const post = message.data;
+          if (post && post.id) {
+            posts.get(post.id).put(post);
+          }
+        }
+      });
+
+      peer.on('close', () => {
+        updateConnectionStatus('Disconnected from peer');
+        document.getElementById('postForm').style.display = 'none';
+        document.getElementById('posts').style.display = 'none';
+        document.getElementById('usersList').style.display = 'block';
+      });
+    }
 
     // Function to create a new post
     function createPost() {
@@ -160,6 +317,11 @@
 
       // Save the post to Gun
       posts.get(post.id).put(post);
+
+      // Send the post to the peer
+      if (peer && peer.connected) {
+        peer.send(JSON.stringify({ type: 'post', data: post }));
+      }
 
       // Clear the input field
       document.getElementById('postContent').value = '';
@@ -197,59 +359,101 @@
       return div.innerHTML;
     }
 
-    // Function to download the page itself
-    function downloadSelf() {
-      // Get the HTML content of the current page
-      const doctype = '<!DOCTYPE html>\n';
-      const htmlContent = doctype + document.documentElement.outerHTML;
+    // Initialize the signaling connection
+    initSignaling();
 
-      // Create a Blob with the HTML content
-      const blob = new Blob([htmlContent], { type: 'text/html' });
-
-      // Create a temporary anchor element
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'p2p-social-media-app.html'; // The name of the downloaded file
-
-      // Append the anchor to the body
-      document.body.appendChild(a);
-
-      // Programmatically click the anchor to trigger the download
-      a.click();
-
-      // Remove the anchor from the document
-      document.body.removeChild(a);
-
-      // Revoke the object URL to free up memory
-      URL.revokeObjectURL(a.href);
-    }
   </script>
 
   <!-- Server-side code enclosed in script type "text/server" -->
   <script type="text/server">
-    /*
-    // Server-side code (Node.js) for the coordinating server
-    // This code will be ignored by browsers but can be extracted and run on the server
+    // Server-side code (Node.js) for the signaling server
+    // This code will be ignored by browsers but can be extracted and run on any server
 
-    // Extract and save this code as "server.js"
+    // Save this entire HTML file as "app.html" or "app.js"
 
-    const express = require('express');
-    const Gun = require('gun');
-    const app = express();
-    const port = process.env.PORT || 80;
+    if (typeof window === 'undefined') {
+      // Server-side code
+      const fs = require('fs');
+      const http = require('http');
+      const https = require('https');
+      const WebSocket = require('ws');
+      const express = require('express');
+      const Gun = require('gun');
 
-    // Serve static files (the same HTML file)
-    app.use(express.static(__dirname));
+      const app = express();
+      const port = process.env.PORT || 443; // Use 443 for HTTPS
 
-    // Create HTTP server
-    const server = app.listen(port, () => {
-      console.log(\`App is running at http://localhost:\${port}\`);
-    });
+      // SSL options
+      const sslOptions = {
+        key: fs.readFileSync('ssl/key.pem'), // Replace with your SSL key path
+        cert: fs.readFileSync('ssl/cert.pem') // Replace with your SSL certificate path
+      };
 
-    // Attach Gun to the server
-    const gun = Gun({ web: server });
+      // Serve the same HTML file
+      app.get('/', (req, res) => {
+        res.sendFile(__filename);
+      });
 
-    */
+      // Serve Gun.js files
+      app.use('/gun', Gun.serve);
+
+      // Create HTTPS server
+      const server = https.createServer(sslOptions, app);
+
+      // Start server
+      server.listen(port, () => {
+        console.log(`App is running at https://your-domain.com`);
+      });
+
+      // Attach Gun to the server
+      const gun = Gun({ web: server });
+
+      // Set up WebSocket server for signaling
+      const wss = new WebSocket.Server({ server, path: '/signaling' });
+
+      let users = {};
+
+      wss.on('connection', (ws) => {
+        // Assign a unique ID to the client
+        const clientId = generateUUID();
+        users[clientId] = ws;
+
+        // Send the client their ID
+        ws.send(JSON.stringify({ type: 'id', id: clientId }));
+
+        // Update the user list for all clients
+        broadcastUserList();
+
+        ws.on('message', (message) => {
+          const data = JSON.parse(message);
+          const target = users[data.to];
+
+          if (target) {
+            target.send(JSON.stringify({ ...data, from: clientId }));
+          }
+        });
+
+        ws.on('close', () => {
+          delete users[clientId];
+          broadcastUserList();
+        });
+      });
+
+      function broadcastUserList() {
+        const userIds = Object.keys(users);
+        const message = JSON.stringify({ type: 'userlist', users: userIds });
+        userIds.forEach((id) => {
+          users[id].send(message);
+        });
+      }
+
+      // Utility function to generate a UUID
+      function generateUUID() {
+        return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+          (c ^ require('crypto').randomBytes(1)[0] & 15 >> c / 4).toString(16)
+        );
+      }
+    }
   </script>
 
 </body>
