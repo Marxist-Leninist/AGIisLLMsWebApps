@@ -54,6 +54,7 @@
       align-items: center;
       font-size: 6vw;
       user-select: none;
+      cursor: pointer;
     }
   </style>
 </head>
@@ -82,6 +83,13 @@
     let score = 0;
     let isUserInteracting = false, onPointerDownPointerX = 0, lon = 0, onPointerDownLon = 0;
 
+    let move = {
+      left: false,
+      right: false,
+      up: false,
+      down: false
+    };
+
     function init() {
       // Set up the scene
       scene = new THREE.Scene();
@@ -108,9 +116,15 @@
       }
 
       // Add event listeners for camera rotation
+      // Touch events
       renderer.domElement.addEventListener('touchstart', onDocumentTouchStart, false);
       renderer.domElement.addEventListener('touchmove', onDocumentTouchMove, false);
       renderer.domElement.addEventListener('touchend', onDocumentTouchEnd, false);
+
+      // Mouse events
+      renderer.domElement.addEventListener('mousedown', onDocumentMouseDown, false);
+      renderer.domElement.addEventListener('mousemove', onDocumentMouseMove, false);
+      renderer.domElement.addEventListener('mouseup', onDocumentMouseUp, false);
 
       // Start the animation loop
       animate();
@@ -129,6 +143,12 @@
 
     function animate() {
       requestAnimationFrame(animate);
+
+      // Handle continuous movement
+      if (move.left) player.position.x -= 0.1;
+      if (move.right) player.position.x += 0.1;
+      if (move.up) player.position.y += 0.1;
+      if (move.down) player.position.y -= 0.1;
 
       // Move bullets forward
       bullets.forEach((bullet, index) => {
@@ -161,18 +181,26 @@
       renderer.render(scene, camera);
     }
 
-    // Handle touch controls
+    // Handle touch and mouse controls
     const leftButton = document.getElementById('left');
     const rightButton = document.getElementById('right');
     const upButton = document.getElementById('up');
     const downButton = document.getElementById('down');
     const shootButton = document.getElementById('shoot');
 
+    // Touch events
     leftButton.addEventListener('touchstart', moveLeft);
     rightButton.addEventListener('touchstart', moveRight);
     upButton.addEventListener('touchstart', moveUp);
     downButton.addEventListener('touchstart', moveDown);
     shootButton.addEventListener('touchstart', shoot);
+
+    // Click events
+    leftButton.addEventListener('click', moveLeft);
+    rightButton.addEventListener('click', moveRight);
+    upButton.addEventListener('click', moveUp);
+    downButton.addEventListener('click', moveDown);
+    shootButton.addEventListener('click', shoot);
 
     function moveLeft() {
       player.position.x -= 0.5;
@@ -200,7 +228,7 @@
       scene.add(bullet);
     }
 
-    // Camera rotation controls
+    // Camera rotation controls (Touch)
     function onDocumentTouchStart(event) {
       if (event.touches.length == 1) {
         event.preventDefault();
@@ -218,6 +246,81 @@
 
     function onDocumentTouchEnd(event) {
       isUserInteracting = false;
+    }
+
+    // Camera rotation controls (Mouse)
+    function onDocumentMouseDown(event) {
+      event.preventDefault();
+      isUserInteracting = true;
+      onPointerDownPointerX = event.clientX;
+      onPointerDownLon = lon;
+    }
+
+    function onDocumentMouseMove(event) {
+      if (isUserInteracting) {
+        lon = (onPointerDownPointerX - event.clientX) * 0.1 + onPointerDownLon;
+      }
+    }
+
+    function onDocumentMouseUp(event) {
+      isUserInteracting = false;
+    }
+
+    // Keyboard controls
+    document.addEventListener('keydown', onKeyDown, false);
+    document.addEventListener('keyup', onKeyUp, false);
+
+    function onKeyDown(event) {
+      switch (event.key) {
+        case 'ArrowLeft':
+        case 'a':
+        case 'A':
+          move.left = true;
+          break;
+        case 'ArrowRight':
+        case 'd':
+        case 'D':
+          move.right = true;
+          break;
+        case 'ArrowUp':
+        case 'w':
+        case 'W':
+          move.up = true;
+          break;
+        case 'ArrowDown':
+        case 's':
+        case 'S':
+          move.down = true;
+          break;
+        case ' ':
+          shoot();
+          break;
+      }
+    }
+
+    function onKeyUp(event) {
+      switch (event.key) {
+        case 'ArrowLeft':
+        case 'a':
+        case 'A':
+          move.left = false;
+          break;
+        case 'ArrowRight':
+        case 'd':
+        case 'D':
+          move.right = false;
+          break;
+        case 'ArrowUp':
+        case 'w':
+        case 'W':
+          move.up = false;
+          break;
+        case 'ArrowDown':
+        case 's':
+        case 'S':
+          move.down = false;
+          break;
+      }
     }
 
     // Handle window resize
