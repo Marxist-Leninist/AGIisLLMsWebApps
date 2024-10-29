@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Simple FPS Game with Up and Down Movement</title>
+  <title>Simple FPS Game with Transparency and Camera Rotation</title>
   <style>
     body { margin: 0; overflow: hidden; touch-action: none; }
     #score { position: absolute; top: 10px; left: 10px; color: white; font-size: 24px; z-index: 1; }
@@ -34,6 +34,7 @@
     let scene, camera, renderer;
     let player, bullets = [], enemies = [];
     let score = 0;
+    let isUserInteracting = false, onPointerDownPointerX = 0, lon = 0, onPointerDownLon = 0;
 
     function init() {
       // Set up the scene
@@ -49,9 +50,9 @@
       renderer.setSize(window.innerWidth, window.innerHeight);
       document.body.appendChild(renderer.domElement);
 
-      // Create the player
+      // Create the player with transparency
       const geometry = new THREE.BoxGeometry(1, 1, 1);
-      const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+      const material = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5 });
       player = new THREE.Mesh(geometry, material);
       scene.add(player);
 
@@ -59,6 +60,11 @@
       for (let i = 0; i < 5; i++) {
         createEnemy();
       }
+
+      // Add event listeners for camera rotation
+      renderer.domElement.addEventListener('touchstart', onDocumentTouchStart, false);
+      renderer.domElement.addEventListener('touchmove', onDocumentTouchMove, false);
+      renderer.domElement.addEventListener('touchend', onDocumentTouchEnd, false);
 
       // Start the animation loop
       animate();
@@ -80,7 +86,7 @@
 
       // Move bullets forward
       bullets.forEach((bullet, index) => {
-        bullet.position.z -= 0.5;
+        bullet.translateZ(-0.5);
         if (bullet.position.z < -50) {
           scene.remove(bullet);
           bullets.splice(index, 1);
@@ -101,6 +107,12 @@
           }
         });
       });
+
+      // Update camera rotation
+      if (isUserInteracting) {
+        lon += 0.1;
+      }
+      camera.rotation.y = THREE.MathUtils.degToRad(lon);
 
       // Render the scene
       renderer.render(scene, camera);
@@ -140,8 +152,29 @@
       const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
       const bullet = new THREE.Mesh(geometry, material);
       bullet.position.set(player.position.x, player.position.y, player.position.z - 1);
+      bullet.rotation.y = camera.rotation.y;
       bullets.push(bullet);
       scene.add(bullet);
+    }
+
+    // Camera rotation controls
+    function onDocumentTouchStart(event) {
+      if (event.touches.length == 1) {
+        event.preventDefault();
+        isUserInteracting = true;
+        onPointerDownPointerX = event.touches[0].pageX;
+        onPointerDownLon = lon;
+      }
+    }
+
+    function onDocumentTouchMove(event) {
+      if (isUserInteracting) {
+        lon = (onPointerDownPointerX - event.touches[0].pageX) * 0.1 + onPointerDownLon;
+      }
+    }
+
+    function onDocumentTouchEnd(event) {
+      isUserInteracting = false;
     }
 
     // Handle window resize
