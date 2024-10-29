@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Mandelbrot Set Visualization</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            margin: 0;
+            background-color: #000;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="mandelbrotCanvas"></canvas>
+<div id="info">Click and drag to zoom in</div>
+
+<script>
+    (function() {
+        const canvas = document.getElementById('mandelbrotCanvas');
+        const ctx = canvas.getContext('2d');
+        let width = window.innerWidth;
+        let height = window.innerHeight;
+        canvas.width = width;
+        canvas.height = height;
+
+        let minX = -2.5, maxX = 1;
+        let minY = -1, maxY = 1;
+        let maxIter = 100;
+
+        let isDragging = false;
+        let dragStart = {};
+        let dragEnd = {};
+
+        function drawMandelbrot() {
+            const imageData = ctx.createImageData(width, height);
+            const pixels = imageData.data;
+
+            for (let py = 0; py < height; py++) {
+                for (let px = 0; px < width; px++) {
+                    let x0 = minX + (px / width) * (maxX - minX);
+                    let y0 = minY + (py / height) * (maxY - minY);
+                    let x = 0;
+                    let y = 0;
+                    let iteration = 0;
+
+                    while (x*x + y*y <= 4 && iteration < maxIter) {
+                        let xTemp = x*x - y*y + x0;
+                        y = 2*x*y + y0;
+                        x = xTemp;
+                        iteration++;
+                    }
+
+                    let color = iteration === maxIter ? 0 : (iteration / maxIter) * 360;
+                    let pixelIndex = (py * width + px) * 4;
+                    let rgb = hslToRgb(color / 360, 1, 0.5);
+                    pixels[pixelIndex] = rgb[0];
+                    pixels[pixelIndex + 1] = rgb[1];
+                    pixels[pixelIndex + 2] = rgb[2];
+                    pixels[pixelIndex + 3] = 255;
+                }
+            }
+
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        function hslToRgb(h, s, l) {
+            let r, g, b;
+
+            if(s == 0){
+                r = g = b = l;
+            } else {
+                function hue2rgb(p, q, t){
+                    if(t < 0) t += 1;
+                    if(t > 1) t -= 1;
+                    if(t < 1/6) return p + (q - p) * 6 * t;
+                    if(t < 1/2) return q;
+                    if(t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+                    return p;
+                }
+                let q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+                let p = 2 * l - q;
+                r = hue2rgb(p, q, h + 1/3);
+                g = hue2rgb(p, q, h);
+                b = hue2rgb(p, q, h - 1/3);
+            }
+            return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+        }
+
+        function onMouseDown(e) {
+            isDragging = true;
+            dragStart.x = e.offsetX;
+            dragStart.y = e.offsetY;
+        }
+
+        function onMouseUp(e) {
+            if (!isDragging) return;
+            dragEnd.x = e.offsetX;
+            dragEnd.y = e.offsetY;
+            isDragging = false;
+
+            // Calculate new boundaries
+            let xStart = minX + (dragStart.x / width) * (maxX - minX);
+            let xEnd = minX + (dragEnd.x / width) * (maxX - minX);
+            let yStart = minY + (dragStart.y / height) * (maxY - minY);
+            let yEnd = minY + (dragEnd.y / height) * (maxY - minY);
+
+            minX = Math.min(xStart, xEnd);
+            maxX = Math.max(xStart, xEnd);
+            minY = Math.min(yStart, yEnd);
+            maxY = Math.max(yStart, yEnd);
+
+            drawMandelbrot();
+        }
+
+        function onMouseMove(e) {
+            if (!isDragging) return;
+            ctx.putImageData(savedImageData, 0, 0);
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(dragStart.x, dragStart.y, e.offsetX - dragStart.x, e.offsetY - dragStart.y);
+        }
+
+        function onResize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+            drawMandelbrot();
+        }
+
+        canvas.addEventListener('mousedown', onMouseDown);
+        canvas.addEventListener('mouseup', onMouseUp);
+        canvas.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('resize', onResize);
+
+        let savedImageData;
+        canvas.addEventListener('mousedown', () => {
+            savedImageData = ctx.getImageData(0, 0, width, height);
+        });
+
+        drawMandelbrot();
+    })();
+</script>
+
+</body>
+</html>
