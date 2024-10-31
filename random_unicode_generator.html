@@ -38,12 +38,38 @@
             resize: vertical;
             min-height: 150px; /* Ensure textarea is large enough on mobile */
         }
+        /* Additional mobile-friendly adjustments */
+        @media (max-width: 600px) {
+            body {
+                margin: 10px;
+            }
+            button, input {
+                font-size: 16px;
+                padding: 8px 16px;
+            }
+            label {
+                font-size: 16px;
+            }
+            #output {
+                font-size: 20px;
+            }
+        }
     </style>
 </head>
 <body>
     <h1>Random Unicode Generator</h1>
     <label for="numChars">Number of characters:</label>
     <input type="number" id="numChars" value="10" min="1" max="1000">
+    
+    <label>
+        <input type="checkbox" id="englishOnly" checked>
+        English characters only
+    </label>
+    <label>
+        <input type="checkbox" id="validCharsOnly" checked>
+        Valid characters only
+    </label>
+    
     <div id="buttonContainer">
         <button onclick="generate()">Generate</button>
         <button onclick="copyText()">Copy to Clipboard</button>
@@ -55,15 +81,35 @@
         function generate() {
             var output = document.getElementById('output');
             var numChars = parseInt(document.getElementById('numChars').value);
+            var englishOnly = document.getElementById('englishOnly').checked;
+            var validCharsOnly = document.getElementById('validCharsOnly').checked;
             var chars = '';
+
             for (var i = 0; i < numChars; i++) {
                 var codePoint;
-                do {
-                    codePoint = Math.floor(Math.random() * (0x10FFFF - 0x0020)) + 0x0020;
-                } while ((codePoint >= 0xD800 && codePoint <= 0xDFFF) || codePoint === 0xFEFF);
+                if (englishOnly) {
+                    // Generate characters from code point 32 to 126 (Printable ASCII characters)
+                    codePoint = Math.floor(Math.random() * (126 - 32 + 1)) + 32;
+                } else {
+                    do {
+                        codePoint = Math.floor(Math.random() * (0x10FFFF - 0x0020 + 1)) + 0x0020;
+                    } while ((codePoint >= 0xD800 && codePoint <= 0xDFFF) || codePoint === 0xFEFF ||
+                            (validCharsOnly && !isValidCharacter(codePoint)));
+                }
                 chars += String.fromCodePoint(codePoint);
             }
             output.value = chars;
+        }
+
+        function isValidCharacter(codePoint) {
+            // Exclude control characters and non-characters
+            if (codePoint <= 0x001F || (codePoint >= 0x007F && codePoint <= 0x009F)) {
+                return false;
+            }
+            if ((codePoint >= 0xFDD0 && codePoint <= 0xFDEF) || (codePoint & 0xFFFF) === 0xFFFF || (codePoint & 0xFFFF) === 0xFFFE) {
+                return false;
+            }
+            return true;
         }
 
         function copyText() {
