@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Subtitles Downloader</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 1.5rem;
+        }
+
+        .input-group {
+            margin-bottom: 1rem;
+        }
+
+        input[type="url"] {
+            width: 100%;
+            padding: 0.5rem;
+            font-size: 1rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+        }
+
+        button {
+            background-color: #FF0000;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            font-size: 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #CC0000;
+        }
+
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        #status {
+            margin-top: 1rem;
+            padding: 1rem;
+            border-radius: 4px;
+        }
+
+        .error {
+            background-color: #ffebee;
+            color: #c62828;
+            border: 1px solid #ef9a9a;
+        }
+
+        .success {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+            border: 1px solid #a5d6a7;
+        }
+
+        #subtitles {
+            margin-top: 1rem;
+            white-space: pre-wrap;
+            background-color: #f8f9fa;
+            padding: 1rem;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 3px solid #FF0000;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>YouTube Subtitles Downloader</h1>
+        <div class="input-group">
+            <input type="url" id="videoUrl" placeholder="Enter YouTube video URL" required>
+            <button onclick="getSubtitles()" id="fetchButton">Get Subtitles</button>
+            <span id="loading" class="loading" style="display: none;"></span>
+        </div>
+        <div id="status" style="display: none;"></div>
+        <div id="subtitles" style="display: none;"></div>
+    </div>
+
+    <script>
+        const corsProxy = 'https://corsproxy.io/?';
+        
+        function extractVideoId(url) {
+            const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
+            const match = url.match(regex);
+            return match ? match[1] : null;
+        }
+
+        async function getSubtitles() {
+            const videoUrl = document.getElementById('videoUrl').value;
+            const status = document.getElementById('status');
+            const subtitles = document.getElementById('subtitles');
+            const loading = document.getElementById('loading');
+            const fetchButton = document.getElementById('fetchButton');
+
+            // Reset UI
+            status.style.display = 'none';
+            subtitles.style.display = 'none';
+            loading.style.display = 'inline-block';
+            fetchButton.disabled = true;
+
+            try {
+                const videoId = extractVideoId(videoUrl);
+                if (!videoId) {
+                    throw new Error('Invalid YouTube URL');
+                }
+
+                // Get video details first to check if subtitles are available
+                const videoDetailsUrl = `https://www.youtube.com/watch?v=${videoId}`;
+                const response = await fetch(corsProxy + encodeURIComponent(videoDetailsUrl));
+                const html = await response.text();
+
+                // Extract caption track URL from video page
+                const captionRegex = /"captionTracks":\[(.*?)\]/;
+                const match = html.match(captionRegex);
+                
+                if (!match) {
+                    throw new Error('No subtitles available for this video');
+                }
+
+                const captionData = JSON.parse(`[${match[1]}]`);
+                if (captionData.length === 0) {
+                    throw new Error('No subtitles available for this video');
+                }
+
+                // Get the first available subtitle (usually English)
+                const subtitle = captionData[0];
+                const subtitleUrl = subtitle.baseUrl;
+                
+                // Fetch subtitle content
+                const subtitleResponse = await fetch(corsProxy + encodeURIComponent(subtitleUrl));
+                const subtitleXml = await subtitleResponse.text();
+
+                // Parse XML and extract text
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(subtitleXml, "text/xml");
+                const textElements = xmlDoc.getElementsByTagName('text');
+                
+                let subtitleText = '';
+                for (let i = 0; i < textElements.length; i++) {
+                    const start = parseFloat(textElements[i].getAttribute('start'));
+                    const duration = parseFloat(textElements[i].getAttribute('dur') || '0');
+                    const text = textElements[i].textContent;
+                    
+                    // Format timestamp
+                    const minutes = Math.floor(start / 60);
+                    const seconds = Math.floor(start % 60);
+                    const ms = Math.floor((start % 1) * 1000);
+                    const timestamp = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
+                    
+                    subtitleText += `${timestamp} --> ${text}\n`;
+                }
+
+                // Display subtitles
+                subtitles.textContent = subtitleText;
+                subtitles.style.display = 'block';
+                
+                // Create download button
+                const blob = new Blob([subtitleText], { type: 'text/plain' });
+                const url = window.URL.createObjectURL(blob);
+                const downloadBtn = document.createElement('button');
+                downloadBtn.textContent = 'Download Subtitles';
+                downloadBtn.style.marginTop = '1rem';
+                downloadBtn.onclick = () => {
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `subtitles-${videoId}.txt`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                };
+                subtitles.parentNode.insertBefore(downloadBtn, subtitles.nextSibling);
+
+                status.className = 'success';
+                status.textContent = 'Subtitles retrieved successfully!';
+                status.style.display = 'block';
+
+            } catch (error) {
+                status.className = 'error';
+                status.textContent = error.message;
+                status.style.display = 'block';
+                subtitles.style.display = 'none';
+            } finally {
+                loading.style.display = 'none';
+                fetchButton.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
