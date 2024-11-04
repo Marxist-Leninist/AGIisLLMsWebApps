@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Equilateral Triangle Calculator</title>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: Arial, sans-serif; }
+    .container { max-width: 800px; margin: auto; padding: 20px; }
+    label { display: block; margin: 10px 0; }
+    input { width: calc(100% - 20px); padding: 8px; margin: 5px 0; }
+    button { padding: 10px 20px; margin-top: 10px; }
+    .use-location { margin-top: 5px; }
+    #map { height: 500px; width: 100%; margin-top: 20px; }
+    #results { margin-top: 20px; }
+  </style>
+  <!-- Load Leaflet CSS and JavaScript -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>Equilateral Triangle Calculator</h1>
+    <p>Enter the addresses or GPS coordinates of two points:</p>
+    <h3>Point A:</h3>
+    <label>Address of Point A:
+      <input type="text" id="address1" placeholder="Enter address for Point A">
+    </label>
+    <label>OR Latitude of Point A:
+      <input type="number" id="lat1" placeholder="Latitude in decimal degrees">
+    </label>
+    <label>Longitude of Point A:
+      <input type="number" id="lon1" placeholder="Longitude in decimal degrees">
+    </label>
+    <button type="button" class="use-location" onclick="useCurrentLocation('A')">Use My Location for Point A</button>
+
+    <h3>Point B:</h3>
+    <label>Address of Point B:
+      <input type="text" id="address2" placeholder="Enter address for Point B">
+    </label>
+    <label>OR Latitude of Point B:
+      <input type="number" id="lat2" placeholder="Latitude in decimal degrees">
+    </label>
+    <label>Longitude of Point B:
+      <input type="number" id="lon2" placeholder="Longitude in decimal degrees">
+    </label>
+    <button type="button" class="use-location" onclick="useCurrentLocation('B')">Use My Location for Point B</button>
+
+    <button onclick="calculate()">Calculate</button>
+
+    <div id="results"></div>
+    <div id="map"></div>
+  </div>
+
+  <!-- Load Leaflet JavaScript -->
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <!-- Load Leaflet Control Geocoder Plugin -->
+  <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
+
+  <script>
+    let userLocation = {}; // To store user's current location
+
+    function useCurrentLocation(point) {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(function(position) {
+          const lat = position.coords.latitude;
+          const lon = position.coords.longitude;
+
+          if (point === 'A') {
+            document.getElementById('lat1').value = lat.toFixed(6);
+            document.getElementById('lon1').value = lon.toFixed(6);
+            alert('Current location set for Point A.');
+          } else if (point === 'B') {
+            document.getElementById('lat2').value = lat.toFixed(6);
+            document.getElementById('lon2').value = lon.toFixed(6);
+            alert('Current location set for Point B.');
+          }
+        }, function(error) {
+          alert('Error retrieving location: ' + error.message);
+        });
+      } else {
+        alert('Geolocation is not supported by this browser.');
+      }
+    }
+
+    function calculate() {
+      const address1 = document.getElementById('address1').value.trim();
+      const address2 = document.getElementById('address2').value.trim();
+      const lat1Input = document.getElementById('lat1').value.trim();
+      const lon1Input = document.getElementById('lon1').value.trim();
+      const lat2Input = document.getElementById('lat2').value.trim();
+      const lon2Input = document.getElementById('lon2').value.trim();
+
+      let lat1, lon1, lat2, lon2;
+
+      // Initialize map early for geocoding
+      const mapDiv = document.getElementById('map');
+      mapDiv.innerHTML = '';
+      const map = L.map('map').setView([0, 0], 2);
+
+      // Proceed to resolve locations
+      if (address1) {
+        geocodeAddress(address1, function(coords) {
+          if (coords) {
+            lat1 = coords.lat;
+            lon1 = coords.lng;
+            processPointB();
+          } else {
+            alert('Unable to geocode Address for Point A. Please check the address and try again.');
+          }
+        });
+      } else if (lat1Input && lon1Input) {
+        lat1 = parseFloat(lat1Input);
+        lon1 = parseFloat(lon1Input);
+        processPointB();
+      } else {
+        alert('Please provide either an address, GPS coordinates, or use your current location for Point A.');
+      }
+
+      function processPointB() {
+        if (address2) {
+          geocodeAddress(address2, function(coords) {
+            if (coords) {
+              lat2 = coords.lat;
+              lon2 = coords.lng;
+              performCalculations(lat1, lon1, lat2, lon2, map);
+            } else {
+              alert('Unable to geocode Address for Point B. Please check the address and try again.');
+            }
+          });
+        } else if (lat2Input && lon2Input) {
+          lat2 = parseFloat(lat2Input);
+          lon2 = parseFloat(lon2Input);
+          performCalculations(lat1, lon1, lat2, lon2, map);
+        } else {
+          alert('Please provide either an address, GPS coordinates, or use your current location for Point B.');
+        }
+      }
+
+      function geocodeAddress(address, callback) {
+        const geocoder = L.Control.Geocoder.nominatim();
+        geocoder.geocode(address, function(results) {
+          if (results && results.length > 0) {
+            const bestResult = results[0];
+            callback(bestResult.center);
+          } else {
+            callback(null);
+          }
+        });
+      }
+
+      function performCalculations(lat1, lon1, lat2, lon2, map) {
+        // Rest of the code remains similar
+        // Convert degrees to radians
+        const toRad = Math.PI / 180;
+        const lat1Rad = lat1 * toRad;
+        const lon1Rad = lon1 * toRad;
+        const lat2Rad = lat2 * toRad;
+        const lon2Rad = lon2 * toRad;
+
+        // Calculate midpoint
+        const dLon = lon2Rad - lon1Rad;
+        const Bx = Math.cos(lat2Rad) * Math.cos(dLon);
+        const By = Math.cos(lat2Rad) * Math.sin(dLon);
+        const latMidRad = Math.atan2(
+          Math.sin(lat1Rad) + Math.sin(lat2Rad),
+          Math.sqrt((Math.cos(lat1Rad) + Bx) * (Math.cos(lat1Rad) + Bx) + By * By)
+        );
+        const lonMidRad = lon1Rad + Math.atan2(By, Math.cos(lat1Rad) + Bx);
+        const latMid = latMidRad / toRad;
+        const lonMid = lonMidRad / toRad;
+
+        // Calculate distance between points (using haversine formula)
+        const R = 6371e3; // Earth radius in meters
+        const deltaLat = (lat2 - lat1) * toRad;
+        const deltaLon = (lon2 - lon1) * toRad;
+        const a = Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+                  Math.cos(lat1Rad) * Math.cos(lat2Rad) *
+                  Math.sin(deltaLon / 2) * Math.sin(deltaLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const distance = R * c;
+
+        // Calculate altitude of the triangle
+        const height = (Math.sqrt(3) / 2) * distance;
+
+        // Calculate bearing from A to B
+        const y = Math.sin(dLon) * Math.cos(lat2Rad);
+        const x = Math.cos(lat1Rad) * Math.sin(lat2Rad) -
+                  Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLon);
+        const initialBearingRad = Math.atan2(y, x);
+        const initialBearingDeg = (initialBearingRad / toRad + 360) % 360;
+
+        // Bearings to apex points
+        const bearingC1 = (initialBearingDeg + 60) % 360;
+        const bearingC2 = (initialBearingDeg - 60 + 360) % 360;
+
+        function destinationPoint(lat, lon, bearing, distance) {
+          const δ = distance / R; // Angular distance in radians
+          const θ = bearing * toRad;
+
+          const latRad = lat * toRad;
+          const lonRad = lon * toRad;
+
+          const latDest = Math.asin(
+            Math.sin(latRad) * Math.cos(δ) +
+            Math.cos(latRad) * Math.sin(δ) * Math.cos(θ)
+          );
+
+          const lonDest = lonRad + Math.atan2(
+            Math.sin(θ) * Math.sin(δ) * Math.cos(latRad),
+            Math.cos(δ) - Math.sin(latRad) * Math.sin(latDest)
+          );
+
+          return {
+            latitude: latDest / toRad,
+            longitude: lonDest / toRad
+          };
+        }
+
+        // Calculate apex points
+        const apex1 = destinationPoint(lat1, lon1, bearingC1, distance);
+        const apex2 = destinationPoint(lat1, lon1, bearingC2, distance);
+
+        // Display results
+        const resultsDiv = document.getElementById('results');
+        resultsDiv.innerHTML = `
+          <h2>Results</h2>
+          <p><strong>Point A Coordinates:</strong> Latitude ${lat1.toFixed(6)}, Longitude ${lon1.toFixed(6)}</p>
+          <p><strong>Point B Coordinates:</strong> Latitude ${lat2.toFixed(6)}, Longitude ${lon2.toFixed(6)}</p>
+          <p><strong>Midpoint Coordinates:</strong> Latitude ${latMid.toFixed(6)}, Longitude ${lonMid.toFixed(6)}</p>
+          <p><strong>Distance between Points A and B:</strong> ${(distance / 1000).toFixed(3)} km</p>
+          <p><strong>Altitude (Height) of Triangle:</strong> ${(height / 1000).toFixed(3)} km</p>
+          <p><strong>Apex Point 1 Coordinates:</strong> Latitude ${apex1.latitude.toFixed(6)}, Longitude ${apex1.longitude.toFixed(6)}</p>
+          <p><strong>Apex Point 2 Coordinates:</strong> Latitude ${apex2.latitude.toFixed(6)}, Longitude ${apex2.longitude.toFixed(6)}</p>
+        `;
+
+        // Adjust map view
+        map.setView([latMid, lonMid], 13);
+
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: 'Map data © <a href="https://openstreetmap.org">OpenStreetMap</a> contributors',
+        }).addTo(map);
+
+        // Add markers and shapes
+        const pointA = L.marker([lat1, lon1]).addTo(map).bindPopup('Point A').openPopup();
+        const pointB = L.marker([lat2, lon2]).addTo(map).bindPopup('Point B');
+        const pointC1 = L.marker([apex1.latitude, apex1.longitude]).addTo(map).bindPopup('Apex Point 1');
+        const pointC2 = L.marker([apex2.latitude, apex2.longitude]).addTo(map).bindPopup('Apex Point 2');
+
+        const triangle1 = L.polygon([
+          [lat1, lon1],
+          [lat2, lon2],
+          [apex1.latitude, apex1.longitude]
+        ], {color: 'blue'}).addTo(map);
+
+        const triangle2 = L.polygon([
+          [lat1, lon1],
+          [lat2, lon2],
+          [apex2.latitude, apex2.longitude]
+        ], {color: 'green'}).addTo(map);
+      }
+    }
+  </script>
+</body>
+</html>
