@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>2D Relay Device Side-View Diagram with Terrain Corrections</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    #canvasContainer {
+      position: relative;
+      width: 100%;
+      max-width: 800px;
+      height: 600px;
+      border: 1px solid #ccc;
+    }
+    #diagramCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    #info {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>2D Relay Device Side-View Diagram with Terrain Corrections</h1>
+  <p>This diagram shows Points A and B on the Earth's surface with terrain elevations and the relay device at the minimum altitude required for line-of-sight communication.</p>
+  <div id="canvasContainer">
+    <canvas id="diagramCanvas" width="800" height="600"></canvas>
+  </div>
+  <div id="info">
+    <p><strong>Point A Coordinates:</strong> Latitude 52.624788, Longitude -1.662570</p>
+    <p><strong>Point B Coordinates:</strong> Latitude 52.615662, Longitude -1.650945</p>
+    <!-- Additional computed information will be displayed here -->
+  </div>
+
+  <script>
+    // Coordinates for Point A
+    const pointALat = 52.624788;
+    const pointALon = -1.662570;
+    const elevationA = 100; // in meters above sea level
+
+    // Coordinates for Point B
+    const pointBLat = 52.615662;
+    const pointBLon = -1.650945;
+    const elevationB = 90; // in meters above sea level
+
+    // Maximum terrain elevation along the path
+    const elevationMax = 110; // in meters above sea level
+
+    // Clearance height above terrain (for safety)
+    const clearanceHeight = 5; // in meters
+
+    // Earth's radius in meters
+    const R = 6371e3;
+
+    // Calculate distance between Point A and Point B using haversine formula
+    function haversineDistance(lat1, lon1, lat2, lon2) {
+      const toRad = Math.PI / 180;
+      const dLat = (lat2 - lat1) * toRad;
+      const dLon = (lon2 - lon1) * toRad;
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const distance = R * c;
+      return distance;
+    }
+
+    const distanceAB = haversineDistance(pointALat, pointALon, pointBLat, pointBLon); // in meters
+
+    // Determine the minimum relay altitude above sea level
+    const minRelayAltitude = Math.max(
+      elevationMax + clearanceHeight,
+      elevationA + clearanceHeight,
+      elevationB + clearanceHeight
+    ); // in meters
+
+    // Assume ground elevation at midpoint for relay device placement
+    const elevationMid = (elevationA + elevationB) / 2;
+
+    // Height of relay device above ground level at midpoint
+    const relayHeightAGL = minRelayAltitude - elevationMid; // in meters
+
+    // Get the canvas and context
+    const canvas = document.getElementById('diagramCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Dimensions for drawing
+    const width = canvas.width;
+    const height = canvas.height;
+    const margin = 50;
+
+    // Scale factors to fit the diagram in canvas
+    const maxAltitude = minRelayAltitude + 20; // Additional space at top
+    const yScale = (height - 2 * margin) / maxAltitude;
+    const xScale = (width - 2 * margin) / distanceAB;
+
+    // Positions along the X-axis
+    const xA = margin;
+    const xB = width - margin;
+    const xMid = (xA + xB) / 2;
+
+    // Positions along the Y-axis (inverted canvas)
+    function yPosition(elevation) {
+      return height - margin - elevation * yScale;
+    }
+
+    // Ground elevations at points
+    const yA = yPosition(elevationA);
+    const yB = yPosition(elevationB);
+    const yMax = yPosition(elevationMax);
+    const yMid = yPosition(elevationMid);
+
+    // Clear canvas
+    ctx.clearRect(0, 0, width, height);
+
+    // Draw terrain profile (simple linear approximation)
+    ctx.beginPath();
+    ctx.moveTo(xA, yA);
+    ctx.lineTo(xMid, yMax);
+    ctx.lineTo(xB, yB);
+    ctx.fillStyle = '#D3D3D3';
+    ctx.fill();
+
+    // Draw ground at Points A and B
+    ctx.strokeStyle = '#808080';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(xA, yA);
+    ctx.lineTo(xB, yB);
+    ctx.stroke();
+
+    // Draw Points A and B
+    const pointRadius = 5;
+    ctx.fillStyle = 'blue';
+    ctx.beginPath();
+    ctx.arc(xA, yA - pointRadius, pointRadius, 0, 2 * Math.PI);
+    ctx.fill();
+
+    ctx.fillStyle = 'green';
+    ctx.beginPath();
+    ctx.arc(xB, yB - pointRadius, pointRadius, 0, 2 * Math.PI);
+    ctx.fill();
+
+    // Draw labels for Points A and B
+    ctx.fillStyle = 'black';
+    ctx.font = '14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Point A', xA, yA - 15);
+    ctx.fillText('Point B', xB, yB - 15);
+
+    // Draw relay device
+    const yRelay = yPosition(minRelayAltitude);
+    ctx.fillStyle = 'red';
+    ctx.beginPath();
+    ctx.rect(xMid - 5, yRelay - 10, 10, 10);
+    ctx.fill();
+
+    // Draw label for relay device
+    ctx.fillStyle = 'black';
+    ctx.fillText('Relay Device', xMid, yRelay - 15);
+
+    // Draw line-of-sight paths
+    ctx.strokeStyle = 'orange';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(xA, yA - pointRadius);
+    ctx.lineTo(xMid, yRelay);
+    ctx.lineTo(xB, yB - pointRadius);
+    ctx.stroke();
+
+    // Draw elevation markers
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([5, 5]);
+    // Elevation Max
+    ctx.beginPath();
+    ctx.moveTo(margin, yMax);
+    ctx.lineTo(width - margin, yMax);
+    ctx.stroke();
+    ctx.fillText(`Max Terrain Elevation (${elevationMax} m)`, width - margin - 100, yMax - 5);
+    // Relay Altitude
+    ctx.beginPath();
+    ctx.moveTo(margin, yRelay);
+    ctx.lineTo(width - margin, yRelay);
+    ctx.stroke();
+    ctx.fillText(`Relay Altitude (${minRelayAltitude} m)`, width - margin - 80, yRelay - 5);
+    ctx.setLineDash([]);
+
+    // Display computed information
+    const infoDiv = document.getElementById('info');
+    const distanceKM = (distanceAB / 1000).toFixed(3);
+    infoDiv.innerHTML += `<p><strong>Distance between Points A and B:</strong> ${distanceKM} km</p>`;
+    infoDiv.innerHTML += `<p><strong>Elevation of Point A:</strong> ${elevationA} meters</p>`;
+    infoDiv.innerHTML += `<p><strong>Elevation of Point B:</strong> ${elevationB} meters</p>`;
+    infoDiv.innerHTML += `<p><strong>Maximum Terrain Elevation between A and B:</strong> ${elevationMax} meters</p>`;
+    infoDiv.innerHTML += `<p><strong>Minimum Relay Altitude (above sea level):</strong> ${minRelayAltitude} meters</p>`;
+    infoDiv.innerHTML += `<p><strong>Relay Height Above Ground Level at Midpoint:</strong> ${relayHeightAGL.toFixed(2)} meters</p>`;
+
+  </script>
+</body>
+</html>
