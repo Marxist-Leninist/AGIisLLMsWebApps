@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>2D Relay Device Side-View Diagram</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    #canvasContainer {
+      position: relative;
+      width: 100%;
+      max-width: 800px;
+      height: 600px;
+      border: 1px solid #ccc;
+    }
+    #diagramCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    #info {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>2D Relay Device Side-View Diagram</h1>
+  <p>This diagram shows Points A and B on the Earth's surface and the relay device at the minimum altitude required for line-of-sight communication.</p>
+  <div id="canvasContainer">
+    <canvas id="diagramCanvas" width="800" height="600"></canvas>
+  </div>
+  <div id="info">
+    <p><strong>Point A Coordinates:</strong> Latitude 52.624788, Longitude -1.662570</p>
+    <p><strong>Point B Coordinates:</strong> Latitude 52.615662, Longitude -1.650945</p>
+    <!-- Additional computed information will be displayed here -->
+  </div>
+
+  <script>
+    // Coordinates for Point A
+    const pointALat = 52.624788;
+    const pointALon = -1.662570;
+
+    // Coordinates for Point B
+    const pointBLat = 52.615662;
+    const pointBLon = -1.650945;
+
+    // Earth's radius in meters
+    const R = 6371e3;
+
+    // Calculate distance between Point A and Point B using haversine formula
+    function haversineDistance(lat1, lon1, lat2, lon2) {
+      const toRad = Math.PI / 180;
+      const dLat = (lat2 - lat1) * toRad;
+      const dLon = (lon2 - lon1) * toRad;
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const distance = R * c;
+      return distance;
+    }
+
+    const distanceAB = haversineDistance(pointALat, pointALon, pointBLat, pointBLon); // in meters
+
+    // Calculate the minimum altitude required for line-of-sight
+    // Using the formula: h = R (sec(d / (2R)) - 1)
+
+    const d = distanceAB;
+    const angle = d / (2 * R); // angle in radians
+    const secant = 1 / Math.cos(angle);
+    let minAltitude = R * (secant - 1); // in meters
+
+    // Set a minimum operational altitude (e.g., 50 meters)
+    const minOperationalAltitude = 50;
+    minAltitude = Math.max(minAltitude, minOperationalAltitude);
+
+    // Get the canvas and context
+    const canvas = document.getElementById('diagramCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Dimensions for drawing
+    const width = canvas.width;
+    const height = canvas.height;
+    const centerX = width / 2;
+    const earthRadius = Math.min(width, height) * 2; // Scaled Earth radius for visualization
+    const scale = (d / 2) / (width / 2 - 100); // Scale factor to fit the diagram in canvas
+
+    // Draw Earth (arc)
+    ctx.beginPath();
+    ctx.arc(centerX, height + earthRadius - 50, earthRadius, Math.PI, 2 * Math.PI);
+    ctx.fillStyle = '#D3D3D3';
+    ctx.fill();
+    ctx.strokeStyle = '#808080';
+    ctx.stroke();
+
+    // Calculate positions of Points A and B on the Earth's surface
+    const xA = centerX - (d / 2) / scale;
+    const xB = centerX + (d / 2) / scale;
+    const yGround = height - 50; // Ground level in canvas
+
+    // Draw Points A and B
+    const pointRadius = 5;
+    ctx.fillStyle = 'blue';
+    ctx.beginPath();
+    ctx.arc(xA, yGround, pointRadius, 0, 2 * Math.PI);
+    ctx.fill();
+
+    ctx.fillStyle = 'green';
+    ctx.beginPath();
+    ctx.arc(xB, yGround, pointRadius, 0, 2 * Math.PI);
+    ctx.fill();
+
+    // Draw labels for Points A and B
+    ctx.fillStyle = 'black';
+    ctx.font = '14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Point A', xA, yGround + 20);
+    ctx.fillText('Point B', xB, yGround + 20);
+
+    // Calculate relay device position
+    const xRelay = centerX;
+    const yRelay = yGround - minAltitude / scale;
+
+    // Draw relay device
+    ctx.fillStyle = 'red';
+    ctx.beginPath();
+    ctx.rect(xRelay - 5, yRelay - 10, 10, 10);
+    ctx.fill();
+
+    // Draw label for relay device
+    ctx.fillStyle = 'black';
+    ctx.fillText('Relay Device', xRelay, yRelay - 15);
+
+    // Draw line-of-sight paths
+    ctx.strokeStyle = 'orange';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(xA, yGround);
+    ctx.lineTo(xRelay, yRelay);
+    ctx.lineTo(xB, yGround);
+    ctx.stroke();
+
+    // Display computed information
+    const infoDiv = document.getElementById('info');
+    const distanceKM = (distanceAB / 1000).toFixed(3);
+    const altitudeM = minAltitude.toFixed(2);
+    infoDiv.innerHTML += `<p><strong>Distance between Points A and B:</strong> ${distanceKM} km</p>`;
+    infoDiv.innerHTML += `<p><strong>Minimum Altitude for Line-of-Sight:</strong> ${altitudeM} meters</p>`;
+
+  </script>
+</body>
+</html>
