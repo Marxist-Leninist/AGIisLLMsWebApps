@@ -3,18 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <title>Web Proxy Browser with Search</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- Added for mobile responsiveness -->
     <style>
         body {
             font-family: Arial, sans-serif;
             margin: 20px;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
         }
         #urlInput {
-            width: 80%;
+            width: calc(100% - 110px); /* Adjusted for button width */
             padding: 8px;
             margin-bottom: 10px;
+            font-size: 16px; /* Increased font size for readability */
         }
         #browseBtn {
             padding: 8px;
+            font-size: 16px;
+            width: 90px; /* Fixed width for consistency */
         }
         #output {
             margin-top: 20px;
@@ -22,14 +29,43 @@
             padding: 10px;
             min-height: 400px;
             background-color: #f9f9f9;
+            overflow-wrap: break-word; /* Ensure long words break appropriately */
+        }
+        /* Responsive adjustments */
+        @media (max-width: 600px) {
+            #urlInput, #browseBtn {
+                width: 100%;
+                box-sizing: border-box;
+                margin-bottom: 10px;
+            }
+            #browseBtn {
+                width: 100%;
+            }
+        }
+        /* Increased contrast for better visibility */
+        body {
+            color: #333;
+            background-color: #fff;
+        }
+        a {
+            color: #0066cc;
+        }
+        a:visited {
+            color: #551a8b;
+        }
+        /* Larger default font size */
+        body, input, button {
+            font-size: 18px;
         }
     </style>
 </head>
 <body>
 
 <h1>Web Proxy Browser with Search</h1>
-<input type="text" id="urlInput" placeholder="Enter URL or Search Query">
-<button id="browseBtn">Browse/Search</button>
+<div style="display: flex; flex-wrap: wrap;">
+    <input type="text" id="urlInput" placeholder="Enter URL or Search Query">
+    <button id="browseBtn">Browse/Search</button>
+</div>
 
 <div id="output"></div>
 
@@ -50,30 +86,11 @@ document.getElementById('browseBtn').addEventListener('click', function() {
         if (!/^https?:\/\//i.test(url)) {
             url = 'http://' + url;
         }
-        fetch(url)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Network response was not ok');
-                }
-                return response.text();
-            })
-            .then(data => {
-                document.getElementById('output').innerHTML = data;
-                // Adjust links to open in a new tab
-                const links = document.getElementById('output').getElementsByTagName('a');
-                for (let i = 0; i < links.length; i++) {
-                    links[i].setAttribute('target', '_blank');
-                    links[i].setAttribute('rel', 'noopener noreferrer');
-                }
-            })
-            .catch(error => {
-                console.error('Error fetching the URL:', error);
-                alert('Error fetching the URL. Please check the console for more details.');
-            });
+        fetchUrl(url);
     } else {
         // If input is a search query
         const searchQuery = encodeURIComponent(input);
-        const searchUrl = `https://api.duckduckgo.com/?q=${searchQuery}&format=json&pretty=1&no_html=1&skip_disambig=1`;
+        const searchUrl = `https://api.duckduckgo.com/?q=${searchQuery}&format=json&no_html=1&skip_disambig=1`;
 
         fetch(searchUrl)
             .then(response => response.json())
@@ -87,18 +104,35 @@ document.getElementById('browseBtn').addEventListener('click', function() {
     }
 });
 
+// Function to fetch and display a URL's content
+function fetchUrl(url) {
+    fetch(url)
+        .then(response => response.text())
+        .then(data => {
+            // Insert a base tag to handle relative URLs
+            const baseTag = `<base href="${url}">`;
+            document.getElementById('output').innerHTML = baseTag + data;
+
+            // No need to reattach event listeners due to event delegation
+        })
+        .catch(error => {
+            console.error('Error fetching the URL:', error);
+            alert('Error fetching the URL. Please check the console for more details.');
+        });
+}
+
 // Function to display search results
 function displaySearchResults(data) {
-    let html = `<h2>Search Results for "${data.Heading}":</h2>`;
+    let html = `<h2>Search Results for "${data.Heading || data.AbstractSource || 'your query'}":</h2>`;
     if (data.RelatedTopics && data.RelatedTopics.length > 0) {
         html += '<ul>';
         data.RelatedTopics.forEach(topic => {
             if (topic.Text && topic.FirstURL) {
-                html += `<li><a href="${topic.FirstURL}" target="_blank">${topic.Text}</a></li>`;
+                html += `<li><a href="${topic.FirstURL}">${topic.Text}</a></li>`;
             } else if (topic.Topics) {
                 topic.Topics.forEach(subTopic => {
                     if (subTopic.Text && subTopic.FirstURL) {
-                        html += `<li><a href="${subTopic.FirstURL}" target="_blank">${subTopic.Text}</a></li>`;
+                        html += `<li><a href="${subTopic.FirstURL}">${subTopic.Text}</a></li>`;
                     }
                 });
             }
@@ -109,6 +143,15 @@ function displaySearchResults(data) {
     }
     document.getElementById('output').innerHTML = html;
 }
+
+// Event delegation to handle clicks on links within #output
+document.getElementById('output').addEventListener('click', function(e) {
+    if (e.target && e.target.nodeName === 'A') {
+        e.preventDefault();
+        const url = e.target.href;
+        fetchUrl(url);
+    }
+});
 </script>
 
 </body>
