@@ -40,9 +40,9 @@ document.getElementById('browseBtn').addEventListener('click', function() {
         alert('Please enter a URL or search query.');
         return;
     }
-    
+
     // Regex to check if the input is a URL
-    const urlPattern = /^(https?:\/\/)?([\w\-]+\.)+[\w\-]+(\/[\w\-./?%&=]*)?$/;
+    const urlPattern = /^(https?:\/\/)?([\w\-]+\.)+[\w\-]+(\/[\w\-./?%&=]*)?$/i;
     if (urlPattern.test(input)) {
         // If input is a URL
         let url = input;
@@ -75,17 +75,22 @@ document.getElementById('browseBtn').addEventListener('click', function() {
         const searchQuery = encodeURIComponent(input);
         const searchUrl = `https://api.duckduckgo.com/?q=${searchQuery}&format=json&pretty=1&no_html=1&skip_disambig=1`;
 
-        // Using JSONP to avoid CORS issues
-        const script = document.createElement('script');
-        script.src = searchUrl + '&callback=displaySearchResults';
-        document.body.appendChild(script);
+        fetch(searchUrl)
+            .then(response => response.json())
+            .then(data => {
+                displaySearchResults(data);
+            })
+            .catch(error => {
+                console.error('Error fetching search results:', error);
+                alert('Error fetching search results. Please check the console for more details.');
+            });
     }
 });
 
 // Function to display search results
 function displaySearchResults(data) {
     let html = `<h2>Search Results for "${data.Heading}":</h2>`;
-    if (data.RelatedTopics.length > 0) {
+    if (data.RelatedTopics && data.RelatedTopics.length > 0) {
         html += '<ul>';
         data.RelatedTopics.forEach(topic => {
             if (topic.Text && topic.FirstURL) {
