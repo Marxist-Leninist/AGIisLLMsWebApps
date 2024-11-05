@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Simple Web Proxy Browser</title>
+    <title>Web Proxy Browser with Search</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -27,41 +27,83 @@
 </head>
 <body>
 
-<h1>Web Proxy Browser</h1>
-<input type="text" id="urlInput" placeholder="Enter URL (e.g., https://example.com)">
-<button id="browseBtn">Browse</button>
+<h1>Web Proxy Browser with Search</h1>
+<input type="text" id="urlInput" placeholder="Enter URL or Search Query">
+<button id="browseBtn">Browse/Search</button>
 
 <div id="output"></div>
 
 <script>
 document.getElementById('browseBtn').addEventListener('click', function() {
-    const url = document.getElementById('urlInput').value.trim();
-    if (!url) {
-        alert('Please enter a URL.');
+    const input = document.getElementById('urlInput').value.trim();
+    if (!input) {
+        alert('Please enter a URL or search query.');
         return;
     }
     
-    fetch(url)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-            }
-            return response.text();
-        })
-        .then(data => {
-            document.getElementById('output').innerHTML = data;
-            // Adjust links to open in a new tab to avoid navigation away from this page
-            const links = document.getElementById('output').getElementsByTagName('a');
-            for (let i = 0; i < links.length; i++) {
-                links[i].setAttribute('target', '_blank');
-                links[i].setAttribute('rel', 'noopener noreferrer');
-            }
-        })
-        .catch(error => {
-            console.error('Error fetching the URL:', error);
-            alert('Error fetching the URL. Please check the console for more details.');
-        });
+    // Regex to check if the input is a URL
+    const urlPattern = /^(https?:\/\/)?([\w\-]+\.)+[\w\-]+(\/[\w\-./?%&=]*)?$/;
+    if (urlPattern.test(input)) {
+        // If input is a URL
+        let url = input;
+        // Add http:// if missing
+        if (!/^https?:\/\//i.test(url)) {
+            url = 'http://' + url;
+        }
+        fetch(url)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.text();
+            })
+            .then(data => {
+                document.getElementById('output').innerHTML = data;
+                // Adjust links to open in a new tab
+                const links = document.getElementById('output').getElementsByTagName('a');
+                for (let i = 0; i < links.length; i++) {
+                    links[i].setAttribute('target', '_blank');
+                    links[i].setAttribute('rel', 'noopener noreferrer');
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching the URL:', error);
+                alert('Error fetching the URL. Please check the console for more details.');
+            });
+    } else {
+        // If input is a search query
+        const searchQuery = encodeURIComponent(input);
+        const searchUrl = `https://api.duckduckgo.com/?q=${searchQuery}&format=json&pretty=1&no_html=1&skip_disambig=1`;
+
+        // Using JSONP to avoid CORS issues
+        const script = document.createElement('script');
+        script.src = searchUrl + '&callback=displaySearchResults';
+        document.body.appendChild(script);
+    }
 });
+
+// Function to display search results
+function displaySearchResults(data) {
+    let html = `<h2>Search Results for "${data.Heading}":</h2>`;
+    if (data.RelatedTopics.length > 0) {
+        html += '<ul>';
+        data.RelatedTopics.forEach(topic => {
+            if (topic.Text && topic.FirstURL) {
+                html += `<li><a href="${topic.FirstURL}" target="_blank">${topic.Text}</a></li>`;
+            } else if (topic.Topics) {
+                topic.Topics.forEach(subTopic => {
+                    if (subTopic.Text && subTopic.FirstURL) {
+                        html += `<li><a href="${subTopic.FirstURL}" target="_blank">${subTopic.Text}</a></li>`;
+                    }
+                });
+            }
+        });
+        html += '</ul>';
+    } else {
+        html += '<p>No results found.</p>';
+    }
+    document.getElementById('output').innerHTML = html;
+}
 </script>
 
 </body>
