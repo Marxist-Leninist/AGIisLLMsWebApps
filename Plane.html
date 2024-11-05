@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>AR HUD Optimized for Samsung Galaxy A33 5G</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <style>
+        /* Global Styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            -ms-user-select: none;
+        }
+
+        body {
+            background: #000;
+            color: #0f0;
+            font-family: monospace;
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+
+        /* Camera Feed */
+        #camera-feed {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: 0;
+        }
+
+        /* HUD Container */
+        .hud-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        /* Sensor Data Display */
+        .sensor-data {
+            position: absolute;
+            bottom: 1rem;
+            left: 1rem;
+            font-size: 1.2rem;
+            line-height: 1.5;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 0.5rem 1rem;
+            border: 1px solid #0f0;
+            border-radius: 5px;
+        }
+
+        /* Compass Styles */
+        .compass {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            width: 80px;
+            height: 80px;
+            border: 2px solid #0f0;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        .compass-arrow {
+            width: 2px;
+            height: 30px;
+            background: #0f0;
+            transform-origin: bottom center;
+        }
+
+        /* Horizon Indicator */
+        .horizon {
+            position: absolute;
+            top: 50%;
+            right: 2rem;
+            width: 150px;
+            height: 150px;
+            border: 2px solid #0f0;
+            border-radius: 50%;
+            transform: translateY(-50%);
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .horizon-line {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: #0f0;
+            transform-origin: center;
+        }
+
+        /* Permission Overlay */
+        .permission-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 2;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+        }
+
+        .permission-button {
+            background: #0f0;
+            color: #000;
+            border: none;
+            padding: 1rem 2rem;
+            font-family: monospace;
+            font-size: 1rem;
+            cursor: pointer;
+            pointer-events: auto;
+        }
+
+        .status {
+            color: #0f0;
+            text-align: center;
+            margin-bottom: 1rem;
+        }
+
+        .error-message {
+            color: red;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <!-- Camera Feed -->
+    <video id="camera-feed" autoplay playsinline></video>
+
+    <!-- Permission Overlay -->
+    <div class="permission-overlay" id="permission-overlay">
+        <div class="status" id="status">Sensor Access Required</div>
+        <button class="permission-button" id="start-button">Start AR Experience</button>
+        <div class="error-message" id="error-message" style="display: none;"></div>
+    </div>
+
+    <!-- HUD Elements -->
+    <div class="hud-container">
+        <!-- Sensor Data Display -->
+        <div class="sensor-data" id="sensor-data">
+            Initializing sensors...
+        </div>
+
+        <!-- Compass -->
+        <div class="compass">
+            <div class="compass-arrow" id="compass-arrow"></div>
+        </div>
+
+        <!-- Horizon Indicator -->
+        <div class="horizon">
+            <div class="horizon-line" id="horizon-line"></div>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const cameraFeed = document.getElementById('camera-feed');
+        const permissionOverlay = document.getElementById('permission-overlay');
+        const startButton = document.getElementById('start-button');
+        const statusDisplay = document.getElementById('status');
+        const errorMessage = document.getElementById('error-message');
+        const sensorDataDisplay = document.getElementById('sensor-data');
+        const compassArrow = document.getElementById('compass-arrow');
+        const horizonLine = document.getElementById('horizon-line');
+
+        // Sensor Flags
+        const sensors = {
+            camera: false,
+            gps: false,
+            orientation: false,
+            motion: false
+        };
+
+        // Start Button Click Handler
+        startButton.addEventListener('click', async () => {
+            errorMessage.style.display = 'none';
+            statusDisplay.textContent = 'Initializing...';
+
+            try {
+                await requestAllPermissions();
+                permissionOverlay.style.display = 'none';
+                updateStatus();
+            } catch (err) {
+                errorMessage.textContent = err.message;
+                errorMessage.style.display = 'block';
+                statusDisplay.textContent = 'Permission Required';
+            }
+        });
+
+        // Request All Permissions
+        async function requestAllPermissions() {
+            await requestCameraAccess();
+            await requestLocationAccess();
+            setupOrientationSensor();
+            setupMotionSensor();
+        }
+
+        // Update Status Display
+        function updateStatus() {
+            statusDisplay.innerHTML = `
+                Camera: ${sensors.camera ? '✓' : '×'}<br>
+                GPS: ${sensors.gps ? '✓' : '×'}<br>
+                Orientation: ${sensors.orientation ? '✓' : '×'}<br>
+                Motion: ${sensors.motion ? '✓' : '×'}
+            `;
+        }
+
+        // Request Camera Access
+        async function requestCameraAccess() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                throw new Error('Camera API not supported.');
+            }
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: { ideal: 'environment' },
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    }
+                });
+                cameraFeed.srcObject = stream;
+                sensors.camera = true;
+            } catch (err) {
+                console.error('Camera access error:', err);
+                throw new Error('Camera access denied. Please allow camera permissions.');
+            }
+        }
+
+        // Request Location Access
+        async function requestLocationAccess() {
+            if (!('geolocation' in navigator)) {
+                throw new Error('Geolocation is not supported by your browser.');
+            }
+            return new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        sensors.gps = true;
+                        updateLocation(position);
+                        // Start watching position
+                        navigator.geolocation.watchPosition(updateLocation, (error) => {
+                            console.error('Geolocation watch error:', error);
+                        }, {
+                            enableHighAccuracy: true,
+                            maximumAge: 0,
+                            timeout: 5000
+                        });
+                        resolve();
+                    },
+                    (error) => {
+                        console.error('Geolocation error:', error);
+                        reject(new Error('Location access denied. Please allow location permissions.'));
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        maximumAge: 0,
+                        timeout: 5000
+                    }
+                );
+            });
+        }
+
+        // Update Location Data
+        function updateLocation(position) {
+            const { latitude, longitude, altitude, accuracy } = position.coords;
+            sensorDataDisplay.innerHTML = `
+                LAT: ${latitude.toFixed(6)}°<br>
+                LON: ${longitude.toFixed(6)}°<br>
+                ALT: ${altitude !== null ? altitude.toFixed(1) + 'm' : 'N/A'}<br>
+                ACC: ${accuracy.toFixed(1)}m
+            `;
+        }
+
+        // Setup Orientation Sensor
+        function setupOrientationSensor() {
+            if (typeof DeviceOrientationEvent === 'undefined') {
+                console.error('Device orientation not supported.');
+                return;
+            }
+            window.addEventListener('deviceorientation', handleOrientation);
+            sensors.orientation = true;
+        }
+
+        // Handle Orientation Events
+        function handleOrientation(event) {
+            if (event.alpha !== null) {
+                compassArrow.style.transform = `rotate(${event.alpha}deg)`;
+            }
+            if (event.beta !== null) {
+                horizonLine.style.transform = `rotate(${-event.beta}deg)`;
+            }
+        }
+
+        // Setup Motion Sensor
+        function setupMotionSensor() {
+            if (typeof DeviceMotionEvent === 'undefined') {
+                console.error('Device motion not supported.');
+                return;
+            }
+            window.addEventListener('devicemotion', handleMotion);
+            sensors.motion = true;
+        }
+
+        // Handle Motion Events
+        function handleMotion(event) {
+            // Process motion data if needed
+        }
+
+        // Lock Screen Orientation to Landscape
+        if (screen.orientation && screen.orientation.lock) {
+            screen.orientation.lock('landscape').catch((err) => {
+                console.warn('Screen orientation lock not supported:', err);
+            });
+        }
+
+        // Prevent Default Touch Actions
+        document.addEventListener('touchmove', function (e) {
+            e.preventDefault();
+        }, { passive: false });
+    </script>
+</body>
+</html>
