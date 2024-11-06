@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Decentralized Social Network</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- PeerJS Library -->
+    <script src="https://cdn.jsdelivr.net/npm/peerjs@1.4.7/dist/peerjs.min.js"></script>
+
+    <!-- Custom CSS -->
+    <style>
+        body {
+            background-color: #ffffff;
+            color: #1a202c; /* Tailwind's gray-800 */
+            font-family: 'Inter', sans-serif;
+        }
+
+        .container {
+            max-width: 600px;
+        }
+
+        .post {
+            background-color: #f7fafc; /* Tailwind's gray-100 */
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .post p {
+            margin-bottom: 0.5rem;
+        }
+
+        .post time {
+            font-size: 0.875rem;
+            color: #718096; /* Tailwind's gray-600 */
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 640px) {
+            h1 {
+                font-size: 1.5rem;
+            }
+
+            .post {
+                padding: 0.75rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container mx-auto p-4">
+        <h1 class="text-3xl font-bold mb-6 text-center">My Decentralized Social Network</h1>
+
+        <!-- Post Creation -->
+        <div class="mb-6">
+            <textarea id="postContent" class="w-full p-2 border rounded" placeholder="What's happening?" rows="3"></textarea>
+            <button id="postButton" class="mt-2 px-4 py-2 bg-blue-500 text-white rounded">Post</button>
+        </div>
+
+        <!-- Posts Feed -->
+        <div id="postsFeed">
+            <!-- Posts will be dynamically added here -->
+        </div>
+
+        <!-- Peer Connection Status -->
+        <div id="status" class="mt-4 text-center text-sm text-gray-600">
+            Connecting...
+        </div>
+    </div>
+
+    <!-- Main JavaScript -->
+    <script>
+        // Initialize PeerJS
+        const peer = new Peer({
+            host: 'peerjs-server.herokuapp.com',
+            secure: true,
+            port: 443,
+            key: 'peerjs',
+            debug: 3
+        });
+
+        // Store connected peers
+        let connections = [];
+
+        // Display own Peer ID
+        let myPeerId = '';
+        peer.on('open', (id) => {
+            myPeerId = id;
+            console.log('My peer ID is: ' + id);
+            document.getElementById('status').innerText = 'Your Peer ID: ' + id;
+
+            // Prompt user to connect to another peer
+            const otherPeerId = prompt('Enter Peer ID to connect with:');
+            if (otherPeerId) {
+                connectToPeer(otherPeerId);
+            }
+        });
+
+        // Handle incoming connections
+        peer.on('connection', (conn) => {
+            setupConnection(conn);
+        });
+
+        // Function to connect to a peer
+        function connectToPeer(peerId) {
+            if (peerId === myPeerId) {
+                alert('You cannot connect to yourself.');
+                return;
+            }
+
+            const conn = peer.connect(peerId);
+            conn.on('open', () => {
+                console.log('Connected to: ' + peerId);
+                setupConnection(conn);
+            });
+
+            conn.on('error', (err) => {
+                console.error(err);
+            });
+        }
+
+        // Setup connection events
+        function setupConnection(conn) {
+            connections.push(conn);
+
+            conn.on('data', (data) => {
+                console.log('Received:', data);
+                displayPost(data.content, data.timestamp);
+            });
+
+            conn.on('close', () => {
+                console.log('Connection closed with peer:', conn.peer);
+                connections = connections.filter(c => c !== conn);
+            });
+
+            conn.on('error', (err) => {
+                console.error('Connection error with peer:', conn.peer, err);
+            });
+        }
+
+        // Sending posts
+        document.getElementById('postButton').addEventListener('click', () => {
+            const content = document.getElementById('postContent').value.trim();
+            if (content) {
+                const post = {
+                    content: content,
+                    timestamp: new Date().toISOString(),
+                };
+
+                // Display the post locally
+                displayPost(post.content, post.timestamp);
+
+                // Send the post to all connected peers
+                connections.forEach((conn) => {
+                    conn.send(post);
+                });
+
+                // Clear the input field
+                document.getElementById('postContent').value = '';
+            } else {
+                alert('Please enter some content.');
+            }
+        });
+
+        // Function to display posts
+        function displayPost(content, timestamp) {
+            const postsFeed = document.getElementById('postsFeed');
+
+            const postElement = document.createElement('div');
+            postElement.className = 'post';
+
+            const contentElement = document.createElement('p');
+            contentElement.textContent = content;
+
+            const timestampElement = document.createElement('time');
+            timestampElement.textContent = `Posted at ${new Date(timestamp).toLocaleTimeString()}`;
+
+            postElement.appendChild(contentElement);
+            postElement.appendChild(timestampElement);
+
+            // Add the new post at the top
+            postsFeed.insertBefore(postElement, postsFeed.firstChild);
+        }
+
+        // Handle network connectivity changes
+        window.addEventListener('offline', () => {
+            console.log('You are offline.');
+            alert('You have lost internet connection.');
+            document.getElementById('status').innerText = 'Offline - Connection lost.';
+            // Optionally, disable posting or notify the user
+        });
+
+        window.addEventListener('online', () => {
+            console.log('You are back online.');
+            alert('You are back online.');
+            document.getElementById('status').innerText = 'Online - Reconnecting...';
+            // Reconnect to peers if necessary
+        });
+
+        // Storing posts locally using localStorage
+        function savePost(content, timestamp) {
+            const posts = JSON.parse(localStorage.getItem('posts')) || [];
+            posts.unshift({ content, timestamp });
+            localStorage.setItem('posts', JSON.stringify(posts));
+        }
+
+        function loadPosts() {
+            const posts = JSON.parse(localStorage.getItem('posts')) || [];
+            posts.forEach((post) => {
+                displayPost(post.content, post.timestamp);
+            });
+        }
+
+        // Call loadPosts on page load
+        window.onload = () => {
+            loadPosts();
+        };
+
+        // Modify displayPost to save posts locally
+        function displayPost(content, timestamp) {
+            // Save post to localStorage
+            savePost(content, timestamp);
+
+            const postsFeed = document.getElementById('postsFeed');
+
+            const postElement = document.createElement('div');
+            postElement.className = 'post';
+
+            const contentElement = document.createElement('p');
+            contentElement.textContent = content;
+
+            const timestampElement = document.createElement('time');
+            timestampElement.textContent = `Posted at ${new Date(timestamp).toLocaleTimeString()}`;
+
+            postElement.appendChild(contentElement);
+            postElement.appendChild(timestampElement);
+
+            // Add the new post at the top
+            postsFeed.insertBefore(postElement, postsFeed.firstChild);
+        }
+    </script>
+</body>
+</html>
