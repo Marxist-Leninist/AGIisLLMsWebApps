@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Decentralized Social Network</title>
+    <title>Decentralized Social Network with Debugging</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <!-- Tailwind CSS CDN -->
@@ -50,11 +50,44 @@
                 padding: 0.75rem;
             }
         }
+
+        /* Debug Log Styles */
+        #debugLog {
+            background-color: #edf2f7; /* Tailwind's gray-200 */
+            padding: 1rem;
+            border-radius: 0.5rem;
+            height: 200px;
+            overflow-y: scroll;
+            font-size: 0.875rem;
+            white-space: pre-wrap;
+        }
     </style>
 </head>
 <body>
     <div class="container mx-auto p-4">
         <h1 class="text-3xl font-bold mb-6 text-center">My Decentralized Social Network</h1>
+
+        <!-- Your Peer ID -->
+        <div class="mb-4">
+            <label for="myPeerId" class="font-semibold">Your Peer ID:</label>
+            <input type="text" id="myPeerId" readonly class="w-full p-2 border rounded mt-1" onclick="this.select()">
+            <p class="text-sm text-gray-600">Share this ID with others so they can connect to you.</p>
+        </div>
+
+        <!-- Connect to Peer -->
+        <div class="mb-4">
+            <label for="connectToPeerId" class="font-semibold">Connect to Peer ID:</label>
+            <input type="text" id="connectToPeerId" class="w-full p-2 border rounded mt-1" placeholder="Enter Peer ID to connect">
+            <button id="connectButton" class="mt-2 px-4 py-2 bg-green-500 text-white rounded">Connect</button>
+        </div>
+
+        <!-- Connected Peers -->
+        <div class="mb-4">
+            <h2 class="text-xl font-semibold">Connected Peers:</h2>
+            <ul id="connectedPeersList" class="list-disc list-inside">
+                <!-- Connected peers will be listed here -->
+            </ul>
+        </div>
 
         <!-- Post Creation -->
         <div class="mb-6">
@@ -67,9 +100,12 @@
             <!-- Posts will be dynamically added here -->
         </div>
 
-        <!-- Peer Connection Status -->
-        <div id="status" class="mt-4 text-center text-sm text-gray-600">
-            Connecting...
+        <!-- Debug Log -->
+        <div class="mt-6">
+            <h2 class="text-xl font-semibold">Debug Log:</h2>
+            <div id="debugLog">
+                <!-- Debug messages will be displayed here -->
+            </div>
         </div>
     </div>
 
@@ -92,13 +128,20 @@
         peer.on('open', (id) => {
             myPeerId = id;
             console.log('My peer ID is: ' + id);
-            document.getElementById('status').innerText = 'Your Peer ID: ' + id;
+            logDebug('My peer ID is: ' + id);
+            document.getElementById('myPeerId').value = id;
 
-            // Prompt user to connect to another peer
-            const otherPeerId = prompt('Enter Peer ID to connect with:');
-            if (otherPeerId) {
-                connectToPeer(otherPeerId);
-            }
+            // Optionally prompt user to connect to another peer
+            // const otherPeerId = prompt('Enter Peer ID to connect with:');
+            // if (otherPeerId) {
+            //     connectToPeer(otherPeerId);
+            // }
+        });
+
+        // Handle errors
+        peer.on('error', (err) => {
+            console.error('Peer error:', err);
+            logDebug('Peer error: ' + err);
         });
 
         // Handle incoming connections
@@ -116,30 +159,38 @@
             const conn = peer.connect(peerId);
             conn.on('open', () => {
                 console.log('Connected to: ' + peerId);
+                logDebug('Connected to: ' + peerId);
                 setupConnection(conn);
             });
 
             conn.on('error', (err) => {
-                console.error(err);
+                console.error('Connection error:', err);
+                logDebug('Connection error with ' + peerId + ': ' + err);
+                alert('Failed to connect to peer: ' + peerId);
             });
         }
 
         // Setup connection events
         function setupConnection(conn) {
             connections.push(conn);
+            updateConnectedPeers();
 
             conn.on('data', (data) => {
-                console.log('Received:', data);
+                console.log('Received from ' + conn.peer + ':', data);
+                logDebug('Received from ' + conn.peer + ': ' + JSON.stringify(data));
                 displayPost(data.content, data.timestamp);
             });
 
             conn.on('close', () => {
                 console.log('Connection closed with peer:', conn.peer);
+                logDebug('Connection closed with peer: ' + conn.peer);
                 connections = connections.filter(c => c !== conn);
+                updateConnectedPeers();
             });
 
             conn.on('error', (err) => {
                 console.error('Connection error with peer:', conn.peer, err);
+                logDebug('Connection error with ' + conn.peer + ': ' + err);
             });
         }
 
@@ -158,6 +209,8 @@
                 // Send the post to all connected peers
                 connections.forEach((conn) => {
                     conn.send(post);
+                    console.log('Sent to ' + conn.peer + ':', post);
+                    logDebug('Sent to ' + conn.peer + ': ' + JSON.stringify(post));
                 });
 
                 // Clear the input field
@@ -167,8 +220,22 @@
             }
         });
 
+        // Handle connect button click
+        document.getElementById('connectButton').addEventListener('click', () => {
+            const peerId = document.getElementById('connectToPeerId').value.trim();
+            if (peerId) {
+                connectToPeer(peerId);
+                document.getElementById('connectToPeerId').value = '';
+            } else {
+                alert('Please enter a Peer ID to connect.');
+            }
+        });
+
         // Function to display posts
         function displayPost(content, timestamp) {
+            // Save post to localStorage
+            savePost(content, timestamp);
+
             const postsFeed = document.getElementById('postsFeed');
 
             const postElement = document.createElement('div');
@@ -187,18 +254,39 @@
             postsFeed.insertBefore(postElement, postsFeed.firstChild);
         }
 
+        // Update connected peers list
+        function updateConnectedPeers() {
+            const list = document.getElementById('connectedPeersList');
+            list.innerHTML = '';
+
+            connections.forEach((conn) => {
+                const listItem = document.createElement('li');
+                listItem.textContent = conn.peer;
+                list.appendChild(listItem);
+            });
+
+            document.getElementById('status').innerText = 'Connected Peers: ' + connections.length;
+        }
+
+        // Debug log function
+        function logDebug(message) {
+            const debugLog = document.getElementById('debugLog');
+            debugLog.textContent += message + '\n';
+            debugLog.scrollTop = debugLog.scrollHeight; // Auto-scroll to bottom
+        }
+
         // Handle network connectivity changes
         window.addEventListener('offline', () => {
             console.log('You are offline.');
+            logDebug('You are offline.');
             alert('You have lost internet connection.');
-            document.getElementById('status').innerText = 'Offline - Connection lost.';
             // Optionally, disable posting or notify the user
         });
 
         window.addEventListener('online', () => {
             console.log('You are back online.');
+            logDebug('You are back online.');
             alert('You are back online.');
-            document.getElementById('status').innerText = 'Online - Reconnecting...';
             // Reconnect to peers if necessary
         });
 
@@ -221,28 +309,8 @@
             loadPosts();
         };
 
-        // Modify displayPost to save posts locally
-        function displayPost(content, timestamp) {
-            // Save post to localStorage
-            savePost(content, timestamp);
-
-            const postsFeed = document.getElementById('postsFeed');
-
-            const postElement = document.createElement('div');
-            postElement.className = 'post';
-
-            const contentElement = document.createElement('p');
-            contentElement.textContent = content;
-
-            const timestampElement = document.createElement('time');
-            timestampElement.textContent = `Posted at ${new Date(timestamp).toLocaleTimeString()}`;
-
-            postElement.appendChild(contentElement);
-            postElement.appendChild(timestampElement);
-
-            // Add the new post at the top
-            postsFeed.insertBefore(postElement, postsFeed.firstChild);
-        }
+        // Show peer's debug messages in console
+        peer._debug = logDebug;
     </script>
 </body>
 </html>
