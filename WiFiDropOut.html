@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Mobile-First WiFi Monitor with Orientation and Map</title>
+  <title>Advanced WiFi Monitor with Enhanced Compass Correction</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <!-- Include Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
@@ -17,11 +17,13 @@
     h1 { margin: 10px; font-size: 1.5em; text-align: center; }
     #compass { position: absolute; top: 70px; right: 10px; width: 50px; height: 50px; z-index: 1000; }
     #compass img { width: 100%; height: auto; transform: rotate(0deg); transform-origin: center center; }
+    #startButton { display: block; margin: 20px auto; padding: 10px 20px; font-size: 1em; }
   </style>
 </head>
 <body>
-  <h1>WiFi Monitor with Orientation and Map</h1>
-  <div id="status">Checking connection...</div>
+  <h1>Advanced WiFi Monitor with Enhanced Compass Correction</h1>
+  <button id="startButton">Start Monitoring</button>
+  <div id="status">Please click "Start Monitoring" to begin.</div>
   <div id="map"></div>
   <div id="compass"><img src="https://i.imgur.com/3j8O1oT.png" alt="Compass"></div>
   <div id="log"></div>
@@ -31,31 +33,84 @@
   <!-- Include Kalman Filter library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/kalmanjs/1.0.0/kalman.min.js"></script>
   <script>
-    var initialPosition = null;
-    var currentPosition = null;
-    var map, marker, circle;
-    var isFirstLoad = true;
-    var kalmanFilterLat = new KalmanFilter({ R: 0.01, Q: 3 });
-    var kalmanFilterLng = new KalmanFilter({ R: 0.01, Q: 3 });
-    var lastUpdateTime = null;
-    var compassHeading = 0;
+    let initialPosition = null;
+    let currentPosition = null;
+    let map, marker, circle;
+    let isFirstLoad = true;
+    let kalmanFilterLat = new KalmanFilter({ R: 0.01, Q: 3 });
+    let kalmanFilterLng = new KalmanFilter({ R: 0.01, Q: 3 });
+    let lastUpdateTime = null;
+    let compassHeading = 0;
+    let watchID = null;
 
-    function getLocation(callback) {
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(function(position) {
-          callback(position.coords);
-        }, function(error) {
-          console.error('Error obtaining location:', error);
-          callback(null);
-        }, {
-          enableHighAccuracy: true,
-          maximumAge: 0,
-          timeout: 5000
-        });
-      } else {
-        console.error('Geolocation is not supported by this browser.');
-        callback(null);
+    function startMonitoring() {
+      // Check for necessary APIs
+      if (!('geolocation' in navigator)) {
+        alert('Geolocation is not supported by your browser.');
+        return;
       }
+      if (!window.DeviceOrientationEvent) {
+        alert('DeviceOrientationEvent is not supported by your browser.');
+        return;
+      }
+
+      // Request permission for iOS 13+ devices
+      if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+        DeviceOrientationEvent.requestPermission()
+          .then(function(permissionState) {
+            if (permissionState === 'granted') {
+              window.addEventListener('deviceorientation', handleOrientationEvent, true);
+            } else {
+              alert('Permission to access device orientation denied.');
+            }
+          })
+          .catch(console.error);
+      } else {
+        // Non-iOS devices
+        window.addEventListener('deviceorientation', handleOrientationEvent, true);
+      }
+
+      // Start watching position
+      watchID = navigator.geolocation.watchPosition(handlePositionUpdate, handlePositionError, {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 5000
+      });
+
+      // Update status
+      updateStatus();
+      setInterval(updateStatus, 2000); // Update every 2 seconds
+
+      // Disable start button
+      document.getElementById('startButton').disabled = true;
+    }
+
+    function handlePositionUpdate(position) {
+      let gpsCoords = position.coords;
+      // Apply Kalman Filter to latitude and longitude
+      gpsCoords.latitude = kalmanFilterLat.filter(gpsCoords.latitude);
+      gpsCoords.longitude = kalmanFilterLng.filter(gpsCoords.longitude);
+
+      if (initialPosition === null) {
+        initialPosition = gpsCoords;
+        currentPosition = gpsCoords;
+        initMap(gpsCoords);
+        lastUpdateTime = Date.now();
+      } else {
+        currentPosition = gpsCoords;
+      }
+
+      let distance = calculateDistance(initialPosition, currentPosition);
+      let distanceText = distance !== null ? 'Distance from start: ' + distance.toFixed(2) + ' meters' : 'Distance data not available';
+
+      let statusElement = document.getElementById('status');
+      statusElement.textContent = 'Monitoring... ' + distanceText;
+
+      updateMap(currentPosition);
+    }
+
+    function handlePositionError(error) {
+      console.error('Error obtaining location:', error);
     }
 
     function calculateDistance(coord1, coord2) {
@@ -75,6 +130,27 @@
       var d = R * c;
 
       return d; // in metres
+    }
+
+    function updateStatus() {
+      let statusElement = document.getElementById('status');
+      let logElement = document.getElementById('log');
+      let dateTime = new Date().toLocaleString();
+      let status = navigator.onLine ? 'Connected' : 'Disconnected';
+      let className = navigator.onLine ? 'online' : 'offline';
+
+      if (!checkConnectionType()) {
+        status = 'Connected via Cellular Data';
+        className = 'error';
+      }
+
+      let distance = calculateDistance(initialPosition, currentPosition);
+      let distanceText = distance !== null ? 'Distance from start: ' + distance.toFixed(2) + ' meters' : 'Distance data not available';
+
+      statusElement.textContent = status + ' - ' + distanceText;
+      statusElement.className = className;
+      logElement.innerHTML += '<div class="' + className + '">[' + dateTime + '] ' + status + ' - ' + distanceText + '</div>';
+      logElement.scrollTop = logElement.scrollHeight;
     }
 
     function checkConnectionType() {
@@ -97,46 +173,6 @@
       }
     }
 
-    function updateStatus(event) {
-      var statusElement = document.getElementById('status');
-      var logElement = document.getElementById('log');
-      var dateTime = new Date().toLocaleString();
-      var status = navigator.onLine ? 'Connected' : 'Disconnected';
-      var className = navigator.onLine ? 'online' : 'offline';
-
-      if (!checkConnectionType()) {
-        status = 'Connected via Cellular Data';
-        className = 'error';
-      }
-
-      getLocation(function(gpsCoords) {
-        if (gpsCoords) {
-          // Apply Kalman Filter to latitude and longitude
-          gpsCoords.latitude = kalmanFilterLat.filter(gpsCoords.latitude);
-          gpsCoords.longitude = kalmanFilterLng.filter(gpsCoords.longitude);
-
-          if (initialPosition === null) {
-            initialPosition = gpsCoords;
-            currentPosition = gpsCoords;
-            initMap(gpsCoords);
-            lastUpdateTime = Date.now();
-          } else {
-            currentPosition = gpsCoords;
-          }
-
-          var distance = calculateDistance(initialPosition, currentPosition);
-          var distanceText = distance !== null ? 'Distance from start: ' + distance.toFixed(2) + ' meters' : 'Distance data not available';
-
-          statusElement.textContent = status + ' - ' + distanceText;
-          statusElement.className = className;
-          logElement.innerHTML += '<div class="' + className + '">[' + dateTime + '] ' + status + ' - ' + distanceText + '</div>';
-          logElement.scrollTop = logElement.scrollHeight;
-
-          updateMap(currentPosition);
-        }
-      });
-    }
-
     function initMap(coords) {
       if (isFirstLoad) {
         map = L.map('map').setView([coords.latitude, coords.longitude], 18);
@@ -154,7 +190,8 @@
         }).addTo(map);
 
         marker = L.marker([coords.latitude, coords.longitude], {
-          rotationAngle: compassHeading
+          rotationAngle: compassHeading,
+          rotationOrigin: 'center center'
         }).addTo(map);
 
         circle = L.circle([coords.latitude, coords.longitude], {
@@ -178,44 +215,45 @@
       }
     }
 
-    function startMonitoring() {
-      // Start capturing orientation data
-      if (window.DeviceOrientationEvent) {
-        window.addEventListener('deviceorientationabsolute', handleOrientationEvent, true);
-        window.addEventListener('deviceorientation', handleOrientationEvent, true);
-      } else {
-        console.warn('DeviceOrientationEvent is not supported');
-      }
-
-      updateStatus();
-      setInterval(updateStatus, 2000); // Update every 2 seconds
-    }
-
     function handleOrientationEvent(event) {
       var compassElement = document.getElementById('compass').children[0];
 
-      var heading = null;
+      // Advanced compass correction using tilt compensation
+      var alpha, beta, gamma;
 
-      if (event.absolute && event.alpha !== null) {
-        // Use the absolute orientation if available
-        heading = event.alpha;
-      } else if (event.webkitCompassHeading !== undefined) {
-        // For iOS devices
-        heading = event.webkitCompassHeading;
-      } else if (event.alpha !== null) {
-        // Calculate heading from alpha
-        heading = 360 - event.alpha; // Adjust for device orientation
-      } else {
-        console.warn('Cannot determine device heading');
-      }
+      if (event.absolute === true || event.absolute === false) {
+        alpha = event.alpha ? event.alpha * (Math.PI / 180) : 0; // Convert to radians
+        beta = event.beta ? event.beta * (Math.PI / 180) : 0;
+        gamma = event.gamma ? event.gamma * (Math.PI / 180) : 0;
 
-      if (heading !== null) {
+        // Calculate heading
+        var sinAlpha = Math.sin(alpha);
+        var cosAlpha = Math.cos(alpha);
+
+        // Calculate tilt-compensated compass heading
+        var x = -Math.cos(beta) * sinAlpha;
+        var y = -Math.sin(beta);
+        var z = -Math.cos(beta) * cosAlpha;
+
+        var heading = Math.atan2(x, z);
+        heading = heading >= 0 ? heading : heading + 2 * Math.PI;
+        heading = heading * (180 / Math.PI); // Convert to degrees
+
+        // Apply magnetic declination correction if desired
+        // For simplicity, we'll assume zero declination here
+        // You can incorporate a declination model or API for accurate correction
+
         compassHeading = heading;
+
+        // Update compass image rotation
         compassElement.style.transform = 'rotate(' + heading + 'deg)';
 
+        // Update marker rotation
         if (marker) {
           marker.setRotationAngle(heading);
         }
+      } else {
+        console.warn('Orientation data is not absolute.');
       }
     }
 
@@ -233,11 +271,7 @@
       }
     });
 
-    window.addEventListener('load', function() {
-      startMonitoring();
-    });
-    window.addEventListener('online', updateStatus);
-    window.addEventListener('offline', updateStatus);
+    document.getElementById('startButton').addEventListener('click', startMonitoring);
   </script>
 </body>
 </html>
