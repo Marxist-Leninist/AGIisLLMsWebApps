@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>WiFi Connection Dropout and Distance Monitor with Map</title>
+  <title>WiFi Connection Dropout and Distance Monitor with Satellite Map</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
     #status { font-size: 1.2em; padding: 10px; background-color: #f4f4f4; }
@@ -10,23 +10,19 @@
     .online { color: green; }
     .offline { color: red; }
     .error { color: orange; }
-    #map { height: calc(100vh - 250px); } /* Adjust height based on other elements */
+    #map { height: calc(100vh - 250px); }
     h1 { margin: 10px; }
   </style>
-  <!-- Include Leaflet CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 </head>
 <body>
-  <h1>WiFi Connection Dropout and Distance Monitor with Map</h1>
+  <h1>WiFi Connection Dropout and Distance Monitor with Satellite Map</h1>
   <div id="status">Checking connection...</div>
   <div id="map"></div>
   <div id="log"></div>
 
-  <!-- Include Leaflet JavaScript -->
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
     var initialPosition = null;
-    var map, marker, circle;
+    var map, marker;
     var isFirstLoad = true;
 
     function getLocation(callback) {
@@ -80,7 +76,6 @@
         }
       } else {
         console.warn('Network Information API not supported.');
-        // Assume WiFi if API not available
         return true;
       }
     }
@@ -114,41 +109,52 @@
         logElement.innerHTML += '<div class="' + className + '">[' + dateTime + '] ' + status + ' - ' + distanceText + '</div>';
         logElement.scrollTop = logElement.scrollHeight;
 
-        // Update map
         if (currentCoords) {
           updateMap(currentCoords);
         }
       });
     }
 
-    function initMap(coords) {
-      map = L.map('map').setView([coords.latitude, coords.longitude], 16);
+    function initMap() {
+      // This function will be called by the Google Maps API
+      getLocation(function(coords) {
+        if (coords) {
+          const position = { lat: coords.latitude, lng: coords.longitude };
+          map = new google.maps.Map(document.getElementById('map'), {
+            zoom: 16,
+            center: position,
+            mapTypeId: 'satellite'  // Set default to satellite view
+          });
 
-      // OpenStreetMap tiles
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors'
-      }).addTo(map);
+          marker = new google.maps.Marker({
+            position: position,
+            map: map
+          });
 
-      marker = L.marker([coords.latitude, coords.longitude]).addTo(map);
-      circle = L.circle([coords.latitude, coords.longitude], { radius: 5 }).addTo(map);
+          // Create a circle overlay
+          new google.maps.Circle({
+            map: map,
+            radius: 5,
+            center: position,
+            fillColor: '#FF0000',
+            fillOpacity: 0.2,
+            strokeColor: '#FF0000',
+            strokeOpacity: 0.4
+          });
+        }
+      });
     }
 
     function updateMap(coords) {
-      if (isFirstLoad) {
-        initMap(coords);
-        isFirstLoad = false;
-      } else {
-        var newLatLng = new L.LatLng(coords.latitude, coords.longitude);
-        marker.setLatLng(newLatLng);
-        circle.setLatLng(newLatLng);
-        map.setView(newLatLng);
+      if (map && marker) {
+        const position = { lat: coords.latitude, lng: coords.longitude };
+        marker.setPosition(position);
+        map.setCenter(position);
       }
     }
 
     function startMonitoring() {
       updateStatus();
-      // Update status every 5 seconds
       setInterval(updateStatus, 5000);
     }
 
@@ -158,5 +164,10 @@
     window.addEventListener('online', updateStatus);
     window.addEventListener('offline', updateStatus);
   </script>
+
+  <!-- Replace YOUR_API_KEY with your actual Google Maps API key -->
+  <script async defer
+    src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&callback=initMap">
+  </script>
 </body>
-</html>
+</html>.
