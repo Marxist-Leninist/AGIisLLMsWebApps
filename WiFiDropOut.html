@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>WiFi Connection Dropout and Distance Monitor with Labeled Satellite Map</title>
+  <title>Enhanced GPS Accuracy WiFi Monitor with Labeled Satellite Map</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
     #status { font-size: 1.2em; padding: 10px; background-color: #f4f4f4; }
@@ -17,17 +17,21 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 </head>
 <body>
-  <h1>WiFi Connection Dropout and Distance Monitor with Labeled Satellite Map</h1>
+  <h1>Enhanced GPS Accuracy WiFi Monitor with Labeled Satellite Map</h1>
   <div id="status">Checking connection...</div>
   <div id="map"></div>
   <div id="log"></div>
 
   <!-- Include Leaflet JavaScript -->
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <!-- Include Kalman Filter library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/kalmanjs/1.0.0/kalman.min.js"></script>
   <script>
     var initialPosition = null;
     var map, marker, circle;
     var isFirstLoad = true;
+    var kalmanFilterLat = new KalmanFilter({ R: 0.01, Q: 3 });
+    var kalmanFilterLng = new KalmanFilter({ R: 0.01, Q: 3 });
 
     function getLocation(callback) {
       if (navigator.geolocation) {
@@ -38,7 +42,8 @@
           callback(null);
         }, {
           enableHighAccuracy: true,
-          maximumAge: 0
+          maximumAge: 0,
+          timeout: 5000
         });
       } else {
         console.error('Geolocation is not supported by this browser.');
@@ -98,6 +103,12 @@
       }
 
       getLocation(function(currentCoords) {
+        if (currentCoords) {
+          // Apply Kalman Filter to latitude and longitude
+          currentCoords.latitude = kalmanFilterLat.filter(currentCoords.latitude);
+          currentCoords.longitude = kalmanFilterLng.filter(currentCoords.longitude);
+        }
+
         if (initialPosition === null && currentCoords) {
           initialPosition = currentCoords;
           initMap(currentCoords);
@@ -123,7 +134,7 @@
 
     function initMap(coords) {
       if (isFirstLoad) {
-        map = L.map('map').setView([coords.latitude, coords.longitude], 16);
+        map = L.map('map').setView([coords.latitude, coords.longitude], 18);
 
         // Esri World Imagery with Labels
         L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
@@ -160,7 +171,7 @@
 
     function startMonitoring() {
       updateStatus();
-      setInterval(updateStatus, 5000);
+      setInterval(updateStatus, 2000); // Update every 2 seconds
     }
 
     window.addEventListener('load', function() {
