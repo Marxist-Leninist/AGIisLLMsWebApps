@@ -2,24 +2,28 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Advanced Sensor Fusion WiFi Monitor with Labeled Satellite Map</title>
+  <title>Mobile-First WiFi Monitor with Orientation and Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Include Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <style>
-    body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
-    #status { font-size: 1.2em; padding: 10px; background-color: #f4f4f4; }
-    #log { padding: 10px; height: 150px; overflow-y: scroll; border-top: 1px solid #ccc; }
+    body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
+    #status { font-size: 1em; padding: 10px; background-color: #f4f4f4; text-align: center; }
+    #log { padding: 10px; height: 150px; overflow-y: scroll; border-top: 1px solid #ccc; font-size: 0.9em; }
     .online { color: green; }
     .offline { color: red; }
     .error { color: orange; }
-    #map { height: calc(100vh - 250px); }
-    h1 { margin: 10px; }
+    #map { height: calc(100vh - 300px); } /* Adjust height for mobile */
+    h1 { margin: 10px; font-size: 1.5em; text-align: center; }
+    #compass { position: absolute; top: 70px; right: 10px; width: 50px; height: 50px; z-index: 1000; }
+    #compass img { width: 100%; height: auto; transform: rotate(0deg); transform-origin: center center; }
   </style>
-  <!-- Include Leaflet CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 </head>
 <body>
-  <h1>Advanced Sensor Fusion WiFi Monitor with Labeled Satellite Map</h1>
+  <h1>WiFi Monitor with Orientation and Map</h1>
   <div id="status">Checking connection...</div>
   <div id="map"></div>
+  <div id="compass"><img src="https://i.imgur.com/3j8O1oT.png" alt="Compass"></div>
   <div id="log"></div>
 
   <!-- Include Leaflet JavaScript -->
@@ -34,11 +38,7 @@
     var kalmanFilterLat = new KalmanFilter({ R: 0.01, Q: 3 });
     var kalmanFilterLng = new KalmanFilter({ R: 0.01, Q: 3 });
     var lastUpdateTime = null;
-    var velocity = { x: 0, y: 0 };
-    var acceleration = { x: 0, y: 0 };
-    var alpha = 0.8; // Low-pass filter constant for acceleration
-    var accelerationGravity = { x: 0, y: 0, z: 0 };
-    var accelerationUser = { x: 0, y: 0, z: 0 };
+    var compassHeading = 0;
 
     function getLocation(callback) {
       if (navigator.geolocation) {
@@ -121,9 +121,7 @@
             initMap(gpsCoords);
             lastUpdateTime = Date.now();
           } else {
-            // Fuse GPS data with inertial navigation estimation
-            var fusedPosition = fusePosition(gpsCoords);
-            currentPosition = fusedPosition;
+            currentPosition = gpsCoords;
           }
 
           var distance = calculateDistance(initialPosition, currentPosition);
@@ -137,41 +135,6 @@
           updateMap(currentPosition);
         }
       });
-    }
-
-    function fusePosition(gpsCoords) {
-      // Time since last update
-      var now = Date.now();
-      var dt = (now - lastUpdateTime) / 1000; // Convert milliseconds to seconds
-      lastUpdateTime = now;
-
-      // Update velocity based on acceleration
-      velocity.x += accelerationUser.x * dt;
-      velocity.y += accelerationUser.y * dt;
-
-      // Estimate displacement
-      var displacement = {
-        x: velocity.x * dt + 0.5 * accelerationUser.x * dt * dt,
-        y: velocity.y * dt + 0.5 * accelerationUser.y * dt * dt
-      };
-
-      // Convert displacement from meters to degrees
-      var deltaLat = (displacement.y / 111139); // Approximate meters per degree latitude
-      var deltaLng = (displacement.x / (111139 * Math.cos(currentPosition.latitude * Math.PI / 180))); // Approximate meters per degree longitude
-
-      // Update position estimate
-      var estimatedPosition = {
-        latitude: currentPosition.latitude + deltaLat,
-        longitude: currentPosition.longitude + deltaLng
-      };
-
-      // Simple fusion by averaging GPS and estimated positions
-      var fusedPosition = {
-        latitude: (gpsCoords.latitude + estimatedPosition.latitude) / 2,
-        longitude: (gpsCoords.longitude + estimatedPosition.longitude) / 2
-      };
-
-      return fusedPosition;
     }
 
     function initMap(coords) {
@@ -190,7 +153,10 @@
           attribution: '&copy; Esri &mdash; Esri, DeLorme, NAVTEQ',
         }).addTo(map);
 
-        marker = L.marker([coords.latitude, coords.longitude]).addTo(map);
+        marker = L.marker([coords.latitude, coords.longitude], {
+          rotationAngle: compassHeading
+        }).addTo(map);
+
         circle = L.circle([coords.latitude, coords.longitude], {
           color: 'red',
           fillColor: '#f03',
@@ -206,38 +172,66 @@
       if (marker && circle) {
         var newLatLng = L.latLng(coords.latitude, coords.longitude);
         marker.setLatLng(newLatLng);
+        marker.setRotationAngle(compassHeading);
         circle.setLatLng(newLatLng);
         map.setView(newLatLng);
       }
     }
 
     function startMonitoring() {
-      // Start capturing sensor data
-      if (window.DeviceMotionEvent) {
-        window.addEventListener('devicemotion', handleMotionEvent, true);
+      // Start capturing orientation data
+      if (window.DeviceOrientationEvent) {
+        window.addEventListener('deviceorientationabsolute', handleOrientationEvent, true);
+        window.addEventListener('deviceorientation', handleOrientationEvent, true);
       } else {
-        console.warn('DeviceMotionEvent is not supported');
+        console.warn('DeviceOrientationEvent is not supported');
       }
 
       updateStatus();
       setInterval(updateStatus, 2000); // Update every 2 seconds
     }
 
-    function handleMotionEvent(event) {
-      var acc = event.accelerationIncludingGravity;
-      if (acc) {
-        // Remove gravity component with a simple high-pass filter
-        accelerationGravity.x = alpha * accelerationGravity.x + (1 - alpha) * acc.x;
-        accelerationGravity.y = alpha * accelerationGravity.y + (1 - alpha) * acc.y;
-        accelerationGravity.z = alpha * accelerationGravity.z + (1 - alpha) * acc.z;
+    function handleOrientationEvent(event) {
+      var compassElement = document.getElementById('compass').children[0];
 
-        accelerationUser.x = acc.x - accelerationGravity.x;
-        accelerationUser.y = acc.y - accelerationGravity.y;
-        accelerationUser.z = acc.z - accelerationGravity.z;
+      var heading = null;
 
-        // Convert from m/s^2 to m/s^2 (no change), but you could adjust units if needed
+      if (event.absolute && event.alpha !== null) {
+        // Use the absolute orientation if available
+        heading = event.alpha;
+      } else if (event.webkitCompassHeading !== undefined) {
+        // For iOS devices
+        heading = event.webkitCompassHeading;
+      } else if (event.alpha !== null) {
+        // Calculate heading from alpha
+        heading = 360 - event.alpha; // Adjust for device orientation
+      } else {
+        console.warn('Cannot determine device heading');
+      }
+
+      if (heading !== null) {
+        compassHeading = heading;
+        compassElement.style.transform = 'rotate(' + heading + 'deg)';
+
+        if (marker) {
+          marker.setRotationAngle(heading);
+        }
       }
     }
+
+    // Extend Leaflet Marker to support rotation
+    L.Marker.include({
+      setRotationAngle: function(angle) {
+        this.options.rotationAngle = angle;
+        this.update();
+      },
+      _setPos: function(pos) {
+        L.Marker.prototype.__proto__._setPos.call(this, pos);
+        if (this.options.rotationAngle) {
+          this._icon.style.transform += ' rotate(' + this.options.rotationAngle + 'deg)';
+        }
+      }
+    });
 
     window.addEventListener('load', function() {
       startMonitoring();
