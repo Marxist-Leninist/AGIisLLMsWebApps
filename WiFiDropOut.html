@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>WiFi Connection Dropout and Distance Monitor with Satellite Map</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
   <style>
     body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
     #status { font-size: 1.2em; padding: 10px; background-color: #f4f4f4; }
@@ -20,9 +21,10 @@
   <div id="map"></div>
   <div id="log"></div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
   <script>
     var initialPosition = null;
-    var map, marker;
+    var map, marker, circle;
     var isFirstLoad = true;
 
     function getLocation(callback) {
@@ -95,6 +97,7 @@
       getLocation(function(currentCoords) {
         if (initialPosition === null && currentCoords) {
           initialPosition = currentCoords;
+          initMap(currentCoords);
         }
 
         var distance = null;
@@ -115,41 +118,33 @@
       });
     }
 
-    function initMap() {
-      // This function will be called by the Google Maps API
-      getLocation(function(coords) {
-        if (coords) {
-          const position = { lat: coords.latitude, lng: coords.longitude };
-          map = new google.maps.Map(document.getElementById('map'), {
-            zoom: 16,
-            center: position,
-            mapTypeId: 'satellite'  // Set default to satellite view
-          });
+    function initMap(coords) {
+      if (isFirstLoad) {
+        map = L.map('map').setView([coords.latitude, coords.longitude], 16);
+        
+        // Add the satellite layer from ESRI
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+          attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+        }).addTo(map);
 
-          marker = new google.maps.Marker({
-            position: position,
-            map: map
-          });
-
-          // Create a circle overlay
-          new google.maps.Circle({
-            map: map,
-            radius: 5,
-            center: position,
-            fillColor: '#FF0000',
-            fillOpacity: 0.2,
-            strokeColor: '#FF0000',
-            strokeOpacity: 0.4
-          });
-        }
-      });
+        marker = L.marker([coords.latitude, coords.longitude]).addTo(map);
+        circle = L.circle([coords.latitude, coords.longitude], {
+          color: 'red',
+          fillColor: '#f03',
+          fillOpacity: 0.2,
+          radius: 5
+        }).addTo(map);
+        
+        isFirstLoad = false;
+      }
     }
 
     function updateMap(coords) {
-      if (map && marker) {
-        const position = { lat: coords.latitude, lng: coords.longitude };
-        marker.setPosition(position);
-        map.setCenter(position);
+      if (marker && circle) {
+        var newLatLng = L.latLng(coords.latitude, coords.longitude);
+        marker.setLatLng(newLatLng);
+        circle.setLatLng(newLatLng);
+        map.setView(newLatLng);
       }
     }
 
@@ -164,10 +159,5 @@
     window.addEventListener('online', updateStatus);
     window.addEventListener('offline', updateStatus);
   </script>
-
-  <!-- Replace YOUR_API_KEY with your actual Google Maps API key -->
-  <script async defer
-    src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&callback=initMap">
-  </script>
 </body>
-</html>.
+</html>
