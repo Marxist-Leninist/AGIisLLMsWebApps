@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Enhanced GPS Accuracy WiFi Monitor with Labeled Satellite Map</title>
+  <title>Advanced Sensor Fusion WiFi Monitor with Labeled Satellite Map</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
     #status { font-size: 1.2em; padding: 10px; background-color: #f4f4f4; }
@@ -17,7 +17,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 </head>
 <body>
-  <h1>Enhanced GPS Accuracy WiFi Monitor with Labeled Satellite Map</h1>
+  <h1>Advanced Sensor Fusion WiFi Monitor with Labeled Satellite Map</h1>
   <div id="status">Checking connection...</div>
   <div id="map"></div>
   <div id="log"></div>
@@ -28,10 +28,17 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/kalmanjs/1.0.0/kalman.min.js"></script>
   <script>
     var initialPosition = null;
+    var currentPosition = null;
     var map, marker, circle;
     var isFirstLoad = true;
     var kalmanFilterLat = new KalmanFilter({ R: 0.01, Q: 3 });
     var kalmanFilterLng = new KalmanFilter({ R: 0.01, Q: 3 });
+    var lastUpdateTime = null;
+    var velocity = { x: 0, y: 0 };
+    var acceleration = { x: 0, y: 0 };
+    var alpha = 0.8; // Low-pass filter constant for acceleration
+    var accelerationGravity = { x: 0, y: 0, z: 0 };
+    var accelerationUser = { x: 0, y: 0, z: 0 };
 
     function getLocation(callback) {
       if (navigator.geolocation) {
@@ -102,34 +109,69 @@
         className = 'error';
       }
 
-      getLocation(function(currentCoords) {
-        if (currentCoords) {
+      getLocation(function(gpsCoords) {
+        if (gpsCoords) {
           // Apply Kalman Filter to latitude and longitude
-          currentCoords.latitude = kalmanFilterLat.filter(currentCoords.latitude);
-          currentCoords.longitude = kalmanFilterLng.filter(currentCoords.longitude);
-        }
+          gpsCoords.latitude = kalmanFilterLat.filter(gpsCoords.latitude);
+          gpsCoords.longitude = kalmanFilterLng.filter(gpsCoords.longitude);
 
-        if (initialPosition === null && currentCoords) {
-          initialPosition = currentCoords;
-          initMap(currentCoords);
-        }
+          if (initialPosition === null) {
+            initialPosition = gpsCoords;
+            currentPosition = gpsCoords;
+            initMap(gpsCoords);
+            lastUpdateTime = Date.now();
+          } else {
+            // Fuse GPS data with inertial navigation estimation
+            var fusedPosition = fusePosition(gpsCoords);
+            currentPosition = fusedPosition;
+          }
 
-        var distance = null;
-        if (currentCoords && initialPosition) {
-          distance = calculateDistance(initialPosition, currentCoords);
-        }
+          var distance = calculateDistance(initialPosition, currentPosition);
+          var distanceText = distance !== null ? 'Distance from start: ' + distance.toFixed(2) + ' meters' : 'Distance data not available';
 
-        var distanceText = distance !== null ? 'Distance from start: ' + distance.toFixed(2) + ' meters' : 'Distance data not available';
+          statusElement.textContent = status + ' - ' + distanceText;
+          statusElement.className = className;
+          logElement.innerHTML += '<div class="' + className + '">[' + dateTime + '] ' + status + ' - ' + distanceText + '</div>';
+          logElement.scrollTop = logElement.scrollHeight;
 
-        statusElement.textContent = status + ' - ' + distanceText;
-        statusElement.className = className;
-        logElement.innerHTML += '<div class="' + className + '">[' + dateTime + '] ' + status + ' - ' + distanceText + '</div>';
-        logElement.scrollTop = logElement.scrollHeight;
-
-        if (currentCoords) {
-          updateMap(currentCoords);
+          updateMap(currentPosition);
         }
       });
+    }
+
+    function fusePosition(gpsCoords) {
+      // Time since last update
+      var now = Date.now();
+      var dt = (now - lastUpdateTime) / 1000; // Convert milliseconds to seconds
+      lastUpdateTime = now;
+
+      // Update velocity based on acceleration
+      velocity.x += accelerationUser.x * dt;
+      velocity.y += accelerationUser.y * dt;
+
+      // Estimate displacement
+      var displacement = {
+        x: velocity.x * dt + 0.5 * accelerationUser.x * dt * dt,
+        y: velocity.y * dt + 0.5 * accelerationUser.y * dt * dt
+      };
+
+      // Convert displacement from meters to degrees
+      var deltaLat = (displacement.y / 111139); // Approximate meters per degree latitude
+      var deltaLng = (displacement.x / (111139 * Math.cos(currentPosition.latitude * Math.PI / 180))); // Approximate meters per degree longitude
+
+      // Update position estimate
+      var estimatedPosition = {
+        latitude: currentPosition.latitude + deltaLat,
+        longitude: currentPosition.longitude + deltaLng
+      };
+
+      // Simple fusion by averaging GPS and estimated positions
+      var fusedPosition = {
+        latitude: (gpsCoords.latitude + estimatedPosition.latitude) / 2,
+        longitude: (gpsCoords.longitude + estimatedPosition.longitude) / 2
+      };
+
+      return fusedPosition;
     }
 
     function initMap(coords) {
@@ -170,8 +212,31 @@
     }
 
     function startMonitoring() {
+      // Start capturing sensor data
+      if (window.DeviceMotionEvent) {
+        window.addEventListener('devicemotion', handleMotionEvent, true);
+      } else {
+        console.warn('DeviceMotionEvent is not supported');
+      }
+
       updateStatus();
       setInterval(updateStatus, 2000); // Update every 2 seconds
+    }
+
+    function handleMotionEvent(event) {
+      var acc = event.accelerationIncludingGravity;
+      if (acc) {
+        // Remove gravity component with a simple high-pass filter
+        accelerationGravity.x = alpha * accelerationGravity.x + (1 - alpha) * acc.x;
+        accelerationGravity.y = alpha * accelerationGravity.y + (1 - alpha) * acc.y;
+        accelerationGravity.z = alpha * accelerationGravity.z + (1 - alpha) * acc.z;
+
+        accelerationUser.x = acc.x - accelerationGravity.x;
+        accelerationUser.y = acc.y - accelerationGravity.y;
+        accelerationUser.z = acc.z - accelerationGravity.z;
+
+        // Convert from m/s^2 to m/s^2 (no change), but you could adjust units if needed
+      }
     }
 
     window.addEventListener('load', function() {
