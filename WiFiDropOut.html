@@ -2,23 +2,32 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>WiFi Connection Dropout and Distance Monitor</title>
+  <title>WiFi Connection Dropout and Distance Monitor with Map</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    #status { font-size: 1.5em; margin-bottom: 20px; }
-    #log { border: 1px solid #ccc; padding: 10px; height: 200px; overflow-y: scroll; }
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
+    #status { font-size: 1.2em; padding: 10px; background-color: #f4f4f4; }
+    #log { padding: 10px; height: 150px; overflow-y: scroll; border-top: 1px solid #ccc; }
     .online { color: green; }
     .offline { color: red; }
     .error { color: orange; }
+    #map { height: calc(100vh - 250px); } /* Adjust height based on other elements */
+    h1 { margin: 10px; }
   </style>
+  <!-- Include Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 </head>
 <body>
-  <h1>WiFi Connection Dropout and Distance Monitor</h1>
+  <h1>WiFi Connection Dropout and Distance Monitor with Map</h1>
   <div id="status">Checking connection...</div>
+  <div id="map"></div>
   <div id="log"></div>
 
+  <!-- Include Leaflet JavaScript -->
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
     var initialPosition = null;
+    var map, marker, circle;
+    var isFirstLoad = true;
 
     function getLocation(callback) {
       if (navigator.geolocation) {
@@ -27,6 +36,9 @@
         }, function(error) {
           console.error('Error obtaining location:', error);
           callback(null);
+        }, {
+          enableHighAccuracy: true,
+          maximumAge: 0
         });
       } else {
         console.error('Geolocation is not supported by this browser.');
@@ -55,7 +67,7 @@
 
     function checkConnectionType() {
       if ('connection' in navigator) {
-        var type = navigator.connection.type;
+        var type = navigator.connection.effectiveType;
         if (type === 'wifi' || type === 'ethernet') {
           console.log('Connected via WiFi/Ethernet.');
           return true;
@@ -97,15 +109,51 @@
 
         var distanceText = distance !== null ? 'Distance from start: ' + distance.toFixed(2) + ' meters' : 'Distance data not available';
 
-        statusElement.textContent = status;
+        statusElement.textContent = status + ' - ' + distanceText;
         statusElement.className = className;
         logElement.innerHTML += '<div class="' + className + '">[' + dateTime + '] ' + status + ' - ' + distanceText + '</div>';
         logElement.scrollTop = logElement.scrollHeight;
+
+        // Update map
+        if (currentCoords) {
+          updateMap(currentCoords);
+        }
       });
     }
 
-    window.addEventListener('load', function() {
+    function initMap(coords) {
+      map = L.map('map').setView([coords.latitude, coords.longitude], 16);
+
+      // OpenStreetMap tiles
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+
+      marker = L.marker([coords.latitude, coords.longitude]).addTo(map);
+      circle = L.circle([coords.latitude, coords.longitude], { radius: 5 }).addTo(map);
+    }
+
+    function updateMap(coords) {
+      if (isFirstLoad) {
+        initMap(coords);
+        isFirstLoad = false;
+      } else {
+        var newLatLng = new L.LatLng(coords.latitude, coords.longitude);
+        marker.setLatLng(newLatLng);
+        circle.setLatLng(newLatLng);
+        map.setView(newLatLng);
+      }
+    }
+
+    function startMonitoring() {
       updateStatus();
+      // Update status every 5 seconds
+      setInterval(updateStatus, 5000);
+    }
+
+    window.addEventListener('load', function() {
+      startMonitoring();
     });
     window.addEventListener('online', updateStatus);
     window.addEventListener('offline', updateStatus);
