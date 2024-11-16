@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Altitude Finder</title>
+    <!-- Ensure proper scaling on mobile devices -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Inline CSS for styling -->
+    <style>
+        /* Reset some basic elements */
+        body, h1, p, input, button {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            margin: 0;
+        }
+
+        header {
+            background-color: #007BFF;
+            color: #fff;
+            padding: 15px;
+            text-align: center;
+        }
+
+        main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #controls {
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #controls input, #controls button {
+            width: 100%;
+            max-width: 500px;
+            padding: 10px;
+            font-size: 1em;
+            margin: 5px 0;
+            box-sizing: border-box;
+        }
+
+        #map {
+            flex: 1;
+            width: 100%;
+        }
+
+        #status, #altitude {
+            text-align: center;
+            font-size: 1em;
+            padding: 10px;
+            word-wrap: break-word;
+        }
+
+        /* Responsive layout for larger screens */
+        @media (min-width: 768px) {
+            main {
+                flex-direction: row;
+            }
+
+            #controls {
+                width: 30%;
+                padding: 20px;
+                align-items: flex-start;
+            }
+
+            #controls input, #controls button {
+                width: 100%;
+            }
+
+            #map {
+                width: 70%;
+                height: 100%;
+            }
+
+            #status, #altitude {
+                text-align: left;
+                padding-left: 20px;
+            }
+        }
+
+        /* Leaflet map container height fix */
+        .leaflet-container {
+            height: 100%;
+            width: 100%;
+        }
+    </style>
+    <!-- Leaflet CSS for map styling -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+</head>
+<body>
+    <header>
+        <h1>Altitude Finder</h1>
+    </header>
+    <main>
+        <div id="controls">
+            <p>Enter an address or location:</p>
+            <input type="text" id="address" placeholder="e.g., Eiffel Tower, Paris">
+            <button id="get-altitude">Get Altitude</button>
+            <p id="status"></p>
+            <p id="altitude"></p>
+        </div>
+        <div id="map"></div>
+    </main>
+    <!-- Leaflet JS for interactive map -->
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <!-- JavaScript code -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize the map
+            var map = L.map('map').setView([20, 0], 2);
+
+            // Add OpenStreetMap tiles
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+
+            var marker;
+
+            // Handle map click
+            map.on('click', function(e) {
+                var lat = e.latlng.lat;
+                var lon = e.latlng.lng;
+
+                if (marker) {
+                    map.removeLayer(marker);
+                }
+
+                marker = L.marker([lat, lon]).addTo(map);
+
+                getElevation(lat, lon);
+            });
+
+            // Handle address input
+            document.getElementById('get-altitude').addEventListener('click', function() {
+                var address = document.getElementById('address').value;
+                if (address.trim() === '') {
+                    updateStatus('Please enter an address.');
+                    return;
+                }
+                geocodeAddress(address);
+            });
+
+            function geocodeAddress(address) {
+                updateStatus('Geocoding address...');
+                fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(address))
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data && data.length > 0) {
+                            var lat = parseFloat(data[0].lat);
+                            var lon = parseFloat(data[0].lon);
+
+                            map.setView([lat, lon], 15);
+
+                            if (marker) {
+                                map.removeLayer(marker);
+                            }
+                            marker = L.marker([lat, lon]).addTo(map);
+
+                            getElevation(lat, lon);
+                        } else {
+                            updateStatus('Address not found.');
+                        }
+                    })
+                    .catch(error => {
+                        updateStatus('Error geocoding address.');
+                    });
+            }
+
+            function getElevation(lat, lon) {
+                updateStatus('Fetching altitude data...');
+                fetch('https://api.open-elevation.com/api/v1/lookup?locations=' + lat + ',' + lon)
+                    .then(response => response.json())
+                    .then(elevationData => {
+                        if (elevationData && elevationData.results && elevationData.results.length > 0) {
+                            var elevation = elevationData.results[0].elevation;
+                            updateStatus('');
+                            updateAltitude('Altitude: ' + elevation + ' meters above sea level.');
+                        } else {
+                            updateStatus('Unable to retrieve altitude data.');
+                        }
+                    })
+                    .catch(error => {
+                        updateStatus('Error fetching altitude data.');
+                    });
+            }
+
+            function updateStatus(message) {
+                document.getElementById('status').innerText = message;
+            }
+
+            function updateAltitude(message) {
+                document.getElementById('altitude').innerText = message;
+            }
+        });
+    </script>
+</body>
+</html>
