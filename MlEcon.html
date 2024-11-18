@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Multi-Sector Zero-Knowledge Game Simulation</title>
+    <title>Multi-Sector Zero-Knowledge Game Simulation with Dependency</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         /* Eye-friendly color scheme */
@@ -81,7 +81,7 @@
 </head>
 <body>
 
-<h1>Multi-Sector Zero-Knowledge Game Simulation</h1>
+<h1>Multi-Sector Zero-Knowledge Game Simulation with Dependency</h1>
 
 <div id="controls">
     <label for="numAgents">Number of Agents:</label>
@@ -117,20 +117,19 @@
     class Agent {
         constructor(id, sector) {
             this.id = id;
-            this.sector = sector; // 'Primary', 'Secondary', 'Tertiary'
-            this.wealth = 100; // Increased initial wealth
+            this.sector = sector; // 'Primary', 'Secondary', 'Tertiary', 'Capitalist'
+            this.wealth = 100; // Starting wealth
             this.isAlive = true;
+            this.goods = 0; // Goods owned
         }
 
         // Agents decide how much to produce or extract
         decideQuantity(maxQuantity) {
-            // Strategy: produce/extract maximum capacity to maximize earnings
             return maxQuantity;
         }
 
         // Agents decide the price for their goods or services
         decidePrice(minPrice, maxPrice) {
-            // Strategy: set price at average to encourage sales
             return Math.floor((minPrice + maxPrice) / 2);
         }
     }
@@ -145,16 +144,15 @@
 
         // Game parameters
         let NRP = 1000;   // Natural Resource Pool
-        const C = 5;      // Consumption need per round
+        const C = 5;      // Consumption need per round (in goods)
         const RER = 10;   // Resource Extraction Rate
         const PC = 10;    // Processing Capacity
-        const SC = 10;    // Service Capacity
         const minPrice = 5; // Minimum price for goods/services
         const maxPrice = 10; // Maximum price for goods/services
 
         // Initialize agents
         const agents = [];
-        const sectors = ['Primary', 'Secondary', 'Tertiary'];
+        const sectors = ['Primary', 'Secondary', 'Tertiary', 'Capitalist'];
         for (let i = 0; i < numAgents; i++) {
             const sector = sectors[i % sectors.length];
             agents.push(new Agent(i + 1, sector));
@@ -171,32 +169,14 @@
             // Agents who are alive
             const activeAgents = agents.filter(agent => agent.isAlive);
 
-            // Agents consume
+            // Reset resources/products/goods for the round
             for (const agent of activeAgents) {
-                agent.wealth -= C;
-                if (agent.wealth < 0) {
-                    agent.isAlive = false;
-                    agent.wealth = 0;
-                    logDiv.innerHTML += `Agent ${agent.id} could not meet consumption needs and has died.<br>`;
-                }
-            }
-
-            // Remove dead agents
-            const aliveAgents = agents.filter(agent => agent.isAlive);
-            if (aliveAgents.length === 0) {
-                logDiv.innerHTML += `All agents have died. Simulation ends.<br>`;
-                break;
-            }
-
-            // Reset resources/products/services for the round
-            for (const agent of aliveAgents) {
                 agent.resources = 0;
                 agent.products = 0;
-                agent.services = 0;
             }
 
             // Primary Sector Actions
-            const primaryAgents = aliveAgents.filter(agent => agent.sector === 'Primary');
+            const primaryAgents = activeAgents.filter(agent => agent.sector === 'Primary');
             for (const agent of primaryAgents) {
                 if (NRP <= 0) break;
                 const quantity = Math.min(agent.decideQuantity(RER), NRP);
@@ -208,7 +188,7 @@
             }
 
             // Secondary Sector Actions
-            const secondaryAgents = aliveAgents.filter(agent => agent.sector === 'Secondary');
+            const secondaryAgents = activeAgents.filter(agent => agent.sector === 'Secondary');
             for (const agent of secondaryAgents) {
                 // Buy resources from primary agents
                 const resourcesNeeded = agent.decideQuantity(PC);
@@ -232,42 +212,89 @@
                     if (resourcesBought >= resourcesNeeded) break;
                 }
 
-                agent.products = resourcesBought; // Products available to sell
+                agent.products = resourcesBought; // Products (goods) available to sell
                 agent.price = agent.decidePrice(minPrice + 1, maxPrice + 2); // Slightly higher price
                 logDiv.innerHTML += `Agent ${agent.id} (Secondary) processed ${resourcesBought} units into products at price ${agent.price} per unit.<br>`;
             }
 
-            // Tertiary Sector Actions
-            const tertiaryAgents = aliveAgents.filter(agent => agent.sector === 'Tertiary');
-            for (const agent of tertiaryAgents) {
-                // Buy products from secondary agents
-                const productsNeeded = agent.decideQuantity(SC);
-                let productsBought = 0;
-                let totalCost = 0;
+            // Market where agents purchase goods to meet consumption needs
+            const marketGoods = [];
+            // Secondary agents supply goods to the market
+            for (const agent of secondaryAgents) {
+                marketGoods.push({
+                    seller: agent,
+                    quantity: agent.products,
+                    price: agent.price
+                });
+            }
 
-                for (const seller of secondaryAgents) {
-                    if (seller.products > 0) {
-                        const quantityToBuy = Math.min(productsNeeded - productsBought, seller.products);
-                        const cost = quantityToBuy * seller.price;
-                        if (agent.wealth >= cost) {
-                            // Transaction occurs
-                            agent.wealth -= cost;
-                            seller.wealth += cost;
-                            seller.products -= quantityToBuy;
-                            productsBought += quantityToBuy;
-                            totalCost += cost;
-                            logDiv.innerHTML += `Agent ${agent.id} (Tertiary) bought ${quantityToBuy} units from Agent ${seller.id} (Secondary) for ${cost} units.<br>`;
+            // Agents consume goods
+            for (const agent of activeAgents) {
+                let goodsNeeded = C;
+                let goodsPurchased = 0;
+
+                // Capitalists and Tertiary agents must purchase goods from the market
+                if (agent.sector === 'Capitalist' || agent.sector === 'Tertiary') {
+                    for (const offer of marketGoods) {
+                        if (offer.quantity > 0) {
+                            const quantityToBuy = Math.min(goodsNeeded - goodsPurchased, offer.quantity);
+                            const cost = quantityToBuy * offer.price;
+                            if (agent.wealth >= cost) {
+                                // Transaction occurs
+                                agent.wealth -= cost;
+                                offer.seller.wealth += cost;
+                                offer.quantity -= quantityToBuy;
+                                goodsPurchased += quantityToBuy;
+                                logDiv.innerHTML += `Agent ${agent.id} (${agent.sector}) bought ${quantityToBuy} goods from Agent ${offer.seller.id} (Secondary) for ${cost} units.<br>`;
+                            }
                         }
+                        if (goodsPurchased >= goodsNeeded) break;
                     }
-                    if (productsBought >= productsNeeded) break;
+                    if (goodsPurchased < goodsNeeded) {
+                        // Could not purchase enough goods
+                        agent.isAlive = false;
+                        agent.wealth = 0;
+                        logDiv.innerHTML += `Agent ${agent.id} (${agent.sector}) could not meet consumption needs and has died.<br>`;
+                    }
+                } else if (agent.sector === 'Primary' || agent.sector === 'Secondary') {
+                    // Producers can consume their own goods
+                    if (agent.sector === 'Secondary' && agent.products >= goodsNeeded) {
+                        agent.products -= goodsNeeded;
+                        goodsPurchased = goodsNeeded;
+                    } else if (agent.sector === 'Primary' && agent.wealth >= goodsNeeded * minPrice) {
+                        // Primary agents buy goods from the market
+                        for (const offer of marketGoods) {
+                            if (offer.quantity > 0) {
+                                const quantityToBuy = Math.min(goodsNeeded - goodsPurchased, offer.quantity);
+                                const cost = quantityToBuy * offer.price;
+                                if (agent.wealth >= cost) {
+                                    // Transaction occurs
+                                    agent.wealth -= cost;
+                                    offer.seller.wealth += cost;
+                                    offer.quantity -= quantityToBuy;
+                                    goodsPurchased += quantityToBuy;
+                                    logDiv.innerHTML += `Agent ${agent.id} (Primary) bought ${quantityToBuy} goods from Agent ${offer.seller.id} (Secondary) for ${cost} units.<br>`;
+                                }
+                            }
+                            if (goodsPurchased >= goodsNeeded) break;
+                        }
+                    } else {
+                        // Could not consume enough goods
+                        agent.isAlive = false;
+                        agent.wealth = 0;
+                        logDiv.innerHTML += `Agent ${agent.id} (${agent.sector}) could not meet consumption needs and has died.<br>`;
+                    }
                 }
-
-                agent.services = productsBought; // Services available to sell
-                agent.price = agent.decidePrice(minPrice + 2, maxPrice + 4); // Higher price
-                logDiv.innerHTML += `Agent ${agent.id} (Tertiary) offers services/products from ${productsBought} units at price ${agent.price} per unit.<br>`;
             }
 
             logDiv.innerHTML += `<br>`;
+
+            // Check if all workers have died
+            const workersAlive = activeAgents.some(agent => agent.sector === 'Primary' || agent.sector === 'Secondary');
+            if (!workersAlive) {
+                logDiv.innerHTML += `All workers have died. Capitalists and others cannot survive without goods. Simulation ends.<br>`;
+                break;
+            }
         }
 
         // Display final wealth of all agents
