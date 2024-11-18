@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Maslow's Hierarchy Simulation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #output {
+            white-space: pre-wrap;
+            background-color: #f4f4f4;
+            padding: 10px;
+            overflow-x: auto;
+            max-height: 600px;
+            overflow-y: scroll;
+        }
+        h1 {
+            color: #2c3e50;
+        }
+    </style>
+</head>
+<body>
+    <h1>Maslow's Hierarchy Simulation</h1>
+    <div id="output"></div>
+    <script>
+        // Define Maslow's Hierarchy of Needs levels
+        const NeedsLevel = {
+            PHYSIOLOGICAL: 1,
+            SAFETY: 2,
+            LOVE_BELONGING: 3,
+            ESTEEM: 4,
+            SELF_ACTUALIZATION: 5
+        };
+
+        // Base Agent class
+        class Agent {
+            constructor(agent_id, role, wealth, energy, land) {
+                this.agent_id = agent_id;
+                this.role = role;
+                this.wealth = wealth;
+                this.energy = energy;
+                this.land = land;
+                this.current_need = NeedsLevel.PHYSIOLOGICAL;
+                this.alive = true;
+            }
+
+            update_needs() {
+                // Simplified logic to update needs based on certain thresholds
+                if (this.wealth < 20) {
+                    this.current_need = NeedsLevel.PHYSIOLOGICAL;
+                } else if (this.wealth < 50) {
+                    this.current_need = NeedsLevel.SAFETY;
+                } else if (this.wealth < 100) {
+                    this.current_need = NeedsLevel.LOVE_BELONGING;
+                } else if (this.wealth < 150) {
+                    this.current_need = NeedsLevel.ESTEEM;
+                } else {
+                    this.current_need = NeedsLevel.SELF_ACTUALIZATION;
+                }
+            }
+
+            act(market) {
+                if (!this.alive) {
+                    return;
+                }
+
+                this.update_needs();
+
+                switch (this.current_need) {
+                    case NeedsLevel.PHYSIOLOGICAL:
+                        this.acquire_basic_needs(market);
+                        break;
+                    case NeedsLevel.SAFETY:
+                        this.ensure_safety(market);
+                        break;
+                    case NeedsLevel.LOVE_BELONGING:
+                        this.social_interactions();
+                        break;
+                    case NeedsLevel.ESTEEM:
+                        this.build_esteem(market);
+                        break;
+                    case NeedsLevel.SELF_ACTUALIZATION:
+                        this.self_actualize();
+                        break;
+                }
+
+                this.check_survival();
+            }
+
+            acquire_basic_needs(market) {
+                // Purchase food and water if affordable
+                if (this.wealth >= market.food_price) {
+                    this.wealth -= market.food_price;
+                    market.sell_food();
+                    printOutput(`Agent ${this.agent_id} bought food for ${market.food_price} units.`);
+                } else {
+                    printOutput(`Agent ${this.agent_id} could not afford food.`);
+                }
+            }
+
+            ensure_safety(market) {
+                // Purchase housing or save money
+                if (this.wealth >= market.housing_price) {
+                    this.wealth -= market.housing_price;
+                    market.sell_housing();
+                    printOutput(`Agent ${this.agent_id} bought housing for ${market.housing_price} units.`);
+                } else {
+                    printOutput(`Agent ${this.agent_id} is saving for housing.`);
+                }
+            }
+
+            social_interactions() {
+                // Interact with other agents
+                printOutput(`Agent ${this.agent_id} is socializing.`);
+            }
+
+            build_esteem(market) {
+                // Purchase luxury goods
+                if (this.wealth >= market.luxury_price) {
+                    this.wealth -= market.luxury_price;
+                    market.sell_luxury();
+                    printOutput(`Agent ${this.agent_id} bought luxury goods for ${market.luxury_price} units.`);
+                } else {
+                    printOutput(`Agent ${this.agent_id} could not afford luxury goods.`);
+                }
+            }
+
+            self_actualize() {
+                // Engage in self-improvement activities
+                printOutput(`Agent ${this.agent_id} is pursuing self-actualization.`);
+            }
+
+            check_survival() {
+                // Agents die if they cannot meet physiological needs
+                if (this.current_need === NeedsLevel.PHYSIOLOGICAL && this.wealth < 1) {
+                    this.alive = false;
+                    printOutput(`Agent ${this.agent_id} has died due to unmet physiological needs.`);
+                }
+            }
+        }
+
+        // Market class
+        class Market {
+            constructor() {
+                this.food_stock = 1000;
+                this.food_price = 5;
+                this.housing_stock = 500;
+                this.housing_price = 50;
+                this.luxury_stock = 200;
+                this.luxury_price = 100;
+            }
+
+            sell_food() {
+                if (this.food_stock > 0) {
+                    this.food_stock -= 1;
+                }
+            }
+
+            sell_housing() {
+                if (this.housing_stock > 0) {
+                    this.housing_stock -= 1;
+                }
+            }
+
+            sell_luxury() {
+                if (this.luxury_stock > 0) {
+                    this.luxury_stock -= 1;
+                }
+            }
+        }
+
+        // Helper function to print output
+        function printOutput(text) {
+            const outputDiv = document.getElementById('output');
+            outputDiv.innerHTML += text + '<br>';
+        }
+
+        // Initialize agents
+        const agents = [];
+        const roles = ['Worker', 'Capitalist', 'Farmer', 'Technologist', 'Consumer'];
+        for (let i = 1; i <= 150; i++) {
+            const role = roles[Math.floor(Math.random() * roles.length)];
+            const wealth = Math.random() * 180 + 20; // Random number between 20 and 200
+            const energy = 50;
+            const land = role === 'Farmer' ? 10 : 0;
+            agents.push(new Agent(i, role, wealth, energy, land));
+        }
+
+        // Initialize market
+        const market = new Market();
+
+        // Simulation rounds
+        for (let roundNumber = 1; roundNumber <= 10; roundNumber++) {
+            printOutput(`<br>--- Round ${roundNumber} ---`);
+            for (let agent of agents) {
+                agent.act(market);
+            }
+
+            // Check if market resources are depleted
+            if (market.food_stock <= 0) {
+                printOutput("Food stock depleted. Simulation ends.");
+                break;
+            }
+        }
+
+        // Final status
+        printOutput("<br>Final Agent Status");
+        printOutput("Agent ID\tRole\t\tWealth\t\tAlive");
+        for (let agent of agents) {
+            const status = agent.alive ? "Alive" : "Deceased";
+            printOutput(`${agent.agent_id}\t\t${agent.role}\t${agent.wealth.toFixed(2)}\t\t${status}`);
+        }
+    </script>
+</body>
+</html>
