@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Zero-Knowledge Game with Survival and Surplus Value Extraction</title>
+    <title>Multi-Sector Zero-Knowledge Game Simulation</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         /* Eye-friendly color scheme */
@@ -55,7 +55,7 @@
         }
         #log {
             max-height: 300px;
-            overflow-y: scroll;
+            overflow-y: auto;
             border: 1px solid #bdc3c7;
             padding: 8px;
             background-color: #ffffff;
@@ -81,14 +81,14 @@
 </head>
 <body>
 
-<h1>Zero-Knowledge Game with Survival and Surplus Value Extraction</h1>
+<h1>Multi-Sector Zero-Knowledge Game Simulation</h1>
 
 <div id="controls">
     <label for="numAgents">Number of Agents:</label>
-    <input type="number" id="numAgents" value="10" min="2" max="100">
+    <input type="number" id="numAgents" value="12" min="3" max="100">
 
     <label for="numRounds">Number of Rounds:</label>
-    <input type="number" id="numRounds" value="20" min="1" max="1000">
+    <input type="number" id="numRounds" value="10" min="1" max="1000">
 
     <button onclick="runSimulation()">Run Simulation</button>
 </div>
@@ -104,7 +104,7 @@
         <thead>
             <tr>
                 <th>Agent ID</th>
-                <th>Role</th>
+                <th>Sector</th>
                 <th>Final Wealth</th>
             </tr>
         </thead>
@@ -115,23 +115,23 @@
 
 <script>
     class Agent {
-        constructor(id, initialWealth) {
+        constructor(id, sector) {
             this.id = id;
-            this.wealth = initialWealth;
+            this.sector = sector; // 'Primary', 'Secondary', 'Tertiary'
+            this.wealth = 100; // Increased initial wealth
             this.isAlive = true;
-            this.role = 'Worker'; // Default role; updated each round based on wealth
         }
 
-        // Decide whether to work or refuse
-        decideWorker() {
-            // Simple strategy: workers prefer to work
-            return 'Work';
+        // Agents decide how much to produce or extract
+        decideQuantity(maxQuantity) {
+            // Strategy: produce/extract maximum capacity to maximize earnings
+            return maxQuantity;
         }
 
-        // Decide whether to hire or not
-        decideCapitalist() {
-            // Simple strategy: capitalists prefer to hire
-            return 'Hire';
+        // Agents decide the price for their goods or services
+        decidePrice(minPrice, maxPrice) {
+            // Strategy: set price at average to encourage sales
+            return Math.floor((minPrice + maxPrice) / 2);
         }
     }
 
@@ -143,80 +143,128 @@
         logDiv.innerHTML = '';
         wealthBody.innerHTML = '';
 
+        // Game parameters
+        let NRP = 1000;   // Natural Resource Pool
+        const C = 5;      // Consumption need per round
+        const RER = 10;   // Resource Extraction Rate
+        const PC = 10;    // Processing Capacity
+        const SC = 10;    // Service Capacity
+        const minPrice = 5; // Minimum price for goods/services
+        const maxPrice = 10; // Maximum price for goods/services
+
         // Initialize agents
         const agents = [];
-        const initialWealth = 100;
+        const sectors = ['Primary', 'Secondary', 'Tertiary'];
         for (let i = 0; i < numAgents; i++) {
-            agents.push(new Agent(i + 1, initialWealth));
+            const sector = sectors[i % sectors.length];
+            agents.push(new Agent(i + 1, sector));
         }
-
-        // Game parameters
-        const C = 10;    // Consumption need per round
-        const T = 120;   // Wealth threshold for roles
-        const LV = 20;   // Labor value produced by worker
-        const W = 12;    // Wage paid to worker
-        const SV = LV - W; // Surplus value gained by capitalist
 
         // Simulation rounds
         for (let round = 1; round <= numRounds; round++) {
             logDiv.innerHTML += `<strong>Round ${round}</strong><br>`;
-
-            // Update roles based on wealth
-            for (const agent of agents) {
-                if (!agent.isAlive) continue;
-                agent.role = agent.wealth >= T ? 'Capitalist' : 'Worker';
-            }
-
-            // Separate agents into roles
-            const workers = agents.filter(agent => agent.isAlive && agent.role === 'Worker');
-            const capitalists = agents.filter(agent => agent.isAlive && agent.role === 'Capitalist');
-
-            // Check if any agents can interact
-            if (workers.length === 0 || capitalists.length === 0) {
-                logDiv.innerHTML += `<strong>No interactions possible. Simulation ends.</strong><br>`;
+            if (NRP <= 0) {
+                logDiv.innerHTML += `Natural resources depleted. Simulation ends.<br>`;
                 break;
             }
 
-            // Shuffle arrays
-            workers.sort(() => 0.5 - Math.random());
-            capitalists.sort(() => 0.5 - Math.random());
+            // Agents who are alive
+            const activeAgents = agents.filter(agent => agent.isAlive);
 
-            const numPairs = Math.min(workers.length, capitalists.length);
-
-            for (let i = 0; i < numPairs; i++) {
-                const worker = workers[i];
-                const capitalist = capitalists[i];
-
-                const workerDecision = worker.decideWorker();
-                const capitalistDecision = capitalist.decideCapitalist();
-
-                let outcome = '';
-
-                if (workerDecision === 'Work' && capitalistDecision === 'Hire') {
-                    // Successful employment
-                    worker.wealth += W;
-                    capitalist.wealth -= W;
-                    capitalist.wealth += SV;
-                    outcome = `Worker ${worker.id} worked for Capitalist ${capitalist.id}. Worker earns ${W} units, Capitalist gains ${SV} units of surplus value.`;
-                } else {
-                    // No employment
-                    outcome = `Worker ${worker.id} did not work with Capitalist ${capitalist.id}. No production occurred.`;
-                }
-
-                logDiv.innerHTML += `${outcome}<br>`;
-            }
-
-            // All agents consume
-            for (const agent of agents) {
-                if (!agent.isAlive) continue;
-
+            // Agents consume
+            for (const agent of activeAgents) {
                 agent.wealth -= C;
-
                 if (agent.wealth < 0) {
                     agent.isAlive = false;
                     agent.wealth = 0;
                     logDiv.innerHTML += `Agent ${agent.id} could not meet consumption needs and has died.<br>`;
                 }
+            }
+
+            // Remove dead agents
+            const aliveAgents = agents.filter(agent => agent.isAlive);
+            if (aliveAgents.length === 0) {
+                logDiv.innerHTML += `All agents have died. Simulation ends.<br>`;
+                break;
+            }
+
+            // Reset resources/products/services for the round
+            for (const agent of aliveAgents) {
+                agent.resources = 0;
+                agent.products = 0;
+                agent.services = 0;
+            }
+
+            // Primary Sector Actions
+            const primaryAgents = aliveAgents.filter(agent => agent.sector === 'Primary');
+            for (const agent of primaryAgents) {
+                if (NRP <= 0) break;
+                const quantity = Math.min(agent.decideQuantity(RER), NRP);
+                const price = agent.decidePrice(minPrice, maxPrice);
+                agent.resources = quantity; // Resources available to sell
+                agent.price = price;
+                NRP -= quantity;
+                logDiv.innerHTML += `Agent ${agent.id} (Primary) extracted ${quantity} units at price ${price} per unit.<br>`;
+            }
+
+            // Secondary Sector Actions
+            const secondaryAgents = aliveAgents.filter(agent => agent.sector === 'Secondary');
+            for (const agent of secondaryAgents) {
+                // Buy resources from primary agents
+                const resourcesNeeded = agent.decideQuantity(PC);
+                let resourcesBought = 0;
+                let totalCost = 0;
+
+                for (const seller of primaryAgents) {
+                    if (seller.resources > 0) {
+                        const quantityToBuy = Math.min(resourcesNeeded - resourcesBought, seller.resources);
+                        const cost = quantityToBuy * seller.price;
+                        if (agent.wealth >= cost) {
+                            // Transaction occurs
+                            agent.wealth -= cost;
+                            seller.wealth += cost;
+                            seller.resources -= quantityToBuy;
+                            resourcesBought += quantityToBuy;
+                            totalCost += cost;
+                            logDiv.innerHTML += `Agent ${agent.id} (Secondary) bought ${quantityToBuy} units from Agent ${seller.id} (Primary) for ${cost} units.<br>`;
+                        }
+                    }
+                    if (resourcesBought >= resourcesNeeded) break;
+                }
+
+                agent.products = resourcesBought; // Products available to sell
+                agent.price = agent.decidePrice(minPrice + 1, maxPrice + 2); // Slightly higher price
+                logDiv.innerHTML += `Agent ${agent.id} (Secondary) processed ${resourcesBought} units into products at price ${agent.price} per unit.<br>`;
+            }
+
+            // Tertiary Sector Actions
+            const tertiaryAgents = aliveAgents.filter(agent => agent.sector === 'Tertiary');
+            for (const agent of tertiaryAgents) {
+                // Buy products from secondary agents
+                const productsNeeded = agent.decideQuantity(SC);
+                let productsBought = 0;
+                let totalCost = 0;
+
+                for (const seller of secondaryAgents) {
+                    if (seller.products > 0) {
+                        const quantityToBuy = Math.min(productsNeeded - productsBought, seller.products);
+                        const cost = quantityToBuy * seller.price;
+                        if (agent.wealth >= cost) {
+                            // Transaction occurs
+                            agent.wealth -= cost;
+                            seller.wealth += cost;
+                            seller.products -= quantityToBuy;
+                            productsBought += quantityToBuy;
+                            totalCost += cost;
+                            logDiv.innerHTML += `Agent ${agent.id} (Tertiary) bought ${quantityToBuy} units from Agent ${seller.id} (Secondary) for ${cost} units.<br>`;
+                        }
+                    }
+                    if (productsBought >= productsNeeded) break;
+                }
+
+                agent.services = productsBought; // Services available to sell
+                agent.price = agent.decidePrice(minPrice + 2, maxPrice + 4); // Higher price
+                logDiv.innerHTML += `Agent ${agent.id} (Tertiary) offers services/products from ${productsBought} units at price ${agent.price} per unit.<br>`;
             }
 
             logDiv.innerHTML += `<br>`;
@@ -227,13 +275,13 @@
         for (const agent of agents) {
             const row = document.createElement('tr');
             const cellId = document.createElement('td');
-            const cellRole = document.createElement('td');
+            const cellSector = document.createElement('td');
             const cellWealth = document.createElement('td');
             cellId.textContent = `Agent ${agent.id}`;
-            cellRole.textContent = agent.isAlive ? agent.role : 'Deceased';
+            cellSector.textContent = agent.isAlive ? agent.sector : 'Deceased';
             cellWealth.textContent = agent.wealth.toFixed(2);
             row.appendChild(cellId);
-            row.appendChild(cellRole);
+            row.appendChild(cellSector);
             row.appendChild(cellWealth);
             // Highlight deceased agents
             if (!agent.isAlive) {
