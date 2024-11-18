@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Zero-Knowledge Game with Wealth Conservation</title>
+    <title>Zero-Knowledge Game with Survival and Surplus Value Extraction</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         /* Eye-friendly color scheme */
@@ -77,33 +77,11 @@
         #wealthTable tr:nth-child(even) {
             background-color: #f9fbfc;
         }
-        /* Responsive styles for larger screens */
-        @media (min-width: 600px) {
-            #controls {
-                display: flex;
-                flex-wrap: wrap;
-                align-items: flex-end;
-            }
-            #controls label, #controls input, #controls button {
-                width: auto;
-                margin-right: 20px;
-            }
-            #controls input {
-                width: 100px;
-            }
-            button {
-                width: auto;
-                margin-top: 0;
-            }
-            #log {
-                max-height: 500px;
-            }
-        }
     </style>
 </head>
 <body>
 
-<h1>Zero-Knowledge Game with Wealth Conservation</h1>
+<h1>Zero-Knowledge Game with Survival and Surplus Value Extraction</h1>
 
 <div id="controls">
     <label for="numAgents">Number of Agents:</label>
@@ -126,6 +104,7 @@
         <thead>
             <tr>
                 <th>Agent ID</th>
+                <th>Role</th>
                 <th>Final Wealth</th>
             </tr>
         </thead>
@@ -139,17 +118,20 @@
         constructor(id, initialWealth) {
             this.id = id;
             this.wealth = initialWealth;
-            this.zeroWealthRounds = 0;
-            this.isEliminated = false;
+            this.isAlive = true;
+            this.role = 'Worker'; // Default role; updated each round based on wealth
         }
 
-        // Decide how much to wager
-        decide() {
-            if (this.wealth <= 0) {
-                return 0;
-            }
-            // Simple strategy: wager a random amount up to 10% of wealth
-            return Math.random() * 0.1 * this.wealth;
+        // Decide whether to work or refuse
+        decideWorker() {
+            // Simple strategy: workers prefer to work
+            return 'Work';
+        }
+
+        // Decide whether to hire or not
+        decideCapitalist() {
+            // Simple strategy: capitalists prefer to hire
+            return 'Hire';
         }
     }
 
@@ -169,72 +151,75 @@
         }
 
         // Game parameters
-        const alpha = 0.1; // Proportion of loser's wealth to transfer
-        const zeroWealthThreshold = 3; // Rounds an agent can stay at zero wealth
+        const C = 10;    // Consumption need per round
+        const T = 120;   // Wealth threshold for roles
+        const LV = 20;   // Labor value produced by worker
+        const W = 12;    // Wage paid to worker
+        const SV = LV - W; // Surplus value gained by capitalist
 
         // Simulation rounds
         for (let round = 1; round <= numRounds; round++) {
             logDiv.innerHTML += `<strong>Round ${round}</strong><br>`;
 
-            // Check if enough agents remain
-            const activeAgents = agents.filter(agent => !agent.isEliminated);
-            if (activeAgents.length < 2) {
-                logDiv.innerHTML += `<strong>Simulation ended due to insufficient active agents.</strong><br>`;
+            // Update roles based on wealth
+            for (const agent of agents) {
+                if (!agent.isAlive) continue;
+                agent.role = agent.wealth >= T ? 'Capitalist' : 'Worker';
+            }
+
+            // Separate agents into roles
+            const workers = agents.filter(agent => agent.isAlive && agent.role === 'Worker');
+            const capitalists = agents.filter(agent => agent.isAlive && agent.role === 'Capitalist');
+
+            // Check if any agents can interact
+            if (workers.length === 0 || capitalists.length === 0) {
+                logDiv.innerHTML += `<strong>No interactions possible. Simulation ends.</strong><br>`;
                 break;
             }
 
-            // Shuffle agents
-            activeAgents.sort(() => 0.5 - Math.random());
+            // Shuffle arrays
+            workers.sort(() => 0.5 - Math.random());
+            capitalists.sort(() => 0.5 - Math.random());
 
-            // Pair agents
-            let i = 0;
-            while (i < activeAgents.length) {
-                if (i + 1 >= activeAgents.length) break; // Skip if odd number of agents
+            const numPairs = Math.min(workers.length, capitalists.length);
 
-                const agentA = activeAgents[i];
-                const agentB = activeAgents[i + 1];
+            for (let i = 0; i < numPairs; i++) {
+                const worker = workers[i];
+                const capitalist = capitalists[i];
 
-                // Agents decide how much to wager
-                const wagerA = agentA.decide();
-                const wagerB = agentB.decide();
+                const workerDecision = worker.decideWorker();
+                const capitalistDecision = capitalist.decideCapitalist();
 
                 let outcome = '';
 
-                if (wagerA > wagerB) {
-                    const transferAmount = alpha * agentB.wealth;
-                    agentA.wealth += transferAmount;
-                    agentB.wealth -= transferAmount;
-                    outcome = `Agent ${agentA.id} wins against Agent ${agentB.id}. Agent ${agentA.id} gains ${transferAmount.toFixed(2)} units.`;
-                } else if (wagerB > wagerA) {
-                    const transferAmount = alpha * agentA.wealth;
-                    agentB.wealth += transferAmount;
-                    agentA.wealth -= transferAmount;
-                    outcome = `Agent ${agentB.id} wins against Agent ${agentA.id}. Agent ${agentB.id} gains ${transferAmount.toFixed(2)} units.`;
+                if (workerDecision === 'Work' && capitalistDecision === 'Hire') {
+                    // Successful employment
+                    worker.wealth += W;
+                    capitalist.wealth -= W;
+                    capitalist.wealth += SV;
+                    outcome = `Worker ${worker.id} worked for Capitalist ${capitalist.id}. Worker earns ${W} units, Capitalist gains ${SV} units of surplus value.`;
                 } else {
-                    outcome = `Agent ${agentA.id} and Agent ${agentB.id} tied. No wealth exchanged.`;
+                    // No employment
+                    outcome = `Worker ${worker.id} did not work with Capitalist ${capitalist.id}. No production occurred.`;
                 }
 
-                // Prevent negative wealth
-                agentA.wealth = Math.max(agentA.wealth, 0);
-                agentB.wealth = Math.max(agentB.wealth, 0);
-
-                // Update zero wealth rounds
-                [agentA, agentB].forEach(agent => {
-                    if (agent.wealth === 0) {
-                        agent.zeroWealthRounds += 1;
-                    } else {
-                        agent.zeroWealthRounds = 0;
-                    }
-
-                    if (agent.zeroWealthRounds >= zeroWealthThreshold && !agent.isEliminated) {
-                        agent.isEliminated = true;
-                        logDiv.innerHTML += `Agent ${agent.id} has been eliminated after ${zeroWealthThreshold} rounds at zero wealth.<br>`;
-                    }
-                });
-
-                logDiv.innerHTML += `${outcome}<br><br>`;
-                i += 2;
+                logDiv.innerHTML += `${outcome}<br>`;
             }
+
+            // All agents consume
+            for (const agent of agents) {
+                if (!agent.isAlive) continue;
+
+                agent.wealth -= C;
+
+                if (agent.wealth < 0) {
+                    agent.isAlive = false;
+                    agent.wealth = 0;
+                    logDiv.innerHTML += `Agent ${agent.id} could not meet consumption needs and has died.<br>`;
+                }
+            }
+
+            logDiv.innerHTML += `<br>`;
         }
 
         // Display final wealth of all agents
@@ -242,15 +227,18 @@
         for (const agent of agents) {
             const row = document.createElement('tr');
             const cellId = document.createElement('td');
+            const cellRole = document.createElement('td');
             const cellWealth = document.createElement('td');
             cellId.textContent = `Agent ${agent.id}`;
+            cellRole.textContent = agent.isAlive ? agent.role : 'Deceased';
             cellWealth.textContent = agent.wealth.toFixed(2);
             row.appendChild(cellId);
+            row.appendChild(cellRole);
             row.appendChild(cellWealth);
-            // Highlight eliminated agents
-            if (agent.isEliminated) {
+            // Highlight deceased agents
+            if (!agent.isAlive) {
                 row.style.color = '#c0392b'; // Soft red color
-                cellWealth.textContent += ' (Eliminated)';
+                cellWealth.textContent += ' (Deceased)';
             }
             wealthBody.appendChild(row);
         }
