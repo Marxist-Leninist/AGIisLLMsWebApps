@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Combined Wealth-Income Histogram in the UK</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        #chart {
+            width: 800px;
+            height: 500px;
+            margin: 0 auto;
+        }
+        .bar {
+            fill: steelblue;
+            stroke: #333;
+        }
+        .axis text {
+            font-size: 12px;
+        }
+        .axis path,
+        .axis line {
+            stroke: #000;
+            shape-rendering: crispEdges;
+        }
+        .legend {
+            margin-top: 20px;
+            font-size: 14px;
+        }
+        .legend div {
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h2>Combined Wealth-Income Distribution in the UK</h2>
+    <div id="chart"></div>
+    <script>
+        // Data for the histogram
+        var data = [
+            {"bracket": "0th-10th percentile", "individuals": 5200000, "wealthIncome": 9500},
+            {"bracket": "10th-25th percentile", "individuals": 7800000, "wealthIncome": 16050},
+            {"bracket": "25th-50th percentile", "individuals": 13000000, "wealthIncome": 31000},
+            {"bracket": "50th-75th percentile", "individuals": 13000000, "wealthIncome": 55000},
+            {"bracket": "75th-90th percentile", "individuals": 7800000, "wealthIncome": 90000},
+            {"bracket": "90th-95th percentile", "individuals": 2600000, "wealthIncome": 139000},
+            {"bracket": "95th-99th percentile", "individuals": 2080000, "wealthIncome": 250000},
+            {"bracket": "99th-100th percentile", "individuals": 520000, "wealthIncome": 250001}
+        ];
+
+        // Create the histogram using basic JavaScript and SVG
+        // Since we are not using external libraries, we'll build the chart from scratch
+
+        // Set up SVG canvas dimensions
+        var width = 800;
+        var height = 500;
+        var margin = {top: 20, right: 30, bottom: 100, left: 70};
+
+        // Calculate maximum individuals for scaling
+        var maxIndividuals = Math.max.apply(Math, data.map(function(o) { return o.individuals; }));
+
+        // Create SVG element
+        var svgNS = "http://www.w3.org/2000/svg";
+        var svg = document.createElementNS(svgNS, "svg");
+        svg.setAttribute("width", width);
+        svg.setAttribute("height", height);
+
+        // Create chart area
+        var chartWidth = width - margin.left - margin.right;
+        var chartHeight = height - margin.top - margin.bottom;
+
+        // Calculate bar width
+        var barWidth = chartWidth / data.length;
+
+        // Create bars
+        data.forEach(function(d, i) {
+            var barHeight = (d.individuals / maxIndividuals) * chartHeight;
+
+            var rect = document.createElementNS(svgNS, "rect");
+            rect.setAttribute("x", margin.left + i * barWidth + 10);
+            rect.setAttribute("y", margin.top + chartHeight - barHeight);
+            rect.setAttribute("width", barWidth - 20);
+            rect.setAttribute("height", barHeight);
+            rect.setAttribute("fill", "steelblue");
+            rect.setAttribute("class", "bar");
+            svg.appendChild(rect);
+
+            // Add bracket labels (rotated for readability)
+            var text = document.createElementNS(svgNS, "text");
+            text.setAttribute("x", margin.left + i * barWidth + barWidth / 2);
+            text.setAttribute("y", height - margin.bottom + 20);
+            text.setAttribute("text-anchor", "end");
+            text.setAttribute("transform", "rotate(-45 " + (margin.left + i * barWidth + barWidth / 2) + "," + (height - margin.bottom + 20) + ")");
+            text.setAttribute("font-size", "12px");
+            text.textContent = d.bracket;
+            svg.appendChild(text);
+
+            // Add value labels on top of bars
+            var valueText = document.createElementNS(svgNS, "text");
+            valueText.setAttribute("x", margin.left + i * barWidth + barWidth / 2);
+            valueText.setAttribute("y", margin.top + chartHeight - barHeight - 5);
+            valueText.setAttribute("text-anchor", "middle");
+            valueText.setAttribute("font-size", "12px");
+            valueText.textContent = (d.individuals / 1000000).toFixed(1) + "M";
+            svg.appendChild(valueText);
+        });
+
+        // Add Y-axis labels (Number of Individuals)
+        for (var i = 0; i <= 5; i++) {
+            var yValue = maxIndividuals * i / 5;
+            var yPosition = margin.top + chartHeight - (chartHeight * i / 5);
+
+            var yLine = document.createElementNS(svgNS, "line");
+            yLine.setAttribute("x1", margin.left);
+            yLine.setAttribute("y1", yPosition);
+            yLine.setAttribute("x2", margin.left - 5);
+            yLine.setAttribute("y2", yPosition);
+            yLine.setAttribute("stroke", "#000");
+            svg.appendChild(yLine);
+
+            var yText = document.createElementNS(svgNS, "text");
+            yText.setAttribute("x", margin.left - 10);
+            yText.setAttribute("y", yPosition + 5);
+            yText.setAttribute("text-anchor", "end");
+            yText.setAttribute("font-size", "12px");
+            yText.textContent = (yValue / 1000000).toFixed(1) + "M";
+            svg.appendChild(yText);
+        }
+
+        // Add Y-axis title
+        var yAxisTitle = document.createElementNS(svgNS, "text");
+        yAxisTitle.setAttribute("transform", "rotate(-90)");
+        yAxisTitle.setAttribute("x", -height / 2);
+        yAxisTitle.setAttribute("y", margin.left - 50);
+        yAxisTitle.setAttribute("text-anchor", "middle");
+        yAxisTitle.setAttribute("font-size", "14px");
+        yAxisTitle.textContent = "Number of Individuals";
+        svg.appendChild(yAxisTitle);
+
+        // Add X-axis title
+        var xAxisTitle = document.createElementNS(svgNS, "text");
+        xAxisTitle.setAttribute("x", width / 2);
+        xAxisTitle.setAttribute("y", height - margin.bottom + 70);
+        xAxisTitle.setAttribute("text-anchor", "middle");
+        xAxisTitle.setAttribute("font-size", "14px");
+        xAxisTitle.textContent = "Percentile Brackets";
+        svg.appendChild(xAxisTitle);
+
+        // Append SVG to chart div
+        document.getElementById("chart").appendChild(svg);
+
+        // Add legend
+        var legend = document.createElement("div");
+        legend.setAttribute("class", "legend");
+        legend.innerHTML = "<strong>Combined Wealth-Income Range (£):</strong>";
+        data.forEach(function(d) {
+            legend.innerHTML += "<div>" + d.bracket + ": " + (d.bracket === "99th-100th percentile" ? "Above £250,000" : "Up to £" + d.wealthIncome.toLocaleString()) + "</div>";
+        });
+        document.getElementById("chart").appendChild(legend);
+
+    </script>
+</body>
+</html>
