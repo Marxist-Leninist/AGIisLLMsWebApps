@@ -3,31 +3,101 @@
 <head>
     <meta charset="UTF-8">
     <title>Zero-Knowledge Game Simulation</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
+        /* Eye-friendly color scheme */
         body {
             font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 10px;
+            background-color: #f0f4f8; /* Light gray-blue background */
+            color: #333; /* Dark gray text */
         }
-        #simulation {
+        h1, h2 {
             margin-top: 20px;
+            color: #2c3e50; /* Darker blue-gray for headings */
         }
-        #results {
-            margin-top: 20px;
+        #controls {
+            margin-bottom: 20px;
         }
-        table {
-            border-collapse: collapse;
+        label {
+            display: block;
+            margin-top: 10px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        input[type="number"] {
             width: 100%;
-            max-width: 600px;
-        }
-        th, td {
-            border: 1px solid #ccc;
             padding: 8px;
-            text-align: left;
+            margin-top: 5px;
+            box-sizing: border-box;
+            border: 1px solid #bdc3c7; /* Light gray border */
+            border-radius: 4px;
+            background-color: #ecf0f1; /* Very light gray background */
+            color: #333;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            margin-top: 15px;
+            background-color: #3498db; /* Soft blue */
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #2980b9; /* Slightly darker blue */
+        }
+        #simulation, #results {
+            margin-top: 30px;
         }
         #log {
             max-height: 300px;
             overflow-y: scroll;
-            border: 1px solid #ccc;
+            border: 1px solid #bdc3c7;
             padding: 8px;
+            background-color: #ffffff; /* White background for contrast */
+            border-radius: 4px;
+        }
+        #wealthTable {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        #wealthTable th, #wealthTable td {
+            border: 1px solid #bdc3c7;
+            padding: 8px;
+            text-align: left;
+        }
+        #wealthTable th {
+            background-color: #ecf0f1; /* Light gray background for header */
+        }
+        #wealthTable tr:nth-child(even) {
+            background-color: #f9fbfc; /* Subtle alternating row colors */
+        }
+        /* Responsive styles for larger screens */
+        @media (min-width: 600px) {
+            #controls {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: flex-end;
+            }
+            #controls label, #controls input, #controls button {
+                width: auto;
+                margin-right: 20px;
+            }
+            #controls input {
+                width: 100px;
+            }
+            button {
+                width: auto;
+                margin-top: 0;
+            }
+            #log {
+                max-height: 500px;
+            }
         }
     </style>
 </head>
@@ -37,9 +107,11 @@
 
 <div id="controls">
     <label for="numAgents">Number of Agents:</label>
-    <input type="number" id="numAgents" value="10" min="2" max="100"><br><br>
+    <input type="number" id="numAgents" value="10" min="2" max="100">
+
     <label for="numRounds">Number of Rounds:</label>
-    <input type="number" id="numRounds" value="20" min="1" max="1000"><br><br>
+    <input type="number" id="numRounds" value="20" min="1" max="1000">
+
     <button onclick="runSimulation()">Run Simulation</button>
 </div>
 
@@ -67,6 +139,7 @@
         constructor(id, initialWealth) {
             this.id = id;
             this.wealth = initialWealth;
+            this.isBankrupt = false;
         }
 
         // Decide whether to attack or defend (randomly for this simulation)
@@ -85,11 +158,13 @@
         wealthBody.innerHTML = '';
 
         // Initialize agents
-        const agents = [];
+        const allAgents = [];
         const initialWealth = 100;
         for (let i = 0; i < numAgents; i++) {
-            agents.push(new Agent(i + 1, initialWealth));
+            allAgents.push(new Agent(i + 1, initialWealth));
         }
+
+        let activeAgents = allAgents.slice(); // Copy of agents for pairing
 
         // Game parameters
         const c = 1;   // Cost when both defend
@@ -100,15 +175,22 @@
         // Simulation rounds
         for (let round = 1; round <= numRounds; round++) {
             logDiv.innerHTML += `<strong>Round ${round}</strong><br>`;
-            // Shuffle agents
-            const shuffledAgents = agents.slice().sort(() => 0.5 - Math.random());
+            // Shuffle active agents
+            activeAgents = activeAgents.sort(() => 0.5 - Math.random());
 
             // Pair agents
-            for (let i = 0; i < shuffledAgents.length; i += 2) {
-                if (i + 1 >= shuffledAgents.length) break; // Skip if odd number of agents
+            let i = 0;
+            while (i < activeAgents.length) {
+                if (i + 1 >= activeAgents.length) break; // Skip if odd number of agents
 
-                const agentA = shuffledAgents[i];
-                const agentB = shuffledAgents[i + 1];
+                const agentA = activeAgents[i];
+                const agentB = activeAgents[i + 1];
+
+                // Skip if either agent is bankrupt
+                if (agentA.isBankrupt || agentB.isBankrupt) {
+                    i += 2;
+                    continue;
+                }
 
                 const decisionA = agentA.decide();
                 const decisionB = agentB.decide();
@@ -135,28 +217,31 @@
 
                 logDiv.innerHTML += `Agent ${agentA.id} chose to ${decisionA}, Agent ${agentB.id} chose to ${decisionB}. ${outcome}<br><br>`;
 
-                // Check for bankrupt agents
-                if (agentA.wealth <= 0) {
+                // Update bankruptcy status
+                if (agentA.wealth <= 0 && !agentA.isBankrupt) {
+                    agentA.isBankrupt = true;
                     logDiv.innerHTML += `Agent ${agentA.id} has gone bankrupt and is out of the game.<br>`;
-                    agents.splice(agents.indexOf(agentA), 1);
                 }
-                if (agentB.wealth <= 0) {
+                if (agentB.wealth <= 0 && !agentB.isBankrupt) {
+                    agentB.isBankrupt = true;
                     logDiv.innerHTML += `Agent ${agentB.id} has gone bankrupt and is out of the game.<br>`;
-                    agents.splice(agents.indexOf(agentB), 1);
                 }
 
-                if (agents.length < 2) break; // End simulation if not enough agents
+                i += 2;
             }
 
-            if (agents.length < 2) {
-                logDiv.innerHTML += `<strong>Simulation ended prematurely due to insufficient agents.</strong><br>`;
+            // Remove bankrupt agents from activeAgents array
+            activeAgents = activeAgents.filter(agent => !agent.isBankrupt);
+
+            if (activeAgents.length < 2) {
+                logDiv.innerHTML += `<strong>Simulation ended prematurely due to insufficient active agents.</strong><br>`;
                 break;
             }
         }
 
-        // Display final wealth
-        agents.sort((a, b) => a.id - b.id);
-        for (const agent of agents) {
+        // Display final wealth of all agents
+        allAgents.sort((a, b) => a.id - b.id);
+        for (const agent of allAgents) {
             const row = document.createElement('tr');
             const cellId = document.createElement('td');
             const cellWealth = document.createElement('td');
@@ -164,6 +249,10 @@
             cellWealth.textContent = agent.wealth.toFixed(2);
             row.appendChild(cellId);
             row.appendChild(cellWealth);
+            // Highlight bankrupt agents
+            if (agent.isBankrupt) {
+                row.style.color = '#c0392b'; // Soft red color
+            }
             wealthBody.appendChild(row);
         }
     }
