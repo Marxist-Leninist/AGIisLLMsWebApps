@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Zero-Knowledge Game Simulation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        #simulation {
+            margin-top: 20px;
+        }
+        #results {
+            margin-top: 20px;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            max-width: 600px;
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: left;
+        }
+        #log {
+            max-height: 300px;
+            overflow-y: scroll;
+            border: 1px solid #ccc;
+            padding: 8px;
+        }
+    </style>
+</head>
+<body>
+
+<h1>Zero-Knowledge Game Simulation</h1>
+
+<div id="controls">
+    <label for="numAgents">Number of Agents:</label>
+    <input type="number" id="numAgents" value="10" min="2" max="100"><br><br>
+    <label for="numRounds">Number of Rounds:</label>
+    <input type="number" id="numRounds" value="20" min="1" max="1000"><br><br>
+    <button onclick="runSimulation()">Run Simulation</button>
+</div>
+
+<div id="simulation">
+    <h2>Simulation Log</h2>
+    <div id="log"></div>
+</div>
+
+<div id="results">
+    <h2>Final Agent Wealth</h2>
+    <table id="wealthTable">
+        <thead>
+            <tr>
+                <th>Agent ID</th>
+                <th>Final Wealth</th>
+            </tr>
+        </thead>
+        <tbody id="wealthBody">
+        </tbody>
+    </table>
+</div>
+
+<script>
+    class Agent {
+        constructor(id, initialWealth) {
+            this.id = id;
+            this.wealth = initialWealth;
+        }
+
+        // Decide whether to attack or defend (randomly for this simulation)
+        decide() {
+            // Agents can have their own strategy; for simplicity, we'll randomize
+            return Math.random() < 0.5 ? 'Attack' : 'Defend';
+        }
+    }
+
+    function runSimulation() {
+        const numAgents = parseInt(document.getElementById('numAgents').value);
+        const numRounds = parseInt(document.getElementById('numRounds').value);
+        const logDiv = document.getElementById('log');
+        const wealthBody = document.getElementById('wealthBody');
+        logDiv.innerHTML = '';
+        wealthBody.innerHTML = '';
+
+        // Initialize agents
+        const agents = [];
+        const initialWealth = 100;
+        for (let i = 0; i < numAgents; i++) {
+            agents.push(new Agent(i + 1, initialWealth));
+        }
+
+        // Game parameters
+        const c = 1;   // Cost when both defend
+        const L = 15;  // Loss to defender when attacked
+        const G = 10;  // Gain to attacker when opponent defends
+        const h = 12;  // High loss when both attack
+
+        // Simulation rounds
+        for (let round = 1; round <= numRounds; round++) {
+            logDiv.innerHTML += `<strong>Round ${round}</strong><br>`;
+            // Shuffle agents
+            const shuffledAgents = agents.slice().sort(() => 0.5 - Math.random());
+
+            // Pair agents
+            for (let i = 0; i < shuffledAgents.length; i += 2) {
+                if (i + 1 >= shuffledAgents.length) break; // Skip if odd number of agents
+
+                const agentA = shuffledAgents[i];
+                const agentB = shuffledAgents[i + 1];
+
+                const decisionA = agentA.decide();
+                const decisionB = agentB.decide();
+
+                // Determine outcome
+                let outcome = '';
+                if (decisionA === 'Defend' && decisionB === 'Defend') {
+                    agentA.wealth -= c;
+                    agentB.wealth -= c;
+                    outcome = `Both defended. Agent ${agentA.id} and Agent ${agentB.id} each lose ${c} units.`;
+                } else if (decisionA === 'Attack' && decisionB === 'Defend') {
+                    agentA.wealth += G;
+                    agentB.wealth -= L;
+                    outcome = `Agent ${agentA.id} attacked and Agent ${agentB.id} defended. Agent ${agentA.id} gains ${G} units, Agent ${agentB.id} loses ${L} units.`;
+                } else if (decisionA === 'Defend' && decisionB === 'Attack') {
+                    agentA.wealth -= L;
+                    agentB.wealth += G;
+                    outcome = `Agent ${agentB.id} attacked and Agent ${agentA.id} defended. Agent ${agentB.id} gains ${G} units, Agent ${agentA.id} loses ${L} units.`;
+                } else if (decisionA === 'Attack' && decisionB === 'Attack') {
+                    agentA.wealth -= h;
+                    agentB.wealth -= h;
+                    outcome = `Both attacked. Agent ${agentA.id} and Agent ${agentB.id} each lose ${h} units.`;
+                }
+
+                logDiv.innerHTML += `Agent ${agentA.id} chose to ${decisionA}, Agent ${agentB.id} chose to ${decisionB}. ${outcome}<br><br>`;
+
+                // Check for bankrupt agents
+                if (agentA.wealth <= 0) {
+                    logDiv.innerHTML += `Agent ${agentA.id} has gone bankrupt and is out of the game.<br>`;
+                    agents.splice(agents.indexOf(agentA), 1);
+                }
+                if (agentB.wealth <= 0) {
+                    logDiv.innerHTML += `Agent ${agentB.id} has gone bankrupt and is out of the game.<br>`;
+                    agents.splice(agents.indexOf(agentB), 1);
+                }
+
+                if (agents.length < 2) break; // End simulation if not enough agents
+            }
+
+            if (agents.length < 2) {
+                logDiv.innerHTML += `<strong>Simulation ended prematurely due to insufficient agents.</strong><br>`;
+                break;
+            }
+        }
+
+        // Display final wealth
+        agents.sort((a, b) => a.id - b.id);
+        for (const agent of agents) {
+            const row = document.createElement('tr');
+            const cellId = document.createElement('td');
+            const cellWealth = document.createElement('td');
+            cellId.textContent = `Agent ${agent.id}`;
+            cellWealth.textContent = agent.wealth.toFixed(2);
+            row.appendChild(cellId);
+            row.appendChild(cellWealth);
+            wealthBody.appendChild(row);
+        }
+    }
+</script>
+
+</body>
+</html>
