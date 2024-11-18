@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Marxist-Leninist Zero-Knowledge Game Simulation</title>
+    <title>Zero-Knowledge Game with Wealth Conservation</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         /* Eye-friendly color scheme */
@@ -74,4 +74,188 @@
         #wealthTable th {
             background-color: #ecf0f1;
         }
-        #wealth
+        #wealthTable tr:nth-child(even) {
+            background-color: #f9fbfc;
+        }
+        /* Responsive styles for larger screens */
+        @media (min-width: 600px) {
+            #controls {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: flex-end;
+            }
+            #controls label, #controls input, #controls button {
+                width: auto;
+                margin-right: 20px;
+            }
+            #controls input {
+                width: 100px;
+            }
+            button {
+                width: auto;
+                margin-top: 0;
+            }
+            #log {
+                max-height: 500px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<h1>Zero-Knowledge Game with Wealth Conservation</h1>
+
+<div id="controls">
+    <label for="numAgents">Number of Agents:</label>
+    <input type="number" id="numAgents" value="10" min="2" max="100">
+
+    <label for="numRounds">Number of Rounds:</label>
+    <input type="number" id="numRounds" value="20" min="1" max="1000">
+
+    <button onclick="runSimulation()">Run Simulation</button>
+</div>
+
+<div id="simulation">
+    <h2>Simulation Log</h2>
+    <div id="log"></div>
+</div>
+
+<div id="results">
+    <h2>Final Agent Wealth</h2>
+    <table id="wealthTable">
+        <thead>
+            <tr>
+                <th>Agent ID</th>
+                <th>Final Wealth</th>
+            </tr>
+        </thead>
+        <tbody id="wealthBody">
+        </tbody>
+    </table>
+</div>
+
+<script>
+    class Agent {
+        constructor(id, initialWealth) {
+            this.id = id;
+            this.wealth = initialWealth;
+            this.zeroWealthRounds = 0;
+            this.isEliminated = false;
+        }
+
+        // Decide how much to wager
+        decide() {
+            if (this.wealth <= 0) {
+                return 0;
+            }
+            // Simple strategy: wager a random amount up to 10% of wealth
+            return Math.random() * 0.1 * this.wealth;
+        }
+    }
+
+    function runSimulation() {
+        const numAgents = parseInt(document.getElementById('numAgents').value);
+        const numRounds = parseInt(document.getElementById('numRounds').value);
+        const logDiv = document.getElementById('log');
+        const wealthBody = document.getElementById('wealthBody');
+        logDiv.innerHTML = '';
+        wealthBody.innerHTML = '';
+
+        // Initialize agents
+        const agents = [];
+        const initialWealth = 100;
+        for (let i = 0; i < numAgents; i++) {
+            agents.push(new Agent(i + 1, initialWealth));
+        }
+
+        // Game parameters
+        const alpha = 0.1; // Proportion of loser's wealth to transfer
+        const zeroWealthThreshold = 3; // Rounds an agent can stay at zero wealth
+
+        // Simulation rounds
+        for (let round = 1; round <= numRounds; round++) {
+            logDiv.innerHTML += `<strong>Round ${round}</strong><br>`;
+
+            // Check if enough agents remain
+            const activeAgents = agents.filter(agent => !agent.isEliminated);
+            if (activeAgents.length < 2) {
+                logDiv.innerHTML += `<strong>Simulation ended due to insufficient active agents.</strong><br>`;
+                break;
+            }
+
+            // Shuffle agents
+            activeAgents.sort(() => 0.5 - Math.random());
+
+            // Pair agents
+            let i = 0;
+            while (i < activeAgents.length) {
+                if (i + 1 >= activeAgents.length) break; // Skip if odd number of agents
+
+                const agentA = activeAgents[i];
+                const agentB = activeAgents[i + 1];
+
+                // Agents decide how much to wager
+                const wagerA = agentA.decide();
+                const wagerB = agentB.decide();
+
+                let outcome = '';
+
+                if (wagerA > wagerB) {
+                    const transferAmount = alpha * agentB.wealth;
+                    agentA.wealth += transferAmount;
+                    agentB.wealth -= transferAmount;
+                    outcome = `Agent ${agentA.id} wins against Agent ${agentB.id}. Agent ${agentA.id} gains ${transferAmount.toFixed(2)} units.`;
+                } else if (wagerB > wagerA) {
+                    const transferAmount = alpha * agentA.wealth;
+                    agentB.wealth += transferAmount;
+                    agentA.wealth -= transferAmount;
+                    outcome = `Agent ${agentB.id} wins against Agent ${agentA.id}. Agent ${agentB.id} gains ${transferAmount.toFixed(2)} units.`;
+                } else {
+                    outcome = `Agent ${agentA.id} and Agent ${agentB.id} tied. No wealth exchanged.`;
+                }
+
+                // Prevent negative wealth
+                agentA.wealth = Math.max(agentA.wealth, 0);
+                agentB.wealth = Math.max(agentB.wealth, 0);
+
+                // Update zero wealth rounds
+                [agentA, agentB].forEach(agent => {
+                    if (agent.wealth === 0) {
+                        agent.zeroWealthRounds += 1;
+                    } else {
+                        agent.zeroWealthRounds = 0;
+                    }
+
+                    if (agent.zeroWealthRounds >= zeroWealthThreshold && !agent.isEliminated) {
+                        agent.isEliminated = true;
+                        logDiv.innerHTML += `Agent ${agent.id} has been eliminated after ${zeroWealthThreshold} rounds at zero wealth.<br>`;
+                    }
+                });
+
+                logDiv.innerHTML += `${outcome}<br><br>`;
+                i += 2;
+            }
+        }
+
+        // Display final wealth of all agents
+        agents.sort((a, b) => a.id - b.id);
+        for (const agent of agents) {
+            const row = document.createElement('tr');
+            const cellId = document.createElement('td');
+            const cellWealth = document.createElement('td');
+            cellId.textContent = `Agent ${agent.id}`;
+            cellWealth.textContent = agent.wealth.toFixed(2);
+            row.appendChild(cellId);
+            row.appendChild(cellWealth);
+            // Highlight eliminated agents
+            if (agent.isEliminated) {
+                row.style.color = '#c0392b'; // Soft red color
+                cellWealth.textContent += ' (Eliminated)';
+            }
+            wealthBody.appendChild(row);
+        }
+    }
+</script>
+
+</body>
+</html>
