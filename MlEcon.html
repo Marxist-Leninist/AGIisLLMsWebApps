@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Multi-Sector Zero-Knowledge Game Simulation with Dependency</title>
+    <title>Multi-Sector Zero-Knowledge Game Simulation with Extreme Survival Strategies</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         /* Eye-friendly color scheme */
@@ -81,7 +81,7 @@
 </head>
 <body>
 
-<h1>Multi-Sector Zero-Knowledge Game Simulation with Dependency</h1>
+<h1>Multi-Sector Zero-Knowledge Game Simulation with Extreme Survival Strategies</h1>
 
 <div id="controls">
     <label for="numAgents">Number of Agents:</label>
@@ -121,6 +121,9 @@
             this.wealth = 100; // Starting wealth
             this.isAlive = true;
             this.goods = 0; // Goods owned
+            this.ostracizedRounds = 0;
+            this.isIll = false;
+            this.decisionPenaltyRounds = 0;
         }
 
         // Agents decide how much to produce or extract
@@ -131,6 +134,23 @@
         // Agents decide the price for their goods or services
         decidePrice(minPrice, maxPrice) {
             return Math.floor((minPrice + maxPrice) / 2);
+        }
+
+        // Agents decide on survival strategy
+        decideSurvivalStrategy() {
+            if (this.isIll || this.decisionPenaltyRounds > 0) {
+                // Reduced decision-making ability
+                return 'Scavenge';
+            }
+            // Prefer foraging over scavenging, cannibalism as last resort
+            const rand = Math.random();
+            if (rand < 0.6) {
+                return 'Forage';
+            } else if (rand < 0.9) {
+                return 'Scavenge';
+            } else {
+                return 'Cannibalize';
+            }
         }
     }
 
@@ -149,6 +169,14 @@
         const PC = 10;    // Processing Capacity
         const minPrice = 5; // Minimum price for goods/services
         const maxPrice = 10; // Maximum price for goods/services
+
+        // Survival strategy probabilities
+        const scavengingIllnessProbability = 0.3;
+        const foragingSuccessProbability = 0.5;
+        const foragingInjuryProbability = 0.2;
+        const foragingDeathProbability = 0.1;
+        const ostracizationDuration = 2;
+        const decisionPenaltyDuration = 2;
 
         // Initialize agents
         const agents = [];
@@ -173,10 +201,19 @@
             for (const agent of activeAgents) {
                 agent.resources = 0;
                 agent.products = 0;
+                agent.goods = 0;
+
+                // Update ostracization and penalties
+                if (agent.ostracizedRounds > 0) {
+                    agent.ostracizedRounds--;
+                }
+                if (agent.decisionPenaltyRounds > 0) {
+                    agent.decisionPenaltyRounds--;
+                }
             }
 
             // Primary Sector Actions
-            const primaryAgents = activeAgents.filter(agent => agent.sector === 'Primary');
+            const primaryAgents = activeAgents.filter(agent => agent.sector === 'Primary' && agent.ostracizedRounds === 0);
             for (const agent of primaryAgents) {
                 if (NRP <= 0) break;
                 const quantity = Math.min(agent.decideQuantity(RER), NRP);
@@ -188,12 +225,11 @@
             }
 
             // Secondary Sector Actions
-            const secondaryAgents = activeAgents.filter(agent => agent.sector === 'Secondary');
+            const secondaryAgents = activeAgents.filter(agent => agent.sector === 'Secondary' && agent.ostracizedRounds === 0);
             for (const agent of secondaryAgents) {
                 // Buy resources from primary agents
                 const resourcesNeeded = agent.decideQuantity(PC);
                 let resourcesBought = 0;
-                let totalCost = 0;
 
                 for (const seller of primaryAgents) {
                     if (seller.resources > 0) {
@@ -205,7 +241,6 @@
                             seller.wealth += cost;
                             seller.resources -= quantityToBuy;
                             resourcesBought += quantityToBuy;
-                            totalCost += cost;
                             logDiv.innerHTML += `Agent ${agent.id} (Secondary) bought ${quantityToBuy} units from Agent ${seller.id} (Primary) for ${cost} units.<br>`;
                         }
                     }
@@ -221,11 +256,13 @@
             const marketGoods = [];
             // Secondary agents supply goods to the market
             for (const agent of secondaryAgents) {
-                marketGoods.push({
-                    seller: agent,
-                    quantity: agent.products,
-                    price: agent.price
-                });
+                if (agent.ostracizedRounds === 0) {
+                    marketGoods.push({
+                        seller: agent,
+                        quantity: agent.products,
+                        price: agent.price
+                    });
+                }
             }
 
             // Agents consume goods
@@ -233,8 +270,14 @@
                 let goodsNeeded = C;
                 let goodsPurchased = 0;
 
-                // Capitalists and Tertiary agents must purchase goods from the market
-                if (agent.sector === 'Capitalist' || agent.sector === 'Tertiary') {
+                // Skip agents who are ostracized
+                if (agent.ostracizedRounds > 0) {
+                    goodsNeeded = 0;
+                    logDiv.innerHTML += `Agent ${agent.id} (${agent.sector}) is ostracized and cannot trade.<br>`;
+                }
+
+                // Purchase goods from the market
+                if (goodsNeeded > 0) {
                     for (const offer of marketGoods) {
                         if (offer.quantity > 0) {
                             const quantityToBuy = Math.min(goodsNeeded - goodsPurchased, offer.quantity);
@@ -250,39 +293,52 @@
                         }
                         if (goodsPurchased >= goodsNeeded) break;
                     }
-                    if (goodsPurchased < goodsNeeded) {
-                        // Could not purchase enough goods
-                        agent.isAlive = false;
-                        agent.wealth = 0;
-                        logDiv.innerHTML += `Agent ${agent.id} (${agent.sector}) could not meet consumption needs and has died.<br>`;
-                    }
-                } else if (agent.sector === 'Primary' || agent.sector === 'Secondary') {
-                    // Producers can consume their own goods
-                    if (agent.sector === 'Secondary' && agent.products >= goodsNeeded) {
-                        agent.products -= goodsNeeded;
-                        goodsPurchased = goodsNeeded;
-                    } else if (agent.sector === 'Primary' && agent.wealth >= goodsNeeded * minPrice) {
-                        // Primary agents buy goods from the market
-                        for (const offer of marketGoods) {
-                            if (offer.quantity > 0) {
-                                const quantityToBuy = Math.min(goodsNeeded - goodsPurchased, offer.quantity);
-                                const cost = quantityToBuy * offer.price;
-                                if (agent.wealth >= cost) {
-                                    // Transaction occurs
-                                    agent.wealth -= cost;
-                                    offer.seller.wealth += cost;
-                                    offer.quantity -= quantityToBuy;
-                                    goodsPurchased += quantityToBuy;
-                                    logDiv.innerHTML += `Agent ${agent.id} (Primary) bought ${quantityToBuy} goods from Agent ${offer.seller.id} (Secondary) for ${cost} units.<br>`;
-                                }
-                            }
-                            if (goodsPurchased >= goodsNeeded) break;
+                }
+
+                // If unable to purchase enough goods
+                if (goodsPurchased < goodsNeeded) {
+                    // Agent decides on survival strategy
+                    const strategy = agent.decideSurvivalStrategy();
+                    if (strategy === 'Scavenge') {
+                        // Attempt to scavenge waste
+                        if (Math.random() < scavengingIllnessProbability) {
+                            agent.isIll = true;
+                            logDiv.innerHTML += `Agent ${agent.id} (${agent.sector}) scavenged waste and became ill.<br>`;
+                        } else {
+                            logDiv.innerHTML += `Agent ${agent.id} (${agent.sector}) scavenged waste successfully.<br>`;
                         }
-                    } else {
-                        // Could not consume enough goods
-                        agent.isAlive = false;
-                        agent.wealth = 0;
-                        logDiv.innerHTML += `Agent ${agent.id} (${agent.sector}) could not meet consumption needs and has died.<br>`;
+                    } else if (strategy === 'Forage') {
+                        // Attempt to forage in nature
+                        const rand = Math.random();
+                        if (rand < foragingDeathProbability) {
+                            agent.isAlive = false;
+                            agent.wealth = 0;
+                            logDiv.innerHTML += `Agent ${agent.id} (${agent.sector}) died while foraging in nature.<br>`;
+                        } else if (rand < foragingDeathProbability + foragingInjuryProbability) {
+                            agent.wealth -= 10; // Injury cost
+                            logDiv.innerHTML += `Agent ${agent.id} (${agent.sector}) was injured while foraging and lost 10 wealth.<br>`;
+                        } else if (rand < foragingDeathProbability + foragingInjuryProbability + foragingSuccessProbability) {
+                            logDiv.innerHTML += `Agent ${agent.id} (${agent.sector}) successfully foraged and met consumption needs.<br>`;
+                        } else {
+                            // Unsuccessful foraging
+                            agent.isAlive = false;
+                            agent.wealth = 0;
+                            logDiv.innerHTML += `Agent ${agent.id} (${agent.sector}) failed to find food while foraging and has died.<br>`;
+                        }
+                    } else if (strategy === 'Cannibalize') {
+                        // Attempt to consume deceased agents
+                        const deceasedAgents = agents.filter(a => !a.isAlive && !a.consumed);
+                        if (deceasedAgents.length > 0) {
+                            const victim = deceasedAgents[0];
+                            victim.consumed = true;
+                            agent.ostracizedRounds = ostracizationDuration;
+                            agent.decisionPenaltyRounds = decisionPenaltyDuration;
+                            logDiv.innerHTML += `Agent ${agent.id} (${agent.sector}) resorted to cannibalism by consuming Agent ${victim.id}. Faces ostracization and penalties.<br>`;
+                        } else {
+                            agent.isAlive = false;
+                            agent.wealth = 0;
+                            logDiv.innerHTML += `Agent ${agent.id} (${agent.sector}) found no deceased agents to consume and has died.<br>`;
+                        }
                     }
                 }
             }
