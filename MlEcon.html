@@ -130,7 +130,7 @@
 
         // Generate subjective preferences
         generatePreference() {
-            const goods = ['Food', 'Goods', 'Services', 'Technology'];
+            const goods = ['Food', 'Goods', 'Technology'];
             const preference = {};
             for (const good of goods) {
                 preference[good] = Math.random();
@@ -151,8 +151,8 @@
         // Decide price for goods/services
         decidePrice(baseCost) {
             // Markup based on sector
-            let markup = 1.2;
-            if (this.sector === 'Capitalist') markup = 1.5;
+            let markup = 1.1;
+            if (this.sector === 'Capitalist') markup = 1.2;
             return baseCost * markup;
         }
 
@@ -160,6 +160,9 @@
         decidePurchases(marketOffers) {
             const purchases = [];
             for (const offer of marketOffers) {
+                // Skip if the seller is the agent themselves
+                if (offer.seller.id === this.id) continue;
+
                 const utility = this.preference[offer.type] || 0;
                 if (utility > 0 && this.wealth >= offer.price) {
                     purchases.push(offer);
@@ -180,9 +183,9 @@
         // Game parameters
         let NRP = 1000;   // Natural Resource Pool (Physicalist and Energy Theory)
         let totalEnergy = 500; // Total energy available
-        const C = 5;      // Consumption need per round
+        const C = 2;      // Consumption need per round (number of goods)
         const laborValuePerHour = 10; // Value created per labor hour
-        const energyValuePerUnit = 5; // Value of energy per unit
+        const energyValuePerUnit = 5; // Value of technology per energy unit
         const landYield = 2; // Agricultural yield per land unit
 
         // Initialize agents
@@ -221,8 +224,9 @@
                     NRP -= laborAllocated;
                     logDiv.innerHTML += `Agent ${agent.id} (${agent.sector}) produced goods worth ${valueProduced} using ${laborAllocated} labor hours.<br>`;
                     // Offer goods to market
-                    const price = agent.decidePrice(valueProduced);
-                    marketOffers.push({ seller: agent, type: 'Goods', quantity: valueProduced, price: price });
+                    const pricePerUnit = agent.decidePrice(laborValuePerHour);
+                    const quantity = valueProduced / laborValuePerHour;
+                    marketOffers.push({ seller: agent, type: 'Goods', quantity: quantity, price: pricePerUnit });
                 } else if (agent.sector === 'Farmer') {
                     // Agriculture Theory of Value
                     const yield = agent.land * landYield;
@@ -230,18 +234,20 @@
                     NRP -= yield;
                     logDiv.innerHTML += `Agent ${agent.id} (Farmer) produced ${yield} units of food from ${agent.land} land units.<br>`;
                     // Offer food to market
-                    const price = agent.decidePrice(yield);
-                    marketOffers.push({ seller: agent, type: 'Food', quantity: yield, price: price });
+                    const pricePerUnit = agent.decidePrice(1); // Base cost for food is 1
+                    marketOffers.push({ seller: agent, type: 'Food', quantity: yield, price: pricePerUnit });
                 } else if (agent.sector === 'Technologist') {
                     // Computer Theory of Value
                     const energyUsed = agent.decideEnergyUsage(10);
                     totalEnergy -= energyUsed;
                     const techOutput = energyUsed * energyValuePerUnit;
                     agent.output = techOutput;
+                    agent.energy -= energyUsed;
                     logDiv.innerHTML += `Agent ${agent.id} (Technologist) produced technology worth ${techOutput} using ${energyUsed} energy units.<br>`;
                     // Offer technology to market
-                    const price = agent.decidePrice(techOutput);
-                    marketOffers.push({ seller: agent, type: 'Technology', quantity: techOutput, price: price });
+                    const pricePerUnit = agent.decidePrice(energyValuePerUnit);
+                    const quantity = techOutput / energyValuePerUnit;
+                    marketOffers.push({ seller: agent, type: 'Technology', quantity: quantity, price: pricePerUnit });
                 }
             }
 
@@ -256,7 +262,7 @@
                         offer.seller.wealth += offer.price;
                         offer.quantity -= 1;
                         agent.goods.push(offer.type);
-                        logDiv.innerHTML += `Agent ${agent.id} (${agent.sector}) bought ${offer.type} from Agent ${offer.seller.id} for ${offer.price} units.<br>`;
+                        logDiv.innerHTML += `Agent ${agent.id} (${agent.sector}) bought ${offer.type} from Agent ${offer.seller.id} for ${offer.price.toFixed(2)} units.<br>`;
                     }
                 }
 
@@ -266,7 +272,9 @@
                     agent.isAlive = false;
                     logDiv.innerHTML += `Agent ${agent.id} (${agent.sector}) could not meet consumption needs and has died.<br>`;
                 } else {
-                    logDiv.innerHTML += `Agent ${agent.id} (${agent.sector}) met consumption needs by consuming ${goodsConsumed} goods.<br>`;
+                    // Agents consume the goods
+                    agent.goods.splice(0, C);
+                    logDiv.innerHTML += `Agent ${agent.id} (${agent.sector}) met consumption needs by consuming ${C} goods.<br>`;
                 }
             }
 
