@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Simple Sign Up and Sign In with Dual Location Estimation</title>
+    <title>Sign Up and Sign In with Enhanced Location Estimation</title>
     <style>
         body { font-family: Arial, sans-serif; }
         .container { width: 300px; margin: 0 auto; }
@@ -55,8 +55,7 @@
                     <tr>
                         <th>Username</th>
                         <th>Password</th>
-                        <th>Ping Estimated Location</th>
-                        <th>IP Geolocation</th>
+                        <th>Estimated Location</th>
                     </tr>
                 </thead>
                 <tbody id="user-table-body">
@@ -72,8 +71,7 @@
     const defaultUser = {
         username: 'admin',
         password: 'admin123',
-        pingLocation: null,
-        ipLocation: null
+        estimatedLocation: null
     };
 
     // Initialize default user if not already present
@@ -82,8 +80,7 @@
         if (!users[defaultUser.username]) {
             users[defaultUser.username] = {
                 password: defaultUser.password,
-                pingLocation: defaultUser.pingLocation,
-                ipLocation: defaultUser.ipLocation
+                estimatedLocation: defaultUser.estimatedLocation
             };
             localStorage.setItem('users', JSON.stringify(users));
         }
@@ -106,14 +103,11 @@
             return;
         }
 
-        // Estimate location based on ping times and get IP geolocation
-        Promise.all([estimatePingLocation(), getIPGeolocation()]).then(locations => {
-            const [pingLocation, ipLocation] = locations;
-
+        // Start location estimation
+        estimateLocation().then(location => {
             users[username] = {
                 password: password,
-                pingLocation: pingLocation,
-                ipLocation: ipLocation
+                estimatedLocation: location
             };
             localStorage.setItem('users', JSON.stringify(users));
 
@@ -194,19 +188,48 @@
             var passwordCell = document.createElement('td');
             passwordCell.textContent = userData.password;
 
-            var pingLocationCell = document.createElement('td');
-            pingLocationCell.textContent = userData.pingLocation || 'Estimating...';
-
-            var ipLocationCell = document.createElement('td');
-            ipLocationCell.textContent = userData.ipLocation || 'Fetching...';
+            var locationCell = document.createElement('td');
+            locationCell.textContent = userData.estimatedLocation || 'Estimating...';
 
             row.appendChild(usernameCell);
             row.appendChild(passwordCell);
-            row.appendChild(pingLocationCell);
-            row.appendChild(ipLocationCell);
+            row.appendChild(locationCell);
 
             tableBody.appendChild(row);
         }
+    }
+
+    // Function to estimate location
+    function estimateLocation() {
+        return new Promise((resolve, reject) => {
+            // First, attempt ping-based location estimation
+            estimatePingLocation().then(location => {
+                resolve(location);
+            }).catch(error => {
+                console.warn('Ping-based estimation failed:', error);
+                // If ping estimation fails, use IP-based geolocation
+                getIPGeolocation().then(ipLocation => {
+                    // Use IP location to get servers in that area
+                    getServersForRegion(ipLocation.region).then(servers => {
+                        // Perform ping tests to refine location
+                        estimateLocationWithServers(servers).then(refinedLocation => {
+                            resolve(refinedLocation);
+                        }).catch(err => {
+                            console.error('Refined estimation failed:', err);
+                            // If all fails, use IP location as the estimate
+                            resolve(ipLocation.fullLocation);
+                        });
+                    }).catch(err => {
+                        console.error('Failed to get servers for region:', err);
+                        // Use IP location as the estimate
+                        resolve(ipLocation.fullLocation);
+                    });
+                }).catch(err => {
+                    console.error('IP-based estimation failed:', err);
+                    resolve('Unknown');
+                });
+            });
+        });
     }
 
     // Function to estimate location based on ping times
@@ -232,7 +255,7 @@
 
             Promise.all(pingPromises).then(() => {
                 if (pingResults.length === 0) {
-                    resolve('Unknown');
+                    reject('No ping results');
                     return;
                 }
 
@@ -270,27 +293,67 @@
     // Function to get IP-based geolocation
     function getIPGeolocation() {
         return new Promise((resolve, reject) => {
-            fetch('https://api.ipify.org?format=json')
+            fetch('https://ipapi.co/json/')
                 .then(response => response.json())
-                .then(data => {
-                    const ip = data.ip;
-
-                    // Get location based on IP
-                    fetch(`https://ipapi.co/${ip}/json/`)
-                        .then(response => response.json())
-                        .then(locationData => {
-                            const location = `${locationData.city}, ${locationData.region}, ${locationData.country_name}`;
-                            resolve(location);
-                        })
-                        .catch(error => {
-                            console.error('Error fetching IP geolocation:', error);
-                            resolve('Unknown');
-                        });
+                .then(locationData => {
+                    const region = locationData.continent_code || 'Unknown';
+                    const fullLocation = `${locationData.city}, ${locationData.region}, ${locationData.country_name}`;
+                    resolve({ region: region, fullLocation: fullLocation });
                 })
                 .catch(error => {
-                    console.error('Error fetching IP:', error);
-                    resolve('Unknown');
+                    reject(error);
                 });
+        });
+    }
+
+    // Function to get servers based on region
+    function getServersForRegion(regionCode) {
+        return new Promise((resolve, reject) => {
+            // Define servers based on region code
+            const serversByRegion = {
+                'NA': [ { region: 'North America', url: 'https://us.example.com/ping.png' } ],
+                'EU': [ { region: 'Europe', url: 'https://eu.example.com/ping.png' } ],
+                'AS': [ { region: 'Asia', url: 'https://asia.example.com/ping.png' } ],
+                'AU': [ { region: 'Australia', url: 'https://au.example.com/ping.png' } ],
+                'SA': [ { region: 'South America', url: 'https://sa.example.com/ping.png' } ],
+                // Add more regions as needed
+            };
+
+            const servers = serversByRegion[regionCode];
+            if (servers && servers.length > 0) {
+                resolve(servers);
+            } else {
+                reject('No servers for region');
+            }
+        });
+    }
+
+    // Function to refine location estimation with servers in the region
+    function estimateLocationWithServers(servers) {
+        return new Promise((resolve, reject) => {
+            let pingResults = [];
+
+            let pingPromises = servers.map(server => {
+                return pingServer(server.url).then(time => {
+                    pingResults.push({ region: server.region, time: time });
+                }).catch(error => {
+                    console.error('Error pinging ' + server.url + ':', error);
+                });
+            });
+
+            Promise.all(pingPromises).then(() => {
+                if (pingResults.length === 0) {
+                    reject('No ping results in region');
+                    return;
+                }
+
+                // Find the server with the lowest ping time
+                pingResults.sort((a, b) => a.time - b.time);
+                const refinedLocation = pingResults[0].region;
+                resolve(refinedLocation);
+            }).catch(error => {
+                reject(error);
+            });
         });
     }
 
