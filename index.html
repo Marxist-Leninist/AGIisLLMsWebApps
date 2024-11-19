@@ -316,22 +316,52 @@
             appList.innerHTML = '';
 
             appFilenames.forEach(filename => {
-                const listItem = document.createElement('li');
-                const link = document.createElement('a');
-                link.href = filename;
+                fetch(filename)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok when fetching ' + filename);
+                        }
+                        return response.text();
+                    })
+                    .then(htmlText => {
+                        let displayName = '';
 
-                // Process filename to create a display name
-                let displayName = filename.replace('.html', '');
+                        // Extract the title from htmlText
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(htmlText, 'text/html');
+                        const titleElement = doc.querySelector('title');
+                        if (titleElement && titleElement.textContent.trim() !== '') {
+                            displayName = titleElement.textContent.trim();
+                        } else {
+                            // Fall back to existing method
+                            displayName = filename.replace('.html', '');
+                            displayName = displayName.replace(/[-_]/g, ' ');
+                            displayName = splitCamelCase(displayName);
+                            displayName = capitalizeWords(displayName);
+                        }
 
-                // Replace hyphens and underscores with spaces in the display name
-                displayName = displayName.replace(/[-_]/g, ' ');
-                // Split camelCase or PascalCase into words
-                displayName = splitCamelCase(displayName);
-                // Capitalize each word
-                displayName = capitalizeWords(displayName);
-                link.textContent = displayName;
-                listItem.appendChild(link);
-                appList.appendChild(listItem);
+                        const listItem = document.createElement('li');
+                        const link = document.createElement('a');
+                        link.href = filename;
+                        link.textContent = displayName;
+                        listItem.appendChild(link);
+                        appList.appendChild(listItem);
+                    })
+                    .catch(error => {
+                        console.error('Error fetching or parsing ' + filename + ':', error);
+                        // Fall back to existing method
+                        let displayName = filename.replace('.html', '');
+                        displayName = displayName.replace(/[-_]/g, ' ');
+                        displayName = splitCamelCase(displayName);
+                        displayName = capitalizeWords(displayName);
+
+                        const listItem = document.createElement('li');
+                        const link = document.createElement('a');
+                        link.href = filename;
+                        link.textContent = displayName;
+                        listItem.appendChild(link);
+                        appList.appendChild(listItem);
+                    });
             });
         }
 
