@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Video to GIF Converter with Download</title>
+    <!-- Add viewport meta tag for mobile responsiveness -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+        #video-upload {
+            margin-bottom: 20px;
+            padding: 10px;
+            font-size: 16px;
+        }
+        #loader {
+            display: none;
+            font-size: 18px;
+            color: #555;
+            margin-bottom: 20px;
+        }
+        #gif-container img {
+            max-width: 100%;
+            height: auto;
+        }
+        #download-link {
+            display: none;
+            margin-top: 20px;
+            font-size: 18px;
+            text-decoration: none;
+            color: #007BFF;
+        }
+        /* Hide canvas element */
+        canvas {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+<h1>Convert Video to Looping GIF</h1>
+<input type="file" id="video-upload" accept="video/*">
+<p id="loader">Processing video, please wait...</p>
+<div id="gif-container"></div>
+<a id="download-link" href="#" download="output.gif">Download GIF</a>
+
+<!-- Include gif.js library -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
+<!-- Include gif.worker.js as a Blob URL -->
+<script>
+fetch('https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js')
+    .then(response => response.blob())
+    .then(blob => {
+        var workerBlobURL = URL.createObjectURL(blob);
+
+        // Main script
+        document.getElementById('video-upload').addEventListener('change', function(event) {
+            var file = event.target.files[0];
+            if (file) {
+                var loader = document.getElementById('loader');
+                loader.style.display = 'block';
+
+                var video = document.createElement('video');
+                video.src = URL.createObjectURL(file);
+                video.crossOrigin = "anonymous";
+                video.muted = true;
+                video.play();
+
+                video.addEventListener('loadeddata', function() {
+                    var maxDuration = Math.min(6, video.duration); // Maximum duration in seconds
+                    var totalFrames = 60;
+                    var interval = maxDuration / totalFrames;
+
+                    // Initial parameters
+                    var quality = 10; // Starting quality (1-30, lower is better)
+                    var scale = 1;    // Starting scale (1 = 100%)
+                    var minQuality = 30; // Maximum acceptable quality value
+                    var minScale = 0.4;  // Minimum acceptable scale (40%)
+                    var sizeLimit = 10240 * 1024; // 10MB in bytes
+
+                    function generateGIF(quality, scale, callback) {
+                        var canvas = document.createElement('canvas');
+                        var ctx = canvas.getContext('2d');
+                        canvas.width = video.videoWidth * scale;
+                        canvas.height = video.videoHeight * scale;
+
+                        var gif = new GIF({
+                            workers: 2,
+                            quality: quality,
+                            workerScript: workerBlobURL,
+                            width: canvas.width,
+                            height: canvas.height
+                        });
+
+                        var currentTime = 0;
+
+                        (function captureFrame() {
+                            if (currentTime <= maxDuration) {
+                                video.currentTime = currentTime;
+                                video.addEventListener('seeked', function onSeeked() {
+                                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                                    gif.addFrame(ctx, {copy: true, delay: interval * 1000});
+                                    currentTime += interval;
+                                    video.removeEventListener('seeked', onSeeked);
+                                    captureFrame();
+                                });
+                            } else {
+                                gif.on('finished', function(blob) {
+                                    callback(blob);
+                                });
+                                gif.render();
+                            }
+                        })();
+                    }
+
+                    function adjustParametersAndGenerateGIF() {
+                        generateGIF(quality, scale, function(blob) {
+                            if (blob.size > sizeLimit) {
+                                // Adjust parameters
+                                if (quality < minQuality) {
+                                    quality += 5; // Decrease quality
+                                } else if (scale > minScale) {
+                                    scale -= 0.1; // Decrease scale
+                                    quality = 10; // Reset quality when scale changes
+                                } else {
+                                    alert('Unable to generate a GIF under 10MB with the current video. Please try a shorter video.');
+                                    loader.style.display = 'none';
+                                    return;
+                                }
+                                // Try again with new parameters
+                                adjustParametersAndGenerateGIF();
+                            } else {
+                                // GIF size is acceptable
+                                var gifContainer = document.getElementById('gif-container');
+                                gifContainer.innerHTML = '';
+
+                                var animatedImage = document.createElement('img');
+                                var url = URL.createObjectURL(blob);
+                                animatedImage.src = url;
+                                gifContainer.appendChild(animatedImage);
+
+                                // Provide download link
+                                var downloadLink = document.getElementById('download-link');
+                                downloadLink.href = url;
+                                downloadLink.style.display = 'inline';
+
+                                loader.style.display = 'none';
+                            }
+                        });
+                    }
+
+                    adjustParametersAndGenerateGIF();
+                });
+            }
+        });
+    });
+</script>
+
+</body>
+</html>
