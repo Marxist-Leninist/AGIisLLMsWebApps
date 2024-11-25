@@ -156,6 +156,22 @@
             bottom: 0;
         }
 
+        /* Search Input Styles */
+        #search-input {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            border: none;
+            font-size: 1em;
+            background-color: #e0e0e0;
+            color: #000;
+        }
+
+        #search-input::placeholder {
+            color: #888;
+        }
+
         /* Responsive Design */
         @media (max-width: 600px) {
             header h1 {
@@ -206,6 +222,8 @@
         <!-- Regular Apps Section -->
         <section class="regular-apps">
             <h2>Available Apps</h2>
+            <!-- Search Input Field -->
+            <input type="text" id="search-input" placeholder="Search apps...">
             <ul class="app-list" id="app-list">
                 <!-- App links will be inserted here -->
             </ul>
@@ -277,6 +295,9 @@
         const GITHUB_API_URL = 'https://api.github.com/repos/Marxist-Leninist/AGIisLLMsWebApps/contents/';
 
         const appList = document.getElementById('app-list');
+        const searchInput = document.getElementById('search-input');
+
+        let appListData = []; // Array of { filename, displayName }
 
         // Function to fetch file list from GitHub API
         function fetchAppListFromGitHub() {
@@ -295,74 +316,99 @@
                     const appFilenames = htmlFiles.map(item => item.name);
                     // Cache the app list in localStorage
                     localStorage.setItem('appFilenames', JSON.stringify(appFilenames));
-                    populateAppList(appFilenames);
+                    // Fetch display names
+                    return Promise.all(appFilenames.map(filename => fetchDisplayName(filename)));
+                })
+                .then(appData => {
+                    appListData = appData; // Store globally
+                    localStorage.setItem('appListData', JSON.stringify(appListData));
+                    populateAppList(appListData);
                 })
                 .catch(error => {
                     console.error('Error fetching file list from GitHub:', error);
                     console.log('Attempting to load app list from cache.');
                     // Use the cached list if available
-                    const cachedAppFilenames = localStorage.getItem('appFilenames');
-                    if (cachedAppFilenames) {
-                        const appFilenames = JSON.parse(cachedAppFilenames);
-                        populateAppList(appFilenames);
+                    const cachedAppData = localStorage.getItem('appListData');
+                    if (cachedAppData) {
+                        appListData = JSON.parse(cachedAppData);
+                        populateAppList(appListData);
                     } else {
-                        displayOfflineMessage();
+                        // Use appFilenames from cache to regenerate appListData
+                        const cachedAppFilenames = localStorage.getItem('appFilenames');
+                        if (cachedAppFilenames) {
+                            const appFilenames = JSON.parse(cachedAppFilenames);
+                            Promise.all(appFilenames.map(filename => fetchDisplayName(filename)))
+                                .then(appData => {
+                                    appListData = appData;
+                                    localStorage.setItem('appListData', JSON.stringify(appListData));
+                                    populateAppList(appListData);
+                                });
+                        } else {
+                            displayOfflineMessage();
+                        }
                     }
                 });
         }
 
-        // Function to populate the app list
-        function populateAppList(appFilenames) {
-            appList.innerHTML = '';
+        // Function to fetch display name for a given filename
+        function fetchDisplayName(filename) {
+            return fetch(filename)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok when fetching ' + filename);
+                    }
+                    return response.text();
+                })
+                .then(htmlText => {
+                    let displayName = '';
 
-            appFilenames.forEach(filename => {
-                fetch(filename)
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error('Network response was not ok when fetching ' + filename);
-                        }
-                        return response.text();
-                    })
-                    .then(htmlText => {
-                        let displayName = '';
-
-                        // Extract the title from htmlText
-                        const parser = new DOMParser();
-                        const doc = parser.parseFromString(htmlText, 'text/html');
-                        const titleElement = doc.querySelector('title');
-                        if (titleElement && titleElement.textContent.trim() !== '') {
-                            displayName = titleElement.textContent.trim();
-                        } else {
-                            // Fall back to existing method
-                            displayName = filename.replace('.html', '');
-                            displayName = displayName.replace(/[-_]/g, ' ');
-                            displayName = splitCamelCase(displayName);
-                            displayName = capitalizeWords(displayName);
-                        }
-
-                        const listItem = document.createElement('li');
-                        const link = document.createElement('a');
-                        link.href = filename;
-                        link.textContent = displayName;
-                        listItem.appendChild(link);
-                        appList.appendChild(listItem);
-                    })
-                    .catch(error => {
-                        console.error('Error fetching or parsing ' + filename + ':', error);
+                    // Extract the title from htmlText
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(htmlText, 'text/html');
+                    const titleElement = doc.querySelector('title');
+                    if (titleElement && titleElement.textContent.trim() !== '') {
+                        displayName = titleElement.textContent.trim();
+                    } else {
                         // Fall back to existing method
-                        let displayName = filename.replace('.html', '');
+                        displayName = filename.replace('.html', '');
                         displayName = displayName.replace(/[-_]/g, ' ');
                         displayName = splitCamelCase(displayName);
                         displayName = capitalizeWords(displayName);
+                    }
 
-                        const listItem = document.createElement('li');
-                        const link = document.createElement('a');
-                        link.href = filename;
-                        link.textContent = displayName;
-                        listItem.appendChild(link);
-                        appList.appendChild(listItem);
-                    });
+                    return { filename, displayName };
+                })
+                .catch(error => {
+                    console.error('Error fetching or parsing ' + filename + ':', error);
+                    // Fall back to existing method
+                    let displayName = filename.replace('.html', '');
+                    displayName = displayName.replace(/[-_]/g, ' ');
+                    displayName = splitCamelCase(displayName);
+                    displayName = capitalizeWords(displayName);
+
+                    return { filename, displayName };
+                });
+        }
+
+        // Function to populate the app list
+        function populateAppList(appData) {
+            appList.innerHTML = '';
+
+            appData.forEach(app => {
+                const { filename, displayName } = app;
+                const listItem = document.createElement('li');
+                const link = document.createElement('a');
+                link.href = filename;
+                link.textContent = displayName;
+                listItem.appendChild(link);
+                appList.appendChild(listItem);
             });
+        }
+
+        // Function to filter the app list based on search query
+        function filterAppList(query) {
+            const filteredAppData = appListData.filter(app => app.displayName.toLowerCase().includes(query));
+            populateAppList(filteredAppData);
         }
 
         // Function to display an offline message
@@ -388,6 +434,12 @@
         function capitalizeWords(text) {
             return text.replace(/\b\w/g, char => char.toUpperCase());
         }
+
+        // Event listener for search input
+        searchInput.addEventListener('input', () => {
+            const query = searchInput.value.toLowerCase();
+            filterAppList(query);
+        });
 
         // Attempt to fetch the app list from GitHub
         fetchAppListFromGitHub();
