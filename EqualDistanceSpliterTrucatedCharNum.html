@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Character Truncator and Splitter</title>
+    <meta charset="UTF-8">
+    <style>
+        .split-piece {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Character Truncator and Splitter</h1>
+    <textarea id="inputText" rows="5" cols="50" placeholder="Enter your text here..."></textarea>
+    <br><br>
+    <label for="mode">Mode:</label>
+    <select id="mode" onchange="changeMode()">
+        <option value="truncate">Truncate</option>
+        <option value="split">Split Equally</option>
+    </select>
+    <br><br>
+    <div id="truncateOptions">
+        <label for="charCount">Number of characters:</label>
+        <input type="number" id="charCount" value="0" min="0">
+    </div>
+    <div id="splitOptions" style="display:none;">
+        <label for="splitCount">Number of pieces:</label>
+        <input type="number" id="splitCount" value="1" min="1">
+    </div>
+    <button onclick="processText()">Process</button>
+    <br><br>
+    <div id="outputArea">
+        <h3>Output:</h3>
+        <textarea id="outputText" rows="5" cols="50" readonly></textarea>
+        <br><br>
+        <button onclick="copyText()">Copy</button>
+    </div>
+    <div id="splitResults" style="display:none;">
+        <h3>Split Pieces:</h3>
+        <div id="pieceDisplay">
+            <!-- Piece content will be displayed here -->
+        </div>
+        <button id="prevPiece" onclick="prevPiece()">Previous</button>
+        <button id="nextPiece" onclick="nextPiece()">Next</button>
+    </div>
+    <script>
+        var splitPieces = [];
+        var currentPieceIndex = 0;
+
+        function changeMode() {
+            var mode = document.getElementById('mode').value;
+            if (mode === 'truncate') {
+                document.getElementById('truncateOptions').style.display = 'block';
+                document.getElementById('splitOptions').style.display = 'none';
+                document.getElementById('outputArea').style.display = 'block';
+                document.getElementById('splitResults').style.display = 'none';
+            } else if (mode === 'split') {
+                document.getElementById('truncateOptions').style.display = 'none';
+                document.getElementById('splitOptions').style.display = 'block';
+                document.getElementById('outputArea').style.display = 'none';
+                document.getElementById('splitResults').style.display = 'block';
+            }
+        }
+
+        function processText() {
+            var inputText = document.getElementById('inputText').value;
+            var mode = document.getElementById('mode').value;
+
+            if (mode === 'truncate') {
+                var charCount = parseInt(document.getElementById('charCount').value) || 0;
+                var truncated = inputText.substring(0, charCount);
+                document.getElementById('outputText').value = truncated;
+            } else if (mode === 'split') {
+                var splitCount = parseInt(document.getElementById('splitCount').value) || 1;
+                splitPieces = []; // Clear previous results
+                currentPieceIndex = 0;
+
+                var pieceLength = Math.ceil(inputText.length / splitCount);
+                for (var i = 0; i < splitCount; i++) {
+                    var start = i * pieceLength;
+                    var end = start + pieceLength;
+                    var piece = inputText.substring(start, end);
+                    splitPieces.push(piece);
+                }
+                displayCurrentPiece();
+            }
+        }
+
+        function displayCurrentPiece() {
+            var pieceDisplay = document.getElementById('pieceDisplay');
+            pieceDisplay.innerHTML = ''; // Clear previous content
+
+            if (splitPieces.length > 0) {
+                var piece = splitPieces[currentPieceIndex];
+
+                var pieceLabel = document.createElement('h4');
+                pieceLabel.textContent = 'Piece ' + (currentPieceIndex + 1) + ' of ' + splitPieces.length;
+
+                var pieceTextarea = document.createElement('textarea');
+                pieceTextarea.rows = 10;
+                pieceTextarea.cols = 80;
+                pieceTextarea.readOnly = true;
+                pieceTextarea.value = piece;
+
+                var copyButton = document.createElement('button');
+                copyButton.textContent = 'Copy';
+                copyButton.onclick = function() {
+                    copyToClipboard(piece);
+                };
+
+                var downloadButton = document.createElement('button');
+                downloadButton.textContent = 'Download as .txt';
+                downloadButton.onclick = function() {
+                    downloadText(piece, 'Piece_' + (currentPieceIndex + 1) + '.txt');
+                };
+
+                pieceDisplay.appendChild(pieceLabel);
+                pieceDisplay.appendChild(pieceTextarea);
+                pieceDisplay.appendChild(document.createElement('br'));
+                pieceDisplay.appendChild(copyButton);
+                pieceDisplay.appendChild(downloadButton);
+            }
+
+            document.getElementById('prevPiece').disabled = (currentPieceIndex === 0);
+            document.getElementById('nextPiece').disabled = (currentPieceIndex === splitPieces.length - 1);
+        }
+
+        function nextPiece() {
+            if (currentPieceIndex < splitPieces.length - 1) {
+                currentPieceIndex++;
+                displayCurrentPiece();
+            }
+        }
+
+        function prevPiece() {
+            if (currentPieceIndex > 0) {
+                currentPieceIndex--;
+                displayCurrentPiece();
+            }
+        }
+
+        function copyText() {
+            var outputText = document.getElementById('outputText').value;
+            copyToClipboard(outputText);
+        }
+
+        function copyToClipboard(text) {
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(function() {
+                    alert('Copied to clipboard!');
+                }, function(err) {
+                    console.error('Could not copy text: ', err);
+                });
+            } else {
+                // Fallback
+                var textArea = document.createElement("textarea");
+                textArea.value = text;
+                textArea.style.position = "fixed";  // Prevent scrolling to bottom
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+
+                try {
+                    document.execCommand('copy');
+                    alert('Copied to clipboard!');
+                } catch (err) {
+                    console.error('Fallback: Unable to copy', err);
+                }
+
+                document.body.removeChild(textArea);
+            }
+        }
+
+        function downloadText(text, filename) {
+            var blob = new Blob([text], { type: 'text/plain' });
+            var url = URL.createObjectURL(blob);
+
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+
+            setTimeout(function() {
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);  
+            }, 0); 
+        }
+    </script>
+</body>
+</html>
