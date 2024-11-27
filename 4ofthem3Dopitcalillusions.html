@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Four Novel Optical Illusions</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #000;
+            color: #fff;
+            overflow: hidden;
+        }
+        .illusion-container {
+            position: relative;
+            width: 100%;
+            height: 100vh;
+            overflow: hidden;
+            display: none;
+        }
+        .illusion-title {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px 20px;
+            border-radius: 5px;
+            z-index: 2;
+        }
+        .navigation {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 3;
+        }
+        .navigation button {
+            background: rgba(0, 0, 0, 0.7);
+            color: #fff;
+            border: none;
+            padding: 10px 15px;
+            margin-left: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            border-radius: 5px;
+        }
+        canvas {
+            display: block;
+        }
+        #description {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            max-width: 80%;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 5px;
+            z-index: 2;
+        }
+    </style>
+</head>
+<body>
+
+<div class="navigation">
+    <button onclick="showIllusion(1)">Illusion 1</button>
+    <button onclick="showIllusion(2)">Illusion 2</button>
+    <button onclick="showIllusion(3)">Illusion 3</button>
+    <button onclick="showIllusion(4)">Illusion 4</button>
+</div>
+
+<div id="illusion1" class="illusion-container"></div>
+<div id="illusion2" class="illusion-container"></div>
+<div id="illusion3" class="illusion-container"></div>
+<div id="illusion4" class="illusion-container"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.152.0/build/three.min.js"></script>
+
+<script>
+    let currentIllusion = null;
+
+    // Function to switch between illusions
+    function showIllusion(number) {
+        // Stop the current illusion if any
+        if (currentIllusion && currentIllusion.stop) {
+            currentIllusion.stop();
+        }
+
+        // Hide all illusions
+        for (let i = 1; i <= 4; i++) {
+            document.getElementById('illusion' + i).style.display = 'none';
+        }
+
+        // Show the selected illusion
+        const container = document.getElementById('illusion' + number);
+        container.style.display = 'block';
+
+        // Start the selected illusion
+        switch (number) {
+            case 1:
+                currentIllusion = illusion1();
+                break;
+            case 2:
+                currentIllusion = illusion2();
+                break;
+            case 3:
+                currentIllusion = illusion3();
+                break;
+            case 4:
+                currentIllusion = illusion4();
+                break;
+        }
+    }
+
+    // Illusion 1: Dynamic Impossible Triangle
+    function illusion1() {
+        const container = document.getElementById('illusion1');
+        let animationId;
+        let renderer, scene, camera, triangle;
+        let resizeListener;
+
+        init();
+        animate();
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 5;
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            container.appendChild(renderer.domElement);
+
+            const geometry = new THREE.Geometry();
+
+            // Define vertices of an impossible triangle
+            geometry.vertices.push(
+                new THREE.Vector3(-1, -1, 0),
+                new THREE.Vector3(1, -1, 0),
+                new THREE.Vector3(0, 1, 0),
+                new THREE.Vector3(0, -1, -1),
+                new THREE.Vector3(2, -1, -1),
+                new THREE.Vector3(1, 1, -1)
+            );
+
+            // Define faces to create the illusion
+            geometry.faces.push(
+                new THREE.Face3(0, 1, 2),
+                new THREE.Face3(3, 4, 5)
+            );
+
+            const material = new THREE.MeshBasicMaterial({ color: 0xff6347, side: THREE.DoubleSide });
+            triangle = new THREE.Mesh(geometry, material);
+            scene.add(triangle);
+
+            // Add title and description
+            const title = document.createElement('div');
+            title.className = 'illusion-title';
+            title.innerText = 'Illusion 1: Dynamic Impossible Triangle';
+            container.appendChild(title);
+
+            const description = document.createElement('div');
+            description.id = 'description';
+            description.innerHTML = 'This illusion presents a dynamically rotating impossible triangle, leveraging perspective and geometry to trick the brain into perceiving an object that cannot exist in three-dimensional space.';
+            container.appendChild(description);
+
+            // Handle window resize
+            resizeListener = () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            };
+            window.addEventListener('resize', resizeListener);
+        }
+
+        function animate() {
+            animationId = requestAnimationFrame(animate);
+            triangle.rotation.y += 0.01;
+            triangle.rotation.x += 0.005;
+            renderer.render(scene, camera);
+        }
+
+        function stop() {
+            cancelAnimationFrame(animationId);
+            window.removeEventListener('resize', resizeListener);
+            // Clean up
+            container.innerHTML = '';
+        }
+
+        return { stop };
+    }
+
+    // Illusion 2: Color-adapting Gradient Illusion
+    function illusion2() {
+        const container = document.getElementById('illusion2');
+        let animationId;
+        let canvas, ctx;
+        let time = 0;
+        let resizeListener;
+
+        init();
+        draw();
+
+        function init() {
+            canvas = document.createElement('canvas');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            container.appendChild(canvas);
+            ctx = canvas.getContext('2d');
+
+            // Add title and description
+            const title = document.createElement('div');
+            title.className = 'illusion-title';
+            title.innerText = 'Illusion 2: Color-adapting Gradient Illusion';
+            container.appendChild(title);
+
+            const description = document.createElement('div');
+            description.id = 'description';
+            description.innerHTML = 'This illusion uses a dynamic gradient that adapts over time to create a sense of motion and depth, exploiting the brain\'s color processing and adaptation mechanisms.';
+            container.appendChild(description);
+
+            // Handle window resize
+            resizeListener = () => {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            };
+            window.addEventListener('resize', resizeListener);
+        }
+
+        function draw() {
+            animationId = requestAnimationFrame(draw);
+            time += 0.01;
+            const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+            gradient.addColorStop(0, `hsl(${(time * 40) % 360}, 100%, 50%)`);
+            gradient.addColorStop(1, `hsl(${(time * 40 + 180) % 360}, 100%, 50%)`);
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function stop() {
+            cancelAnimationFrame(animationId);
+            window.removeEventListener('resize', resizeListener);
+            // Clean up
+            container.innerHTML = '';
+        }
+
+        return { stop };
+    }
+
+    // Illusion 3: Peripheral Motion Rings
+    function illusion3() {
+        const container = document.getElementById('illusion3');
+        let animationId;
+        let canvas, ctx;
+        let resizeListener;
+
+        init();
+        drawRings();
+
+        function init() {
+            canvas = document.createElement('canvas');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            container.appendChild(canvas);
+            ctx = canvas.getContext('2d');
+
+            // Add title and description
+            const title = document.createElement('div');
+            title.className = 'illusion-title';
+            title.innerText = 'Illusion 3: Peripheral Motion Rings';
+            container.appendChild(title);
+
+            const description = document.createElement('div');
+            description.id = 'description';
+            description.innerHTML = 'By utilizing the peripheral drift illusion, these concentric rings appear to rotate when you focus on the center, exploiting the brain\'s motion detection in peripheral vision.';
+            container.appendChild(description);
+
+            // Handle window resize
+            resizeListener = () => {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            };
+            window.addEventListener('resize', resizeListener);
+        }
+
+        function drawRings() {
+            animationId = requestAnimationFrame(drawRings);
+            const numRings = 10;
+            const maxRadius = Math.min(canvas.width, canvas.height) / 2;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.save();
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+
+            for (let i = 0; i < numRings; i++) {
+                ctx.beginPath();
+                ctx.arc(0, 0, (i + 1) * maxRadius / numRings, 0, 2 * Math.PI);
+                ctx.strokeStyle = `hsl(${(i * 36) % 360}, 100%, 50%)`;
+                ctx.lineWidth = 10;
+                ctx.stroke();
+            }
+
+            ctx.restore();
+        }
+
+        function stop() {
+            cancelAnimationFrame(animationId);
+            window.removeEventListener('resize', resizeListener);
+            // Clean up
+            container.innerHTML = '';
+        }
+
+        return { stop };
+    }
+
+    // Illusion 4: Depth Inversion Illusion
+    function illusion4() {
+        const container = document.getElementById('illusion4');
+        let animationId;
+        let renderer, scene, camera, sphere;
+        let resizeListener;
+
+        init();
+        animate();
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 5;
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            container.appendChild(renderer.domElement);
+
+            // Create a concave object that appears convex
+            const geometry = new THREE.SphereGeometry(1, 32, 32);
+            geometry.scale(-1, 1, 1); // Invert normals
+            const material = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
+            sphere = new THREE.Mesh(geometry, material);
+            scene.add(sphere);
+
+            // Add title and description
+            const title = document.createElement('div');
+            title.className = 'illusion-title';
+            title.innerText = 'Illusion 4: Depth Inversion Illusion';
+            container.appendChild(title);
+
+            const description = document.createElement('div');
+            description.id = 'description';
+            description.innerHTML = 'This illusion presents a concave object that appears convex due to the inversion of depth cues, challenging the brain\'s interpretation of shading and perspective.';
+            container.appendChild(description);
+
+            // Handle window resize
+            resizeListener = () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            };
+            window.addEventListener('resize', resizeListener);
+        }
+
+        function animate() {
+            animationId = requestAnimationFrame(animate);
+            sphere.rotation.y += 0.01;
+            renderer.render(scene, camera);
+        }
+
+        function stop() {
+            cancelAnimationFrame(animationId);
+            window.removeEventListener('resize', resizeListener);
+            // Clean up
+            container.innerHTML = '';
+        }
+
+        return { stop };
+    }
+
+    // Start with Illusion 1
+    showIllusion(1);
+
+</script>
+
+</body>
+</html>
