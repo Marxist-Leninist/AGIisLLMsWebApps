@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>3D Optical Illusion Without Head Tracking</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+        }
+        canvas {
+            display: block;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            z-index: 1;
+        }
+    </style>
+</head>
+<body>
+
+<div id="info">3D Optical Illusion: Focus on the center and observe the depth effect.</div>
+<canvas id="canvas"></canvas>
+
+<!-- Include Three.js -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.142.0/build/three.min.js"></script>
+
+<script>
+    // Set up the scene, camera, and renderer
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000000);
+
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.z = 5;
+
+    const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas'), antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+
+    // Create a group to hold the objects
+    const group = new THREE.Group();
+
+    // Create multiple layers of transparent planes with patterns
+    const layers = 20;
+    const depth = 10;
+    const textureLoader = new THREE.TextureLoader();
+
+    for (let i = 0; i < layers; i++) {
+        const geometry = new THREE.PlaneGeometry(10, 10);
+        const material = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            map: createPatternTexture(i),
+            transparent: true,
+            opacity: 0.05 + (i / layers) * 0.5,
+            depthWrite: false,
+        });
+        const plane = new THREE.Mesh(geometry, material);
+        plane.position.z = - (i / layers) * depth;
+        group.add(plane);
+    }
+
+    scene.add(group);
+
+    // Add subtle rotation to the group to enhance the 3D effect
+    let angle = 0;
+    function animate() {
+        requestAnimationFrame(animate);
+
+        // Rotate the group slightly
+        angle += 0.0005;
+        group.rotation.x = Math.sin(angle) * 0.1;
+        group.rotation.y = Math.cos(angle) * 0.1;
+
+        renderer.render(scene, camera);
+    }
+
+    animate();
+
+    // Handle window resize
+    window.addEventListener('resize', onWindowResize, false);
+    function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    // Function to create a dynamic pattern texture
+    function createPatternTexture(index) {
+        const size = 512;
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = size;
+        const ctx = canvas.getContext('2d');
+
+        // Create a radial gradient pattern
+        const gradient = ctx.createRadialGradient(
+            size / 2, size / 2, 0,
+            size / 2, size / 2, size / 2
+        );
+
+        // Alternate colors for chromostereopsis effect
+        const hue = (index * 36) % 360;
+        gradient.addColorStop(0, `hsla(${hue}, 100%, 50%, 1)`);
+        gradient.addColorStop(1, `hsla(${(hue + 180) % 360}, 100%, 50%, 0)`);
+
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, size, size);
+
+        // Create noise pattern
+        const imageData = ctx.getImageData(0, 0, size, size);
+        const data = imageData.data;
+        for (let i = 0; i < data.length; i += 4) {
+            const rand = Math.random() * 50;
+            data[i] += rand;     // Red
+            data[i + 1] += rand; // Green
+            data[i + 2] += rand; // Blue
+        }
+        ctx.putImageData(imageData, 0, 0);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        return texture;
+    }
+</script>
+
+</body>
+</html>
