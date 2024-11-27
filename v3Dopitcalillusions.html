@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cinema-Style 3D Effect Without Glasses</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: Arial, sans-serif;
+            color: #fff;
+        }
+        #instructions {
+            position: absolute;
+            top: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            z-index: 1;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+        }
+        #container {
+            display: flex;
+            width: 100vw;
+            height: 100vh;
+        }
+        canvas {
+            width: 50%;
+            height: 100%;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+<div id="instructions">
+    <h2>Cinema-Style 3D Effect Without Glasses</h2>
+    <p>
+        To experience the 3D effect, use the <strong>cross-eyed viewing method</strong>:
+    </p>
+    <ol>
+        <li>Sit comfortably and center yourself in front of the screen.</li>
+        <li>Focus your eyes on the area between the two images.</li>
+        <li>Slowly cross your eyes until the two images overlap in the center.</li>
+        <li>Adjust your focus on the combined middle image to see it in 3D.</li>
+    </ol>
+    <p>
+        It might take some practice. Do not strain your eyes. If you feel discomfort, please stop.
+    </p>
+</div>
+
+<div id="container">
+    <canvas id="leftCanvas"></canvas>
+    <canvas id="rightCanvas"></canvas>
+</div>
+
+<!-- Include Three.js -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.152.0/build/three.min.js"></script>
+
+<script>
+    // Parameters
+    const scene = new THREE.Scene();
+    const leftCamera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight / 2, 0.1, 1000);
+    const rightCamera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight / 2, 0.1, 1000);
+    const rendererLeft = new THREE.WebGLRenderer({ canvas: document.getElementById('leftCanvas'), antialias: true });
+    const rendererRight = new THREE.WebGLRenderer({ canvas: document.getElementById('rightCanvas'), antialias: true });
+    rendererLeft.setSize(window.innerWidth / 2, window.innerHeight);
+    rendererRight.setSize(window.innerWidth / 2, window.innerHeight);
+
+    // Adjust camera positions for stereoscopic effect
+    const eyeSeparation = 0.1; // Adjust for stronger or weaker 3D effect
+    leftCamera.position.x = -eyeSeparation / 2;
+    rightCamera.position.x = eyeSeparation / 2;
+    leftCamera.position.z = 5;
+    rightCamera.position.z = 5;
+
+    // Add lighting
+    const ambientLight = new THREE.AmbientLight(0x404040); // Soft white light
+    scene.add(ambientLight);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(5, 10, 7.5);
+    scene.add(directionalLight);
+
+    // Add a 3D object
+    const geometry = new THREE.TorusKnotGeometry(1, 0.4, 100, 16);
+    const material = new THREE.MeshPhongMaterial({ color: 0xff6347, shininess: 100 });
+    const torusKnot = new THREE.Mesh(geometry, material);
+    scene.add(torusKnot);
+
+    // Add interactive controls
+    let isUserInteracting = false,
+        onPointerDownPointerX = 0,
+        onPointerDownPointerY = 0,
+        lon = 0,
+        onPointerDownLon = 0,
+        lat = 0,
+        onPointerDownLat = 0,
+        distance = 5;
+
+    document.addEventListener('mousedown', onDocumentMouseDown, false);
+    document.addEventListener('wheel', onDocumentMouseWheel, false);
+
+    function onDocumentMouseDown(event) {
+        event.preventDefault();
+        isUserInteracting = true;
+
+        onPointerDownPointerX = event.clientX;
+        onPointerDownPointerY = event.clientY;
+
+        onPointerDownLon = lon;
+        onPointerDownLat = lat;
+
+        document.addEventListener('mousemove', onDocumentMouseMove, false);
+        document.addEventListener('mouseup', onDocumentMouseUp, false);
+    }
+
+    function onDocumentMouseMove(event) {
+        lon = (event.clientX - onPointerDownPointerX) * 0.1 + onPointerDownLon;
+        lat = (event.clientY - onPointerDownPointerY) * 0.1 + onPointerDownLat;
+    }
+
+    function onDocumentMouseUp() {
+        isUserInteracting = false;
+
+        document.removeEventListener('mousemove', onDocumentMouseMove);
+        document.removeEventListener('mouseup', onDocumentMouseUp);
+    }
+
+    function onDocumentMouseWheel(event) {
+        const delta = event.wheelDeltaY || event.deltaY * -1;
+        distance += delta * 0.01;
+        distance = Math.max(2, Math.min(10, distance)); // Limit zoom
+
+        leftCamera.position.z = distance;
+        rightCamera.position.z = distance;
+    }
+
+    // Animation loop
+    function animate() {
+        requestAnimationFrame(animate);
+
+        if (isUserInteracting) {
+            torusKnot.rotation.y = THREE.Math.degToRad(lon);
+            torusKnot.rotation.x = THREE.Math.degToRad(lat);
+        } else {
+            torusKnot.rotation.x += 0.005;
+            torusKnot.rotation.y += 0.005;
+        }
+
+        // Render left eye view
+        rendererLeft.render(scene, leftCamera);
+
+        // Render right eye view
+        rendererRight.render(scene, rightCamera);
+    }
+
+    animate();
+
+    // Handle window resize
+    window.addEventListener('resize', onWindowResize, false);
+    function onWindowResize() {
+        leftCamera.aspect = window.innerWidth / window.innerHeight / 2;
+        rightCamera.aspect = window.innerWidth / window.innerHeight / 2;
+        leftCamera.updateProjectionMatrix();
+        rightCamera.updateProjectionMatrix();
+        rendererLeft.setSize(window.innerWidth / 2, window.innerHeight);
+        rendererRight.setSize(window.innerWidth / 2, window.innerHeight);
+    }
+
+    // Auto-hide Instructions after 5 seconds
+    const instructionsDiv = document.getElementById('instructions');
+    let instructionsVisible = true;
+
+    let hideTimeout = setTimeout(() => {
+        instructionsDiv.style.display = 'none';
+        instructionsVisible = false;
+    }, 5000); // Adjust the time as needed
+
+    // Toggle instructions on mouse click
+    document.addEventListener('click', () => {
+        // Prevent toggling if the click is inside the instructions
+        if (event.target.closest('#instructions')) return;
+
+        instructionsVisible = !instructionsVisible;
+        instructionsDiv.style.display = instructionsVisible ? 'block' : 'none';
+    });
+
+</script>
+
+</body>
+</html>
