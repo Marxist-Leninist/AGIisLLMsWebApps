@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dynamic Head-Tracked 3D Visualization</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            z-index: 1;
+        }
+    </style>
+</head>
+<body>
+
+<div id="info">Move your head left/right and up/down to see the 3D effect.</div>
+<canvas id="canvas"></canvas>
+
+<!-- Include Three.js -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.142.0/build/three.min.js"></script>
+<!-- Include TensorFlow.js -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.11.0/dist/tf.min.js"></script>
+<!-- Include Face Landmarks Detection Model -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/face-landmarks-detection@1.0.4/dist/face-landmarks-detection.min.js"></script>
+
+<script>
+(async () => {
+    // Set up Three.js scene
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas'), antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+
+    // Add lighting
+    const light = new THREE.DirectionalLight(0xffffff, 1);
+    light.position.set(0, 0, 10).normalize();
+    scene.add(light);
+
+    // Add a complex 3D object (e.g., a torus knot)
+    const geometry = new THREE.TorusKnotGeometry(1, 0.3, 100, 16);
+    const material = new THREE.MeshNormalMaterial();
+    const torusKnot = new THREE.Mesh(geometry, material);
+    scene.add(torusKnot);
+
+    camera.position.z = 5;
+
+    // Handle window resize
+    window.addEventListener('resize', onWindowResize, false);
+    function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    // Initialize head tracking
+    let model, video, videoWidth, videoHeight, ctx, canvas2d;
+    let faceDetected = false;
+
+    async function setupCamera() {
+        video = document.createElement('video');
+        video.style.display = 'none';
+        document.body.appendChild(video);
+
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+        video.srcObject = stream;
+        await video.play();
+
+        videoWidth = video.videoWidth;
+        videoHeight = video.videoHeight;
+
+        // Create a 2D canvas to draw video frames
+        canvas2d = document.createElement('canvas');
+        canvas2d.width = videoWidth;
+        canvas2d.height = videoHeight;
+        ctx = canvas2d.getContext('2d');
+    }
+
+    async function loadModel() {
+        model = await faceLandmarksDetection.load(
+            faceLandmarksDetection.SupportedPackages.mediapipeFacemesh,
+            { maxFaces: 1 }
+        );
+    }
+
+    async function detectFace() {
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+            ctx.drawImage(video, 0, 0, videoWidth, videoHeight);
+            const predictions = await model.estimateFaces({ input: canvas2d });
+
+            if (predictions.length > 0) {
+                faceDetected = true;
+                const keypoints = predictions[0].scaledMesh;
+
+                // Get nose tip position
+                const noseTip = keypoints[1];
+
+                // Map the nose position to camera movement
+                const relativeX = (noseTip[0] - videoWidth / 2) / (videoWidth / 2);
+                const relativeY = (noseTip[1] - videoHeight / 2) / (videoHeight / 2);
+
+                // Adjust camera position
+                camera.position.x = relativeX * 2;
+                camera.position.y = -relativeY * 2;
+                camera.lookAt(scene.position);
+            } else {
+                faceDetected = false;
+            }
+        }
+        requestAnimationFrame(detectFace);
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+        torusKnot.rotation.x += 0.005;
+        torusKnot.rotation.y += 0.005;
+        renderer.render(scene, camera);
+    }
+
+    await setupCamera();
+    await loadModel();
+    detectFace();
+    animate();
+})();
+</script>
+</body>
+</html>
