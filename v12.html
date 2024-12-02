@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Video Overlay Tool</title>
+    <style>
+        /* Styling */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            padding: 20px;
+        }
+        #appContainer {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+        }
+        label {
+            font-weight: bold;
+            margin-top: 10px;
+            display: block;
+        }
+        input[type="file"],
+        input[type="text"],
+        button {
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 8px;
+        }
+        #progress {
+            margin-top: 10px;
+            font-weight: bold;
+            text-align: center;
+        }
+        #downloadLink {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+        }
+        #downloadLink a {
+            color: #2980b9;
+            font-size: 18px;
+            text-decoration: none;
+        }
+        canvas {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="appContainer">
+        <h1>Video Overlay Tool</h1>
+        <label for="videoInput">Select Video File:</label>
+        <input type="file" id="videoInput" accept="video/*">
+
+        <label for="imageInput">Select Image File:</label>
+        <input type="file" id="imageInput" accept="image/*">
+
+        <label for="startTime">Start Time (MM:SS or seconds):</label>
+        <input type="text" id="startTime" placeholder="e.g., 01:10 or 70">
+
+        <label for="endTime">End Time (MM:SS, seconds, or "END"):</label>
+        <input type="text" id="endTime" placeholder="e.g., 02:00 or END">
+
+        <button id="startButton">Process Video</button>
+
+        <div id="progress"></div>
+        <div id="downloadLink">
+            <a id="downloadAnchor" href="#" download="output.webm">Download Processed Video</a>
+        </div>
+
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <script>
+        const videoInput = document.getElementById('videoInput');
+        const imageInput = document.getElementById('imageInput');
+        const startTimeInput = document.getElementById('startTime');
+        const endTimeInput = document.getElementById('endTime');
+        const startButton = document.getElementById('startButton');
+        const progressDiv = document.getElementById('progress');
+        const downloadLink = document.getElementById('downloadLink');
+        const downloadAnchor = document.getElementById('downloadAnchor');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        let videoFile;
+        let imageFile;
+        let startTime;
+        let endTime;
+
+        startButton.addEventListener('click', async () => {
+            if (!videoInput.files[0] || !imageInput.files[0]) {
+                alert('Please select both a video and an image file.');
+                return;
+            }
+
+            videoFile = videoInput.files[0];
+            imageFile = imageInput.files[0];
+
+            startTime = parseTimeInput(startTimeInput.value.trim());
+            let endTimeRaw = endTimeInput.value.trim().toUpperCase();
+            endTime = endTimeRaw === 'END' ? 'END' : parseTimeInput(endTimeRaw);
+
+            if (isNaN(startTime)) {
+                alert('Please enter a valid start time.');
+                return;
+            }
+
+            progressDiv.textContent = 'Processing video...';
+
+            try {
+                await processVideo();
+            } catch (error) {
+                console.error(error);
+                alert('An error occurred during processing.');
+            }
+        });
+
+        function parseTimeInput(input) {
+            if (input.includes(':')) {
+                const parts = input.split(':');
+                const minutes = parseInt(parts[0], 10);
+                const seconds = parseFloat(parts[1]);
+                if (!isNaN(minutes) && !isNaN(seconds)) {
+                    return minutes * 60 + seconds;
+                }
+            } else {
+                const seconds = parseFloat(input);
+                if (!isNaN(seconds)) {
+                    return seconds;
+                }
+            }
+            return NaN;
+        }
+
+        async function processVideo() {
+            // Create video element to play the input video
+            const videoElement = document.createElement('video');
+            videoElement.src = URL.createObjectURL(videoFile);
+            videoElement.crossOrigin = 'anonymous';
+
+            // Wait for video metadata to load
+            await new Promise((resolve, reject) => {
+                videoElement.onloadedmetadata = () => {
+                    resolve();
+                };
+                videoElement.onerror = () => {
+                    reject('Error loading video');
+                };
+            });
+
+            const duration = videoElement.duration;
+
+            if (endTime === 'END' || endTime > duration) {
+                endTime = duration;
+            }
+
+            if (endTime <= startTime) {
+                alert('End time must be greater than start time.');
+                return;
+            }
+
+            const overlayImage = new Image();
+            overlayImage.src = URL.createObjectURL(imageFile);
+
+            await new Promise((resolve, reject) => {
+                overlayImage.onload = () => {
+                    resolve();
+                };
+                overlayImage.onerror = () => {
+                    reject('Error loading image');
+                };
+            });
+
+            // Set canvas dimensions
+            canvas.width = videoElement.videoWidth;
+            canvas.height = videoElement.videoHeight;
+
+            // Set up MediaRecorder
+            const stream = canvas.captureStream(30); // 30 FPS
+            const mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm; codecs=vp9' });
+            const recordedChunks = [];
+
+            mediaRecorder.ondataavailable = function (e) {
+                if (e.data.size > 0) {
+                    recordedChunks.push(e.data);
+                }
+            };
+
+            mediaRecorder.start();
+
+            const fps = 30;
+            const frameDuration = 1 / fps;
+            let currentTime = startTime;
+            let lastUpdateTime = performance.now();
+
+            videoElement.currentTime = startTime;
+
+            videoElement.play();
+
+            function renderFrame() {
+                const now = performance.now();
+                const elapsed = (now - lastUpdateTime) / 1000;
+
+                if (elapsed >= frameDuration) {
+                    if (currentTime >= endTime) {
+                        mediaRecorder.stop();
+                        videoElement.pause();
+                        progressDiv.textContent = 'Processing complete!';
+                        createDownloadLink(recordedChunks);
+                        return;
+                    }
+
+                    ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+
+                    if (currentTime >= startTime && currentTime < endTime) {
+                        ctx.drawImage(overlayImage, 0, 0, canvas.width, canvas.height);
+                    }
+
+                    currentTime += frameDuration;
+                    lastUpdateTime = now;
+                }
+
+                requestAnimationFrame(renderFrame);
+            }
+
+            renderFrame();
+        }
+
+        function createDownloadLink(recordedChunks) {
+            const blob = new Blob(recordedChunks, { type: 'video/webm' });
+            const url = URL.createObjectURL(blob);
+            downloadAnchor.href = url;
+            downloadLink.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
