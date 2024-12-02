@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Video Cutter and Overlay with FFmpeg.js</title>
+    <style>
+        /* Basic styling */
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        #controls {
+            margin-bottom: 20px;
+        }
+        #controls label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        #controls input {
+            margin-bottom: 15px;
+        }
+        #startButton {
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+        #downloadLink {
+            display: none;
+            margin-top: 20px;
+        }
+        #progress {
+            margin-top: 10px;
+        }
+    </style>
+    <!-- Include FFmpeg.js -->
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.5/dist/ffmpeg.min.js"></script>
+</head>
+<body>
+    <h1>Video Cutter and Overlay</h1>
+    <div id="controls">
+        <label for="videoInput">Select Video File:</label>
+        <input type="file" id="videoInput" accept="video/*"><br>
+
+        <label for="imageInput">Select Image File:</label>
+        <input type="file" id="imageInput" accept="image/*"><br>
+
+        <label for="startTime">Start Time (MM:SS or seconds):</label>
+        <input type="text" id="startTime" placeholder="e.g., 01:10 or 70"><br>
+
+        <label for="endTime">End Time (MM:SS, seconds, or 'END'):</label>
+        <input type="text" id="endTime" placeholder="e.g., 02:00, 120, or END"><br>
+
+        <button id="startButton">Process Video</button>
+    </div>
+
+    <div id="progress"></div>
+    <a id="downloadLink" href="#" download="output.mp4">Download Processed Video</a>
+
+    <script>
+        const { createFFmpeg, fetchFile } = FFmpeg;
+        const ffmpeg = createFFmpeg({ log: true });
+        const startButton = document.getElementById('startButton');
+        const videoInput = document.getElementById('videoInput');
+        const imageInput = document.getElementById('imageInput');
+        const startTimeInput = document.getElementById('startTime');
+        const endTimeInput = document.getElementById('endTime');
+        const downloadLink = document.getElementById('downloadLink');
+        const progressDiv = document.getElementById('progress');
+
+        startButton.addEventListener('click', async () => {
+            if (!videoInput.files[0] || !imageInput.files[0]) {
+                alert('Please select both a video and an image file.');
+                return;
+            }
+
+            const startTime = parseTimeInput(startTimeInput.value.trim());
+            let endTime = endTimeInput.value.trim().toUpperCase();
+            if (endTime !== 'END') {
+                endTime = parseTimeInput(endTime);
+                if (isNaN(endTime)) {
+                    alert('Please enter a valid end time.');
+                    return;
+                }
+            }
+
+            if (isNaN(startTime)) {
+                alert('Please enter a valid start time.');
+                return;
+            }
+
+            // Initialize FFmpeg
+            if (!ffmpeg.isLoaded()) {
+                await ffmpeg.load();
+            }
+
+            // Read files
+            const videoData = await fetchFile(videoInput.files[0]);
+            const imageData = await fetchFile(imageInput.files[0]);
+
+            // Write files to FFmpeg FS
+            ffmpeg.FS('writeFile', 'input.mp4', videoData);
+            ffmpeg.FS('writeFile', 'overlay.png', imageData);
+
+            // Get video duration
+            let videoDuration = await getVideoDuration('input.mp4');
+
+            // If endTime is 'END', set it to video duration
+            if (endTime === 'END') {
+                endTime = videoDuration;
+            }
+
+            // Calculate duration
+            const duration = endTime - startTime;
+            if (duration <= 0) {
+                alert('End time must be greater than start time.');
+                return;
+            }
+
+            // Build FFmpeg command
+            const command = [
+                '-ss', `${startTime}`,          // Start time
+                '-t', `${duration}`,            // Duration
+                '-i', 'input.mp4',              // Input video
+                '-i', 'overlay.png',            // Overlay image
+                '-filter_complex', 'overlay',   // Overlay filter
+                '-c:a', 'copy',                 // Copy audio
+                '-y',                           // Overwrite output
+                'output.mp4'                    // Output file
+            ];
+
+            progressDiv.textContent = 'Processing video...';
+
+            try {
+                await ffmpeg.run(...command);
+                const data = ffmpeg.FS('readFile', 'output.mp4');
+
+                // Create a Blob URL for the output video
+                const videoBlob = new Blob([data.buffer], { type: 'video/mp4' });
+                const videoUrl = URL.createObjectURL(videoBlob);
+
+                // Set the download link
+                downloadLink.href = videoUrl;
+                downloadLink.style.display = 'block';
+                progressDiv.textContent = 'Processing complete!';
+            } catch (error) {
+                console.error(error);
+                alert('An error occurred during processing.');
+            }
+        });
+
+        // Function to parse time input in MM:SS or seconds
+        function parseTimeInput(input) {
+            if (input.includes(':')) {
+                // MM:SS format
+                const parts = input.split(':');
+                const minutes = parseInt(parts[0], 10);
+                const seconds = parseFloat(parts[1]);
+                if (!isNaN(minutes) && !isNaN(seconds)) {
+                    return minutes * 60 + seconds;
+                }
+            } else {
+                // Seconds format
+                const seconds = parseFloat(input);
+                if (!isNaN(seconds)) {
+                    return seconds;
+                }
+            }
+            return NaN;
+        }
+
+        // Function to get video duration using FFprobe
+        async function getVideoDuration(fileName) {
+            await ffmpeg.run('-i', fileName);
+            const ffprobeData = ffmpeg.FS('readFile', 'ffmpeg_output.txt');
+            const output = new TextDecoder().decode(ffprobeData);
+            const match = output.match(/Duration:\s(\d+):(\d+):(\d+\.\d+)/);
+            if (match) {
+                const hours = parseInt(match[1], 10);
+                const minutes = parseInt(match[2], 10);
+                const seconds = parseFloat(match[3]);
+                return hours * 3600 + minutes * 60 + seconds;
+            } else {
+                throw new Error('Could not determine video duration.');
+            }
+        }
+
+        // Redirect FFmpeg logs to a file
+        ffmpeg.setLogger(({ type, message }) => {
+            if (type === 'fferr') {
+                ffmpeg.FS('appendFile', 'ffmpeg_output.txt', new TextEncoder().encode(message + '\n'));
+            }
+        });
+    </script>
+</body>
+</html>
