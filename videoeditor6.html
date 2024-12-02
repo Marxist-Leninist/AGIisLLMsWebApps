@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Image with Optional Timed Video Overlay and Download</title>
+    <style>
+        /* Existing styles... */
+        #container {
+            position: relative;
+            width: 800px; /* Adjust width as needed */
+            height: 600px; /* Adjust height as needed */
+            border: 1px solid #ccc;
+        }
+        #renderCanvas {
+            display: none;
+        }
+        /* Additional styles if needed */
+    </style>
+</head>
+<body>
+    <h1>Image with Optional Timed Video Overlay</h1>
+    <div id="controls">
+        <label for="imageInput">Select Image:</label>
+        <input type="file" id="imageInput" accept="image/*"><br><br>
+
+        <label for="videoInput">Select Video:</label>
+        <input type="file" id="videoInput" accept="video/*"><br><br>
+
+        <!-- Volume Control -->
+        <label for="volumeControl">Volume:</label>
+        <input type="range" id="volumeControl" min="0" max="1" step="0.01" value="1"><br><br>
+
+        <!-- Option to use only the image -->
+        <label>
+            <input type="checkbox" id="imageOnlyCheckbox">
+            Generate video with only the image (no overlays)
+        </label><br><br>
+
+        <div id="timePointsContainer">
+            <div id="timeRow">
+                <label>Set Video Overlay Times (MM:SS):</label>
+                <button id="addTimeButton">Add Time Point</button>
+            </div>
+            <!-- Time points will be added here -->
+        </div>
+
+        <button id="startButton">Start</button>
+        <!-- Download Button -->
+        <button id="downloadButton" disabled>Download Video</button>
+        <!-- ETA Display -->
+        <div id="etaDisplay"></div>
+    </div>
+
+    <!-- Canvas for rendering -->
+    <canvas id="renderCanvas" width="800" height="600"></canvas>
+
+    <!-- Hidden video element for overlay -->
+    <video id="overlayVideo" width="320" height="240" style="display:none;">
+        Your browser does not support the video tag.
+    </video>
+
+    <script>
+        let imageInput = document.getElementById('imageInput');
+        let videoInput = document.getElementById('videoInput');
+        let overlayVideo = document.getElementById('overlayVideo');
+        let startButton = document.getElementById('startButton');
+        let timePointsContainer = document.getElementById('timePointsContainer');
+        let addTimeButton = document.getElementById('addTimeButton');
+        let volumeControl = document.getElementById('volumeControl');
+        let downloadButton = document.getElementById('downloadButton');
+        let etaDisplay = document.getElementById('etaDisplay');
+        let renderCanvas = document.getElementById('renderCanvas');
+        let ctx = renderCanvas.getContext('2d');
+        let timePoints = [];
+        let backgroundImage = new Image();
+        let mediaRecorder;
+        let recordedChunks = [];
+        let totalDuration = 0;
+        let imageOnlyCheckbox = document.getElementById('imageOnlyCheckbox');
+
+        // Load the selected image
+        imageInput.addEventListener('change', function(event) {
+            let file = event.target.files[0];
+            if (file) {
+                let url = URL.createObjectURL(file);
+                backgroundImage.src = url;
+            }
+        });
+
+        // Load the selected video
+        videoInput.addEventListener('change', function(event) {
+            let file = event.target.files[0];
+            if (file) {
+                let url = URL.createObjectURL(file);
+                overlayVideo.src = url;
+            }
+        });
+
+        // Volume control
+        volumeControl.addEventListener('input', function() {
+            overlayVideo.volume = volumeControl.value;
+        });
+
+        // Add a new time point row
+        addTimeButton.addEventListener('click', function() {
+            addTimePointRow();
+        });
+
+        // Start the rendering process
+        startButton.addEventListener('click', function() {
+            if (imageOnlyCheckbox.checked) {
+                // Generate video with only the image
+                totalDuration = getTotalDurationFromUser();
+                if (totalDuration > 0) {
+                    etaDisplay.textContent = `Estimated time to generate video: ${Math.ceil(totalDuration)} seconds`;
+                    startButton.disabled = true;
+                    downloadButton.disabled = true;
+                    startRenderingImageOnly();
+                } else {
+                    alert('Please enter a valid duration.');
+                }
+            } else {
+                // Parse time points
+                timePoints = [];
+                let timePointRows = document.getElementsByClassName('timePointRow');
+                for (let row of timePointRows) {
+                    let startTimeInput = row.querySelector('.startTimeInput');
+                    let endTimeInput = row.querySelector('.endTimeInput');
+                    let startTimeValue = parseTimeInput(startTimeInput.value.trim());
+                    let endTimeValueRaw = endTimeInput.value.trim();
+                    let endTimeValue = endTimeValueRaw.toLowerCase() === 'end' ? 'End' : parseTimeInput(endTimeValueRaw);
+
+                    if (!isNaN(startTimeValue) && (endTimeValue === 'End' || (!isNaN(endTimeValue) && endTimeValue > startTimeValue))) {
+                        timePoints.push({ start: startTimeValue, end: endTimeValue });
+                    }
+                }
+
+                if (timePoints.length === 0) {
+                    alert('Please add at least one valid time point or select "Generate video with only the image".');
+                    return;
+                }
+
+                // Determine total duration
+                totalDuration = calculateTotalDuration(timePoints);
+                etaDisplay.textContent = `Estimated time to generate video: ${Math.ceil(totalDuration)} seconds`;
+
+                // Disable start button and enable download button after processing
+                startButton.disabled = true;
+                downloadButton.disabled = true;
+
+                // Start rendering
+                startRenderingWithOverlay();
+            }
+        });
+
+        // Function to parse time input in MM:SS or seconds
+        function parseTimeInput(input) {
+            if (input.includes(':')) {
+                // MM:SS format
+                let parts = input.split(':');
+                let minutes = parseInt(parts[0]);
+                let seconds = parseFloat(parts[1]);
+                if (!isNaN(minutes) && !isNaN(seconds)) {
+                    return minutes * 60 + seconds;
+                }
+            } else {
+                // Seconds format
+                return parseFloat(input);
+            }
+            return NaN;
+        }
+
+        // Function to get total duration from user for image-only video
+        function getTotalDurationFromUser() {
+            let durationInput = prompt('Enter the duration for the video (MM:SS or seconds):', '00:30');
+            let duration = parseTimeInput(durationInput);
+            return duration;
+        }
+
+        // Function to calculate total duration based on time points
+        function calculateTotalDuration(timePoints) {
+            let durations = timePoints.map(tp => {
+                if (tp.end === 'End') {
+                    // Use overlay video duration if known, else default to 60 seconds
+                    return overlayVideo.duration || 60;
+                } else {
+                    return tp.end;
+                }
+            });
+            return Math.max(...durations);
+        }
+
+        async function startRenderingImageOnly() {
+            // Set up MediaRecorder
+            let stream = renderCanvas.captureStream(30); // 30 FPS
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+            mediaRecorder.ondataavailable = function(e) {
+                if (e.data.size > 0) {
+                    recordedChunks.push(e.data);
+                }
+            };
+
+            mediaRecorder.onstop = function() {
+                let blob = new Blob(recordedChunks, { type: 'video/webm' });
+                let url = URL.createObjectURL(blob);
+                downloadButton.href = url;
+                downloadButton.download = 'output.webm';
+                downloadButton.disabled = false;
+                startButton.disabled = false;
+                etaDisplay.textContent = 'Video generation complete!';
+            };
+
+            mediaRecorder.start();
+
+            // Start drawing frames
+            let currentTime = 0;
+            let frameDuration = 1 / 30; // Duration of each frame in seconds
+
+            function renderFrame() {
+                if (currentTime >= totalDuration) {
+                    mediaRecorder.stop();
+                    return;
+                }
+
+                // Draw background image
+                ctx.drawImage(backgroundImage, 0, 0, renderCanvas.width, renderCanvas.height);
+
+                currentTime += frameDuration;
+                requestAnimationFrame(renderFrame);
+            }
+
+            renderFrame();
+        }
+
+        async function startRenderingWithOverlay() {
+            // Wait for overlay video to be ready
+            await overlayVideo.play();
+            overlayVideo.pause();
+
+            // Set up MediaRecorder
+            let stream = renderCanvas.captureStream(30); // 30 FPS
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+            mediaRecorder.ondataavailable = function(e) {
+                if (e.data.size > 0) {
+                    recordedChunks.push(e.data);
+                }
+            };
+
+            mediaRecorder.onstop = function() {
+                let blob = new Blob(recordedChunks, { type: 'video/webm' });
+                let url = URL.createObjectURL(blob);
+                downloadButton.href = url;
+                downloadButton.download = 'output.webm';
+                downloadButton.disabled = false;
+                startButton.disabled = false;
+                etaDisplay.textContent = 'Video generation complete!';
+            };
+
+            mediaRecorder.start();
+
+            // Start drawing frames
+            let currentTime = 0;
+            let frameDuration = 1 / 30; // Duration of each frame in seconds
+
+            function renderFrame() {
+                if (currentTime >= totalDuration) {
+                    mediaRecorder.stop();
+                    return;
+                }
+
+                // Draw background image
+                ctx.drawImage(backgroundImage, 0, 0, renderCanvas.width, renderCanvas.height);
+
+                // Check if we should overlay video
+                let overlay = timePoints.find(tp => currentTime >= tp.start && (tp.end === 'End' || currentTime < tp.end));
+
+                if (overlay) {
+                    // Set the current time of the overlay video
+                    overlayVideo.currentTime = currentTime - overlay.start;
+
+                    // Draw video frame
+                    ctx.drawImage(overlayVideo, 0, 0, overlayVideo.videoWidth, overlayVideo.videoHeight);
+                }
+
+                currentTime += frameDuration;
+                requestAnimationFrame(renderFrame);
+            }
+
+            renderFrame();
+        }
+
+        function addTimePointRow() {
+            let row = document.createElement('div');
+            row.className = 'timePointRow';
+
+            // Start time input
+            let startTimeInput = document.createElement('input');
+            startTimeInput.type = 'text';
+            startTimeInput.className = 'startTimeInput';
+            startTimeInput.placeholder = 'Start Time (MM:SS)';
+
+            // End time input or select
+            let endTimeInput = document.createElement('input');
+            endTimeInput.type = 'text';
+            endTimeInput.className = 'endTimeInput';
+            endTimeInput.placeholder = 'End Time (MM:SS or "End")';
+
+            // Remove button
+            let removeButton = document.createElement('button');
+            removeButton.textContent = 'Remove';
+            removeButton.className = 'removeTimeButton';
+            removeButton.addEventListener('click', function() {
+                row.remove();
+            });
+
+            row.appendChild(startTimeInput);
+            row.appendChild(document.createTextNode(' to '));
+            row.appendChild(endTimeInput);
+            row.appendChild(removeButton);
+
+            timePointsContainer.appendChild(row);
+        }
+
+        // Add initial time point row
+        addTimePointRow();
+    </script>
+</body>
+</html>
