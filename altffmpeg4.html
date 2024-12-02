@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Edge Optimized MP4 Parser with Web Worker</title>
+    <style>
+        /* CSS Styles */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        #fileInput {
+            margin-bottom: 20px;
+        }
+        #boxList {
+            margin-top: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+        }
+        .box {
+            margin-left: 20px;
+            border-left: 1px solid #ccc;
+            padding-left: 10px;
+        }
+        .box-type {
+            font-weight: bold;
+            color: #0066cc;
+        }
+        .box-size {
+            color: #555;
+        }
+        .box-info {
+            color: #007700;
+            margin-left: 20px;
+        }
+        #extractAudioBtn {
+            margin-top: 10px;
+        }
+        #downloadLink {
+            margin-top: 20px;
+        }
+        #status {
+            margin-top: 10px;
+            color: #cc0000;
+        }
+    </style>
+</head>
+<body>
+
+<h1>Edge Optimized MP4 Parser with Web Worker</h1>
+<input type="file" id="fileInput" accept=".mp4"><br>
+<button id="extractAudioBtn" disabled>Extract Audio Track</button>
+<div id="status"></div>
+<div id="downloadLink"></div>
+<div id="boxList"></div>
+
+<script>
+    let selectedFile;
+    let fileArrayBuffer;
+    let audioTrackInfo;
+    let worker;
+
+    document.getElementById('fileInput').addEventListener('change', function(event) {
+        selectedFile = event.target.files[0];
+        if (selectedFile) {
+            parseMP4(selectedFile);
+            document.getElementById('extractAudioBtn').disabled = false;
+        }
+    });
+
+    document.getElementById('extractAudioBtn').addEventListener('click', function() {
+        if (selectedFile) {
+            extractAudio();
+        }
+    });
+
+    function parseMP4(file) {
+        // Reset previous data
+        document.getElementById('boxList').innerHTML = '';
+        document.getElementById('downloadLink').innerHTML = '';
+        document.getElementById('status').textContent = 'Parsing MP4 file...';
+
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            fileArrayBuffer = event.target.result;
+
+            // Initialize the worker
+            initializeWorker();
+
+            // Send the file data to the worker for parsing
+            worker.postMessage({ action: 'parse', fileBuffer: fileArrayBuffer }, [fileArrayBuffer]);
+
+            // Disable the extract button until parsing is complete
+            document.getElementById('extractAudioBtn').disabled = true;
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    function extractAudio() {
+        if (!audioTrackInfo) {
+            alert('No audio track available for extraction.');
+            return;
+        }
+
+        document.getElementById('status').textContent = 'Extracting audio...';
+
+        // Send a message to the worker to start audio extraction
+        worker.postMessage({ action: 'extract', audioTrackInfo: audioTrackInfo });
+    }
+
+    function initializeWorker() {
+        // Terminate existing worker if any
+        if (worker) {
+            worker.terminate();
+        }
+
+        // Create worker from a Blob URL
+        const workerCode = `
+        ${workerScript.toString()}
+        `;
+        const blob = new Blob(['(' + workerCode + ')()'], { type: 'application/javascript' });
+        const workerUrl = URL.createObjectURL(blob);
+        worker = new Worker(workerUrl);
+
+        // Handle messages from the worker
+        worker.onmessage = function(event) {
+            const message = event.data;
+            if (message.action === 'parsed') {
+                // Parsing complete
+                const boxes = message.boxes;
+                audioTrackInfo = message.audioTrackInfo;
+                displayBoxes(boxes);
+                if (audioTrackInfo) {
+                    document.getElementById('status').textContent = 'Audio track found.';
+                } else {
+                    document.getElementById('status').textContent = 'No audio track found.';
+                }
+                // Re-enable the extract button
+                document.getElementById('extractAudioBtn').disabled = false;
+            } else if (message.action === 'extracted') {
+                // Extraction complete
+                const audioData = message.audioData;
+
+                // Create a Blob and generate a URL
+                const audioBlob = new Blob([audioData], { type: 'audio/aac' });
+                const url = URL.createObjectURL(audioBlob);
+
+                // Create a download link
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = 'extracted_audio.aac';
+                link.textContent = 'Download Extracted Audio';
+                document.getElementById('downloadLink').innerHTML = '';
+                document.getElementById('downloadLink').appendChild(link);
+                document.getElementById('status').textContent = 'Audio extraction complete.';
+            } else if (message.action === 'status') {
+                // Update status message
+                document.getElementById('status').textContent = message.status;
+            }
+        };
+
+        worker.onerror = function(error) {
+            console.error('Worker error:', error);
+            document.getElementById('status').textContent = 'An error occurred during processing.';
+        };
+    }
+
+    function displayBoxes(boxes, parentElement = document.getElementById('boxList'), indent = 0) {
+        boxes.forEach(box => {
+            const div = document.createElement('div');
+            div.className = 'box';
+            div.style.marginLeft = indent + 'px';
+
+            const typeSpan = document.createElement('span');
+            typeSpan.className = 'box-type';
+            typeSpan.textContent = box.type;
+
+            const sizeSpan = document.createElement('span');
+            sizeSpan.className = 'box-size';
+            sizeSpan.textContent = ` (size: ${box.size})`;
+
+            div.appendChild(typeSpan);
+            div.appendChild(sizeSpan);
+            parentElement.appendChild(div);
+
+            // Display additional info if available
+            if (box.info) {
+                const infoDiv = document.createElement('div');
+                infoDiv.className = 'box-info';
+                infoDiv.style.marginLeft = (indent + 20) + 'px';
+                infoDiv.textContent = JSON.stringify(box.info);
+                parentElement.appendChild(infoDiv);
+            }
+
+            if (box.children && box.children.length > 0) {
+                displayBoxes(box.children, parentElement, indent + 20);
+            }
+        });
+    }
+
+    function workerScript() {
+        self.onmessage = function(event) {
+            const message = event.data;
+            if (message.action === 'parse') {
+                const fileBuffer = message.fileBuffer;
+                parseMP4(fileBuffer);
+            } else if (message.action === 'extract') {
+                const audioTrackInfo = message.audioTrackInfo;
+                extractAudio(audioTrackInfo);
+            }
+        };
+
+        function parseMP4(arrayBuffer) {
+            self.postMessage({ action: 'status', status: 'Parsing MP4 file...' });
+
+            const dataView = new DataView(arrayBuffer);
+
+            // Check for BigInt support
+            if (typeof dataView.getBigUint64 !== 'function') {
+                self.postMessage({ action: 'error', message: 'BigInt support is required.' });
+                return;
+            }
+
+            readBoxesAsync(dataView, 0, dataView.byteLength).then(boxes => {
+                const audioTrackInfo = findAudioTrack(boxes);
+                self.postMessage({ action: 'parsed', boxes: boxes, audioTrackInfo: audioTrackInfo });
+            });
+        }
+
+        async function extractAudio(audioTrackInfo) {
+            self.postMessage({ action: 'status', status: 'Extracting audio...' });
+
+            getAudioDataAsync(audioTrackInfo).then(audioData => {
+                if (audioData) {
+                    self.postMessage({ action: 'extracted', audioData: audioData }, [audioData.buffer]);
+                } else {
+                    self.postMessage({ action: 'status', status: 'Failed to extract audio data.' });
+                }
+            });
+        }
+
+        async function readBoxesAsync(dataView, start, end) {
+            const boxes = [];
+            let offset = start;
+
+            while (offset < end) {
+                if (offset + 8 > end) break; // Not enough data for header
+
+                // Read size (4 bytes) and type (4 bytes)
+                const size = dataView.getUint32(offset);
+                const type = getString(dataView, offset + 4, 4);
+
+                let boxSize = size;
+                let headerSize = 8;
+
+                if (size === 0) {
+                    // Box extends to end of file
+                    boxSize = end - offset;
+                } else if (size === 1) {
+                    // 64-bit large size
+                    if (offset + 16 > end) break; // Not enough data
+                    boxSize = Number(dataView.getBigUint64(offset + 8, false));
+                    headerSize = 16;
+                }
+
+                if (boxSize < headerSize) {
+                    console.error('Invalid box size');
+                    break;
+                }
+
+                const box = {
+                    type: type,
+                    size: boxSize,
+                    start: offset,
+                    headerSize: headerSize,
+                    end: offset + boxSize,
+                    children: [],
+                    data: null,
+                    info: null
+                };
+
+                // Parse specific boxes for additional info
+                if (type === 'ftyp') {
+                    box.info = parseFtypBox(dataView, offset + headerSize, boxSize - headerSize);
+                } else if (type === 'mvhd') {
+                    box.info = parseMvhdBox(dataView, offset + headerSize, boxSize - headerSize);
+                } else if (type === 'tkhd') {
+                    box.info = parseTkhdBox(dataView, offset + headerSize, boxSize - headerSize);
+                } else if (type === 'mdhd') {
+                    box.info = parseMdhdBox(dataView, offset + headerSize, boxSize - headerSize);
+                } else if (type === 'hdlr') {
+                    box.info = parseHdlrBox(dataView, offset + headerSize, boxSize - headerSize);
+                } else if (type === 'stsd') {
+                    box.info = parseStsdBox(dataView, offset + headerSize, boxSize - headerSize);
+                } else if (['stts', 'stsc', 'stsz', 'stco', 'co64'].includes(type)) {
+                    box.data = dataView.buffer.slice(offset + headerSize, offset + boxSize);
+                    box.version = dataView.getUint8(offset + headerSize);
+                } else if (type === 'mdat') {
+                    box.data = { offset: offset + headerSize, size: boxSize - headerSize };
+                }
+
+                // Check if box is a container box
+                if (isContainerBox(type)) {
+                    // Yield control to the event loop to keep UI responsive
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                    box.children = await readBoxesAsync(dataView, offset + headerSize, offset + boxSize);
+                }
+
+                boxes.push(box);
+                offset += boxSize;
+            }
+
+            return boxes;
+        }
+
+        function isContainerBox(type) {
+            return ['moov', 'trak', 'mdia', 'minf', 'stbl', 'edts', 'dinf', 'udta', 'meta'].includes(type);
+        }
+
+        function parseFtypBox(dataView, offset, size) {
+            const majorBrand = getString(dataView, offset, 4);
+            const minorVersion = dataView.getUint32(offset + 4);
+            const compatibleBrands = [];
+            for (let i = offset + 8; i < offset + size; i += 4) {
+                compatibleBrands.push(getString(dataView, i, 4));
+            }
+            return {
+                majorBrand: majorBrand,
+                minorVersion: minorVersion,
+                compatibleBrands: compatibleBrands
+            };
+        }
+
+        function parseMvhdBox(dataView, offset, size) {
+            const version = dataView.getUint8(offset);
+            let timescale, duration;
+            if (version === 1) {
+                timescale = dataView.getUint32(offset + 20);
+                duration = Number(dataView.getBigUint64(offset + 24, false));
+            } else {
+                timescale = dataView.getUint32(offset + 12);
+                duration = dataView.getUint32(offset + 16);
+            }
+            return {
+                version: version,
+                timescale: timescale,
+                duration: duration
+            };
+        }
+
+        function parseTkhdBox(dataView, offset, size) {
+            const version = dataView.getUint8(offset);
+            let trackId;
+            if (version === 1) {
+                trackId = dataView.getUint32(offset + 16);
+            } else {
+                trackId = dataView.getUint32(offset + 12);
+            }
+            return {
+                version: version,
+                trackId: trackId
+            };
+        }
+
+        function parseMdhdBox(dataView, offset, size) {
+            const version = dataView.getUint8(offset);
+            let timescale, duration;
+            if (version === 1) {
+                timescale = dataView.getUint32(offset + 20);
+                duration = Number(dataView.getBigUint64(offset + 24, false));
+            } else {
+                timescale = dataView.getUint32(offset + 12);
+                duration = dataView.getUint32(offset + 16);
+            }
+            return {
+                version: version,
+                timescale: timescale,
+                duration: duration
+            };
+        }
+
+        function parseHdlrBox(dataView, offset, size) {
+            const handlerType = getString(dataView, offset + 8, 4);
+            return {
+                handlerType: handlerType
+            };
+        }
+
+        function parseStsdBox(dataView, offset, size) {
+            const entryCount = dataView.getUint32(offset + 4);
+            const format = getString(dataView, offset + 8, 4);
+            // For AAC, we need to get the AudioSpecificConfig from esds box
+            let esdsOffset = offset + 16; // Skip some fields to reach the esds box
+            let esdsFound = false;
+            while (esdsOffset < offset + size) {
+                const boxSize = dataView.getUint32(esdsOffset);
+                const boxType = getString(dataView, esdsOffset + 4, 4);
+                if (boxType === 'esds') {
+                    esdsFound = true;
+                    break;
+                }
+                esdsOffset += boxSize;
+            }
+            let audioConfig = null;
+            if (esdsFound) {
+                audioConfig = parseEsdsBox(dataView, esdsOffset + 8, size - (esdsOffset - offset + 8));
+            }
+            return {
+                entryCount: entryCount,
+                format: format,
+                audioConfig: audioConfig
+            };
+        }
+
+        function parseEsdsBox(dataView, offset, size) {
+            // Skip version and flags (4 bytes)
+            offset += 4;
+            // Parsing ES_Descriptor (ISO/IEC 14496-1)
+            let tag = dataView.getUint8(offset);
+            if (tag !== 0x03) return null; // ES_DescrTag
+            let lengthInfo = readMp4DescriptorLength(dataView, offset + 1);
+            offset += 2 + lengthInfo.byteLength;
+            tag = dataView.getUint8(offset);
+            if (tag !== 0x04) return null; // DecoderConfigDescrTag
+            lengthInfo = readMp4DescriptorLength(dataView, offset + 1);
+            offset += 13 + lengthInfo.byteLength;
+            tag = dataView.getUint8(offset);
+            if (tag !== 0x05) return null; // DecoderSpecificInfoTag
+            lengthInfo = readMp4DescriptorLength(dataView, offset + 1);
+            offset += 1 + lengthInfo.byteLength;
+            const audioConfig = new Uint8Array(dataView.buffer, dataView.byteOffset + offset, lengthInfo.length);
+            return audioConfig;
+        }
+
+        function readMp4DescriptorLength(dataView, offset) {
+            let length = 0;
+            let count = 0;
+            let byteLength = 0;
+            while (true) {
+                const b = dataView.getUint8(offset + count);
+                length = (length << 7) | (b & 0x7F);
+                byteLength++;
+                if (!(b & 0x80)) {
+                    break;
+                }
+                count++;
+            }
+            return { length, byteLength };
+        }
+
+        function getString(dataView, offset, length) {
+            let value = '';
+            for (let i = 0; i < length; i++) {
+                value += String.fromCharCode(dataView.getUint8(offset + i));
+            }
+            return value;
+        }
+
+        function findAudioTrack(boxes) {
+            let audioTrack = null;
+
+            for (const box of boxes) {
+                if (box.type === 'moov') {
+                    for (const trak of box.children.filter(b => b.type === 'trak')) {
+                        let mdia = trak.children.find(b => b.type === 'mdia');
+                        if (mdia) {
+                            let hdlr = mdia.children.find(b => b.type === 'hdlr');
+                            if (hdlr && hdlr.info.handlerType === 'soun') {
+                                // This is the audio track
+                                audioTrack = {
+                                    trak: trak,
+                                    mdia: mdia
+                                };
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (audioTrack) {
+                // Extract necessary information
+                const stbl = audioTrack.mdia.children.find(b => b.type === 'minf')
+                    .children.find(b => b.type === 'stbl');
+                const stsd = stbl.children.find(b => b.type === 'stsd');
+                const stts = stbl.children.find(b => b.type === 'stts');
+                const stsc = stbl.children.find(b => b.type === 'stsc');
+                const stsz = stbl.children.find(b => b.type === 'stsz');
+                const stco = stbl.children.find(b => b.type === 'stco' || b.type === 'co64');
+
+                return {
+                    stsd: stsd,
+                    stts: stts,
+                    stsc: stsc,
+                    stsz: stsz,
+                    stco: stco,
+                    mdat: findMdatBox(boxes),
+                    codec: stsd.info.format,
+                    audioConfig: stsd.info.audioConfig
+                };
+            }
+
+            return null;
+        }
+
+        function findMdatBox(boxes) {
+            for (const box of boxes) {
+                if (box.type === 'mdat') {
+                    return box;
+                } else if (box.children && box.children.length > 0) {
+                    const mdat = findMdatBox(box.children);
+                    if (mdat) return mdat;
+                }
+            }
+            return null;
+        }
+
+        async function getAudioDataAsync(trackInfo) {
+            if (!trackInfo.mdat) {
+                console.error('mdat box not found');
+                return null;
+            }
+
+            const dataView = new DataView(trackInfo.mdat.buffer);
+
+            // Parse sample size table (stsz)
+            const stszDataView = new DataView(trackInfo.stsz.data);
+            const sampleCount = stszDataView.getUint32(8);
+            const sampleSizes = [];
+            let offset = 12;
+            for (let i = 0; i < sampleCount; i++) {
+                sampleSizes.push(stszDataView.getUint32(offset));
+                offset += 4;
+                // Yield control every 10000 iterations
+                if (i % 10000 === 0) {
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                }
+            }
+
+            // Parse chunk offset table (stco or co64)
+            const stcoDataView = new DataView(trackInfo.stco.data);
+            const chunkCount = stcoDataView.getUint32(8);
+            const chunkOffsets = [];
+            offset = 12;
+            const is64Bit = trackInfo.stco.type === 'co64';
+            for (let i = 0; i < chunkCount; i++) {
+                if (is64Bit) {
+                    chunkOffsets.push(Number(stcoDataView.getBigUint64(offset, false)));
+                    offset += 8;
+                } else {
+                    chunkOffsets.push(stcoDataView.getUint32(offset));
+                    offset += 4;
+                }
+                // Yield control every 10000 iterations
+                if (i % 10000 === 0) {
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                }
+            }
+
+            // Parse sample to chunk table (stsc)
+            const stscDataView = new DataView(trackInfo.stsc.data);
+            const entryCount = stscDataView.getUint32(8);
+            const stscEntries = [];
+            offset = 12;
+            for (let i = 0; i < entryCount; i++) {
+                stscEntries.push({
+                    firstChunk: stscDataView.getUint32(offset),
+                    samplesPerChunk: stscDataView.getUint32(offset + 4),
+                    sampleDescriptionIndex: stscDataView.getUint32(offset + 8)
+                });
+                offset += 12;
+                // Yield control every 1000 iterations
+                if (i % 1000 === 0) {
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                }
+            }
+
+            // Build a mapping from samples to offsets
+            const sampleOffsets = [];
+            let sampleIndex = 0;
+
+            for (let i = 0; i < stscEntries.length; i++) {
+                const currentEntry = stscEntries[i];
+                const nextEntry = stscEntries[i + 1];
+                const chunkStart = currentEntry.firstChunk - 1;
+                const chunkEnd = nextEntry ? nextEntry.firstChunk - 1 : chunkOffsets.length;
+                for (let chunkIndex = chunkStart; chunkIndex < chunkEnd; chunkIndex++) {
+                    let chunkOffset = chunkOffsets[chunkIndex];
+                    for (let j = 0; j < currentEntry.samplesPerChunk; j++) {
+                        if (sampleIndex >= sampleSizes.length) break;
+                        const sampleSize = sampleSizes[sampleIndex];
+                        sampleOffsets.push({
+                            offset: chunkOffset,
+                            size: sampleSize
+                        });
+                        chunkOffset += sampleSize;
+                        sampleIndex++;
+                    }
+                    // Yield control every 100 iterations
+                    if (chunkIndex % 100 === 0) {
+                        await new Promise(resolve => setTimeout(resolve, 0));
+                    }
+                }
+            }
+
+            // Read and concatenate the audio samples, adding ADTS headers if necessary
+            const audioData = [];
+            for (let i = 0; i < sampleOffsets.length; i++) {
+                const sample = sampleOffsets[i];
+                const sampleData = trackInfo.mdat.buffer.slice(sample.offset, sample.offset + sample.size);
+                // For AAC, add ADTS header
+                if (trackInfo.codec === 'mp4a') {
+                    const adtsHeader = createAdtsHeader(trackInfo.audioConfig, sample.size);
+                    audioData.push(adtsHeader);
+                }
+                audioData.push(new Uint8Array(sampleData));
+
+                // Yield control every 1000 iterations
+                if (i % 1000 === 0) {
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                    self.postMessage({ action: 'status', status: \`Extracting audio... (\${i}/\${sampleOffsets.length})\` });
+                }
+            }
+
+            // Concatenate all sample data
+            const totalSize = audioData.reduce((sum, buffer) => sum + buffer.byteLength, 0);
+            const combinedBuffer = new Uint8Array(totalSize);
+            let position = 0;
+            for (const buffer of audioData) {
+                combinedBuffer.set(buffer, position);
+                position += buffer.byteLength;
+            }
+
+            return combinedBuffer;
+        }
+
+        function createAdtsHeader(audioConfig, packetLength) {
+            // Extract Audio Object Type (AOT) and Sampling Frequency Index from AudioSpecificConfig
+            const audioObjectType = (audioConfig[0] >> 3) & 0x1F;
+            const samplingFrequencyIndex = ((audioConfig[0] & 0x07) << 1) | ((audioConfig[1] >> 7) & 0x01);
+            const channelConfiguration = (audioConfig[1] >> 3) & 0x0F;
+
+            const adtsHeader = new Uint8Array(7);
+            const frameLength = 7 + packetLength;
+
+            adtsHeader[0] = 0xFF; // Sync word
+            adtsHeader[1] = 0xF1; // Sync word, MPEG-2 Layer, protection absent
+            adtsHeader[2] = ((audioObjectType - 1) << 6) | (samplingFrequencyIndex << 2) | (channelConfiguration >> 2);
+            adtsHeader[3] = ((channelConfiguration & 3) << 6) | (frameLength >> 11);
+            adtsHeader[4] = (frameLength >> 3) & 0xFF;
+            adtsHeader[5] = ((frameLength & 7) << 5) | 0x1F;
+            adtsHeader[6] = 0xFC;
+
+            return adtsHeader;
+        }
+    }
+
+</script>
+
+</body>
+</html>
