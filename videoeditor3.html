@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Image with Timed Video Overlay</title>
+    <style>
+        #container {
+            position: relative;
+            width: 800px; /* Adjust width as needed */
+            height: 600px; /* Adjust height as needed */
+            border: 1px solid #ccc;
+        }
+        #backgroundImage {
+            width: 100%;
+            height: 100%;
+        }
+        #overlayVideo {
+            position: absolute;
+            top: 0;
+            left: 0;
+            display: none;
+        }
+        #controls {
+            margin-bottom: 20px;
+        }
+        #timeRow {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        #timeRow label {
+            margin-right: 10px;
+        }
+        #addTimeButton {
+            margin-left: 10px;
+        }
+        .timePointRow {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        .timePointRow input {
+            width: 60px;
+            margin-right: 5px;
+        }
+        .timePointRow select {
+            margin-right: 5px;
+        }
+        .removeTimeButton {
+            margin-left: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Image with Timed Video Overlay</h1>
+    <div id="controls">
+        <label for="imageInput">Select Image:</label>
+        <input type="file" id="imageInput" accept="image/*"><br><br>
+
+        <label for="videoInput">Select Video:</label>
+        <input type="file" id="videoInput" accept="video/*"><br><br>
+
+        <div id="timePointsContainer">
+            <div id="timeRow">
+                <label>Set Video Overlay Times:</label>
+                <button id="addTimeButton">Add Time Point</button>
+            </div>
+            <!-- Time points will be added here -->
+        </div>
+
+        <button id="startButton">Start</button>
+    </div>
+
+    <div id="container">
+        <img id="backgroundImage" src="" alt="Background Image">
+        <video id="overlayVideo" width="320" height="240">
+            Your browser does not support the video tag.
+        </video>
+    </div>
+
+    <script>
+        let imageInput = document.getElementById('imageInput');
+        let videoInput = document.getElementById('videoInput');
+        let backgroundImage = document.getElementById('backgroundImage');
+        let overlayVideo = document.getElementById('overlayVideo');
+        let startButton = document.getElementById('startButton');
+        let timePointsContainer = document.getElementById('timePointsContainer');
+        let addTimeButton = document.getElementById('addTimeButton');
+        let timePoints = [];
+        let startTime = 0;
+        let timer;
+        let overlayIntervals = [];
+
+        // Load the selected image
+        imageInput.addEventListener('change', function(event) {
+            let file = event.target.files[0];
+            if (file) {
+                let url = URL.createObjectURL(file);
+                backgroundImage.src = url;
+            }
+        });
+
+        // Load the selected video
+        videoInput.addEventListener('change', function(event) {
+            let file = event.target.files[0];
+            if (file) {
+                let url = URL.createObjectURL(file);
+                overlayVideo.src = url;
+            }
+        });
+
+        // Add a new time point row
+        addTimeButton.addEventListener('click', function() {
+            addTimePointRow();
+        });
+
+        // Start the timer and display
+        startButton.addEventListener('click', function() {
+            // Parse time points
+            timePoints = [];
+            let timePointRows = document.getElementsByClassName('timePointRow');
+            for (let row of timePointRows) {
+                let startTimeInput = row.querySelector('.startTimeInput');
+                let endTimeSelect = row.querySelector('.endTimeSelect');
+                let startTimeValue = parseFloat(startTimeInput.value.trim());
+                let endTimeValue = endTimeSelect.value === 'End' ? Infinity : parseFloat(endTimeSelect.value.trim());
+
+                if (!isNaN(startTimeValue)) {
+                    timePoints.push({ start: startTimeValue, end: endTimeValue, played: false });
+                }
+            }
+
+            // Sort time points by start time
+            timePoints.sort(function(a, b) { return a.start - b.start; });
+
+            // Reset variables
+            startTime = Date.now() / 1000;
+
+            // Hide the video
+            overlayVideo.style.display = 'none';
+
+            // Clear any existing timer
+            if (timer) {
+                clearInterval(timer);
+            }
+
+            // Start checking time
+            timer = setInterval(checkTime, 100);
+        });
+
+        overlayVideo.addEventListener('ended', function() {
+            overlayVideo.style.display = 'none';
+        });
+
+        function checkTime() {
+            let now = Date.now() / 1000;
+            let elapsed = now - startTime;
+
+            // Hide or show video based on current time
+            let isVideoVisible = false;
+            for (let tp of timePoints) {
+                if (elapsed >= tp.start && elapsed < tp.end) {
+                    isVideoVisible = true;
+                    if (!tp.played) {
+                        overlayVideo.style.display = 'block';
+                        overlayVideo.currentTime = 0;
+                        overlayVideo.play();
+                        tp.played = true;
+                    }
+                    break;
+                }
+            }
+            if (!isVideoVisible) {
+                overlayVideo.style.display = 'none';
+                overlayVideo.pause();
+            }
+        }
+
+        function addTimePointRow() {
+            let row = document.createElement('div');
+            row.className = 'timePointRow';
+
+            // Start time input
+            let startTimeInput = document.createElement('input');
+            startTimeInput.type = 'number';
+            startTimeInput.min = '0';
+            startTimeInput.step = '0.1';
+            startTimeInput.className = 'startTimeInput';
+            startTimeInput.placeholder = 'Start Time';
+
+            // End time select
+            let endTimeSelect = document.createElement('select');
+            endTimeSelect.className = 'endTimeSelect';
+
+            // Populate end time options
+            for (let i = 1; i <= 60; i++) {
+                let option = document.createElement('option');
+                option.value = i;
+                option.textContent = i + 's';
+                endTimeSelect.appendChild(option);
+            }
+            let endOption = document.createElement('option');
+            endOption.value = 'End';
+            endOption.textContent = 'End';
+            endTimeSelect.appendChild(endOption);
+
+            // Remove button
+            let removeButton = document.createElement('button');
+            removeButton.textContent = 'Remove';
+            removeButton.className = 'removeTimeButton';
+            removeButton.addEventListener('click', function() {
+                row.remove();
+            });
+
+            row.appendChild(startTimeInput);
+            row.appendChild(document.createTextNode(' to '));
+            row.appendChild(endTimeSelect);
+            row.appendChild(removeButton);
+
+            timePointsContainer.appendChild(row);
+        }
+
+        // Add initial time point row
+        addTimePointRow();
+    </script>
+</body>
+</html>
