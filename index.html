@@ -241,8 +241,10 @@
                 <input type="text" id="search-input" placeholder="Search apps...">
                 <select id="sort-by">
                     <option value="original">Original</option>
-                    <option value="alphabetical">Alphabetical</option>
-                    <option value="lastCommitted">Last Committed</option>
+                    <option value="alphabetical">Alphabetical (Display Name)</option>
+                    <option value="filenameAlphabetical">Alphabetical (Filename)</option>
+                    <option value="lastCommittedDesc">Last Committed (Newest First)</option>
+                    <option value="lastCommittedAsc">Last Committed (Oldest First)</option>
                 </select>
             </div>
             <ul class="app-list" id="app-list">
@@ -320,8 +322,8 @@
         const searchInput = document.getElementById('search-input');
         const sortBySelect = document.getElementById('sort-by');
 
-        let appListData = []; // Array of { filename, displayName, commitDate }
-        let originalAppListData = []; // To store original order
+        let appListData = []; // Array of { filename, displayName, commitDate, originalIndex }
+        let originalAppListData = []; // Keep track of original order
 
         // Function to fetch file list from GitHub API
         function fetchAppListFromGitHub() {
@@ -333,15 +335,16 @@
                     return response.json();
                 })
                 .then(data => {
-                    const htmlFiles = data.filter(item => item.type === 'file' && item.name.endsWith('.html') && item.name.toLowerCase() !== 'index.html');
-                    if (htmlFiles.length === 0) {
-                        throw new Error('No HTML files found in the repository');
-                    }
-                    const appFilenames = htmlFiles.map(item => item.name);
-                    localStorage.setItem('appFilenames', JSON.stringify(appFilenames));
-                    return Promise.all(appFilenames.map(filename => fetchAppData(filename)));
+                    // Attempt to treat any file as potential HTML if no extension
+                    const candidateFiles = data.filter(item => item.type === 'file' && item.name.toLowerCase() !== 'index.html');
+
+                    const appFilesPromises = candidateFiles.map((item, index) => tryProcessFile(item, index));
+                    return Promise.all(appFilesPromises);
                 })
                 .then(appData => {
+                    // Filter out nulls (non-HTML files)
+                    appData = appData.filter(d => d !== null);
+
                     appListData = appData;
                     originalAppListData = [...appData];
                     localStorage.setItem('appListData', JSON.stringify(appListData));
@@ -356,48 +359,44 @@
                         originalAppListData = [...appListData];
                         applySorting();
                     } else {
-                        // Use cached filenames if available
-                        const cachedAppFilenames = localStorage.getItem('appFilenames');
-                        if (cachedAppFilenames) {
-                            const appFilenames = JSON.parse(cachedAppFilenames);
-                            Promise.all(appFilenames.map(filename => fetchAppData(filename)))
-                                .then(appData => {
-                                    appListData = appData;
-                                    originalAppListData = [...appData];
-                                    localStorage.setItem('appListData', JSON.stringify(appListData));
-                                    applySorting();
-                                })
-                                .catch(err => {
-                                    console.error('Error fetching from cache fallback:', err);
-                                    displayOfflineMessage();
-                                });
-                        } else {
-                            displayOfflineMessage();
-                        }
+                        displayOfflineMessage();
                     }
                 });
         }
 
-        // Fetch displayName and commitDate for a given filename
-        function fetchAppData(filename) {
-            return Promise.all([fetchDisplayName(filename), fetchLastCommitDate(filename)])
-                .then(values => {
-                    const [displayName, commitDate] = values;
-                    return { filename, displayName, commitDate };
-                })
-                .catch(error => {
-                    console.error('Error fetching app data for ' + filename + ':', error);
-                    let displayName = filename.replace('.html', '');
-                    displayName = displayName.replace(/[-_]/g, ' ');
-                    displayName = splitCamelCase(displayName);
-                    displayName = capitalizeWords(displayName);
-                    return { filename, displayName, commitDate: null };
-                });
+        // Try to process a file as HTML (even if no .html extension)
+        async function tryProcessFile(item, originalIndex) {
+            // If it ends with .html, try directly
+            // If not, attempt to fetch and check content
+            let filename = item.name;
+            let url = item.download_url;
+
+            let isHtml = filename.toLowerCase().endsWith('.html');
+            if (!isHtml) {
+                // Check if content is HTML by fetching HEAD or some portion
+                const headResp = await fetch(url, { method: 'HEAD' });
+                if (!headResp.ok) return null;
+
+                const contentType = headResp.headers.get('content-type') || '';
+                if (contentType.includes('text/html')) {
+                    // It's HTML, but no extension. We'll treat it as HTML.
+                    // We'll virtually rename it to have .html for display purposes
+                    filename += '.html';
+                    isHtml = true;
+                } else {
+                    // Not HTML, skip
+                    return null;
+                }
+            }
+
+            // If we reach here, we have confirmed it's HTML
+            const [displayName, commitDate] = await Promise.all([fetchDisplayName(url, filename), fetchLastCommitDate(item.path)]);
+            return { filename, displayName, commitDate, originalIndex };
         }
 
-        // Function to fetch display name for a given filename
-        function fetchDisplayName(filename) {
-            return fetch(filename)
+        // Fetch displayName by downloading the file and parsing <title>
+        function fetchDisplayName(url, filename) {
+            return fetch(url)
                 .then(response => {
                     if (!response.ok) {
                         throw new Error('Network response was not ok when fetching ' + filename);
@@ -430,11 +429,10 @@
         }
 
         // Function to fetch last commit date for a file
-        function fetchLastCommitDate(filename) {
-            return fetch(GITHUB_COMMITS_API_URL + encodeURIComponent(filename))
+        function fetchLastCommitDate(path) {
+            return fetch(GITHUB_COMMITS_API_URL + encodeURIComponent(path))
                 .then(response => {
                     if (!response.ok) {
-                        // If we can't fetch commit info, just return null
                         return null;
                     }
                     return response.json();
@@ -446,7 +444,7 @@
                     return null;
                 })
                 .catch(error => {
-                    console.error('Error fetching commit date for ' + filename + ':', error);
+                    console.error('Error fetching commit date for ' + path + ':', error);
                     return null;
                 });
         }
@@ -469,6 +467,7 @@
                 const { filename, displayName } = app;
                 const listItem = document.createElement('li');
                 const link = document.createElement('a');
+                // If original file had no .html extension but is HTML, filename now ends with .html (virtually)
                 link.href = filename;
                 link.textContent = displayName;
                 listItem.appendChild(link);
@@ -488,17 +487,30 @@
         }
 
         function sortOriginal() {
-            // Restore original order
-            appListData = [...originalAppListData];
+            // Restore original order by originalIndex
+            appListData.sort((a, b) => a.originalIndex - b.originalIndex);
         }
 
-        function sortLastCommitted() {
+        function sortLastCommittedDesc() {
             // Sort by commitDate descending (most recent first)
             appListData.sort((a, b) => {
                 const dateA = a.commitDate ? new Date(a.commitDate) : new Date(0);
                 const dateB = b.commitDate ? new Date(b.commitDate) : new Date(0);
                 return dateB - dateA;
             });
+        }
+
+        function sortLastCommittedAsc() {
+            // Sort by commitDate ascending (oldest first)
+            appListData.sort((a, b) => {
+                const dateA = a.commitDate ? new Date(a.commitDate) : new Date(0);
+                const dateB = b.commitDate ? new Date(b.commitDate) : new Date(0);
+                return dateA - dateB;
+            });
+        }
+
+        function sortFilenameAlphabetical() {
+            appListData.sort((a, b) => a.filename.localeCompare(b.filename));
         }
 
         // Apply sorting based on the selected option
@@ -508,8 +520,12 @@
                 sortAlphabetically();
             } else if (sortValue === 'original') {
                 sortOriginal();
-            } else if (sortValue === 'lastCommitted') {
-                sortLastCommitted();
+            } else if (sortValue === 'lastCommittedDesc') {
+                sortLastCommittedDesc();
+            } else if (sortValue === 'lastCommittedAsc') {
+                sortLastCommittedAsc();
+            } else if (sortValue === 'filenameAlphabetical') {
+                sortFilenameAlphabetical();
             }
 
             filterAppList(searchInput.value.toLowerCase());
