@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Semi-Universal Analytical Solution - Part 3 (Interactive)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background: #f9f9f9;
+        color: #333;
+        margin: 20px;
+    }
+
+    h1, h2 {
+        margin-bottom: 10px;
+    }
+
+    .params-section {
+        background: #fff;
+        border: 1px solid #ccc;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+
+    .params-section label {
+        display: block;
+        margin: 5px 0;
+    }
+
+    .params-section input,
+    .params-section select {
+        padding: 5px;
+        font-size: 1em;
+        margin-bottom: 10px;
+        width: 100%;
+        max-width: 300px;
+    }
+
+    button {
+        padding: 10px 15px;
+        background: #0066cc;
+        color: #fff;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+
+    button:hover {
+        background: #0055a3;
+    }
+
+    #output {
+        background: #fff;
+        border: 1px solid #ccc;
+        padding: 15px;
+        border-radius: 8px;
+        margin-top: 20px;
+        white-space: pre-wrap;
+        font-family: monospace;
+    }
+
+    .note {
+        font-size: 0.9em;
+        color: #666;
+        margin-top: 10px;
+    }
+</style>
+</head>
+<body>
+
+<h1>Semi-Universal, Fully Analytical Solution - Interactive Demo (Part 3)</h1>
+<p>This demo lets you vary parameters of an "exact sub-block" amplitude and a "random-like" block with a chosen probability distribution. We then compute:</p>
+<ul>
+    <li>The analytical combined amplitude (expected value).</li>
+    <li>A Monte Carlo approximation to check how close it is.</li>
+</ul>
+
+<p>In reality, more complex distributions (Beta, Dirichlet) and more complicated exact blocks can be used. Here we provide two distribution options (Exponential and Beta) and a single amplitude exact block for demonstration.</p>
+
+<div class="params-section">
+    <h2>Set Parameters</h2>
+
+    <label for="a_exact_re">Exact Amplitude Real Part (a_exact_re):</label>
+    <input type="number" id="a_exact_re" value="0.9239" step="0.0001">
+
+    <label for="a_exact_im">Exact Amplitude Imag Part (a_exact_im):</label>
+    <input type="number" id="a_exact_im" value="0.0" step="0.0001">
+
+    <label for="distribution">Random Distribution:</label>
+    <select id="distribution">
+        <option value="exponential">Exponential (rate λ)</option>
+        <option value="beta">Beta(α, β)</option>
+    </select>
+
+    <div id="exp-params">
+        <label for="lambda">λ (rate for Exponential):</label>
+        <input type="number" id="lambda" value="10" step="0.1" min="0.1">
+        <span class="note">Mean = 1/λ</span>
+    </div>
+
+    <div id="beta-params" style="display:none;">
+        <label for="alpha">α (Alpha for Beta):</label>
+        <input type="number" id="alpha" value="2" step="0.1" min="0.1">
+        <label for="betaVal">β (Beta for Beta):</label>
+        <input type="number" id="betaVal" value="5" step="0.1" min="0.1">
+        <span class="note">Mean = α/(α+β)</span>
+    </div>
+
+    <label for="num_samples">Monte Carlo Samples:</label>
+    <input type="number" id="num_samples" value="100000" step="10000" min="1000">
+
+    <button id="runBtn">Compute</button>
+</div>
+
+<div id="output"></div>
+
+<script>
+const distributionSelect = document.getElementById('distribution');
+const expParams = document.getElementById('exp-params');
+const betaParams = document.getElementById('beta-params');
+
+distributionSelect.addEventListener('change', () => {
+    const dist = distributionSelect.value;
+    if (dist === 'exponential') {
+        expParams.style.display = 'block';
+        betaParams.style.display = 'none';
+    } else {
+        expParams.style.display = 'none';
+        betaParams.style.display = 'block';
+    }
+});
+
+document.getElementById('runBtn').addEventListener('click', () => {
+    const a_exact_re = parseFloat(document.getElementById('a_exact_re').value);
+    const a_exact_im = parseFloat(document.getElementById('a_exact_im').value);
+    const dist = distributionSelect.value;
+    const numSamples = parseInt(document.getElementById('num_samples').value,10);
+
+    let meanVal;
+    let distName;
+
+    if (dist === 'exponential') {
+        const lambda = parseFloat(document.getElementById('lambda').value);
+        // For exponential with rate λ, mean = 1/λ
+        meanVal = 1/lambda;
+        distName = `Exponential with mean = ${meanVal.toFixed(4)}`;
+    } else {
+        const alpha = parseFloat(document.getElementById('alpha').value);
+        const betaVal = parseFloat(document.getElementById('betaVal').value);
+        // Beta(α,β) mean = α/(α+β)
+        meanVal = alpha/(alpha+betaVal);
+        distName = `Beta(α=${alpha}, β=${betaVal}) with mean = ${meanVal.toFixed(4)}`;
+    }
+
+    // Analytical combined amplitude = E[A]*a_exact
+    const a_comb_re_analytical = meanVal * a_exact_re;
+    const a_comb_im_analytical = meanVal * a_exact_im;
+
+    // Monte Carlo approximation
+    // We'll sample from the chosen distribution:
+    // - Exponential: draw from exponential
+    // - Beta: draw from beta distribution
+    // then compute average and multiply by a_exact.
+
+    function randomExponential(lambda) {
+        // Inverse transform sampling
+        const u = Math.random();
+        return -Math.log(1-u)/lambda;
+    }
+
+    function randomBeta(alpha, beta) {
+        // Use a basic method: generate two Gamma(alpha,1) and Gamma(beta,1) and normalize
+        // Gamma(alpha,1) ~ shape=alpha, scale=1
+        // For large alpha/beta, could do better approximation, but this is a rough approach
+
+        function gammaShapeOne(shape) {
+            // For simplicity, if shape is large, do rejection sampling.
+            // A simple method: We can use the standard Gamma sampling (Marsaglia and Tsang).
+            // Implementing a simple Gamma for demonstration:
+            return gammaMarsagliaTsang(shape);
+        }
+
+        function gammaMarsagliaTsang(k) {
+            // k > 0, shape param. For demonstration, assume k>0 is small or large is fine.
+            const d = k - 1/3;
+            const c = 1/Math.sqrt(9*d);
+            let x, v, u;
+            do {
+                do {
+                    let z = normalRandom();
+                    x = 1 + c*z;
+                } while (x <= 0);
+                v = x*x*x;
+                u = Math.random();
+            } while (u > 1 - 0.331*( (z*z)*(z*z) ) && Math.log(u) > 0.5*z*z + d*(1 - v + Math.log(v)));
+            return d*v;
+        }
+
+        function normalRandom() {
+            // Box-Muller
+            let u = Math.random();
+            let v = Math.random();
+            return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
+        }
+
+        const ga = gammaShapeOne(alpha);
+        const gb = gammaShapeOne(beta);
+        return ga/(ga+gb);
+    }
+
+    let sumA = 0;
+    for (let i=0; i<numSamples; i++) {
+        let A;
+        if (dist === 'exponential') {
+            const lambda = parseFloat(document.getElementById('lambda').value);
+            A = randomExponential(lambda);
+        } else {
+            const alpha = parseFloat(document.getElementById('alpha').value);
+            const betaVal = parseFloat(document.getElementById('betaVal').value);
+            A = randomBeta(alpha, betaVal);
+        }
+        sumA += A;
+    }
+    const avgA = sumA/numSamples;
+    const mc_re = avgA * a_exact_re;
+    const mc_im = avgA * a_exact_im;
+
+    const output = document.getElementById('output');
+    output.textContent =
+`Parameters:
+a_exact = ${a_exact_re.toFixed(4)} + ${a_exact_im.toFixed(4)}i
+Random distribution: ${distName}
+
+Analytical:
+Mean(A) = ${meanVal.toFixed(4)}
+Combined amplitude (Analytical) = E[A]*a_exact = ${a_comb_re_analytical.toFixed(4)} + ${a_comb_im_analytical.toFixed(4)}i
+
+Monte Carlo (N=${numSamples}):
+Monte Carlo Approx. E[A] = ${avgA.toFixed(4)}
+Monte Carlo Combined Amp ~ ${mc_re.toFixed(4)} + ${mc_im.toFixed(4)}i
+
+Check closeness to analytical. With enough samples, these should be close.
+In more complex cases (Beta, Dirichlet), or multiple exact sub-blocks, the principle remains:
+Form an integral of known PDFs and exact components, yielding a fully analytical representation.`;
+});
+</script>
+
+</body>
+</html>
