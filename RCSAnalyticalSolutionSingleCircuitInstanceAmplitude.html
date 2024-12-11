@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Closed-Form Analytical Solution for a Single Circuit Instance Amplitude</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    background: #f7f7f7;
+    color: #333;
+    line-height: 1.6;
+  }
+  h1, h2, h3 {
+    margin-bottom: 10px;
+  }
+  p {
+    margin-bottom: 15px;
+  }
+  code, pre {
+    background: #eee;
+    padding: 2px 4px;
+    border-radius: 4px;
+  }
+  button {
+    padding: 5px 10px;
+    cursor: pointer;
+    margin-right: 10px;
+  }
+  #output {
+    margin-top: 20px;
+    padding: 10px;
+    background: #fff;
+    border: 1px solid #ccc;
+  }
+  .equation {
+    background: #fff;
+    display: inline-block;
+    padding: 5px;
+    margin: 5px 0;
+  }
+  .explanation {
+    background: #fcfcfc;
+    border-left: 3px solid #ccc;
+    padding: 10px;
+    margin: 15px 0;
+  }
+</style>
+<!-- Load MathJax for rendering equations -->
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['$', '$'], ['\\(', '\\)']]
+    }
+  };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js"></script>
+</head>
+<body>
+
+<h1>Closed-Form Analytical Solution for a Single Specific Circuit Instance</h1>
+
+<p>
+We previously found statistical distributions for ensembles of random circuits (the Haar-random limit), which gave us a full analytical solution for the distribution of output probabilities. However, when it comes to a <strong>single specific circuit instance</strong>, finding a neat, simple closed-form expression for the amplitude 
+<code>⟨x|U|0⟩</code> is highly nontrivial for large circuits. 
+</p>
+
+<p>
+Nevertheless, we do have a closed-form solution in principle. By explicitly writing down the parameterizations of each gate and multiplying all the corresponding matrices, we arrive at a finite algebraic expression for the amplitude. While this expression can be extremely complicated for large circuits, it is still a "closed-form" solution.
+</p>
+
+<h2>An Example: Single-Qubit Random Gate</h2>
+
+<p>Consider a single-qubit random unitary gate drawn from the Haar measure. One common parameterization of a single-qubit unitary <code>U</code> is:</p>
+
+<div class="equation">
+  $$
+  U(\alpha,\theta,\gamma) = e^{i\alpha} R_z(\gamma) R_y(\theta) R_z(\beta)
+  $$
+</div>
+
+<p>However, a more standard parameterization often used is:</p>
+
+<div class="equation">
+  $$
+  U(\alpha,\beta,\gamma) = e^{i\alpha}
+  \begin{pmatrix}
+  e^{-i(\beta+\gamma)/2}\cos(\frac{\theta}{2}) & -e^{-i(\beta-\gamma)/2}\sin(\frac{\theta}{2}) \\
+  e^{i(\beta-\gamma)/2}\sin(\frac{\theta}{2}) & e^{i(\beta+\gamma)/2}\cos(\frac{\theta}{2})
+  \end{pmatrix}
+  $$
+</div>
+
+<p>
+Here, $(\alpha,\beta,\theta,\gamma)$ are angles chosen according to the Haar measure on U(2). For simplicity, we often absorb global phases and use a slightly reduced parameterization. One common simple parameterization for Haar random on U(2) is:
+</p>
+
+<div class="equation">
+  $$
+  U = \begin{pmatrix}
+  \cos(\theta/2) & -\sin(\theta/2)e^{-i\phi}\\
+  \sin(\theta/2)e^{i\phi} & \cos(\theta/2)
+  \end{pmatrix}
+  $$
+</div>
+
+<p>
+where $\theta$ is distributed such that $\cos(\theta)$ is uniform on [-1,1], and $\phi$ is uniform on [0, 2π). This parameterization is equivalent up to global phases to the earlier forms.
+</p>
+
+<p>
+If we start in the state $|0\rangle = \begin{pmatrix}1 \\ 0\end{pmatrix}$, applying $U$ gives:
+</p>
+
+<div class="equation">
+  $$
+  U|0\rangle = \begin{pmatrix}\cos(\theta/2) \\ \sin(\theta/2)e^{i\phi}\end{pmatrix}.
+  $$
+</div>
+
+<p>
+This is a closed-form expression for the output state. The amplitude for outcome $x=0$ is $\langle 0|U|0\rangle = \cos(\theta/2)$ and for outcome $x=1$ is $\langle 1|U|0\rangle = \sin(\theta/2)e^{i\phi}$ — both fully closed-form and exact.
+</p>
+
+<p>
+For a single qubit and a single random gate, this is simple. For multiple qubits and multiple layers of gates, you would write each gate in a similar parametric form, multiply all the matrices symbolically, and read off the amplitude. The resulting expression is guaranteed to be finite and well-defined, hence a closed-form solution. However, it would be algebraically enormous for large circuits.
+</p>
+
+<div class="explanation">
+  <strong>Key Point:</strong> The "closed-form" solution for a single instance is basically the explicit algebraic product of all the unitary matrices (each expressed in terms of their defining parameters). This is a well-defined, finite mathematical expression—no infinite series or unsolvable integrals remain. It's just that for large circuits, the expression becomes too large to write down conveniently.
+</div>
+
+<h2>Practical Demonstration</h2>
+
+<p>Below, we provide a simple JavaScript demonstration where we:</p>
+<ol>
+  <li>Generate a random single-qubit Haar-distributed gate by choosing $(\theta, \phi)$ appropriately.</li>
+  <li>Compute the amplitude $⟨0|U|0⟩$ and $⟨1|U|0⟩$ explicitly.</li>
+  <li>Display the results.</li>
+</ol>
+
+<button id="generateBtn">Generate Random Gate and Compute Amplitudes</button>
+
+<div id="output"></div>
+
+<script>
+function randomHaarSingleQubit() {
+  // Generate a random unitary on U(2) from Haar measure:
+  // One method:
+  // phi ~ Uniform(0,2π)
+  // u ~ Uniform(0,1), then cos(θ) = 2u-1 so θ = arccos(2u-1)
+  // Actually, let's do:
+  // Let z = 2u-1, then θ = arccos(z)
+  let u = Math.random();
+  let z = 2*u - 1; // z in [-1,1]
+  let theta = Math.acos(z);
+  let phi = 2*Math.PI*Math.random();
+  
+  // U|0> = [cos(θ/2), sin(θ/2)e^{iφ}]^T
+  let amp0 = Math.cos(theta/2);
+  let amp1 = Math.sin(theta/2)*Math.cos(phi) + i*Math.sin(theta/2)*Math.sin(phi); 
+  // Actually we can store amp1 as a complex number in a nice format:
+  let amp1_re = Math.sin(theta/2)*Math.cos(phi);
+  let amp1_im = Math.sin(theta/2)*Math.sin(phi);
+  
+  return {theta, phi, amp0, amp1_re, amp1_im};
+}
+
+document.getElementById('generateBtn').addEventListener('click', () => {
+  const {theta, phi, amp0, amp1_re, amp1_im} = randomHaarSingleQubit();
+  
+  const out = document.getElementById('output');
+  out.innerHTML = `
+    <p><strong>Random angles chosen:</strong></p>
+    <p>θ = ${theta.toFixed(4)} radians, φ = ${phi.toFixed(4)} radians</p>
+    <p><strong>Final state:</strong> U|0> = [cos(θ/2), sin(θ/2)e^{iφ}]<sup>T</sup></p>
+    <p>cos(θ/2) = ${Math.cos(theta/2).toFixed(6)}</p>
+    <p>sin(θ/2) = ${Math.sin(theta/2).toFixed(6)} and φ = ${phi.toFixed(4)} rad</p>
+    <p><strong>Amplitudes:</strong></p>
+    <p>⟨0|U|0⟩ = ${amp0.toFixed(6)} (real)</p>
+    <p>⟨1|U|0⟩ = ${amp1_re.toFixed(6)} + ${amp1_im.toFixed(6)}i</p>
+    <p>This is a closed-form solution for this single gate instance. For multiple gates, we would multiply their parameterized matrices and read off the resulting amplitude. It's complex, but still a finite closed-form expression.</p>
+  `;
+});
+</script>
+
+</body>
+</html>
