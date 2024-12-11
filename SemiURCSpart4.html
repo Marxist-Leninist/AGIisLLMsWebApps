@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Semi-Universal Analytical Solution - Part 4 (Dirichlet & Multi-State)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background: #f9f9f9;
+        color: #333;
+        margin: 20px;
+    }
+
+    h1, h2 {
+        margin-bottom: 10px;
+    }
+
+    .params-section {
+        background: #fff;
+        border: 1px solid #ccc;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+
+    .params-section label {
+        display: block;
+        margin: 5px 0;
+    }
+
+    .params-section input,
+    .params-section select {
+        padding: 5px;
+        font-size: 1em;
+        margin-bottom: 10px;
+        width: 100%;
+        max-width: 300px;
+    }
+
+    .amplitudes-container {
+        margin-bottom: 15px;
+    }
+
+    .amplitude-inputs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .amplitude-inputs div {
+        display: flex;
+        flex-direction: column;
+        max-width: 110px;
+    }
+
+    button {
+        padding: 10px 15px;
+        background: #0066cc;
+        color: #fff;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+
+    button:hover {
+        background: #0055a3;
+    }
+
+    #output {
+        background: #fff;
+        border: 1px solid #ccc;
+        padding: 15px;
+        border-radius: 8px;
+        margin-top: 20px;
+        white-space: pre-wrap;
+        font-family: monospace;
+    }
+
+    .note {
+        font-size: 0.9em;
+        color: #666;
+        margin-top: 10px;
+    }
+</style>
+</head>
+<body>
+
+<h1>Part 4: Dirichlet Distribution & Multi-State Exact Block</h1>
+
+<p>
+Now we consider a multi-state scenario. Suppose the random block yields a probability vector \((p_1, p_2, \ldots, p_d)\) drawn from a Dirichlet distribution. The exact block provides a set of exact amplitudes \((a_{\text{exact},1}, \ldots, a_{\text{exact},d})\). The final amplitude is:
+</p>
+
+<pre>Final Amplitude = Σ_z p_z * a_exact_z</pre>
+
+<p>
+For Dirichlet(\(\alpha_1, \dots, \alpha_d\)), the expected value of \(p_z\) is \(\alpha_z / \sum_i \alpha_i\). Thus the analytical solution is straightforward:
+</p>
+<pre>E[Amplitude] = Σ_z (α_z / Σ_i α_i) * a_exact_z</pre>
+
+<p>
+We'll assume each \(\alpha_z\) is the same (uniform Dirichlet) for simplicity, or let the user pick a single α, meaning α_1=α_2=...=α_d. Then E[p_z] = 1/d if all α's are equal. We'll show a Monte Carlo approximation to verify closeness.
+</p>
+
+<div class="params-section">
+    <h2>Set Parameters</h2>
+    <label for="dimension">Dimension d (number of states):</label>
+    <input type="number" id="dimension" value="4" min="2">
+
+    <label for="alpha">Alpha (each α_z the same):</label>
+    <input type="number" id="alpha" value="1" step="0.1" min="0.1">
+    <span class="note">For α=1, it's Dirichlet(1,1,...,1) = uniform over simplex. Mean p_z = 1/d.</span>
+
+    <div class="amplitudes-container">
+        <label>Exact Amplitudes (Real and Imag parts):</label>
+        <div class="amplitude-inputs" id="amplitude-inputs">
+            <!-- Will dynamically generate amplitude input fields based on dimension -->
+        </div>
+    </div>
+
+    <label for="num_samples">Monte Carlo Samples:</label>
+    <input type="number" id="num_samples" value="100000" step="10000" min="1000">
+
+    <button id="runBtn">Compute</button>
+</div>
+
+<div id="output"></div>
+
+<script>
+function updateAmplitudeInputs() {
+    const dimension = parseInt(document.getElementById('dimension').value,10);
+    const container = document.getElementById('amplitude-inputs');
+    container.innerHTML = '';
+    for (let i=1; i<=dimension; i++) {
+        const div = document.createElement('div');
+        const labelRe = document.createElement('label');
+        labelRe.textContent = `a_exact_${i}_re:`;
+        const inputRe = document.createElement('input');
+        inputRe.type = 'number';
+        inputRe.value = (1/(dimension+i*0.2)).toFixed(4);
+        inputRe.step = '0.0001';
+
+        const labelIm = document.createElement('label');
+        labelIm.textContent = `a_exact_${i}_im:`;
+        const inputIm = document.createElement('input');
+        inputIm.type = 'number';
+        inputIm.value = '0.0000';
+        inputIm.step = '0.0001';
+
+        div.appendChild(labelRe);
+        div.appendChild(inputRe);
+        div.appendChild(labelIm);
+        div.appendChild(inputIm);
+        container.appendChild(div);
+    }
+}
+
+document.getElementById('dimension').addEventListener('change', updateAmplitudeInputs);
+updateAmplitudeInputs(); // Initialize at start
+
+document.getElementById('runBtn').addEventListener('click', () => {
+    const dimension = parseInt(document.getElementById('dimension').value,10);
+    const alphaVal = parseFloat(document.getElementById('alpha').value);
+    const numSamples = parseInt(document.getElementById('num_samples').value,10);
+
+    const ampContainer = document.getElementById('amplitude-inputs');
+    const exactAmps = [];
+    for (let i=0; i<dimension; i++) {
+        const re = parseFloat(ampContainer.children[i].querySelectorAll('input')[0].value);
+        const im = parseFloat(ampContainer.children[i].querySelectorAll('input')[1].value);
+        exactAmps.push({re, im});
+    }
+
+    // Dirichlet(α,...,α) d times means α_z = α for all z.
+    // Sum of alphas = α*d.
+    // E[p_z] = α / (α*d) = 1/d (for uniform α).
+    // Actually this is independent of α if all are equal, it's always 1/d.
+    // If α are all equal: E[p_z] = α / (d*α) = 1/d.
+    // The magnitude of α affects distribution concentration, but mean stays the same (1/d for all equal α's).
+    const meanProb = 1/dimension;
+
+    // Analytical combined amplitude:
+    let a_comb_re_analytical = 0;
+    let a_comb_im_analytical = 0;
+    // E[Amplitude] = Σ_z E[p_z]*a_exact_z = Σ_z (1/d)*a_exact_z (since all α identical)
+    for (let i=0; i<dimension; i++) {
+        a_comb_re_analytical += meanProb * exactAmps[i].re;
+        a_comb_im_analytical += meanProb * exactAmps[i].im;
+    }
+
+    // Monte Carlo approximation:
+    // Need to sample from Dirichlet. Dirichlet(α,...,α) with same α.
+    // Dirichlet sampling method:
+    // Sample d Gamma(α,1) random variables and normalize by their sum.
+    function gammaMarsagliaTsang(k) {
+        // Marsaglia-Tsang method for gamma(k,1)
+        const d = k - 1/3;
+        const c = 1/Math.sqrt(9*d);
+        let x, v, u, z;
+        do {
+            do {
+                let u1 = Math.random();
+                let u2 = Math.random();
+                z = Math.sqrt(-2*Math.log(u1)) * Math.cos(2*Math.PI*u2);
+                x = 1 + c*z;
+            } while (x <= 0);
+            v = x*x*x;
+            u = Math.random();
+        } while ( u > 1 - 0.331 * Math.pow(z,4) && Math.log(u) > 0.5*z*z + d*(1-v+Math.log(v)) );
+        return d*v;
+    }
+
+    function sampleDirichlet(d, alphaVal) {
+        let gammaSamples = [];
+        for (let i=0; i<d; i++) {
+            // If α is uniform for all, gamma(α,1)
+            gammaSamples.push(gammaMarsagliaTsang(alphaVal));
+        }
+        const sumG = gammaSamples.reduce((a,b)=>a+b,0);
+        return gammaSamples.map(g => g/sumG);
+    }
+
+    let sumRe = 0;
+    let sumIm = 0;
+    for (let i=0; i<numSamples; i++) {
+        const p = sampleDirichlet(dimension, alphaVal);
+        let ampRe = 0;
+        let ampIm = 0;
+        for (let j=0; j<dimension; j++) {
+            ampRe += p[j]*exactAmps[j].re;
+            ampIm += p[j]*exactAmps[j].im;
+        }
+        sumRe += ampRe;
+        sumIm += ampIm;
+    }
+    const mc_re = sumRe/numSamples;
+    const mc_im = sumIm/numSamples;
+
+    const output = document.getElementById('output');
+    output.textContent =
+`Dimension d = ${dimension}, α = ${alphaVal.toFixed(4)}
+For uniform α, mean p_z = 1/d regardless of α.
+
+Exact Amplitudes:
+${exactAmps.map((a,i)=>`z=${i+1}: ${a.re.toFixed(4)} + ${a.im.toFixed(4)}i`).join('\n')}
+
+Analytical Expectation:
+Mean probabilities = 1/d = ${(1/dimension).toFixed(4)}
+Combined amplitude (Analytical):
+= Σ_z (1/d)*a_exact_z
+= ${a_comb_re_analytical.toFixed(4)} + ${a_comb_im_analytical.toFixed(4)}i
+
+Monte Carlo (N=${numSamples}):
+MC Combined Amp ~ ${mc_re.toFixed(4)} + ${mc_im.toFixed(4)}i
+
+Check closeness: With large N and uniform α, MC should approach analytical value.
+For more complex α arrays or different distributions, the principle remains the same:
+We know E[p_z], thus E[Amplitude] is fully analytical.
+This scaling to Dirichlet is a step towards more intricate circuit structures.`;
+});
+</script>
+
+</body>
+</html>
