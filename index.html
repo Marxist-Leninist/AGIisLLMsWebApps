@@ -335,16 +335,13 @@
                     return response.json();
                 })
                 .then(data => {
-                    // Attempt to treat any file as potential HTML if no extension
                     const candidateFiles = data.filter(item => item.type === 'file' && item.name.toLowerCase() !== 'index.html');
 
                     const appFilesPromises = candidateFiles.map((item, index) => tryProcessFile(item, index));
                     return Promise.all(appFilesPromises);
                 })
                 .then(appData => {
-                    // Filter out nulls (non-HTML files)
                     appData = appData.filter(d => d !== null);
-
                     appListData = appData;
                     originalAppListData = [...appData];
                     localStorage.setItem('appListData', JSON.stringify(appListData));
@@ -364,37 +361,28 @@
                 });
         }
 
-        // Try to process a file as HTML (even if no .html extension)
         async function tryProcessFile(item, originalIndex) {
-            // If it ends with .html, try directly
-            // If not, attempt to fetch and check content
             let filename = item.name;
             let url = item.download_url;
 
             let isHtml = filename.toLowerCase().endsWith('.html');
             if (!isHtml) {
-                // Check if content is HTML by fetching HEAD or some portion
                 const headResp = await fetch(url, { method: 'HEAD' });
                 if (!headResp.ok) return null;
 
                 const contentType = headResp.headers.get('content-type') || '';
                 if (contentType.includes('text/html')) {
-                    // It's HTML, but no extension. We'll treat it as HTML.
-                    // We'll virtually rename it to have .html for display purposes
                     filename += '.html';
                     isHtml = true;
                 } else {
-                    // Not HTML, skip
                     return null;
                 }
             }
 
-            // If we reach here, we have confirmed it's HTML
             const [displayName, commitDate] = await Promise.all([fetchDisplayName(url, filename), fetchLastCommitDate(item.path)]);
             return { filename, displayName, commitDate, originalIndex };
         }
 
-        // Fetch displayName by downloading the file and parsing <title>
         function fetchDisplayName(url, filename) {
             return fetch(url)
                 .then(response => {
@@ -428,7 +416,6 @@
                 });
         }
 
-        // Function to fetch last commit date for a file
         function fetchLastCommitDate(path) {
             return fetch(GITHUB_COMMITS_API_URL + encodeURIComponent(path))
                 .then(response => {
@@ -449,7 +436,6 @@
                 });
         }
 
-        // Function to populate the app list
         function populateAppList(appData) {
             appList.innerHTML = '';
             if (appData.length === 0) {
@@ -466,33 +452,38 @@
             appData.forEach(app => {
                 const { filename, displayName } = app;
                 const listItem = document.createElement('li');
+                
                 const link = document.createElement('a');
-                // If original file had no .html extension but is HTML, filename now ends with .html (virtually)
                 link.href = filename;
                 link.textContent = displayName;
+
+                // Show filename alongside display name
+                const filenameSpan = document.createElement('span');
+                filenameSpan.style.fontSize = '0.9em';
+                filenameSpan.style.color = '#333';
+                filenameSpan.style.marginLeft = '10px';
+                filenameSpan.textContent = '(' + filename + ')';
+
                 listItem.appendChild(link);
+                listItem.appendChild(filenameSpan);
                 appList.appendChild(listItem);
             });
         }
 
-        // Function to filter the app list based on search query
         function filterAppList(query) {
             const filteredAppData = appListData.filter(app => app.displayName.toLowerCase().includes(query));
             populateAppList(filteredAppData);
         }
 
-        // Sorting functions
         function sortAlphabetically() {
             appListData.sort((a, b) => a.displayName.localeCompare(b.displayName));
         }
 
         function sortOriginal() {
-            // Restore original order by originalIndex
             appListData.sort((a, b) => a.originalIndex - b.originalIndex);
         }
 
         function sortLastCommittedDesc() {
-            // Sort by commitDate descending (most recent first)
             appListData.sort((a, b) => {
                 const dateA = a.commitDate ? new Date(a.commitDate) : new Date(0);
                 const dateB = b.commitDate ? new Date(b.commitDate) : new Date(0);
@@ -501,7 +492,6 @@
         }
 
         function sortLastCommittedAsc() {
-            // Sort by commitDate ascending (oldest first)
             appListData.sort((a, b) => {
                 const dateA = a.commitDate ? new Date(a.commitDate) : new Date(0);
                 const dateB = b.commitDate ? new Date(b.commitDate) : new Date(0);
@@ -513,7 +503,6 @@
             appListData.sort((a, b) => a.filename.localeCompare(b.filename));
         }
 
-        // Apply sorting based on the selected option
         function applySorting() {
             const sortValue = sortBySelect.value;
             if (sortValue === 'alphabetical') {
@@ -531,7 +520,6 @@
             filterAppList(searchInput.value.toLowerCase());
         }
 
-        // Function to display an offline message
         function displayOfflineMessage() {
             appList.innerHTML = '';
             const messageItem = document.createElement('li');
@@ -543,7 +531,6 @@
             appList.appendChild(messageItem);
         }
 
-        // Function to split camelCase and PascalCase into words
         function splitCamelCase(text) {
             return text
                 .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
@@ -551,12 +538,10 @@
                 .trim();
         }
 
-        // Function to capitalize the first letter of each word
         function capitalizeWords(text) {
             return text.replace(/\b\w/g, char => char.toUpperCase());
         }
 
-        // Event listeners
         searchInput.addEventListener('input', () => {
             filterAppList(searchInput.value.toLowerCase());
         });
@@ -565,7 +550,6 @@
             applySorting();
         });
 
-        // Attempt to fetch the app list from GitHub
         fetchAppListFromGitHub();
     </script>
 </body>
