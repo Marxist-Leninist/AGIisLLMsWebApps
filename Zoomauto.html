@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Improved Automatic Zooming Mandelbrot</title>
+<style>
+  body {
+    margin: 0;
+    background: #000;
+    color: #fff;
+    font-family: sans-serif;
+  }
+  #info {
+    position: absolute;
+    top: 10px; left: 10px;
+    background: rgba(0,0,0,0.5);
+    padding: 8px;
+    border-radius: 3px;
+    font-size: 14px;
+    line-height: 1.5em;
+  }
+  #info span {
+    display: block;
+  }
+</style>
+</head>
+<body>
+<canvas id="mandelbrot"></canvas>
+<div id="info">
+  <span><b>Center (X,Y):</b> <span id="centerCoord"></span></span>
+  <span><b>Scale (width):</b> <span id="scaleValue"></span></span>
+  <span><b>Iterations:</b> 200</span>
+</div>
+<script>
+"use strict";
+
+// Deterministic computation of the Mandelbrot set using smoothed coloring.
+// No intangible concepts, probabilities, or observer effects. 
+// This code follows strict physicalist, materialist principles: 
+// The rendering is a direct consequence of iterative numeric operations on complex numbers.
+
+const canvas = document.getElementById("mandelbrot");
+const ctx = canvas.getContext("2d");
+const centerCoordEl = document.getElementById("centerCoord");
+const scaleValueEl = document.getElementById("scaleValue");
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+
+window.addEventListener('resize', () => {
+  resizeCanvas();
+  // Redraw after resize:
+  drawMandelbrot();
+});
+
+resizeCanvas();
+
+// Initial parameters
+let centerX = -0.5;
+let centerY = 0.0;
+let scale = 3.0; // The width in complex plane coordinates currently visible
+
+// Iteration parameters
+const maxIterations = 200;
+
+// Use time-based animation for smoother zoom
+let startTime = null;
+
+// Smooth iteration count: 
+// This technique uses the "log(log(|z|))" approach to produce smooth gradients.
+function smoothIterationCount(x, y, maxIter) {
+  let zx = 0, zy = 0;
+  let iteration = 0;
+  while (zx*zx + zy*zy <= 4 && iteration < maxIter) {
+    const xtemp = zx*zx - zy*zy + x;
+    zy = 2*zx*zy + y;
+    zx = xtemp;
+    iteration++;
+  }
+  
+  // If point is in set:
+  if (iteration === maxIter) return maxIter;
+  
+  // For smoothing: 
+  const r2 = zx*zx + zy*zy;
+  // fractional part:
+  const smooth = iteration + 1 - Math.log(Math.log(Math.sqrt(r2)))/Math.log(2);
+  return smooth;
+}
+
+function drawMandelbrot() {
+  const width = canvas.width;
+  const height = canvas.height;
+  const imgData = ctx.createImageData(width, height);
+  const data = imgData.data;
+
+  // Update info panel
+  centerCoordEl.textContent = `${centerX.toFixed(6)}, ${centerY.toFixed(6)}`;
+  scaleValueEl.textContent = scale.toExponential(3);
+
+  for (let py = 0; py < height; py++) {
+    const y0 = centerY + (py - height / 2) * (scale / height);
+    for (let px = 0; px < width; px++) {
+      const x0 = centerX + (px - width / 2) * (scale / width);
+
+      const val = smoothIterationCount(x0, y0, maxIterations);
+
+      const idx = (py * width + px) * 4;
+
+      let r, g, b;
+      if (val >= maxIterations) {
+        // Inside set: black
+        r = 0; g = 0; b = 0;
+      } else {
+        // Outside set: create a color gradient
+        const normalized = val / maxIterations; 
+        // Use a color map. For example, a smooth transition in HSV or just a nice gradient:
+        // We'll do a gradient from dark blue to light yellow to white:
+        // This is deterministic arithmetic based on val.
+        
+        // Let's map normalized to a hue or directly to RGB.
+        // A simple approach: use a cosine-based palette.
+        const c1 = 0.5+0.5*Math.cos(3.0 + normalized*10.0);
+        const c2 = 0.5+0.5*Math.cos(1.0 + normalized*10.0);
+        const c3 = 0.5+0.5*Math.cos(5.0 + normalized*10.0);
+        
+        r = Math.floor(255 * c1);
+        g = Math.floor(255 * c2);
+        b = Math.floor(255 * c3);
+      }
+
+      data[idx]   = r;
+      data[idx+1] = g;
+      data[idx+2] = b;
+      data[idx+3] = 255;
+    }
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+}
+
+// Animation loop
+function animate(timestamp) {
+  if (!startTime) startTime = timestamp;
+  const elapsed = timestamp - startTime;
+
+  // After a certain time interval, zoom in slightly.
+  // A gentle exponential decay: scale = initial_scale * exp(-rate * time)
+  // We'll just scale by a small factor per second:
+  const zoomFactorPerSecond = 0.5; // half the size every ~1 second
+  const t = elapsed / 1000; 
+  // scale = 3 * (0.5^t) means scale shrinks by half every second:
+  // scale = initial_scale * (zoomFactorPerSecond^t)
+  scale = 3.0 * Math.pow(zoomFactorPerSecond, t);
+
+  // Draw the current frame
+  drawMandelbrot();
+
+  requestAnimationFrame(animate);
+}
+
+// Initial draw and start animation
+drawMandelbrot();
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>
