@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Enhanced Automatic Zooming Mandelbrot (Mobile-First + Worker)</title>
+<style>
+  body {
+    margin: 0;
+    background: #000;
+    color: #fff;
+    font-family: sans-serif;
+    overflow: hidden;
+  }
+  #info {
+    position: absolute;
+    top: 10px; left: 10px;
+    background: rgba(0,0,0,0.5);
+    padding: 8px;
+    border-radius: 3px;
+    font-size: 12px;
+    line-height: 1.5em;
+  }
+  #info span {
+    display: block;
+    margin-bottom: 4px;
+  }
+  @media (min-width: 600px) {
+    #info { font-size: 14px; }
+  }
+</style>
+</head>
+<body>
+<canvas id="mandelbrot"></canvas>
+<div id="info">
+  <span><b>Center:</b> <span id="centerCoord"></span></span>
+  <span><b>Scale:</b> <span id="scaleValue"></span></span>
+  <span><b>Iterations:</b> <span id="iterCount"></span></span>
+</div>
+
+<script>
+"use strict";
+
+// All computations are deterministic and materialist, arising solely from the iterative formula. 
+// No intangible or observer-dependent concepts are needed.
+
+const canvas = document.getElementById("mandelbrot");
+const ctx = canvas.getContext("2d");
+const centerCoordEl = document.getElementById("centerCoord");
+const scaleValueEl = document.getElementById("scaleValue");
+const iterCountEl = document.getElementById("iterCount");
+
+function resizeCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  const width = Math.floor(window.innerWidth * dpr);
+  const height = Math.floor(window.innerHeight * dpr);
+  canvas.width = width;
+  canvas.height = height;
+  ctx.resetTransform();
+  ctx.scale(dpr, dpr);
+}
+
+window.addEventListener('resize', () => {
+  resizeCanvas();
+  requestFrameRender();
+});
+
+resizeCanvas();
+
+// Initial parameters
+let centerX = -0.5;
+let centerY = 0.0;
+let scale = 3.0; // The width in complex coordinates currently visible
+
+// Time-based zoom parameters
+let startTime = null;
+const initialScale = scale;
+const zoomFactorPerSecond = 0.5; // scale halves every second
+
+// Progressive iteration parameters
+let baseIterations = 50;  // Start low for quick initial render
+let iterationGrowthRate = 0.1; // Increase iterations by 10% per second
+// This means after t seconds, iterations ~ baseIterations * exp(iterationGrowthRate * t)
+
+// Offscreen rendering via a Web Worker for performance
+// We'll create the worker from a Blob URL to keep this single-file.
+const workerCode = `
+self.onmessage = function(e) {
+  const {width, height, centerX, centerY, scale, maxIterations} = e.data;
+
+  function smoothIterationCount(x, y, maxIter) {
+    let zx = 0, zy = 0;
+    let iteration = 0;
+    while (zx*zx + zy*zy <= 4 && iteration < maxIter) {
+      const xtemp = zx*zx - zy*zy + x;
+      zy = 2*zx*zy + y;
+      zx = xtemp;
+      iteration++;
+    }
+    if (iteration === maxIter) return maxIter; // inside set
+    const r2 = zx*zx + zy*zy;
+    return iteration + 1 - Math.log(Math.log(Math.sqrt(r2)))/Math.log(2);
+  }
+
+  const data = new Uint8ClampedArray(width*height*4);
+  for (let py = 0; py < height; py++) {
+    const y0 = centerY + (py - height/2)* (scale / height);
+    for (let px = 0; px < width; px++) {
+      const x0 = centerX + (px - width/2)* (scale / width);
+      const val = smoothIterationCount(x0, y0, maxIterations);
+      const idx = (py*width + px)*4;
+
+      let r, g, b;
+      if (val >= maxIterations) {
+        r = 0; g = 0; b = 0;
+      } else {
+        const normalized = val / maxIterations;
+        const c1 = 0.5+0.5*Math.cos(3.0 + normalized*10.0);
+        const c2 = 0.5+0.5*Math.cos(1.0 + normalized*10.0);
+        const c3 = 0.5+0.5*Math.cos(5.0 + normalized*10.0);
+
+        r = Math.floor(255 * c1);
+        g = Math.floor(255 * c2);
+        b = Math.floor(255 * c3);
+      }
+
+      data[idx] = r;
+      data[idx+1] = g;
+      data[idx+2] = b;
+      data[idx+3] = 255;
+    }
+  }
+
+  self.postMessage({width, height, data}, [data.buffer]);
+};
+`;
+
+const blob = new Blob([workerCode], {type: 'application/javascript'});
+const workerUrl = URL.createObjectURL(blob);
+const worker = new Worker(workerUrl);
+
+// We'll batch render requests to avoid multiple simultaneous calls
+let renderRequested = false;
+let currentIterationCount = baseIterations;
+
+function requestFrameRender() {
+  if (!renderRequested) {
+    renderRequested = true;
+    // Post a message to the worker
+    const width = canvas.width;
+    const height = canvas.height;
+    worker.postMessage({
+      width: width,
+      height: height,
+      centerX: centerX,
+      centerY: centerY,
+      scale: scale,
+      maxIterations: Math.round(currentIterationCount)
+    });
+  }
+}
+
+worker.onmessage = function(e) {
+  renderRequested = false;
+  const {width, height, data} = e.data;
+  const imgData = new ImageData(new Uint8ClampedArray(data), width, height);
+  ctx.putImageData(imgData, 0, 0, 0, 0, window.innerWidth, window.innerHeight);
+};
+
+// Animation loop
+function animate(timestamp) {
+  if (!startTime) startTime = timestamp;
+  const elapsed = (timestamp - startTime) / 1000; // in seconds
+
+  // Update scale based on elapsed time
+  scale = initialScale * Math.pow(zoomFactorPerSecond, elapsed);
+
+  // Increase iteration count over time for more detail
+  // Iterations = baseIterations * exp(iterationGrowthRate * elapsed)
+  currentIterationCount = baseIterations * Math.exp(iterationGrowthRate * elapsed);
+
+  // Update info display
+  centerCoordEl.textContent = \`\${centerX.toFixed(6)}, \${centerY.toFixed(6)}\`;
+  scaleValueEl.textContent = scale.toExponential(3);
+  iterCountEl.textContent = Math.round(currentIterationCount);
+
+  // Request a new render
+  requestFrameRender();
+
+  requestAnimationFrame(animate);
+}
+
+// Initial draw and start animation
+requestFrameRender();
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>
