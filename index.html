@@ -240,11 +240,13 @@
             <div class="app-controls">
                 <input type="text" id="search-input" placeholder="Search apps...">
                 <select id="sort-by">
+                    <option value="random">Random</option>
                     <option value="original">Original</option>
                     <option value="alphabetical">Alphabetical (Display Name)</option>
                     <option value="filenameAlphabetical">Alphabetical (Filename)</option>
                     <option value="lastCommittedDesc">Last Committed (Newest First)</option>
                     <option value="lastCommittedAsc">Last Committed (Oldest First)</option>
+                    <option value="shortestName">Shortest Display Name</option>
                 </select>
             </div>
             <ul class="app-list" id="app-list">
@@ -345,6 +347,9 @@
                     appListData = appData;
                     originalAppListData = [...appData];
                     localStorage.setItem('appListData', JSON.stringify(appListData));
+
+                    // Set default sorting to random
+                    sortBySelect.value = 'random';
                     applySorting();
                 })
                 .catch(error => {
@@ -354,6 +359,7 @@
                     if (cachedAppData) {
                         appListData = JSON.parse(cachedAppData);
                         originalAppListData = [...appListData];
+                        sortBySelect.value = 'random'; // Default to random even if loaded from cache
                         applySorting();
                     } else {
                         displayOfflineMessage();
@@ -503,6 +509,18 @@
             appListData.sort((a, b) => a.filename.localeCompare(b.filename));
         }
 
+        function sortShortestName() {
+            appListData.sort((a, b) => a.displayName.length - b.displayName.length);
+        }
+
+        function sortRandom() {
+            // Fisher-Yates shuffle
+            for (let i = appListData.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [appListData[i], appListData[j]] = [appListData[j], appListData[i]];
+            }
+        }
+
         function applySorting() {
             const sortValue = sortBySelect.value;
             if (sortValue === 'alphabetical') {
@@ -515,6 +533,10 @@
                 sortLastCommittedAsc();
             } else if (sortValue === 'filenameAlphabetical') {
                 sortFilenameAlphabetical();
+            } else if (sortValue === 'shortestName') {
+                sortShortestName();
+            } else if (sortValue === 'random') {
+                sortRandom();
             }
 
             filterAppList(searchInput.value.toLowerCase());
