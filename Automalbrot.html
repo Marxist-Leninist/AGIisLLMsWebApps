@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<!-- Mobile-first scaling -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Stable Automatic Zooming Mandelbrot (Simple)</title>
+<style>
+  body {
+    margin: 0; 
+    background: #000; 
+    color: #fff; 
+    font-family: sans-serif; 
+    overflow: hidden;
+  }
+  #info {
+    position: absolute;
+    top: 10px; left: 10px;
+    background: rgba(0,0,0,0.5);
+    padding: 8px;
+    border-radius: 3px;
+    font-size: 14px;
+    line-height: 1.5em;
+  }
+  #info span {
+    display: block;
+    margin-bottom: 4px;
+  }
+</style>
+</head>
+<body>
+<canvas id="mandelbrot"></canvas>
+<div id="info">
+  <span><b>Center:</b> <span id="centerCoord"></span></span>
+  <span><b>Scale:</b> <span id="scaleValue"></span></span>
+  <span><b>Iterations:</b> <span id="iterCount"></span></span>
+</div>
+<script>
+"use strict";
+
+// Purely arithmetic computation of the Mandelbrot set.
+// No probabilities, no intangible entities, no non-causal concepts.
+
+const canvas = document.getElementById('mandelbrot');
+const ctx = canvas.getContext('2d');
+const centerCoordEl = document.getElementById("centerCoord");
+const scaleValueEl = document.getElementById("scaleValue");
+const iterCountEl = document.getElementById("iterCount");
+
+function resizeCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  const width = Math.floor(window.innerWidth * dpr);
+  const height = Math.floor(window.innerHeight * dpr);
+  canvas.width = width;
+  canvas.height = height;
+  ctx.scale(dpr, dpr);
+}
+
+window.addEventListener('resize', () => {
+  resizeCanvas();
+  drawMandelbrot();
+});
+
+resizeCanvas();
+
+// Initial parameters:
+let centerX = -0.5;
+let centerY = 0.0;
+let scale = 3.0;
+const maxIterations = 100; // Keep low for speed
+iterCountEl.textContent = maxIterations.toString();
+
+// Slow down the zoom so the image remains stable and recognizable for a while
+// scale reduces by 10% every 2 seconds, i.e., 0.95^(t/2)
+let startTime = null;
+const zoomFactorPerSecond = 0.95; 
+
+function drawMandelbrot() {
+  const width = canvas.width;
+  const height = canvas.height;
+  const imgData = ctx.createImageData(width, height);
+  const data = imgData.data;
+
+  for (let py = 0; py < height; py++) {
+    const y0 = centerY + (py - height/2)* (scale / height);
+    for (let px = 0; px < width; px++) {
+      const x0 = centerX + (px - width/2)* (scale / width);
+      let zx = 0, zy = 0;
+      let iteration = 0;
+      while (zx*zx + zy*zy <= 4 && iteration < maxIterations) {
+        const xtemp = zx*zx - zy*zy + x0;
+        zy = 2*zx*zy + y0;
+        zx = xtemp;
+        iteration++;
+      }
+
+      const idx = (py*width + px)*4;
+      let val;
+      if (iteration === maxIterations) {
+        val = 0; // inside set: black
+      } else {
+        val = Math.floor(255 * (iteration/maxIterations));
+      }
+
+      data[idx]=val; data[idx+1]=val; data[idx+2]=val; data[idx+3]=255;
+    }
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+}
+
+function animate(timestamp) {
+  if (!startTime) startTime = timestamp;
+  const elapsed = (timestamp - startTime)/1000; // seconds
+
+  // Update scale based on elapsed time
+  // scale = initial_scale * (zoomFactorPerSecond^elapsed)
+  // initial_scale = 3.0
+  scale = 3.0 * Math.pow(zoomFactorPerSecond, elapsed/2);
+
+  // Update info
+  centerCoordEl.textContent = `${centerX.toFixed(6)}, ${centerY.toFixed(6)}`;
+  scaleValueEl.textContent = scale.toExponential(3);
+
+  drawMandelbrot();
+  requestAnimationFrame(animate);
+}
+
+// Initial draw and start animation
+drawMandelbrot();
+requestAnimationFrame(animate);
+
+</script>
+</body>
+</html>
