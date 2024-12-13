@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Automatic Zooming Mandelbrot</title>
+<style>
+  body {
+    margin: 0;
+    background: #000;
+    color: #fff;
+    font-family: sans-serif;
+  }
+  #info {
+    position: absolute;
+    top: 10px; left: 10px;
+    background: rgba(0,0,0,0.5);
+    padding: 5px;
+    border-radius: 3px;
+  }
+</style>
+</head>
+<body>
+<canvas id="mandelbrot"></canvas>
+<div id="info">Automatically Zooming In</div>
+<script>
+"use strict";
+
+// Deterministic numeric procedure to generate and continuously zoom 
+// into the Mandelbrot set. No intangible or observer-dependent aspects.
+// Soviet-influenced materialist approach: 
+// The display is directly computed from the iterative formula.
+
+const canvas = document.getElementById("mandelbrot");
+const ctx = canvas.getContext("2d");
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+
+window.addEventListener('resize', () => {
+  resizeCanvas();
+  drawMandelbrot();
+});
+
+resizeCanvas();
+
+// Initial parameters for the portion of the complex plane
+let centerX = -0.5;
+let centerY = 0;
+let scale = 3; // width of the region in the complex plane
+
+// Maximum number of iterations for each point
+const maxIterations = 200;
+
+function drawMandelbrot() {
+  const width = canvas.width;
+  const height = canvas.height;
+  const imgData = ctx.createImageData(width, height);
+  const data = imgData.data;
+
+  for (let py = 0; py < height; py++) {
+    const y0 = centerY + (py - height / 2) * (scale / height);
+    for (let px = 0; px < width; px++) {
+      const x0 = centerX + (px - width / 2) * (scale / width);
+
+      let x = 0;
+      let y = 0;
+      let iteration = 0;
+      while (x*x + y*y <= 4 && iteration < maxIterations) {
+        const xtemp = x*x - y*y + x0;
+        y = 2*x*y + y0;
+        x = xtemp;
+        iteration++;
+      }
+
+      const idx = (py * width + px) * 4;
+      let r, g, b;
+      if (iteration === maxIterations) {
+        // Inside the set
+        r = 0; g = 0; b = 0;
+      } else {
+        // Outside the set: simple gradient
+        const ratio = iteration / maxIterations;
+        r = Math.floor(255 * ratio);
+        g = Math.floor(255 * ratio);
+        b = Math.floor(128 * ratio);
+      }
+
+      data[idx] = r;
+      data[idx+1] = g;
+      data[idx+2] = b;
+      data[idx+3] = 255;
+    }
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+}
+
+// Continuous zoom animation
+// We will zoom in slowly at each animation frame
+function animate() {
+  // Decrease scale slightly each frame to zoom in
+  scale *= 0.99;
+  drawMandelbrot();
+  requestAnimationFrame(animate);
+}
+
+drawMandelbrot();
+requestAnimationFrame(animate);
+
+</script>
+</body>
+</html>
