@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Nuclear Isomer Battery - Part 4: Custom Optimization Criteria</title>
+<style>
+body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    line-height: 1.6;
+}
+code, pre {
+    font-family: Consolas, monospace;
+    background: #f9f9f9;
+    padding: 2px 4px;
+    display: inline-block;
+}
+h1, h2, h3 {
+    font-weight: normal;
+}
+h1 {
+    font-size: 1.8em;
+    margin-bottom: 0.5em;
+}
+h2 {
+    font-size: 1.4em;
+    margin-top: 1.2em;
+    margin-bottom: 0.5em;
+}
+h3 {
+    font-size: 1.2em;
+    margin-top: 1em;
+    margin-bottom: 0.3em;
+}
+p {
+    margin-bottom: 1em;
+}
+label {
+    display: inline-block;
+    width: 210px;
+    font-weight: bold;
+}
+input[type="number"], input[type="text"] {
+    width: 100px;
+    margin-bottom: 5px;
+}
+button {
+    margin-top: 10px;
+}
+.result {
+    background: #f0f0f0;
+    padding: 10px;
+    margin-top: 10px;
+    white-space: pre-wrap;
+    font-family: Consolas, monospace;
+}
+.note {
+    font-size: 0.9em;
+    color: #555;
+}
+ul, li {
+    margin-bottom: 0.5em;
+}
+</style>
+</head>
+<body>
+<h1>Nuclear Isomer Battery - Part 4: Custom Optimization Criteria</h1>
+
+<p><strong>Note:</strong> This is Part 4. In previous parts, we established formulas and performed simple optimizations. Now we introduce a more complex optimization scenario where we define a <em>cost function</em> that takes into account not just the energy released but also the cost of providing the triggering photon intensity <code>I_γ</code> over the chosen interval.</p>
+
+<p>We have:</p>
+<pre>
+N(t):
+ t < t₀: N(t) = N₀ * exp(-λ t)
+ t ≥ t₀: N(t) = N₀ * exp(-λ t₀) * exp[-(λ + Γ_trigger/ℏ)(t - t₀)]
+
+P(t) = N(t)*E* (Γ_spont + Γ_trigger)/ℏ
+</pre>
+
+<p>Energy released in [t₀, t₀+Δt]:</p>
+<pre>
+E_released = N₀ E* exp(-Γ_spont t₀/ℏ) [1 - exp(-(Γ_spont+Γ_trigger)*Δt/ℏ)]
+</pre>
+
+<p>Let’s define a cost function <code>Cost = I_γ * Δt * C</code>, where <code>C</code> is some constant cost factor (Joules per unit intensity, for instance). We can try to maximize <code>Gain = E_released - Cost</code>.</p>
+
+<p>We already have Γ_trigger related to I_γ from a simplified E1 formula:</p>
+<pre>
+Γ_trigger ≈ (16π/9)*α*B(E1)*(E_γ²*I_γ)/(ℏ (m_p c²))
+</pre>
+
+<p>Thus, <code>Γ_trigger</code> is proportional to <code>I_γ</code>. If we set <code>C</code> and try different <code>I_γ</code> and <code>t₀</code>, we can find the best trade-off. Let’s do a brute-force scan again.</p>
+
+<h2>Interactive Input</h2>
+<p>Set parameters and click "Optimize with Cost" to try to find the best trade-off. We’ll scan over t₀ and I_γ, compute Γ_trigger from I_γ, and find max(Gain).</p>
+
+<label>N₀:</label><input type="number" id="N0" value="1e12"><br>
+<label>E* (J):</label><input type="number" id="E_star" value="1e-13"><br>
+<label>T₁/₂ (s):</label><input type="number" id="T_half" value="3600"><br>
+<label>Δt (s):</label><input type="number" id="Delta_t" value="10"><br>
+<label>ℏ (J·s):</label><input type="number" id="hbar" value="1.054571817e-34"><br>
+<label>α (fine-structure):</label><input type="number" id="alpha" value="0.0072973525693"><br>
+<label>B(E1) (SI):</label><input type="number" id="B_E1" value="1e-50"><br>
+<label>E_γ (J):</label><input type="number" id="E_gamma" value="1e-14"><br>
+<label>m_p c² (J):</label><input type="number" id="m_p_c2" value="1.50327759e-10"><br>
+<label>C (cost factor, J/(W/m²)*s):</label><input type="number" id="Cfactor" value="1e-14"><br>
+
+<h3>Range to Scan</h3>
+<label>t₀ min (s):</label><input type="number" id="t0_min" value="0"><br>
+<label>t₀ max (s):</label><input type="number" id="t0_max" value="2000"><br>
+<label>t₀ steps:</label><input type="number" id="t0_steps" value="20"><br>
+
+<label>I_γ min (W/m²):</label><input type="number" id="I_gamma_min" value="1e18"><br>
+<label>I_γ max (W/m²):</label><input type="number" id="I_gamma_max" value="1e22"><br>
+<label>I_γ steps:</label><input type="number" id="I_gamma_steps" value="20"><br>
+
+<button onclick="optimizeWithCost()">Optimize with Cost</button>
+
+<div class="result" id="result"></div>
+
+<script>
+function optimizeWithCost() {
+    const N0 = parseFloat(document.getElementById('N0').value);
+    const E_star = parseFloat(document.getElementById('E_star').value);
+    const T_half = parseFloat(document.getElementById('T_half').value);
+    const Delta_t = parseFloat(document.getElementById('Delta_t').value);
+    const hbar = parseFloat(document.getElementById('hbar').value);
+
+    const alpha = parseFloat(document.getElementById('alpha').value);
+    const B_E1 = parseFloat(document.getElementById('B_E1').value);
+    const E_gamma = parseFloat(document.getElementById('E_gamma').value);
+    const m_p_c2 = parseFloat(document.getElementById('m_p_c2').value);
+    const Cfactor = parseFloat(document.getElementById('Cfactor').value);
+
+    const t0_min = parseFloat(document.getElementById('t0_min').value);
+    const t0_max = parseFloat(document.getElementById('t0_max').value);
+    const t0_steps = parseInt(document.getElementById('t0_steps').value);
+
+    const I_gamma_min = parseFloat(document.getElementById('I_gamma_min').value);
+    const I_gamma_max = parseFloat(document.getElementById('I_gamma_max').value);
+    const I_gamma_steps = parseInt(document.getElementById('I_gamma_steps').value);
+
+    const ln2 = Math.log(2);
+    const lambda = ln2 / T_half;
+    const Gamma_spont = hbar * lambda;
+
+    let bestGain = -Infinity;
+    let best_t0 = null;
+    let best_Igamma = null;
+    let best_Ereleased = null;
+    let best_Cost = null;
+
+    for (let i=0; i<=t0_steps; i++) {
+        let t0 = t0_min + i*(t0_max - t0_min)/t0_steps;
+        for (let j=0; j<=I_gamma_steps; j++) {
+            let I_gamma = I_gamma_min + j*(I_gamma_max - I_gamma_min)/I_gamma_steps;
+
+            // Γ_trigger from E1 formula:
+            // Γ_trigger ≈ (16π/9)*α*B(E1)*(E_γ² * I_γ)/(ℏ (m_p c²))
+            const pi = Math.PI;
+            let Gamma_trigger = (16*pi/9)*alpha*B_E1*((E_gamma**2)*I_gamma)/(hbar*(m_p_c2));
+
+            // E_released = N0 E* exp(-Gamma_spont t0/ℏ) [1 - exp(-(Gamma_spont+Gamma_trigger)*Δt/ℏ)]
+            let factor = (Gamma_spont+Gamma_trigger)*Delta_t/hbar;
+            let Ereleased = N0 * E_star * Math.exp(-(Gamma_spont*t0/hbar)) * (1 - Math.exp(-factor));
+
+            // Cost = I_γ * Δt * Cfactor
+            let Cost = I_gamma * Delta_t * Cfactor;
+
+            let Gain = Ereleased - Cost;
+
+            if (Gain > bestGain) {
+                bestGain = Gain;
+                best_t0 = t0;
+                best_Igamma = I_gamma;
+                best_Ereleased = Ereleased;
+                best_Cost = Cost;
+            }
+        }
+    }
+
+    let output = `Maximized Gain:
+Gain = ${bestGain} J
+At t0 = ${best_t0} s
+I_gamma = ${best_Igamma} W/m²
+
+E_released = ${best_Ereleased} J
+Cost = ${best_Cost} J`;
+
+    document.getElementById('result').textContent = output;
+}
+</script>
+</body>
+</html>
