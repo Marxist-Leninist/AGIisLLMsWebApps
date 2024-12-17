@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Nuclear Isomer Battery - Part 3: Optimization Scenarios</title>
+<style>
+body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    line-height: 1.6;
+}
+code, pre {
+    font-family: Consolas, monospace;
+    background: #f9f9f9;
+    padding: 2px 4px;
+    display: inline-block;
+}
+h1, h2, h3 {
+    font-weight: normal;
+}
+h1 {
+    font-size: 1.8em;
+    margin-bottom: 0.5em;
+}
+h2 {
+    font-size: 1.4em;
+    margin-top: 1.2em;
+    margin-bottom: 0.5em;
+}
+h3 {
+    font-size: 1.2em;
+    margin-top: 1em;
+    margin-bottom: 0.3em;
+}
+p {
+    margin-bottom: 1em;
+}
+label {
+    display: inline-block;
+    width: 210px;
+    font-weight: bold;
+}
+input[type="number"], input[type="text"] {
+    width: 100px;
+    margin-bottom: 5px;
+}
+button {
+    margin-top: 10px;
+}
+.result {
+    background: #f0f0f0;
+    padding: 10px;
+    margin-top: 10px;
+    white-space: pre-wrap;
+    font-family: Consolas, monospace;
+}
+.note {
+    font-size: 0.9em;
+    color: #555;
+}
+ul, li {
+    margin-bottom: 0.5em;
+}
+</style>
+</head>
+<body>
+<h1>Nuclear Isomer Battery - Part 3: Optimization Scenarios</h1>
+
+<p><strong>Note:</strong> This is Part 3. In <a href="https://marxist-leninist.github.io/AGIisLLMsWebApps/NuclearIsomerBatteryFullyAnlyticalSolution.html" target="_blank">Part 1</a>, we got the closed-form solutions. In Part 2, we added interactive input to compute N(t) and P(t). Now in Part 3, we explore a scenario where we try to <em>optimize</em> certain parameters (like when to trigger <code>t₀</code> or choose <code>Γ_trigger</code>) to maximize a chosen objective, such as energy released in a given time window <code>Δt</code>.</p>
+
+<p>We know from Part 1 and 2:</p>
+<pre>
+N(t):
+ t < t₀: N(t) = N₀ * exp(-λ t)
+ t ≥ t₀: N(t) = N₀ * exp(-λ t₀) * exp[-(λ + Γ_trigger/ℏ)(t - t₀)]
+
+P(t) = N(t) * E* * (Γ_spont + Γ_trigger)/ℏ, 
+ where Γ_spont = ℏ λ, λ = ln(2)/T₁/₂
+</pre>
+
+<p>Define an objective: For example, we want to maximize the energy released in a short window [t₀, t₀+Δt]. The energy released in [t₀, t₀+Δt] is:</p>
+
+<pre>
+E_released = ∫ from t₀ to t₀+Δt P(t) dt
+           = N₀ E* e^(-Γ_spont t₀/ℏ) [1 - exp(-(Γ_spont+Γ_trigger)*Δt/ℏ)]
+</pre>
+
+<p>Given T₁/₂, N₀, E*, and Δt fixed, we can try changing t₀ and Γ_trigger to see how E_released responds.</p>
+
+<h2>Interactive Optimization</h2>
+<p>Set parameters and click "Optimize" to attempt a simple numerical approach: we’ll vary t₀ and Γ_trigger on a grid and find which combination gives the maximum E_released.</p>
+
+<label>N₀:</label><input type="number" id="N0" value="1e12"><br>
+<label>E* (J):</label><input type="number" id="E_star" value="1e-13"><br>
+<label>T₁/₂ (s):</label><input type="number" id="T_half" value="3600"><br>
+<label>Δt (s):</label><input type="number" id="Delta_t" value="10"><br>
+<label>ℏ (J·s):</label><input type="number" id="hbar" value="1.054571817e-34"><br>
+<p><em>We will scan t₀ and Γ_trigger in given ranges:</em></p>
+<label>t₀ min (s):</label><input type="number" id="t0_min" value="0"><br>
+<label>t₀ max (s):</label><input type="number" id="t0_max" value="2000"><br>
+<label>t₀ steps:</label><input type="number" id="t0_steps" value="20"><br>
+
+<label>Γ_trigger min (J):</label><input type="number" id="Gtr_min" value="0"><br>
+<label>Γ_trigger max (J):</label><input type="number" id="Gtr_max" value="1e-20"><br>
+<label>Γ_trigger steps:</label><input type="number" id="Gtr_steps" value="20"><br>
+
+<button onclick="optimize()">Optimize</button>
+
+<div class="result" id="result"></div>
+
+<script>
+function optimize() {
+    const N0 = parseFloat(document.getElementById('N0').value);
+    const E_star = parseFloat(document.getElementById('E_star').value);
+    const T_half = parseFloat(document.getElementById('T_half').value);
+    const Delta_t = parseFloat(document.getElementById('Delta_t').value);
+    const hbar = parseFloat(document.getElementById('hbar').value);
+
+    const t0_min = parseFloat(document.getElementById('t0_min').value);
+    const t0_max = parseFloat(document.getElementById('t0_max').value);
+    const t0_steps = parseInt(document.getElementById('t0_steps').value);
+
+    const Gtr_min = parseFloat(document.getElementById('Gtr_min').value);
+    const Gtr_max = parseFloat(document.getElementById('Gtr_max').value);
+    const Gtr_steps = parseInt(document.getElementById('Gtr_steps').value);
+
+    const ln2 = Math.log(2);
+    const lambda = ln2 / T_half;
+    const Gamma_spont = hbar * lambda;
+
+    let bestE = -Infinity;
+    let best_t0 = null;
+    let best_Gtr = null;
+
+    for (let i=0; i<=t0_steps; i++) {
+        let t0 = t0_min + i*(t0_max - t0_min)/t0_steps;
+        for (let j=0; j<=Gtr_steps; j++) {
+            let Gamma_trigger = Gtr_min + j*(Gtr_max - Gtr_min)/Gtr_steps;
+
+            // E_released = N0 * E* * exp(-Gamma_spont t0/ℏ) * [1 - exp(-(Gamma_spont+Gamma_trigger)*Δt/ℏ)]
+            // Note: (Gamma_spont+Gamma_trigger)/ℏ = rate, ensure no confusion. Actually from formula:
+            // E_released = integrate P(t) from t0 to t0+Δt
+            // P(t) after t0 = N0 E* ((Gamma_spont+Gamma_trigger)/hbar)*exp(-Gamma_spont t0/hbar)*exp(- (Gamma_spont+Gamma_trigger)(t-t0)/hbar)
+            // integral over u=(t-t0) from 0 to Δt:
+            // = N0 E* exp(-Gamma_spont t0/hbar) (Gamma_spont+Gamma_trigger)/hbar * ∫0^Δt exp(-(Gamma_spont+Gamma_trigger)u/hbar) du
+            // = N0 E* exp(-Gamma_spont t0/hbar) (Gamma_spont+Gamma_trigger)/hbar * [ (hbar/(Gamma_spont+Gamma_trigger)) (1 - exp(-(Gamma_spont+Gamma_trigger)*Δt/hbar)) ]
+            // (Gamma_spont+Gamma_trigger)/hbar cancels with hbar/(Gamma_spont+Gamma_trigger)
+            // Simplifies to:
+            // E_released = N0 E* exp(-Gamma_spont t0/hbar) [1 - exp(-(Gamma_spont+Gamma_trigger)*Δt/hbar)]
+            
+            let factor = (Gamma_spont+Gamma_trigger)*Delta_t/hbar;
+            let E_released = N0 * E_star * Math.exp(- (Gamma_spont * t0 / hbar)) * (1 - Math.exp(-factor));
+
+            if (E_released > bestE) {
+                bestE = E_released;
+                best_t0 = t0;
+                best_Gtr = Gamma_trigger;
+            }
+        }
+    }
+
+    let output = `Maximized E_released (in chosen Δt after t0):
+Max E_released = ${bestE} Joules
+at t0 = ${best_t0} s
+and Γ_trigger = ${best_Gtr} J`;
+
+    document.getElementById('result').textContent = output;
+}
+</script>
+</body>
+</html>
