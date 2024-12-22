@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Rocket Launch and Orbit Game (Improved Version)</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; background-color: #000033; }
+        canvas { display: block; }
+        #ui { position: absolute; top: 10px; left: 10px; color: white; text-shadow: 1px 1px 2px black; }
+        #miniMap { position: absolute; bottom: 10px; right: 10px; border: 2px solid white; }
+        #startScreen { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: white; background: rgba(0,0,0,0.7); padding: 20px; border-radius: 10px; }
+        #orbitInfo { position: absolute; top: 10px; right: 10px; color: white; text-shadow: 1px 1px 2px black; text-align: right; }
+        #debugInfo { position: absolute; bottom: 10px; left: 10px; color: yellow; text-shadow: 1px 1px 2px black; }
+        #missionObjectives { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); color: white; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <canvas id="miniMap" width="200" height="200"></canvas>
+    <div id="ui">
+        <div>Altitude: <span id="altitude">0</span> km</div>
+        <div>Velocity: <span id="velocity">0</span> m/s</div>
+        <div>Fuel: <span id="fuel">100</span>%</div>
+        <div>Angle: <span id="angle">0</span>°</div>
+        <div>Current Stage: <span id="currentStage">1</span></div>
+    </div>
+    <div id="orbitInfo">
+        <div>Apoapsis: <span id="apoapsis">0</span> km</div>
+        <div>Periapsis: <span id="periapsis">0</span> km</div>
+        <div>Orbital Period: <span id="orbitalPeriod">0</span> min</div>
+    </div>
+    <div id="debugInfo">
+        <div>FPS: <span id="fps">0</span></div>
+        <div>Frame Time: <span id="frameTime">0</span> ms</div>
+        <div>MiniMap Time: <span id="miniMapTime">0</span> ms</div>
+    </div>
+    <div id="missionObjectives">
+        <h3>Mission Objectives:</h3>
+        <ul>
+            <li id="objective1">Reach 100km altitude</li>
+            <li id="objective2">Achieve stable orbit</li>
+            <li id="objective3">Complete one full orbit</li>
+        </ul>
+    </div>
+    <div id="startScreen">
+        <h1>Rocket Launch and Orbit</h1>
+        <p>Launch your rocket and try to achieve orbit!</p>
+        <h2>Controls:</h2>
+        <p>Up Arrow / W: Activate thrust</p>
+        <p>Left Arrow / A: Rotate left</p>
+        <p>Right Arrow / D: Rotate right</p>
+        <p>Down Arrow / S: Activate aerobrakes (in atmosphere)</p>
+        <p>J: Jettison stage</p>
+        <p>Mouse: Drag to pan, scroll to zoom</p>
+        <button id="startButton">Start Game</button>
+    </div>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const miniMapCanvas = document.getElementById('miniMap');
+        const miniMapCtx = miniMapCanvas.getContext('2d');
+        const uiElements = {
+            altitude: document.getElementById('altitude'),
+            velocity: document.getElementById('velocity'),
+            fuel: document.getElementById('fuel'),
+            angle: document.getElementById('angle'),
+            apoapsis: document.getElementById('apoapsis'),
+            periapsis: document.getElementById('periapsis'),
+            orbitalPeriod: document.getElementById('orbitalPeriod'),
+            fps: document.getElementById('fps'),
+            frameTime: document.getElementById('frameTime'),
+            miniMapTime: document.getElementById('miniMapTime'),
+            currentStage: document.getElementById('currentStage')
+        };
+        const startScreen = document.getElementById('startScreen');
+        const startButton = document.getElementById('startButton');
+
+        let rocket = {
+            x: 0,
+            y: 0,
+            width: 10,
+            height: 30,
+            velocityX: 0,
+            velocityY: 0,
+            thrusting: false,
+            angle: 0,
+            rotationSpeed: 2,
+            aeroBraking: false
+        };
+
+        let stages = [
+            { fuel: 200, thrust: 0.2 },
+            { fuel: 150, thrust: 0.15 }
+        ];
+        let currentStage = 0;
+
+        const GRAVITY = 9.8;
+        const FUEL_CONSUMPTION = 0.5;
+        const PLANET_RADIUS = 6371000; // Earth's radius in meters
+        const ATMOSPHERE_HEIGHT = 100000; // 100 km
+        const SCALE = 100; // 1 pixel = 100 meters
+
+        let camera = { x: 0, y: 0, zoom: 1 };
+        let cameraControl = { x: 0, y: 0, zoom: 1 };
+        let isDragging = false;
+        let lastMousePos = { x: 0, y: 0 };
+        let miniMapZoom = 1;
+        let miniMapOffset = { x: 0, y: 0 };
+        let lastFrameTime = performance.now();
+        let frameCount = 0;
+        let lastFpsUpdate = performance.now();
+
+        function initGame() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            resetRocket();
+            drawGame();
+        }
+
+        function resetRocket() {
+            rocket.x = 0;
+            rocket.y = -PLANET_RADIUS - 100; // Start 100 meters above surface
+            rocket.velocityX = 0;
+            rocket.velocityY = 0;
+            rocket.angle = 0;
+            rocket.thrusting = false;
+            rocket.aeroBraking = false;
+            stages = [
+                { fuel: 200, thrust: 0.2 },
+                { fuel: 150, thrust: 0.15 }
+            ];
+            currentStage = 0;
+            cameraControl = { x: 0, y: 0, zoom: 1 };
+            miniMapZoom = 1;
+            miniMapOffset = { x: 0, y: 0 };
+        }
+
+        function startGame() {
+            startScreen.style.display = 'none';
+            requestAnimationFrame(gameLoop);
+        }
+
+        function gameLoop(timestamp) {
+            updateGame(timestamp);
+            requestAnimationFrame(gameLoop);
+        }
+
+        function updateGame(currentTime) {
+            try {
+                const deltaTime = currentTime - lastFrameTime;
+                lastFrameTime = currentTime;
+
+                // FPS calculation
+                frameCount++;
+                if (currentTime - lastFpsUpdate > 1000) {
+                    uiElements.fps.textContent = frameCount;
+                    frameCount = 0;
+                    lastFpsUpdate = currentTime;
+                }
+
+                uiElements.frameTime.textContent = deltaTime.toFixed(2);
+
+                // Performance warning
+                if (deltaTime > 50) { // More than 50ms per frame (less than 20 FPS)
+                    console.warn(`Low performance detected. Frame time: ${deltaTime.toFixed(2)}ms`);
+                }
+
+                const distance = Math.sqrt(rocket.x ** 2 + rocket.y ** 2);
+                const altitude = distance - PLANET_RADIUS;
+                const inAtmosphere = altitude < ATMOSPHERE_HEIGHT;
+
+                // Gravity
+                const gravityForce = GRAVITY * (PLANET_RADIUS / distance) ** 2;
+                const gravityAngle = Math.atan2(rocket.y, rocket.x);
+                rocket.velocityX -= gravityForce * Math.cos(gravityAngle) / 60;
+                rocket.velocityY -= gravityForce * Math.sin(gravityAngle) / 60;
+
+                // Thrust
+                if (rocket.thrusting && stages[currentStage].fuel > 0) {
+                    rocket.velocityX += Math.sin(rocket.angle) * stages[currentStage].thrust;
+                    rocket.velocityY -= Math.cos(rocket.angle) * stages[currentStage].thrust;
+                    stages[currentStage].fuel -= FUEL_CONSUMPTION / 60;
+                }
+
+                // Aerobraking
+                if (rocket.aeroBraking && inAtmosphere) {
+                    const drag = 0.01 * (1 - altitude / ATMOSPHERE_HEIGHT);
+                    rocket.velocityX *= (1 - drag);
+                    rocket.velocityY *= (1 - drag);
+                }
+
+                // Update position
+                rocket.x += rocket.velocityX;
+                rocket.y += rocket.velocityY;
+
+                // Check for surface collision
+                if (distance < PLANET_RADIUS) {
+                    resetRocket();
+                    console.log("Crashed! Resetting rocket.");
+                }
+
+                // Update camera
+                camera.x = rocket.x;
+                camera.y = rocket.y;
+                camera.zoom = Math.max(0.1, Math.min(1, 50000 / altitude));
+
+                updateUI(altitude);
+                drawGame();
+                updateMiniMap();
+                updateOrbitInfo();
+                checkObjectives(altitude);
+
+            } catch (error) {
+                console.error("Error in updateGame:", error);
+            }
+        }
+
+        function updateUI(altitude) {
+            uiElements.altitude.textContent = (altitude / 1000).toFixed(2);
+            uiElements.velocity.textContent = Math.sqrt(rocket.velocityX ** 2 + rocket.velocityY ** 2).toFixed(2);
+            uiElements.fuel.textContent = stages[currentStage].fuel.toFixed(0);
+            uiElements.angle.textContent = (rocket.angle * 180 / Math.PI).toFixed(0);
+            uiElements.currentStage.textContent = currentStage + 1;
+        }
+
+        function drawGame() {
+            ctx.fillStyle = '#000033';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.save();
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+            ctx.scale(cameraControl.zoom, cameraControl.zoom);
+            ctx.translate(-camera.x / SCALE - cameraControl.x, -camera.y / SCALE - cameraControl.y);
+
+            // Draw planet
+            ctx.fillStyle = '#003300';
+            ctx.beginPath();
+            ctx.arc(0, 0, PLANET_RADIUS / SCALE, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw atmosphere
+            ctx.fillStyle = 'rgba(135, 206, 250, 0.2)';
+            ctx.beginPath();
+            ctx.arc(0, 0, (PLANET_RADIUS + ATMOSPHERE_HEIGHT) / SCALE, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw rocket
+            ctx.save();
+            ctx.translate(rocket.x / SCALE, rocket.y / SCALE);
+            ctx.rotate(rocket.angle);
+            ctx.fillStyle = '#CCCCCC';
+            ctx.fillRect(-rocket.width / 2, -rocket.height / 2, rocket.width, rocket.height);
+
+            // Draw flame if thrusting
+            if (rocket.thrusting && stages[currentStage].fuel > 0) {
+                ctx.fillStyle = '#FF3300';
+                ctx.beginPath();
+                ctx.moveTo(-rocket.width / 4, rocket.height / 2);
+                ctx.lineTo(rocket.width / 4, rocket.height / 2);
+                ctx.lineTo(0, rocket.height / 2 + 20);
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            // Draw aerobrakes if active
+            if (rocket.aeroBraking) {
+                ctx.fillStyle = '#FF0000';
+                ctx.fillRect(-rocket.width, -rocket.height / 4, rocket.width * 2, rocket.height / 2);
+            }
+
+            ctx.restore();
+
+            ctx.restore();
+        }
+
+        function updateMiniMap() {
+            const startTime = performance.now();
+
+            miniMapCtx.fillStyle = '#000033';
+            miniMapCtx.fillRect(0, 0, miniMapCanvas.width, miniMapCanvas.height);
+
+            const centerX = miniMapCanvas.width / 2 - miniMapOffset.x * miniMapZoom;
+            const centerY = miniMapCanvas.height / 2 - miniMapOffset.y * miniMapZoom;
+            const mapRadius = miniMapCanvas.width / 2 - 5;
+            const mapScale = (PLANET_RADIUS + ATMOSPHERE_HEIGHT * 2) / mapRadius / miniMapZoom;
+
+            miniMapCtx.save();
+            miniMapCtx.translate(miniMapCanvas.width / 2, miniMapCanvas.height / 2);
+            miniMapCtx.scale(miniMapZoom, miniMapZoom);
+            miniMapCtx.translate(-miniMapCanvas.width / 2 + miniMapOffset.x, -miniMapCanvas.height / 2 + miniMapOffset.y);
+
+            // Draw planet
+            miniMapCtx.fillStyle = '#003300';
+            miniMapCtx.beginPath();
+            miniMapCtx.arc(centerX, centerY, PLANET_RADIUS / mapScale, 0, Math.PI * 2);
+            miniMapCtx.fill();
+
+            // Draw atmosphere
+            miniMapCtx.strokeStyle = 'rgba(135, 206, 250, 0.5)';
+            miniMapCtx.beginPath();
+            miniMapCtx.arc(centerX, centerY, (PLANET_RADIUS + ATMOSPHERE_HEIGHT) / mapScale, 0, Math.PI * 2);
+            miniMapCtx.stroke();
+
+            // Draw full Newtonian trajectory
+            miniMapCtx.strokeStyle = '#FFFF00';
+            miniMapCtx.beginPath();
+
+            let predictX = rocket.x;
+            let predictY = rocket.y;
+            let predictVX = rocket.velocityX;
+            let predictVY = rocket.velocityY;
+
+            miniMapCtx.moveTo(centerX + predictX / mapScale, centerY + predictY / mapScale);
+
+            let isOrbital = false;
+            let orbitComplete = false;
+
+            for (let i = 0; i < 100000; i++) {
+                const predictDistance = Math.sqrt(predictX ** 2 + predictY ** 2);
+                if (predictDistance < PLANET_RADIUS) break; // Crash
+
+                const predictGravityForce = GRAVITY * (PLANET_RADIUS / predictDistance) ** 2;
+                const predictGravityAngle = Math.atan2(predictY, predictX);
+
+                predictVX -= predictGravityForce * Math.cos(predictGravityAngle) / 60;
+                predictVY -= predictGravityForce * Math.sin(predictGravityAngle) / 60;
+
+                predictX += predictVX;
+                predictY += predictVY;
+
+                const mapX = centerX + predictX / mapScale;
+                const mapY = centerY + predictY / mapScale;
+
+                // Check if point is within minimap bounds
+                if (mapX >= 0 && mapX <= miniMapCanvas.width && mapY >= 0 && mapY <= miniMapCanvas.height) {
+                    miniMapCtx.lineTo(mapX, mapY);
+                }
+
+                // Check if orbit is complete or escaping
+                if (i > 100 && !orbitComplete) {
+                    if (Math.abs(predictX - rocket.x) < 1000 && Math.abs(predictY - rocket.y) < 1000) {
+                        orbitComplete = true;
+                        isOrbital = true;
+                    }
+                }
+                if (predictDistance > PLANET_RADIUS * 20 && !isOrbital) {
+                    break; // Escape trajectory
+                }
+                if (orbitComplete && i > 200) {
+                    break; // Completed more than one orbit
+                }
+            }
+
+            miniMapCtx.stroke();
+
+            // Draw apoapsis and periapsis markers
+            const apoapsisDistance = (parseFloat(uiElements.apoapsis.textContent) * 1000 + PLANET_RADIUS) / mapScale;
+            const periapsisDistance = (parseFloat(uiElements.periapsis.textContent) * 1000 + PLANET_RADIUS) / mapScale;
+
+            miniMapCtx.fillStyle = '#00FF00';
+            miniMapCtx.beginPath();
+            miniMapCtx.arc(centerX, centerY - apoapsisDistance, 3, 0, Math.PI * 2);
+            miniMapCtx.fill();
+
+            miniMapCtx.fillStyle = '#FF0000';
+            miniMapCtx.beginPath();
+            miniMapCtx.arc(centerX, centerY - periapsisDistance, 3, 0, Math.PI * 2);
+            miniMapCtx.fill();
+
+            // Draw rocket
+            miniMapCtx.fillStyle = '#FF0000';
+            miniMapCtx.beginPath();
+            miniMapCtx.arc(centerX + rocket.x / mapScale, centerY + rocket.y / mapScale, 3, 0, Math.PI * 2);
+            miniMapCtx.fill();
+
+            miniMapCtx.restore();
+
+            const endTime = performance.now();
+            const executionTime = endTime - startTime;
+            uiElements.miniMapTime.textContent = executionTime.toFixed(2);
+            if (executionTime > 16) { // If it takes more than 16ms (60 FPS)
+                console.warn(`updateMiniMap took ${executionTime.toFixed(2)}ms to execute`);
+            }
+        }
+
+        function updateOrbitInfo() {
+            const distance = Math.sqrt(rocket.x ** 2 + rocket.y ** 2);
+            const velocity = Math.sqrt(rocket.velocityX ** 2 + rocket.velocityY ** 2);
+            const radialVelocity = (rocket.x * rocket.velocityX + rocket.y * rocket.velocityY) / distance;
+            const tangentialVelocity = Math.sqrt(velocity ** 2 - radialVelocity ** 2);
+
+            const specificEnergy = (velocity ** 2) / 2 - GRAVITY * PLANET_RADIUS ** 2 / distance;
+            const semiMajorAxis = -GRAVITY * PLANET_RADIUS ** 2 / (2 * specificEnergy);
+
+            const eccentricity = Math.sqrt(1 + 2 * specificEnergy * (distance * tangentialVelocity / (GRAVITY * PLANET_RADIUS)) ** 2);
+
+            const apoapsis = semiMajorAxis * (1 + eccentricity) - PLANET_RADIUS;
+            const periapsis = semiMajorAxis * (1 - eccentricity) - PLANET_RADIUS;
+            const orbitalPeriod = 2 * Math.PI * Math.sqrt(semiMajorAxis ** 3 / (GRAVITY * PLANET_RADIUS ** 2));
+
+            uiElements.apoapsis.textContent = (apoapsis / 1000).toFixed(2);
+            uiElements.periapsis.textContent = (periapsis / 1000).toFixed(2);
+            uiElements.orbitalPeriod.textContent = (orbitalPeriod / 60).toFixed(2);
+        }
+
+        function checkObjectives(altitude) {
+            if (altitude > 100000) {
+                document.getElementById('objective1').style.textDecoration = 'line-through';
+            }
+            if (altitude > 200000 && Math.abs(parseFloat(uiElements.apoapsis.textContent) - parseFloat(uiElements.periapsis.textContent)) < 50) {
+                document.getElementById('objective2').style.textDecoration = 'line-through';
+            }
+            // You can add more complex logic for the third objective (complete one full orbit)
+        }
+
+        function jettisonStage() {
+            if (currentStage < stages.length - 1) {
+                currentStage++;
+                // You might want to add some velocity here to simulate stage separation
+                rocket.velocityY -= 10; // Add a small upward velocity boost
+            }
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowUp' || e.key === 'w') rocket.thrusting = true;
+            if (e.key === 'ArrowLeft' || e.key === 'a') rocket.angle -= rocket.rotationSpeed * Math.PI / 180;
+            if (e.key === 'ArrowRight' || e.key === 'd') rocket.angle += rocket.rotationSpeed * Math.PI / 180;
+            if (e.key === 'ArrowDown' || e.key === 's') rocket.aeroBraking = true;
+            if (e.key === 'j') jettisonStage();
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowUp' || e.key === 'w') rocket.thrusting = false;
+            if (e.key === 'ArrowDown' || e.key === 's') rocket.aeroBraking = false;
+        });
+
+        canvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            lastMousePos = { x: e.clientX, y: e.clientY };
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                const dx = e.clientX - lastMousePos.x;
+                const dy = e.clientY - lastMousePos.y;
+                cameraControl.x += dx / cameraControl.zoom;
+                cameraControl.y += dy / cameraControl.zoom;
+                lastMousePos = { x: e.clientX, y: e.clientY };
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+
+        canvas.addEventListener('wheel', (e) => {
+            const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+            cameraControl.zoom *= zoomFactor;
+            cameraControl.zoom = Math.max(0.1, Math.min(10, cameraControl.zoom));
+        });
+
+        miniMapCanvas.addEventListener('wheel', (e) => {
+            const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+            miniMapZoom *= zoomFactor;
+            miniMapZoom = Math.max(0.5, Math.min(5, miniMapZoom));
+            e.preventDefault();
+        });
+
+        miniMapCanvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            lastMousePos = { x: e.clientX, y: e.clientY };
+        });
+
+        miniMapCanvas.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                const dx = e.clientX - lastMousePos.x;
+                const dy = e.clientY - lastMousePos.y;
+                miniMapOffset.x += dx / miniMapZoom;
+                miniMapOffset.y += dy / miniMapZoom;
+                lastMousePos = { x: e.clientX, y: e.clientY };
+            }
+        });
+
+        miniMapCanvas.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+
+        startButton.addEventListener('click', startGame);
+        window.addEventListener('resize', initGame);
+
+        function logMemoryUsage() {
+            if (performance.memory) {
+                console.log(`Used JS Heap: ${(performance.memory.usedJSHeapSize / (1024 * 1024)).toFixed(2)} MB`);
+                console.log(`JS Heap Limit: ${(performance.memory.jsHeapSizeLimit / (1024 * 1024)).toFixed(2)} MB`);
+            }
+        }
+
+        // Call this function periodically
+        setInterval(logMemoryUsage, 5000); // Log every 5 seconds
+
+        initGame();
+    </script>
+</body>
+</html>
