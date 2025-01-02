@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>IP Address Info</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 20px;
+      background: #f0f0f0;
+    }
+    .container {
+      background: #fff;
+      padding: 20px;
+      max-width: 600px;
+      margin: auto;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+    }
+    h1 {
+      margin-top: 0;
+    }
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #f8f8f8;
+      padding: 10px;
+      border-radius: 4px;
+    }
+    button {
+      margin-right: 10px;
+      padding: 10px 15px;
+      cursor: pointer;
+      border: none;
+      border-radius: 4px;
+      background: #0080ff;
+      color: #fff;
+      font-size: 14px;
+    }
+    button:hover {
+      background: #0059b3;
+    }
+    .loading {
+      font-style: italic;
+      color: gray;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>Your IP & Network Info</h1>
+  <div id="ip-details" class="loading">
+    Fetching details...
+  </div>
+
+  <div style="margin-top:20px;">
+    <button onclick="copyAllInfo()">Copy Info</button>
+    <button onclick="shareAllInfo()">Share Info</button>
+  </div>
+</div>
+
+<script>
+  const ipDetailsDiv = document.getElementById('ip-details');
+
+  // Data structure to hold results
+  let ipData = {
+    ipv4: null,
+    ipv6: null,
+    details: {}
+  };
+
+  // 1) Fetch IPv4
+  fetch('https://api.ipify.org?format=json')
+    .then(response => response.json())
+    .then(data => {
+      ipData.ipv4 = data.ip || 'Unavailable';
+      updateDisplay();
+    })
+    .catch(err => {
+      ipData.ipv4 = 'Error fetching IPv4';
+      updateDisplay();
+    });
+
+  // 2) Fetch IPv6 (some connections might not provide IPv6)
+  fetch('https://api64.ipify.org?format=json')
+    .then(response => response.json())
+    .then(data => {
+      ipData.ipv6 = data.ip || 'Unavailable';
+      updateDisplay();
+    })
+    .catch(err => {
+      ipData.ipv6 = 'Error fetching IPv6';
+      updateDisplay();
+    });
+
+  // 3) Fetch geolocation & additional info from ipapi.co
+  fetch('https://ipapi.co/json/')
+    .then(response => response.json())
+    .then(info => {
+      ipData.details = info;
+      updateDisplay();
+    })
+    .catch(err => {
+      ipData.details = { error: 'Error fetching extra details' };
+      updateDisplay();
+    });
+
+  // Update the display once data is received
+  function updateDisplay() {
+    let infoHtml = '';
+    infoHtml += 'IPv4 Address: ' + (ipData.ipv4 ? ipData.ipv4 : '...') + '\n';
+    infoHtml += 'IPv6 Address: ' + (ipData.ipv6 ? ipData.ipv6 : '...') + '\n\n';
+
+    if (Object.keys(ipData.details).length === 0) {
+      infoHtml += 'Extra Details: Fetching...';
+    } else if (ipData.details.error) {
+      infoHtml += 'Extra Details: ' + ipData.details.error;
+    } else {
+      // Display everything we got from the location API
+      infoHtml += 'City: ' + (ipData.details.city || 'N/A') + '\n';
+      infoHtml += 'Region/State: ' + (ipData.details.region || 'N/A') + '\n';
+      infoHtml += 'Country: ' + (ipData.details.country_name || 'N/A') + '\n';
+      infoHtml += 'Postal Code: ' + (ipData.details.postal || 'N/A') + '\n';
+      infoHtml += 'Latitude, Longitude: ' + (ipData.details.latitude + ', ' + ipData.details.longitude || 'N/A') + '\n';
+      infoHtml += 'Organization: ' + (ipData.details.org || 'N/A') + '\n';
+      infoHtml += 'ASN: ' + (ipData.details.asn || 'N/A') + '\n';
+      infoHtml += 'Timezone: ' + (ipData.details.timezone || 'N/A') + '\n';
+      infoHtml += 'UTC Offset: ' + (ipData.details.utc_offset || 'N/A') + '\n';
+      infoHtml += 'Currency: ' + (ipData.details.currency || 'N/A') + '\n';
+      infoHtml += 'Country Calling Code: ' + (ipData.details.country_calling_code || 'N/A') + '\n';
+      infoHtml += 'Languages: ' + (ipData.details.languages || 'N/A') + '\n';
+      infoHtml += 'User Agent (if provided): ' + (ipData.details.user_agent || 'N/A') + '\n';
+    }
+    ipDetailsDiv.innerHTML = '<pre>' + infoHtml + '</pre>';
+    ipDetailsDiv.classList.remove('loading');
+  }
+
+  // Copy all IP & info to clipboard
+  function copyAllInfo() {
+    let textToCopy = ipDetailsDiv.innerText;
+    navigator.clipboard.writeText(textToCopy)
+      .then(() => {
+        alert('IP & Info copied to clipboard!');
+      })
+      .catch(err => {
+        alert('Failed to copy: ' + err);
+      });
+  }
+
+  // Share via native share dialog (if supported)
+  function shareAllInfo() {
+    if (navigator.share) {
+      navigator.share({
+        title: 'My IP & Network Info',
+        text: ipDetailsDiv.innerText
+      })
+      .catch(err => {
+        alert('Share failed: ' + err);
+      });
+    } else {
+      alert('Native Web Share not supported on this browser.');
+    }
+  }
+</script>
+</body>
+</html>
