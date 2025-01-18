@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Improved ELIZA (Classic) in a Single HTML File</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      margin: 0;
+      padding: 0;
+    }
+    header {
+      background: #3b5998;
+      color: #fff;
+      padding: 1rem;
+      text-align: center;
+    }
+    .container {
+      max-width: 600px;
+      margin: 1rem auto;
+      background: #fff;
+      border-radius: 5px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      display: flex;
+      flex-direction: column;
+    }
+    .chatbox {
+      flex: 1;
+      padding: 1rem;
+      overflow-y: auto;
+      max-height: 500px;
+      border-bottom: 1px solid #ccc;
+    }
+    .user-message, .eliza-message {
+      margin: 0.5rem 0;
+      padding: 0.5rem;
+      border-radius: 5px;
+      max-width: 80%;
+      clear: both;
+    }
+    .user-message {
+      background: #d1e7dd;
+      float: right;
+    }
+    .eliza-message {
+      background: #e2e3e5;
+      float: left;
+    }
+    .input-area {
+      padding: 1rem;
+      display: flex;
+      gap: 0.5rem;
+      border-top: 1px solid #ccc;
+    }
+    .input-area input[type="text"] {
+      flex: 1;
+      padding: 0.5rem;
+      font-size: 1rem;
+    }
+    .input-area button {
+      padding: 0.5rem 1rem;
+      font-size: 1rem;
+      background: #3b5998;
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      border-radius: 3px;
+    }
+    .input-area button:hover {
+      background: #354f88;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Improved ELIZA (Classic)</h1>
+</header>
+
+<div class="container">
+  <div class="chatbox" id="chatbox"></div>
+  <div class="input-area">
+    <input type="text" id="userInput" placeholder="Type your message..." />
+    <button onclick="sendMessage()">Send</button>
+  </div>
+</div>
+
+<script>
+// -------------------------------
+// Reflection Dictionary
+// -------------------------------
+const reflections = {
+  "am": "are",
+  "was": "were",
+  "i": "you",
+  "i'd": "you would",
+  "i've": "you have",
+  "i'll": "you will",
+  "my": "your",
+  "are": "am",
+  "you've": "I have",
+  "you'll": "I will",
+  "your": "my",
+  "yours": "mine",
+  "you": "me",
+  "me": "you"
+};
+
+// -------------------------------
+// ELIZA Patterns & Responses
+// -------------------------------
+const patterns = [
+  // Example: [regex, array of responses]
+  [/I need (.*)/i, [
+    "Why do you need {0}?",
+    "Would it really help you to get {0}?",
+    "Are you sure you need {0}?"
+  ]],
+  [/Why don'?t you ([^\?]*)\??/i, [
+    "Do you really think I don't {0}?",
+    "Perhaps I will {0} in good time.",
+    "Do you want me to {0}?"
+  ]],
+  [/Why can'?t I ([^\?]*)\??/i, [
+    "Do you think you should be able to {0}?",
+    "If you could {0}, what would you do?",
+    "I don't know — why can't you {0}?",
+    "Have you really tried?"
+  ]],
+  [/I can'?t (.*)/i, [
+    "How do you know you can't {0}?",
+    "Perhaps you could {0} if you tried.",
+    "What would it take for you to {0}?"
+  ]],
+  [/I am (.*)/i, [
+    "Did you come to me because you are {0}?",
+    "How long have you been {0}?",
+    "How do you feel about being {0}?"
+  ]],
+  [/I'?m (.*)/i, [
+    "How does being {0} make you feel?",
+    "Do you enjoy being {0}?",
+    "Why do you tell me you're {0}?"
+  ]],
+  [/Are you (.*)/i, [
+    "Why does it matter whether I am {0}?",
+    "Would you prefer if I weren't {0}?",
+    "Perhaps you believe I am {0}.",
+    "I may be {0} — what do you think?"
+  ]],
+  [/What (.*)/i, [
+    "Why do you ask?",
+    "How would an answer to that help you?",
+    "What do you think?"
+  ]],
+  [/How (.*)/i, [
+    "How do you suppose?",
+    "Perhaps you can answer your own question.",
+    "What is it you're really asking?"
+  ]],
+  [/Because (.*)/i, [
+    "Is that the real reason?",
+    "What other reasons come to mind?",
+    "Does that reason apply to anything else?",
+    "If {0}, what else must be true?"
+  ]],
+  [/(.*) sorry (.*)/i, [
+    "There are many times when no apology is needed.",
+    "What feelings do you have when you apologize?"
+  ]],
+  [/Hello(.*)/i, [
+    "Hello… I’m glad you could drop by today.",
+    "Hi there… how are you today?",
+    "Hello, how are you feeling today?"
+  ]],
+  [/(.*) friend (.*)/i, [
+    "Tell me more about your friends.",
+    "Why do you mention friends?",
+    "What do you value most in your friends?"
+  ]],
+  [/Yes/i, [
+    "You seem quite sure.",
+    "OK, but can you elaborate a bit?"
+  ]],
+  [/(.*) computer(.*)/i, [
+    "Are you really talking about me?",
+    "Does it seem strange to talk to a computer?",
+    "How do computers make you feel?",
+    "Do you feel threatened by computers?"
+  ]],
+  [/Is it (.*)/i, [
+    "Do you think it is {0}?",
+    "Perhaps it's {0} — what do you think?",
+    "If it were {0}, what would you do?",
+    "It could well be that {0}."
+  ]],
+  [/It is (.*)/i, [
+    "You seem very certain.",
+    "If I told you that it probably isn't {0}, what would you feel?"
+  ]],
+  [/Can you (.*)/i, [
+    "What makes you think I can't {0}?",
+    "If I could {0}, then what?",
+    "Why do you ask if I can {0}?"
+  ]],
+  [/Can I (.*)/i, [
+    "Perhaps you don't want to {0}.",
+    "Do you want to be able to {0}?",
+    "If you could {0}, would you?"
+  ]],
+  [/You are (.*)/i, [
+    "Why do you think I am {0}?",
+    "Does it please you to think that I'm {0}?",
+    "Perhaps you would like me to be {0}.",
+    "Perhaps you're really talking about yourself?"
+  ]],
+  [/You'?re (.*)/i, [
+    "Why do you say I am {0}?",
+    "Why do you think I am {0}?",
+    "Are we talking about you, or me?"
+  ]],
+  [/I don'?t (.*)/i, [
+    "Don't you really {0}?",
+    "Why don't you {0}?",
+    "Do you want to {0}?"
+  ]],
+  [/I feel (.*)/i, [
+    "Good, tell me more about these feelings.",
+    "Do you often feel {0}?",
+    "When do you usually feel {0}?",
+    "When you feel {0}, what do you do?"
+  ]],
+  [/I have (.*)/i, [
+    "Why do you tell me that you've {0}?",
+    "Have you really {0}?",
+    "Now that you have {0}, what will you do next?"
+  ]],
+  [/I would (.*)/i, [
+    "Could you explain why you would {0}?",
+    "Why would you {0}?",
+    "Who else knows that you would {0}?"
+  ]],
+  [/Is there (.*)/i, [
+    "Do you think there is {0}?",
+    "It's likely that there is {0}.",
+    "Would you like there to be {0}?"
+  ]],
+  [/My (.*)/i, [
+    "I see, your {0}.",
+    "Why do you say that your {0}?",
+    "When your {0}, how do you feel?"
+  ]],
+  [/You (.*)/i, [
+    "We should be discussing you, not me.",
+    "Why do you say that about me?",
+    "Why do you care whether I {0}?"
+  ]],
+  [/Why (.*)/i, [
+    "Why don't you tell me the reason why {0}?",
+    "Why do you think {0}?"
+  ]],
+  [/(.*) mother(.*)/i, [
+    "Tell me more about your mother.",
+    "What was your relationship with your mother like?",
+    "How do you feel about your mother?"
+  ]],
+  [/(.*) father(.*)/i, [
+    "Tell me more about your father.",
+    "How did your father make you feel?",
+    "How do you feel about your father?"
+  ]],
+  [/(.*) child(.*)/i, [
+    "Did you have close friends as a child?",
+    "What is your favorite childhood memory?",
+    "Do you remember any dreams or nightmares from childhood?"
+  ]],
+  [/(.*)\?/i, [
+    "Why do you ask that?",
+    "Please consider whether you can answer your own question.",
+    "Perhaps the answer lies within yourself?",
+    "Why don't you tell me?"
+  ]],
+  [/quit/i, [
+    "Thank you for talking with me. Goodbye!",
+    "Goodbye! It was nice speaking to you."
+  ]],
+  [/(.*)/i, [
+    "Please tell me more.",
+    "Let's change focus a bit… Tell me about your family.",
+    "Can you elaborate on that?",
+    "Why do you say that?",
+    "I see. Please, go on."
+  ]]
+];
+
+// -------------------------------
+// Utility Functions
+// -------------------------------
+function reflect(statement) {
+  // Swap pronouns etc. in the input string
+  const tokens = statement.toLowerCase().split(/\s+/);
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i].replace(/[^a-zA-Z0-9_']/g, ""); // strip punctuation for matching
+    if (reflections[t]) {
+      tokens[i] = reflections[t];
+    }
+  }
+  return tokens.join(" ");
+}
+
+function matchElizaResponse(text) {
+  // Return an appropriate response from the patterns
+  for (const [regex, responses] of patterns) {
+    const match = text.match(regex);
+    if (match) {
+      let response = responses[Math.floor(Math.random() * responses.length)];
+      if (match[1]) {
+        const reflected = reflect(match[1]);
+        response = response.replace(/\{0\}/g, reflected);
+      }
+      return response;
+    }
+  }
+  return "Please, go on..."; // default fallback
+}
+
+// -------------------------------
+// Main Chat Logic
+// -------------------------------
+const chatbox = document.getElementById("chatbox");
+const userInput = document.getElementById("userInput");
+
+function addMessage(text, sender = "user") {
+  const messageElem = document.createElement("div");
+  messageElem.className = sender === "user" ? "user-message" : "eliza-message";
+  messageElem.textContent = text;
+  chatbox.appendChild(messageElem);
+  chatbox.scrollTop = chatbox.scrollHeight;
+}
+
+function sendMessage() {
+  const text = userInput.value.trim();
+  if (!text) return;
+
+  // User message
+  addMessage(text, "user");
+  userInput.value = "";
+
+  // Check for 'quit' or empty
+  if (text.toLowerCase() === "quit") {
+    addMessage("Thank you for talking with me. Goodbye!", "eliza");
+    return;
+  }
+
+  // Compute ELIZA's reply
+  const elizaReply = matchElizaResponse(text);
+  
+  // Slight delay to simulate "thinking"
+  setTimeout(() => {
+    addMessage(elizaReply, "eliza");
+  }, 300);
+}
+
+// Optional: Press Enter to send
+userInput.addEventListener("keypress", function(e) {
+  if (e.key === "Enter") {
+    sendMessage();
+    e.preventDefault();
+  }
+});
+
+// Greet user on load
+window.onload = () => {
+  addMessage("ELIZA: Hello, I'm ELIZA. How can I help you today?", "eliza");
+};
+</script>
+
+</body>
+</html>
