@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>3D First-Person Robot Simulator (No WebGL) with Strafing</title>
+  <style>
+    body {
+      margin: 0;
+      background: #444;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: sans-serif;
+    }
+    #canvasContainer {
+      position: relative;
+      margin: 10px 0;
+    }
+    canvas {
+      background: #000;
+      display: block;
+    }
+    #controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      justify-content: center;
+    }
+    button {
+      cursor: pointer;
+      font-size: 16px;
+      padding: 10px;
+      background: #666;
+      color: #fff;
+      border: none;
+      outline: none;
+      border-radius: 4px;
+    }
+    button:hover {
+      background: #888;
+    }
+  </style>
+</head>
+<body>
+  <h1 style="color: #fff;">3D Robot Simulator (No WebGL) with Strafing</h1>
+
+  <div id="canvasContainer">
+    <canvas id="view" width="640" height="360"></canvas>
+  </div>
+
+  <div id="controls">
+    <button id="btnLeft">Turn Left</button>
+    <button id="btnRight">Turn Right</button>
+    <button id="btnStrafeLeft">Strafe Left</button>
+    <button id="btnStrafeRight">Strafe Right</button>
+    <button id="btnForward">Forward</button>
+    <button id="btnBackward">Backward</button>
+  </div>
+
+  <script>
+    // ============ MAP DEFINITION ============
+    // 0 = empty, 1 = wall
+    const map = [
+      [1,1,1,1,1,1,1,1],
+      [1,0,0,0,0,0,0,1],
+      [1,0,0,1,0,0,0,1],
+      [1,0,0,0,0,0,0,1],
+      [1,0,0,0,0,1,0,1],
+      [1,0,1,0,0,0,0,1],
+      [1,0,0,0,0,0,0,1],
+      [1,1,1,1,1,1,1,1]
+    ];
+    const mapWidth = map[0].length;
+    const mapHeight = map.length;
+
+    // Robot/player starting position & angle
+    let posX = 3.5;
+    let posY = 3.5;
+    let angle = 0; // 0 = facing east (radians)
+
+    // Movement settings
+    const moveSpeed = 0.05; 
+    const rotSpeed = 0.03;
+
+    // Canvas setup
+    const canvas = document.getElementById("view");
+    const ctx = canvas.getContext("2d");
+    const width = canvas.width;
+    const height = canvas.height;
+
+    // Raycasting parameters
+    const fov = Math.PI / 3; // 60-degree field of view
+
+    // ============ MAIN RENDER LOOP ============
+    function render() {
+      // Clear screen
+      ctx.clearRect(0, 0, width, height);
+
+      // Raycast for each vertical column
+      for (let x = 0; x < width; x++) {
+        const rayAngle = (angle - fov/2) + (x / width) * fov;
+
+        let distanceToWall = 0;
+        let hitWall = false;
+        const maxDepth = 20; // limit ray distance
+
+        // Step increments
+        const stepX = Math.cos(rayAngle) * 0.01;
+        const stepY = Math.sin(rayAngle) * 0.01;
+
+        // Ray start
+        let testX = posX;
+        let testY = posY;
+
+        // Move the ray outward until we hit something or max out
+        while (!hitWall && distanceToWall < maxDepth) {
+          distanceToWall += 0.01;
+          testX += stepX;
+          testY += stepY;
+
+          // Check boundaries
+          if (testX < 0 || testX >= mapWidth || testY < 0 || testY >= mapHeight) {
+            hitWall = true;
+            distanceToWall = maxDepth; // as if we hit a boundary
+          } else if (map[Math.floor(testY)][Math.floor(testX)] === 1) {
+            // Hit a wall
+            hitWall = true;
+          }
+        }
+
+        // Determine wall slice height
+        const wallHeight = Math.floor(height / distanceToWall);
+        const start = Math.floor((height - wallHeight) / 2);
+        const end = Math.floor((height + wallHeight) / 2);
+
+        // Simple shading
+        let shade = 255 - Math.min(255, (distanceToWall / maxDepth) * 255);
+        shade = Math.floor(shade);
+        ctx.fillStyle = `rgb(${shade}, ${shade}, ${shade})`;
+
+        // Draw vertical line
+        ctx.fillRect(x, start, 1, end - start);
+      }
+
+      requestAnimationFrame(render);
+    }
+
+    // ============ CONTROLS ============
+
+    // Helper to check if new position is in a wall
+    function canMove(newX, newY) {
+      return map[Math.floor(newY)][Math.floor(newX)] === 0;
+    }
+
+    // Turn left
+    document.getElementById("btnLeft").addEventListener("click", () => {
+      angle -= rotSpeed * 10;
+    });
+
+    // Turn right
+    document.getElementById("btnRight").addEventListener("click", () => {
+      angle += rotSpeed * 10;
+    });
+
+    // Move forward
+    document.getElementById("btnForward").addEventListener("click", () => {
+      const newX = posX + Math.cos(angle) * moveSpeed * 5;
+      const newY = posY + Math.sin(angle) * moveSpeed * 5;
+      if (canMove(newX, newY)) {
+        posX = newX;
+        posY = newY;
+      }
+    });
+
+    // Move backward
+    document.getElementById("btnBackward").addEventListener("click", () => {
+      const newX = posX - Math.cos(angle) * moveSpeed * 5;
+      const newY = posY - Math.sin(angle) * moveSpeed * 5;
+      if (canMove(newX, newY)) {
+        posX = newX;
+        posY = newY;
+      }
+    });
+
+    // Strafe / Slide left
+    document.getElementById("btnStrafeLeft").addEventListener("click", () => {
+      // Move perpendicular to facing direction
+      const newX = posX - Math.sin(angle) * moveSpeed * 5;
+      const newY = posY + Math.cos(angle) * moveSpeed * 5;
+      if (canMove(newX, newY)) {
+        posX = newX;
+        posY = newY;
+      }
+    });
+
+    // Strafe / Slide right
+    document.getElementById("btnStrafeRight").addEventListener("click", () => {
+      // Move perpendicular to facing direction the other way
+      const newX = posX + Math.sin(angle) * moveSpeed * 5;
+      const newY = posY - Math.cos(angle) * moveSpeed * 5;
+      if (canMove(newX, newY)) {
+        posX = newX;
+        posY = newY;
+      }
+    });
+
+    // Start rendering
+    render();
+  </script>
+</body>
+</html>
