@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Extended Robot Simulator (No WebGL) - with GPS & Sub-second Clock</title>
+  <style>
+    /* Overall layout: left = 3D or Overhead view, right = UI controls */
+    body {
+      margin: 0;
+      background: #444;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: row;
+      height: 100vh;
+      overflow: hidden;
+    }
+    /* Left pane with either first-person canvas or overhead canvas */
+    #leftPane {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 10px;
+      box-sizing: border-box;
+      position: relative; /* for overlay messages */
+    }
+    h1 {
+      color: #fff;
+      margin: 0;
+      font-size: 18px;
+    }
+    #canvasContainer {
+      position: relative;
+      margin: 5px 0;
+    }
+    canvas {
+      background: #000;
+      display: block;
+    }
+    #worldMessages {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #fff;
+      text-align: center;
+      font-size: 20px;
+      pointer-events: none; /* let clicks pass through */
+      max-width: 80%;
+    }
+    #worldMessages .message {
+      background: rgba(0,0,0,0.5);
+      margin: 5px 0;
+      padding: 5px 10px;
+      border-radius: 6px;
+      display: inline-block;
+    }
+
+    #controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      justify-content: center;
+      margin: 5px 0;
+    }
+    button {
+      cursor: pointer;
+      font-size: 14px;
+      padding: 6px;
+      background: #666;
+      color: #fff;
+      border: none;
+      outline: none;
+      border-radius: 4px;
+    }
+    button:hover {
+      background: #888;
+    }
+    label, #status, #timeDisplay, #gpsDisplay {
+      color: #eee;
+      font-size: 14px;
+      margin: 2px 0;
+    }
+
+    /* Right pane: environment editing, BFS waypoint toggles, etc. */
+    #rightPane {
+      width: 320px;
+      background: #333;
+      display: flex;
+      flex-direction: column;
+      padding: 10px;
+      box-sizing: border-box;
+      overflow-y: auto;
+    }
+    #rightPane h2 {
+      color: #fff;
+      margin: 8px 0 4px 0;
+      font-size: 16px;
+    }
+    textarea, input[type="text"], input[type="number"] {
+      width: 100%;
+      box-sizing: border-box;
+      font-size: 14px;
+    }
+    textarea {
+      height: 80px;
+      resize: none;
+      margin-bottom: 5px;
+    }
+    #commandsList {
+      background: #222;
+      padding: 5px;
+      border-radius: 4px;
+      color: #ccc;
+      flex: 1;
+      overflow-y: auto;
+      margin-bottom: 10px;
+    }
+    #commandsList p {
+      margin: 4px 0;
+      font-size: 14px;
+      border-bottom: 1px solid #444;
+      padding: 2px 0;
+    }
+    .sliderRow {
+      display: flex;
+      align-items: center;
+      margin: 5px 0;
+    }
+    .sliderRow label {
+      flex: 0 0 60px;
+    }
+    .sliderRow input[type="range"] {
+      flex: 1;
+    }
+  </style>
+</head>
+<body>
+
+<div id="leftPane">
+  <h1>Extended Robot Simulator</h1>
+  <div id="canvasContainer">
+    <!-- We'll sometimes use #view3D for first-person, or #viewOverhead for overhead. -->
+    <canvas id="view3D" width="640" height="360"></canvas>
+    <canvas id="viewOverhead" width="640" height="360" style="position:absolute; top:0; left:0; display:none;"></canvas>
+  </div>
+
+  <div id="controls">
+    <button id="btnToggleCamera">Camera: First-Person</button>
+    <button id="btnLevel">Level: 1</button>
+    <button id="btnLeft">Turn Left</button>
+    <button id="btnRight">Turn Right</button>
+    <button id="btnForward">Forward</button>
+    <button id="btnBackward">Backward</button>
+    <button id="btnStrafeLeft">Strafe L</button>
+    <button id="btnStrafeRight">Strafe R</button>
+    <button id="btnToggleAI">AI: OFF</button>
+  </div>
+
+  <label id="status">Status: Manual</label>
+  <!-- Real-time clock & GPS -->
+  <label id="timeDisplay"></label>
+  <label id="gpsDisplay"></label>
+
+  <div id="worldMessages"></div>
+</div>
+
+<div id="rightPane">
+  <h2>Environment Editing</h2>
+  <textarea id="envInput" placeholder="Enter ASCII map, 0=empty, 1=wall"></textarea>
+  <button id="btnLoadEnv">Load Environment</button>
+  <button id="btnAddObstacle">Add Obstacle (click overhead)</button>
+
+  <h2>Speed Control</h2>
+  <div class="sliderRow">
+    <label>Speed:</label>
+    <input type="range" id="speedSlider" min="0.01" max="0.2" step="0.01" value="0.05">
+  </div>
+
+  <h2>Waypoints (Click Overhead)</h2>
+  <p style="color:#ddd; margin:0;">
+    In overhead view, click on a cell to set BFS waypoint.<br/>
+    The robot (if AI is ON) will go there.
+  </p>
+
+  <h2>Manual Commands</h2>
+  <textarea id="commandInput" placeholder="E.g.:
+forward 5
+turnLeft 90
+strafeRight 3
+"></textarea>
+  <button id="btnRunCommands">Run</button>
+  <button id="btnClearCommands">Clear</button>
+
+  <h2>Queued Commands</h2>
+  <div id="commandsList"></div>
+
+  <h2>Speak to the World</h2>
+  <input id="speakText" type="text" placeholder="Your message..."/>
+  <input id="speakDuration" type="number" placeholder="Duration (sec)" min="1" value="3"/>
+  <button id="btnSpeak">Speak</button>
+</div>
+
+<script>
+/* 
+  ====================
+   GLOBAL SIMULATOR DATA
+  ====================
+*/
+
+// ASCII map data => 2D array "mapGrid" of 0/1
+let mapGrid = [];
+let mapWidth = 0;
+let mapHeight = 0;
+
+// Robot/player state
+let posX = 3.5, posY = 3.5; 
+let angle = 0; // 0 => facing east
+let level = 1; // also can scale rotation
+let baseMoveSpeed = 0.05;
+let baseRotSpeed = 0.03;
+function getMoveSpeed() {
+  return baseMoveSpeed * level;
+}
+function getRotSpeed() {
+  return baseRotSpeed * level;
+}
+
+// Hardcode a reference lat/long near Google HQ
+const referenceLat = 37.4219999;
+const referenceLon = -122.0840575;
+// Suppose each map cell is 1 meter, and 1 deg of lat ~ 111,111m, 1 deg of lon ~ 111,111*cos(lat) at that lat
+function updateGPS() {
+  // For simplicity, 1 cell = 1 meter
+  const metersX = posX; // how many m from the left edge
+  const metersY = posY; // from top edge
+  // We'll offset lat by metersY and lon by metersX
+  // 1 lat deg ~ 111,111 m
+  const latOffset = metersY / 111111;
+  // 1 lon deg ~ 111,111 * cos(latitude) => approximate cos(37.42)= ~0.79 => ~ 88,000 m/deg
+  const metersPerLon = 111111 * Math.cos(referenceLat*Math.PI/180);
+  const lonOffset = metersX / metersPerLon;
+  const latNow = referenceLat + latOffset;
+  const lonNow = referenceLon + lonOffset;
+  const gpsEl = document.getElementById("gpsDisplay");
+  gpsEl.textContent = `GPS: ${latNow.toFixed(6)}, ${lonNow.toFixed(6)}`;
+}
+
+// BFS AI
+let aiEnabled = false;
+let currentPath = [];
+let pathIndex = 0;
+let goalCell = null;
+
+// Command queue (manual instructions)
+let commandsQueue = [];
+
+// "Add obstacle" mode
+let addingObstacle = false; 
+
+// Sub-second clock
+function updateClock() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const mo = String(now.getMonth()+1).padStart(2,"0");
+  const d = String(now.getDate()).padStart(2,"0");
+  const h = String(now.getHours()).padStart(2,"0");
+  const mi = String(now.getMinutes()).padStart(2,"0");
+  const s = String(now.getSeconds()).padStart(2,"0");
+  const ms = String(now.getMilliseconds()).padStart(3,"0");
+  document.getElementById("timeDisplay").textContent =
+    `${y}-${mo}-${d} ${h}:${mi}:${s}.${ms}`;
+}
+setInterval(updateClock, 100);
+updateClock();
+
+// Overhead vs first-person camera
+let cameraMode = "first";
+
+// Canvas references
+const canvas3D = document.getElementById("view3D");
+const ctx3D = canvas3D.getContext("2d");
+const width3D = canvas3D.width;
+const height3D = canvas3D.height;
+
+const canvasOverhead = document.getElementById("viewOverhead");
+const ctxOverhead = canvasOverhead.getContext("2d");
+canvasOverhead.style.display = "none";
+const wOverhead = canvasOverhead.width;
+const hOverhead = canvasOverhead.height;
+
+/* 
+  ====================
+   ENVIRONMENT / MAP
+  ====================
+*/
+function parseAsciiMap(asciiText) {
+  const lines = asciiText
+    .split("\n")
+    .map(line => line.trim())
+    .filter(line => line.length > 0);
+
+  const grid = lines.map(l => {
+    const row = [];
+    for (let c=0; c<l.length; c++){
+      row.push(l[c] === "1" ? 1 : 0);
+    }
+    return row;
+  });
+  const h = grid.length;
+  const w = h>0 ? grid[0].length : 0;
+  return {grid, w, h};
+}
+
+function loadEnvironment(asciiText) {
+  const parsed = parseAsciiMap(asciiText);
+  if (parsed.w<=0 || parsed.h<=0) {
+    alert("Invalid environment (no valid lines).");
+    return;
+  }
+  mapGrid = parsed.grid;
+  mapWidth = parsed.w;
+  mapHeight = parsed.h;
+
+  // reset position
+  posX = 1.5;
+  posY = 1.5;
+  angle = 0;
+  aiEnabled = false;
+  document.getElementById("btnToggleAI").textContent = "AI: OFF";
+  document.getElementById("status").textContent = "Status: Manual";
+  commandsQueue.length = 0;
+  updateCommandsListUI();
+}
+
+// Provide a default environment:
+const defaultEnv = 
+`1111111111
+1000000001
+1000100001
+1000100001
+1000100001
+1000100001
+1000000001
+1010000001
+1000000001
+1111111111
+`;
+document.getElementById("envInput").value = defaultEnv;
+loadEnvironment(defaultEnv);
+
+/*
+  BFS PATHFINDING
+*/
+function bfsPath(sx, sy, ex, ey) {
+  const queue = [];
+  const visited = new Set();
+  const parent = {};
+
+  const startKey = sx+","+sy;
+  queue.push({x:sx, y:sy});
+  visited.add(startKey);
+
+  const dirs = [
+    {dx:1, dy:0}, {dx:-1, dy:0},
+    {dx:0, dy:1}, {dx:0, dy:-1}
+  ];
+  let found = false;
+  while(queue.length>0) {
+    const {x,y} = queue.shift();
+    if (x===ex && y===ey) {
+      found = true;
+      break;
+    }
+    for (let d of dirs) {
+      const nx = x + d.dx;
+      const ny = y + d.dy;
+      if (nx>=0 && nx<mapWidth && ny>=0 && ny<mapHeight) {
+        if (mapGrid[ny][nx]===0) {
+          const k = nx+","+ny;
+          if (!visited.has(k)) {
+            visited.add(k);
+            parent[k] = {px:x, py:y};
+            queue.push({x:nx, y:ny});
+          }
+        }
+      }
+    }
+  }
+  if(!found) return [];
+  const path = [];
+  let ck = ex+","+ey;
+  while(ck !== startKey) {
+    const [cx,cy] = ck.split(",").map(Number);
+    path.push({x:cx, y:cy});
+    ck = parent[ck].px + "," + parent[ck].py;
+  }
+  path.push({x:sx, y:sy});
+  path.reverse();
+  return path;
+}
+
+function setNewGoalCell(cx, cy) {
+  const sx = Math.floor(posX);
+  const sy = Math.floor(posY);
+  goalCell = {x: cx, y: cy};
+  currentPath = bfsPath(sx, sy, cx, cy);
+  pathIndex = 0;
+}
+
+/*
+  AI UPDATE
+*/
+function aiUpdate() {
+  if (!aiEnabled) return;
+  if (currentPath.length>0 && pathIndex<currentPath.length) {
+    const cell = currentPath[pathIndex];
+    const tx = cell.x + 0.5;
+    const ty = cell.y + 0.5;
+
+    const dx = tx - posX;
+    const dy = ty - posY;
+    const targetAngle = Math.atan2(dy, dx);
+
+    let angleDiff = targetAngle - angle;
+    angleDiff = ((angleDiff + Math.PI) % (2*Math.PI)) - Math.PI;
+
+    const rotationStep = getRotSpeed()*10;
+    if (Math.abs(angleDiff)>0.05) {
+      angle += Math.sign(angleDiff)*Math.min(Math.abs(angleDiff), rotationStep);
+    } else {
+      // move forward
+      const tryX = posX + Math.cos(angle)* getMoveSpeed()*3;
+      const tryY = posY + Math.sin(angle)* getMoveSpeed()*3;
+      if(mapGrid[Math.floor(tryY)][Math.floor(tryX)]===0){
+        posX=tryX; posY=tryY;
+      }
+    }
+    const dist = Math.hypot(tx-posX, ty-posY);
+    if(dist<0.1){
+      pathIndex++;
+    }
+  }
+}
+
+/*
+  COMMAND QUEUE
+*/
+function parseCommands(txt) {
+  const lines = txt.split("\n");
+  const newCmds = [];
+  for (let line of lines) {
+    line = line.trim().toLowerCase();
+    if(!line) continue;
+    const parts = line.split(/\s+/);
+    if(parts.length<2) continue;
+    const cmd = parts[0];
+    const val = parseFloat(parts[1]);
+    if(isNaN(val)) continue;
+    switch(cmd){
+      case "forward":
+      case "backward":
+      case "strafeleft":
+      case "straferight":
+      case "turnleft":
+      case "turnright":
+        newCmds.push({type:cmd, amount:val, progress:val});
+        break;
+    }
+  }
+  return newCmds;
+}
+
+function doOneCommandStep(cmd) {
+  const distancePerFrame = 0.2;
+  const degreesPerFrame = 5 * level;
+  switch(cmd.type) {
+    case "forward": {
+      const step = Math.min(distancePerFrame, cmd.progress);
+      const nx = posX + Math.cos(angle)* getMoveSpeed()*5 * step;
+      const ny = posY + Math.sin(angle)* getMoveSpeed()*5 * step;
+      if(mapGrid[Math.floor(ny)][Math.floor(nx)]===0){
+        posX=nx;posY=ny;
+      }
+      cmd.progress-=step;
+      return cmd.progress<=0;
+    }
+    case "backward": {
+      const step = Math.min(distancePerFrame, cmd.progress);
+      const nx = posX - Math.cos(angle)* getMoveSpeed()*5 * step;
+      const ny = posY - Math.sin(angle)* getMoveSpeed()*5 * step;
+      if(mapGrid[Math.floor(ny)][Math.floor(nx)]===0){
+        posX=nx;posY=ny;
+      }
+      cmd.progress-=step;
+      return cmd.progress<=0;
+    }
+    case "strafeleft": {
+      const step = Math.min(distancePerFrame, cmd.progress);
+      const nx = posX - Math.sin(angle)* getMoveSpeed()*5 * step;
+      const ny = posY + Math.cos(angle)* getMoveSpeed()*5 * step;
+      if(mapGrid[Math.floor(ny)][Math.floor(nx)]===0){
+        posX=nx; posY=ny;
+      }
+      cmd.progress-=step;
+      return cmd.progress<=0;
+    }
+    case "straferight": {
+      const step = Math.min(distancePerFrame, cmd.progress);
+      const nx = posX + Math.sin(angle)* getMoveSpeed()*5 * step;
+      const ny = posY - Math.cos(angle)* getMoveSpeed()*5 * step;
+      if(mapGrid[Math.floor(ny)][Math.floor(nx)]===0){
+        posX=nx; posY=ny;
+      }
+      cmd.progress-=step;
+      return cmd.progress<=0;
+    }
+    case "turnleft": {
+      const step = Math.min(degreesPerFrame, cmd.progress);
+      angle -= step*(Math.PI/180);
+      cmd.progress-=step;
+      return cmd.progress<=0;
+    }
+    case "turnright": {
+      const step = Math.min(degreesPerFrame, cmd.progress);
+      angle += step*(Math.PI/180);
+      cmd.progress-=step;
+      return cmd.progress<=0;
+    }
+  }
+  return true;
+}
+
+function updateCommandsListUI() {
+  const listEl = document.getElementById("commandsList");
+  listEl.innerHTML = "";
+  commandsQueue.forEach((cmd, idx)=>{
+    let s = cmd.type+" "+cmd.amount;
+    if(cmd.type.startsWith("turn")){
+      s += ` (left: ${cmd.progress.toFixed(1)}°)`;
+    } else {
+      s += ` (left: ${cmd.progress.toFixed(1)})`;
+    }
+    const p = document.createElement("p");
+    p.textContent = `${idx+1}. ${s}`;
+    listEl.appendChild(p);
+  });
+}
+
+/*
+  SPEAK TO WORLD
+*/
+let worldMessages = [];
+function speakToWorld(msg, dur){
+  if(!msg)return;
+  if(dur<0.1) dur=0.1;
+  worldMessages.push({ text: msg, timeLeft: dur });
+}
+
+function updateWorldMessages(dt){
+  for(let i=0;i<worldMessages.length;i++){
+    worldMessages[i].timeLeft-=dt;
+  }
+  worldMessages = worldMessages.filter(m=>m.timeLeft>0);
+  const container = document.getElementById("worldMessages");
+  container.innerHTML = "";
+  worldMessages.forEach(m=>{
+    const div = document.createElement("div");
+    div.className="message";
+    div.textContent=m.text;
+    container.appendChild(div);
+  });
+}
+
+/*
+  FIRST-PERSON RAYCAST
+*/
+const maxDepth = 20;
+function render3D(){
+  ctx3D.clearRect(0,0,width3D,height3D);
+  const fovRad = Math.PI/3; 
+  for(let col=0; col<width3D; col++){
+    const rayAngle = angle - fovRad/2 + (col/width3D)*fovRad;
+    let distance=0;
+    const stepX = Math.cos(rayAngle)*0.01;
+    const stepY = Math.sin(rayAngle)*0.01;
+    let hitWall = false;
+    let testX = posX;
+    let testY = posY;
+
+    while(!hitWall && distance<maxDepth){
+      distance+=0.01;
+      testX+=stepX;
+      testY+=stepY;
+      if(testX<0||testX>=mapWidth||testY<0||testY>=mapHeight){
+        hitWall=true;
+        distance=maxDepth;
+      } else {
+        if(mapGrid[Math.floor(testY)][Math.floor(testX)]===1){
+          hitWall=true;
+        }
+      }
+    }
+    const wallHeight = Math.floor(height3D/distance);
+    const sliceTop = Math.floor((height3D-wallHeight)/2);
+    const sliceBot = sliceTop+wallHeight;
+
+    // color shading
+    const shade = 1 - Math.min(1, distance/maxDepth);
+    const c = Math.floor(255*shade);
+    ctx3D.fillStyle = `rgb(${c},${c},${c})`;
+    ctx3D.fillRect(col, sliceTop, 1, wallHeight);
+  }
+}
+
+/*
+  OVERHEAD RENDER
+*/
+function renderOverhead(){
+  ctxOverhead.clearRect(0,0,wOverhead,hOverhead);
+
+  const cellSizeX = wOverhead / mapWidth;
+  const cellSizeY = hOverhead / mapHeight;
+
+  // draw walls
+  for(let y=0;y<mapHeight;y++){
+    for(let x=0;x<mapWidth;x++){
+      if(mapGrid[y][x]===1){
+        ctxOverhead.fillStyle="#444";
+      } else {
+        ctxOverhead.fillStyle="#ccc";
+      }
+      ctxOverhead.fillRect(x*cellSizeX, y*cellSizeY, cellSizeX, cellSizeY);
+    }
+  }
+
+  // BFS path highlight
+  if(currentPath.length>0){
+    ctxOverhead.fillStyle="rgba(255,0,0,0.3)";
+    for(let i=0; i<currentPath.length; i++){
+      const c = currentPath[i];
+      ctxOverhead.fillRect(c.x*cellSizeX, c.y*cellSizeY, cellSizeX, cellSizeY);
+    }
+  }
+
+  // goal cell
+  if(goalCell){
+    ctxOverhead.fillStyle="rgba(255,0,0,0.6)";
+    ctxOverhead.fillRect(goalCell.x*cellSizeX, goalCell.y*cellSizeY, cellSizeX, cellSizeY);
+  }
+
+  // player
+  ctxOverhead.fillStyle="blue";
+  ctxOverhead.beginPath();
+  ctxOverhead.arc(posX*cellSizeX, posY*cellSizeY, Math.max(3,cellSizeX*0.3), 0, 2*Math.PI);
+  ctxOverhead.fill();
+
+  // heading line
+  ctxOverhead.strokeStyle="blue";
+  ctxOverhead.beginPath();
+  ctxOverhead.moveTo(posX*cellSizeX, posY*cellSizeY);
+  const hx = posX + Math.cos(angle)*0.5;
+  const hy = posY + Math.sin(angle)*0.5;
+  ctxOverhead.lineTo(hx*cellSizeX, hy*cellSizeY);
+  ctxOverhead.stroke();
+}
+
+/*
+  MAIN LOOP
+*/
+function gameLoop(){
+  // AI step
+  aiUpdate();
+
+  // manual commands
+  if(!aiEnabled && commandsQueue.length>0){
+    const cmd = commandsQueue[0];
+    const done = doOneCommandStep(cmd);
+    if(done){
+      commandsQueue.shift();
+      updateCommandsListUI();
+    }
+  }
+
+  // ephemeral messages
+  updateWorldMessages(0.03); // ~30ms => 0.03s
+
+  // update GPS
+  updateGPS();
+
+  // render
+  if(cameraMode==="first"){
+    render3D();
+  } else {
+    renderOverhead();
+  }
+
+  requestAnimationFrame(gameLoop);
+}
+
+/*
+  EVENT HANDLERS
+*/
+
+// Toggle camera
+document.getElementById("btnToggleCamera").addEventListener("click", ()=>{
+  if(cameraMode==="first"){
+    cameraMode="overhead";
+    canvas3D.style.display="none";
+    canvasOverhead.style.display="block";
+    document.getElementById("btnToggleCamera").textContent="Camera: Overhead";
+  } else {
+    cameraMode="first";
+    canvas3D.style.display="block";
+    canvasOverhead.style.display="none";
+    document.getElementById("btnToggleCamera").textContent="Camera: First-Person";
+  }
+});
+
+// Level
+document.getElementById("btnLevel").addEventListener("click", ()=>{
+  level++;
+  if(level>4) level=1;
+  document.getElementById("btnLevel").textContent="Level: "+level;
+});
+
+// Turn left/right, move forward/back, strafe
+document.getElementById("btnLeft").addEventListener("click", ()=>{
+  angle-=getRotSpeed()*10;
+});
+document.getElementById("btnRight").addEventListener("click", ()=>{
+  angle+=getRotSpeed()*10;
+});
+document.getElementById("btnForward").addEventListener("click", ()=>{
+  const nx = posX + Math.cos(angle)* getMoveSpeed()*5;
+  const ny = posY + Math.sin(angle)* getMoveSpeed()*5;
+  if(mapGrid[Math.floor(ny)][Math.floor(nx)]===0){
+    posX=nx;posY=ny;
+  }
+});
+document.getElementById("btnBackward").addEventListener("click", ()=>{
+  const nx = posX - Math.cos(angle)* getMoveSpeed()*5;
+  const ny = posY - Math.sin(angle)* getMoveSpeed()*5;
+  if(mapGrid[Math.floor(ny)][Math.floor(nx)]===0){
+    posX=nx;posY=ny;
+  }
+});
+document.getElementById("btnStrafeLeft").addEventListener("click", ()=>{
+  const nx = posX - Math.sin(angle)* getMoveSpeed()*5;
+  const ny = posY + Math.cos(angle)* getMoveSpeed()*5;
+  if(mapGrid[Math.floor(ny)][Math.floor(nx)]===0){
+    posX=nx;posY=ny;
+  }
+});
+document.getElementById("btnStrafeRight").addEventListener("click", ()=>{
+  const nx = posX + Math.sin(angle)* getMoveSpeed()*5;
+  const ny = posY - Math.cos(angle)* getMoveSpeed()*5;
+  if(mapGrid[Math.floor(ny)][Math.floor(nx)]===0){
+    posX=nx;posY=ny;
+  }
+});
+
+// AI toggle
+document.getElementById("btnToggleAI").addEventListener("click",(e)=>{
+  aiEnabled = !aiEnabled;
+  e.target.textContent = aiEnabled ? "AI: ON" : "AI: OFF";
+  document.getElementById("status").textContent = aiEnabled ? "Status: AI" : "Status: Manual";
+  if(aiEnabled){
+    commandsQueue.length=0;
+    updateCommandsListUI();
+  }
+});
+
+// Speed slider
+document.getElementById("speedSlider").addEventListener("input", (e)=>{
+  baseMoveSpeed = parseFloat(e.target.value);
+});
+
+// Load environment
+document.getElementById("btnLoadEnv").addEventListener("click", ()=>{
+  const asciiText = document.getElementById("envInput").value;
+  loadEnvironment(asciiText);
+});
+
+// Add obstacle
+document.getElementById("btnAddObstacle").addEventListener("click", ()=>{
+  cameraMode="overhead";
+  canvas3D.style.display="none";
+  canvasOverhead.style.display="block";
+  document.getElementById("btnToggleCamera").textContent="Camera: Overhead";
+  addingObstacle=true;
+  alert("Click overhead to place an obstacle (wall=1).");
+});
+
+// Overhead canvas click => set BFS waypoint or place obstacle
+canvasOverhead.addEventListener("click",(e)=>{
+  const rect = canvasOverhead.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const cellX = Math.floor(mx/(wOverhead/mapWidth));
+  const cellY = Math.floor(my/(hOverhead/mapHeight));
+  if(cellX<0||cellX>=mapWidth||cellY<0||cellY>=mapHeight)return;
+
+  if(addingObstacle){
+    // place a wall
+    mapGrid[cellY][cellX]=1;
+    addingObstacle=false;
+  } else {
+    // BFS waypoint
+    if(mapGrid[cellY][cellX]===0){
+      setNewGoalCell(cellX, cellY);
+      if(!aiEnabled){
+        alert("Waypoint set, but AI is OFF. Toggle AI to navigate automatically.");
+      }
+    } else {
+      alert("That cell is blocked; pick an open space.");
+    }
+  }
+});
+
+// Manual commands
+document.getElementById("btnRunCommands").addEventListener("click", ()=>{
+  if(aiEnabled){
+    alert("Turn AI OFF to run manual commands!");
+    return;
+  }
+  const txt = document.getElementById("commandInput").value;
+  const newCmds = parseCommands(txt);
+  if(newCmds.length>0){
+    commandsQueue.push(...newCmds);
+    updateCommandsListUI();
+  }
+});
+document.getElementById("btnClearCommands").addEventListener("click", ()=>{
+  commandsQueue.length=0;
+  updateCommandsListUI();
+});
+
+// Speak
+document.getElementById("btnSpeak").addEventListener("click", ()=>{
+  const msg = document.getElementById("speakText").value.trim();
+  const dur = parseFloat(document.getElementById("speakDuration").value)||3;
+  if(msg){
+    speakToWorld(msg, dur);
+    document.getElementById("speakText").value="";
+  }
+});
+
+/*
+  START
+*/
+updateCommandsListUI();
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
