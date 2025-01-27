@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>3D Robot Simulator with Simple AI (No WebGL)</title>
+  <style>
+    body {
+      margin: 0;
+      background: #444;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: sans-serif;
+    }
+    #canvasContainer {
+      position: relative;
+      margin: 5px 0;
+    }
+    canvas {
+      background: #000;
+      display: block;
+    }
+    #controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      justify-content: center;
+      margin-bottom: 10px;
+    }
+    button {
+      cursor: pointer;
+      font-size: 14px;
+      padding: 8px;
+      background: #666;
+      color: #fff;
+      border: none;
+      outline: none;
+      border-radius: 4px;
+    }
+    button:hover {
+      background: #888;
+    }
+    #status {
+      color: #eee;
+      margin: 5px;
+    }
+  </style>
+</head>
+<body>
+  <h1 style="color:#fff; margin-top:10px;">3D Robot Simulator (No WebGL) with Simple AI</h1>
+
+  <div id="canvasContainer">
+    <canvas id="view" width="640" height="360"></canvas>
+  </div>
+
+  <div id="controls">
+    <button id="btnLeft">Turn Left</button>
+    <button id="btnRight">Turn Right</button>
+    <button id="btnForward">Forward</button>
+    <button id="btnBackward">Backward</button>
+    <button id="btnStrafeLeft">Strafe Left</button>
+    <button id="btnStrafeRight">Strafe Right</button>
+    <button id="btnToggleAI">Toggle AI</button>
+  </div>
+
+  <div id="status">AI: OFF</div>
+
+  <script>
+    // ==================== MAP DEFINITION ====================
+    // 0 = empty floor, 1 = wall
+    const map = [
+      [1,1,1,1,1,1,1,1,1,1],
+      [1,0,0,0,0,0,0,0,0,1],
+      [1,0,1,1,0,0,0,1,0,1],
+      [1,0,0,0,0,1,0,0,0,1],
+      [1,0,0,0,0,1,0,1,0,1],
+      [1,0,0,1,0,0,0,0,0,1],
+      [1,0,1,0,0,0,1,0,0,1],
+      [1,0,0,0,1,0,0,0,0,1],
+      [1,0,0,0,0,0,0,0,0,1],
+      [1,1,1,1,1,1,1,1,1,1]
+    ];
+    const mapWidth = map[0].length;
+    const mapHeight = map.length;
+
+    // Player (robot) starting position + angle
+    let posX = 3.5;
+    let posY = 3.5;
+    let angle = 0; // radians; 0 = facing east
+
+    // Movement configuration
+    const moveSpeed = 0.05;
+    const rotSpeed = 0.03;
+
+    // Canvas setup
+    const canvas = document.getElementById("view");
+    const ctx = canvas.getContext("2d");
+    const width = canvas.width;
+    const height = canvas.height;
+
+    // Raycasting parameters
+    const fov = Math.PI / 3; // 60-degree field of view
+    const maxDepth = 20;
+
+    // AI / AGI autopilot
+    let aiEnabled = false;
+    let currentPath = []; // array of grid cells (x, y) from BFS
+    let goalCell = null;  // {x, y} in grid coordinates
+    let pathIndex = 0;    // which step in the path we’re going to
+
+    // ==================== RENDER (RAYCAST) LOOP ====================
+    function renderFrame() {
+      // Clear the canvas
+      ctx.clearRect(0, 0, width, height);
+
+      // Raycast each vertical column
+      for (let col = 0; col < width; col++) {
+        // For each column, figure out the angle of the ray
+        const rayAngle = (angle - fov / 2) + (col / width) * fov;
+
+        let distanceToWall = 0;
+        let hitWall = false;
+
+        // Ray step increments
+        const stepX = Math.cos(rayAngle) * 0.01;
+        const stepY = Math.sin(rayAngle) * 0.01;
+
+        // Start the ray at the player’s position
+        let testX = posX;
+        let testY = posY;
+
+        // Move the ray outward until we hit a wall or max out
+        while (!hitWall && distanceToWall < maxDepth) {
+          distanceToWall += 0.01;
+          testX += stepX;
+          testY += stepY;
+
+          // Check boundaries
+          if (
+            testX < 0 || testX >= mapWidth ||
+            testY < 0 || testY >= mapHeight
+          ) {
+            hitWall = true;
+            distanceToWall = maxDepth;
+          } else if (map[Math.floor(testY)][Math.floor(testX)] === 1) {
+            // Hit a wall
+            hitWall = true;
+          }
+        }
+
+        // Calculate wall slice height
+        const wallHeight = Math.floor(height / distanceToWall);
+        const start = Math.floor((height - wallHeight) / 2);
+        const end = Math.floor((height + wallHeight) / 2);
+
+        // Simple distance-based shading
+        let shade = 255 - Math.min(255, (distanceToWall / maxDepth) * 255);
+        shade = Math.floor(shade);
+        ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
+
+        // Draw the vertical line
+        ctx.fillRect(col, start, 1, end - start);
+      }
+      requestAnimationFrame(renderFrame);
+    }
+
+    // ==================== PATHFINDING (BFS) ====================
+    function bfsPath(startX, startY, endX, endY) {
+      // Standard BFS on the 2D grid to find a path from (sx,sy) to (ex,ey).
+      // Returns an array of {x, y} steps in grid coordinates, including the start and end.
+      // If no path found, returns an empty array.
+      const queue = [];
+      const visited = new Set();
+      const parent = {};
+
+      const startKey = startX + "," + startY;
+      queue.push({ x: startX, y: startY });
+      visited.add(startKey);
+
+      const directions = [
+        { dx: 1, dy: 0 },
+        { dx: -1, dy: 0 },
+        { dx: 0, dy: 1 },
+        { dx: 0, dy: -1 }
+      ];
+
+      let found = false;
+      while (queue.length > 0) {
+        const { x, y } = queue.shift();
+        if (x === endX && y === endY) {
+          found = true;
+          break;
+        }
+
+        for (let dir of directions) {
+          const nx = x + dir.dx;
+          const ny = y + dir.dy;
+          if (
+            nx >= 0 && nx < mapWidth &&
+            ny >= 0 && ny < mapHeight &&
+            map[ny][nx] === 0
+          ) {
+            const key = nx + "," + ny;
+            if (!visited.has(key)) {
+              visited.add(key);
+              parent[key] = { px: x, py: y }; // store where we came from
+              queue.push({ x: nx, y: ny });
+            }
+          }
+        }
+      }
+
+      if (!found) return [];
+
+      // Reconstruct path
+      const path = [];
+      let curKey = endX + "," + endY;
+      while (curKey !== startKey) {
+        const [cx, cy] = curKey.split(",").map(Number);
+        path.push({ x: cx, y: cy });
+        const p = parent[curKey];
+        curKey = p.px + "," + p.py;
+      }
+      // Add the start
+      path.push({ x: startX, y: startY });
+      // Reverse
+      path.reverse();
+      return path;
+    }
+
+    function getRandomOpenCell() {
+      // find all 0-cells in map
+      const openCells = [];
+      for (let y = 0; y < mapHeight; y++) {
+        for (let x = 0; x < mapWidth; x++) {
+          if (map[y][x] === 0) {
+            openCells.push({ x, y });
+          }
+        }
+      }
+      if (openCells.length === 0) return { x: 1, y: 1 }; // fallback
+      return openCells[Math.floor(Math.random() * openCells.length)];
+    }
+
+    // ==================== AI CONTROL LOOP ====================
+    function aiUpdate() {
+      if (!aiEnabled) return;
+
+      // If we have a path & we haven’t reached the end
+      if (currentPath.length > 0 && pathIndex < currentPath.length) {
+        const cell = currentPath[pathIndex];
+        // Convert cell to center in float coords
+        const targetX = cell.x + 0.5;
+        const targetY = cell.y + 0.5;
+
+        // Direction from (posX, posY) to that target
+        const dx = targetX - posX;
+        const dy = targetY - posY;
+        const targetAngle = Math.atan2(dy, dx);
+
+        // Normalize angle difference
+        let angleDiff = targetAngle - angle;
+        // Make sure angleDiff is in [-pi, pi]
+        angleDiff = ((angleDiff + Math.PI) % (2 * Math.PI)) - Math.PI;
+
+        // If angle difference is large, rotate a bit
+        const rotationStep = rotSpeed * 10;
+        if (Math.abs(angleDiff) > 0.05) {
+          // Turn left or right depending on sign
+          if (angleDiff > 0) {
+            angle += Math.min(angleDiff, rotationStep);
+          } else {
+            angle += Math.max(angleDiff, -rotationStep);
+          }
+        } else {
+          // Move forward
+          const tryX = posX + Math.cos(angle) * moveSpeed * 3;
+          const tryY = posY + Math.sin(angle) * moveSpeed * 3;
+          if (map[Math.floor(tryY)][Math.floor(tryX)] === 0) {
+            posX = tryX;
+            posY = tryY;
+          }
+        }
+
+        // Check if we are “close enough” to target cell center
+        const dist = Math.hypot(targetX - posX, targetY - posY);
+        if (dist < 0.1) {
+          // Advance to next step
+          pathIndex++;
+          if (pathIndex >= currentPath.length) {
+            // Reached the goal – pick a new goal
+            setNewGoal();
+          }
+        }
+      } else {
+        // No path or finished path – pick a new goal
+        setNewGoal();
+      }
+    }
+
+    function setNewGoal() {
+      goalCell = getRandomOpenCell();
+      const sx = Math.floor(posX);
+      const sy = Math.floor(posY);
+      currentPath = bfsPath(sx, sy, goalCell.x, goalCell.y);
+      pathIndex = 0;
+    }
+
+    // ==================== CONTROLS & EVENTS ====================
+    function canMove(newX, newY) {
+      return map[Math.floor(newY)][Math.floor(newX)] === 0;
+    }
+
+    document.getElementById("btnLeft").addEventListener("click", () => {
+      angle -= rotSpeed * 10;
+    });
+
+    document.getElementById("btnRight").addEventListener("click", () => {
+      angle += rotSpeed * 10;
+    });
+
+    document.getElementById("btnForward").addEventListener("click", () => {
+      const newX = posX + Math.cos(angle) * moveSpeed * 5;
+      const newY = posY + Math.sin(angle) * moveSpeed * 5;
+      if (canMove(newX, newY)) {
+        posX = newX;
+        posY = newY;
+      }
+    });
+
+    document.getElementById("btnBackward").addEventListener("click", () => {
+      const newX = posX - Math.cos(angle) * moveSpeed * 5;
+      const newY = posY - Math.sin(angle) * moveSpeed * 5;
+      if (canMove(newX, newY)) {
+        posX = newX;
+        posY = newY;
+      }
+    });
+
+    document.getElementById("btnStrafeLeft").addEventListener("click", () => {
+      const newX = posX - Math.sin(angle) * moveSpeed * 5;
+      const newY = posY + Math.cos(angle) * moveSpeed * 5;
+      if (canMove(newX, newY)) {
+        posX = newX;
+        posY = newY;
+      }
+    });
+
+    document.getElementById("btnStrafeRight").addEventListener("click", () => {
+      const newX = posX + Math.sin(angle) * moveSpeed * 5;
+      const newY = posY - Math.cos(angle) * moveSpeed * 5;
+      if (canMove(newX, newY)) {
+        posX = newX;
+        posY = newY;
+      }
+    });
+
+    const statusEl = document.getElementById("status");
+    document.getElementById("btnToggleAI").addEventListener("click", () => {
+      aiEnabled = !aiEnabled;
+      if (aiEnabled) {
+        statusEl.textContent = "AI: ON";
+        setNewGoal(); // pick an initial goal
+      } else {
+        statusEl.textContent = "AI: OFF";
+      }
+    });
+
+    // ==================== MAIN LOOP (render + AI) ====================
+    function gameLoop() {
+      // Update AI (if on)
+      aiUpdate();
+      // Schedule next
+      setTimeout(gameLoop, 30); // ~33 fps
+    }
+
+    // Start everything
+    renderFrame();  // start the raycasting loop via requestAnimationFrame
+    gameLoop();     // start the AI/logic loop
+  </script>
+</body>
+</html>
