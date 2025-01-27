@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>3D Robot Simulator + Patterned Walls + Strafing (No WebGL)</title>
+  <style>
+    /* Overall page layout */
+    body {
+      margin: 0;
+      background: #444;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: row;
+      height: 100vh;
+      overflow: hidden;
+    }
+    /* Left pane: 3D view, controls, etc. */
+    #leftPane {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 10px;
+      box-sizing: border-box;
+      position: relative; /* for overlay positioning */
+    }
+    h1 {
+      color: #fff;
+      margin: 10px 0;
+      font-size: 18px;
+      text-align: center;
+    }
+    #canvasContainer {
+      position: relative;
+      margin: 5px 0;
+    }
+    canvas {
+      background: #000;
+      display: block;
+    }
+    #controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      justify-content: center;
+      margin-bottom: 10px;
+    }
+    button {
+      cursor: pointer;
+      font-size: 14px;
+      padding: 8px;
+      background: #666;
+      color: #fff;
+      border: none;
+      outline: none;
+      border-radius: 4px;
+    }
+    button:hover {
+      background: #888;
+    }
+    #status {
+      color: #eee;
+      margin: 5px;
+    }
+    /* Clock display */
+    #timeDisplay {
+      color: #fff;
+      margin: 5px;
+      font-size: 14px;
+    }
+
+    /* Right pane: instructions, "Speak" input, etc. */
+    #rightPane {
+      width: 300px;
+      background: #333;
+      display: flex;
+      flex-direction: column;
+      padding: 10px;
+      box-sizing: border-box;
+      overflow-y: auto;
+    }
+    #rightPane h2 {
+      color: #fff;
+      margin: 10px 0 5px 0;
+      font-size: 16px;
+    }
+    textarea, input[type="text"], input[type="number"] {
+      width: 100%;
+      box-sizing: border-box;
+      font-size: 14px;
+    }
+    textarea {
+      height: 80px;
+      resize: none;
+      margin-bottom: 5px;
+    }
+    #commandsList {
+      background: #222;
+      padding: 5px;
+      border-radius: 4px;
+      color: #ccc;
+      flex: 1;
+      overflow-y: auto;
+    }
+    #commandsList p {
+      margin: 4px 0;
+      font-size: 14px;
+      border-bottom: 1px solid #444;
+      padding: 2px 0;
+    }
+
+    /* "Speak to the World" overlay in the 3D view */
+    #worldMessages {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #fff;
+      text-align: center;
+      font-size: 20px;
+      pointer-events: none; /* let clicks pass through */
+      max-width: 80%;
+    }
+    #worldMessages .message {
+      background: rgba(0,0,0,0.5);
+      margin: 5px 0;
+      padding: 5px 10px;
+      border-radius: 6px;
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
+  <!-- Left Pane: 3D view, controls, status, overlays -->
+  <div id="leftPane">
+    <h1>3D Robot Simulator (Patterned Walls, Bearing-Based Strafe)</h1>
+
+    <div id="canvasContainer">
+      <canvas id="view" width="640" height="360"></canvas>
+    </div>
+
+    <div id="controls">
+      <button id="btnLevel">Level: 1</button>
+      <button id="btnLeft">Turn Left</button>
+      <button id="btnRight">Turn Right</button>
+      <button id="btnForward">Forward</button>
+      <button id="btnBackward">Backward</button>
+      <button id="btnStrafeLeft">Strafe Left</button>
+      <button id="btnStrafeRight">Strafe Right</button>
+      <button id="btnToggleAI">Toggle AI</button>
+    </div>
+
+    <div id="status">AI: OFF</div>
+    <!-- Real-time clock display -->
+    <div id="timeDisplay"></div>
+
+    <!-- Overlay messages for "Speak to the world" -->
+    <div id="worldMessages"></div>
+  </div>
+
+  <!-- Right Pane: instructions, speak input, etc. -->
+  <div id="rightPane">
+    <!-- Multi-step instructions -->
+    <h2>Enter Instructions</h2>
+    <textarea id="commandInput" placeholder="E.g.:
+forward 5
+turnLeft 90
+strafeRight 3
+..."></textarea>
+    <button id="btnRunCommands">Run Instructions</button>
+    <button id="btnClearCommands">Clear Commands</button>
+
+    <h2>Parsed Command Queue</h2>
+    <div id="commandsList"></div>
+
+    <!-- "Speak to the World" -->
+    <h2>Speak to the World</h2>
+    <input id="speakText" type="text" placeholder="Type your message..." />
+    <input id="speakDuration" type="number" placeholder="Duration (sec)" min="1" value="3" />
+    <button id="btnSpeak">Speak</button>
+  </div>
+
+  <script>
+    // ==================== MAP DEFINITION (Walls & Floor) ====================
+    // 0 = empty floor, 1 = wall
+    const map = [
+      [1,1,1,1,1,1,1,1,1,1],
+      [1,0,0,0,0,0,0,0,0,1],
+      [1,0,1,1,0,0,0,1,0,1],
+      [1,0,0,0,0,1,0,0,0,1],
+      [1,0,0,0,0,1,0,1,0,1],
+      [1,0,0,1,0,0,0,0,0,1],
+      [1,0,1,0,0,0,1,0,0,1],
+      [1,0,0,0,1,0,0,0,0,1],
+      [1,0,0,0,0,0,0,0,0,1],
+      [1,1,1,1,1,1,1,1,1,1]
+    ];
+    const mapWidth = map[0].length;
+    const mapHeight = map.length;
+
+    // ==================== ROBOT/PLAYER STATE ====================
+    let posX = 3.5;
+    let posY = 3.5;
+    let angle = 0; // 0 => facing east (bearing = angle in radians)
+
+    // Base speeds & FOV
+    const baseMoveSpeed = 0.05;   // multiplied by "level"
+    const baseRotSpeed = 0.03;    // multiplied by "level"
+    const fov = Math.PI / 3;      // 60-degree field of view
+    const maxDepth = 20;          // how far rays can go
+
+    // "Level" multiplier (1,2,3,4)
+    let level = 1;
+
+    // Movement speed and rotation speed factoring in "level"
+    function getMoveSpeed() {
+      return baseMoveSpeed * level;
+    }
+    function getRotSpeed() {
+      return baseRotSpeed * level;
+    }
+
+    // ==================== CANVAS & RENDERING ====================
+    const canvas = document.getElementById("view");
+    const ctx = canvas.getContext("2d");
+    const width = canvas.width;
+    const height = canvas.height;
+
+    // ==================== WALL COLORING & PATTERN ====================
+    // We'll assign a base color by "row" (y) then add a checker pattern
+    // to each vertical pixel in the wall slice.
+
+    // Some base colors (in hex) to cycle for rows
+    const colorPalette = [
+      "#FF0000", // red
+      "#FF7F00", // orange
+      "#FFFF00", // yellow
+      "#00FF00", // green
+      "#00FFFF", // cyan
+      "#0000FF", // blue
+      "#8B00FF", // violet
+      "#FF00FF", // magenta
+    ];
+
+    // Convert hex color => {r, g, b}
+    function hexToRgb(hex) {
+      hex = hex.replace(/^#/, "");
+      if (hex.length === 3) {
+        hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+      }
+      const num = parseInt(hex, 16);
+      return {
+        r: (num >> 16) & 255,
+        g: (num >> 8) & 255,
+        b: num & 255
+      };
+    }
+
+    // Given the (x,y) cell where the wall is, pick a base color
+    function getWallBaseColor(xCell, yCell) {
+      const idx = yCell % colorPalette.length;
+      return hexToRgb(colorPalette[idx]);
+    }
+
+    // Simple function to darken color by factor [0..1]
+    function shadeColor(color, factor) {
+      return {
+        r: Math.floor(color.r * factor),
+        g: Math.floor(color.g * factor),
+        b: Math.floor(color.b * factor),
+      };
+    }
+
+    // Convert {r,g,b} => "rgb(r,g,b)"
+    function toCssRgb(c) {
+      return `rgb(${c.r},${c.g},${c.b})`;
+    }
+
+    // ==================== AI / AUTOPILOT (BFS) ====================
+    let aiEnabled = false;
+    let currentPath = [];  // BFS path steps
+    let goalCell = null;   // random target
+    let pathIndex = 0;
+
+    function bfsPath(sx, sy, ex, ey) {
+      const queue = [];
+      const visited = new Set();
+      const parent = {};
+
+      const startKey = sx + "," + sy;
+      queue.push({ x: sx, y: sy });
+      visited.add(startKey);
+
+      const directions = [
+        { dx: 1, dy: 0 },
+        { dx: -1, dy: 0 },
+        { dx: 0, dy: 1 },
+        { dx: 0, dy: -1 }
+      ];
+
+      let found = false;
+      while (queue.length > 0) {
+        const { x, y } = queue.shift();
+        if (x === ex && y === ey) {
+          found = true;
+          break;
+        }
+        for (let dir of directions) {
+          const nx = x + dir.dx;
+          const ny = y + dir.dy;
+          if (
+            nx >= 0 && nx < mapWidth &&
+            ny >= 0 && ny < mapHeight &&
+            map[ny][nx] === 0
+          ) {
+            const key = nx + "," + ny;
+            if (!visited.has(key)) {
+              visited.add(key);
+              parent[key] = { px: x, py: y };
+              queue.push({ x: nx, y: ny });
+            }
+          }
+        }
+      }
+      if (!found) return [];
+
+      // Reconstruct path
+      const path = [];
+      let curKey = ex + "," + ey;
+      while (curKey !== startKey) {
+        const [cx, cy] = curKey.split(",").map(Number);
+        path.push({ x: cx, y: cy });
+        const p = parent[curKey];
+        curKey = p.px + "," + p.py;
+      }
+      path.push({ x: sx, y: sy });
+      path.reverse();
+      return path;
+    }
+
+    function getRandomOpenCell() {
+      const openCells = [];
+      for (let y = 0; y < mapHeight; y++) {
+        for (let x = 0; x < mapWidth; x++) {
+          if (map[y][x] === 0) openCells.push({ x, y });
+        }
+      }
+      if (openCells.length === 0) return { x: 1, y: 1 };
+      return openCells[Math.floor(Math.random() * openCells.length)];
+    }
+
+    function setNewGoal() {
+      goalCell = getRandomOpenCell();
+      const sx = Math.floor(posX);
+      const sy = Math.floor(posY);
+      currentPath = bfsPath(sx, sy, goalCell.x, goalCell.y);
+      pathIndex = 0;
+    }
+
+    function aiUpdate() {
+      if (!aiEnabled) return;
+      if (currentPath.length > 0 && pathIndex < currentPath.length) {
+        const cell = currentPath[pathIndex];
+        const tx = cell.x + 0.5;
+        const ty = cell.y + 0.5;
+
+        const dx = tx - posX;
+        const dy = ty - posY;
+        const targetAngle = Math.atan2(dy, dx);
+
+        // Normalize angle difference [-π, π]
+        let angleDiff = targetAngle - angle;
+        angleDiff = ((angleDiff + Math.PI) % (2*Math.PI)) - Math.PI;
+
+        const rotationStep = getRotSpeed() * 10;
+        if (Math.abs(angleDiff) > 0.05) {
+          // rotate left/right to face target
+          if (angleDiff > 0) {
+            angle += Math.min(angleDiff, rotationStep);
+          } else {
+            angle += Math.max(angleDiff, -rotationStep);
+          }
+        } else {
+          // Move forward
+          const tryX = posX + Math.cos(angle) * getMoveSpeed() * 3;
+          const tryY = posY + Math.sin(angle) * getMoveSpeed() * 3;
+          if (map[Math.floor(tryY)][Math.floor(tryX)] === 0) {
+            posX = tryX;
+            posY = tryY;
+          }
+        }
+        const dist = Math.hypot(tx - posX, ty - posY);
+        if (dist < 0.1) {
+          pathIndex++;
+          if (pathIndex >= currentPath.length) {
+            setNewGoal();
+          }
+        }
+      } else {
+        // no path or finished => pick new
+        setNewGoal();
+      }
+    }
+
+    // ==================== MULTI-STEP COMMANDS (FORWARD, TURN, STRAFE, ETC.) ====================
+    const commandsQueue = [];
+    function parseCommands(inputText) {
+      const lines = inputText.split("\n");
+      const newCommands = [];
+
+      lines.forEach(line => {
+        const trimmed = line.trim().toLowerCase();
+        if (!trimmed) return;
+        const parts = trimmed.split(/\s+/);
+        if (parts.length < 2) return;
+
+        const cmd = parts[0];
+        const val = parseFloat(parts[1]);
+        if (isNaN(val)) return;
+
+        switch (cmd) {
+          case "forward":
+          case "backward":
+          case "strafeleft":
+          case "straferight":
+          case "turnleft":
+          case "turnright":
+            newCommands.push({
+              type: cmd,
+              amount: val,
+              progress: val
+            });
+            break;
+          default:
+            // unknown command
+            break;
+        }
+      });
+      return newCommands;
+    }
+
+    const distancePerFrame = 0.2;  
+    const degreesPerFrame = 5;     
+
+    function doOneCommandStep(cmd) {
+      switch (cmd.type) {
+        case "forward": {
+          // Move "val" steps forward (bearing-based) in small increments
+          const step = Math.min(distancePerFrame, cmd.progress);
+          const tryX = posX + Math.cos(angle) * getMoveSpeed() * 5 * step;
+          const tryY = posY + Math.sin(angle) * getMoveSpeed() * 5 * step;
+          if (map[Math.floor(tryY)][Math.floor(tryX)] === 0) {
+            posX = tryX;
+            posY = tryY;
+          }
+          cmd.progress -= step;
+          return (cmd.progress <= 0);
+        }
+        case "backward": {
+          const step = Math.min(distancePerFrame, cmd.progress);
+          const tryX = posX - Math.cos(angle) * getMoveSpeed() * 5 * step;
+          const tryY = posY - Math.sin(angle) * getMoveSpeed() * 5 * step;
+          if (map[Math.floor(tryY)][Math.floor(tryX)] === 0) {
+            posX = tryX;
+            posY = tryY;
+          }
+          cmd.progress -= step;
+          return (cmd.progress <= 0);
+        }
+        case "strafeleft": {
+          // Strafe left => angle - 90°, or equivalently: 
+          // dx = -sin(angle), dy = cos(angle)
+          const step = Math.min(distancePerFrame, cmd.progress);
+          const tryX = posX - Math.sin(angle) * getMoveSpeed() * 5 * step;
+          const tryY = posY + Math.cos(angle) * getMoveSpeed() * 5 * step;
+          if (map[Math.floor(tryY)][Math.floor(tryX)] === 0) {
+            posX = tryX;
+            posY = tryY;
+          }
+          cmd.progress -= step;
+          return (cmd.progress <= 0);
+        }
+        case "straferight": {
+          // Strafe right => angle + 90°, or equivalently:
+          // dx = sin(angle), dy = -cos(angle)
+          const step = Math.min(distancePerFrame, cmd.progress);
+          const tryX = posX + Math.sin(angle) * getMoveSpeed() * 5 * step;
+          const tryY = posY - Math.cos(angle) * getMoveSpeed() * 5 * step;
+          if (map[Math.floor(tryY)][Math.floor(tryX)] === 0) {
+            posX = tryX;
+            posY = tryY;
+          }
+          cmd.progress -= step;
+          return (cmd.progress <= 0);
+        }
+        case "turnleft": {
+          const step = Math.min(degreesPerFrame * level, cmd.progress);
+          angle -= step * (Math.PI / 180);
+          cmd.progress -= step;
+          return (cmd.progress <= 0);
+        }
+        case "turnright": {
+          const step = Math.min(degreesPerFrame * level, cmd.progress);
+          angle += step * (Math.PI / 180);
+          cmd.progress -= step;
+          return (cmd.progress <= 0);
+        }
+      }
+      return true; 
+    }
+
+    // ==================== "SPEAK TO THE WORLD" OVERLAY ====================
+    const worldMessagesEl = document.getElementById("worldMessages");
+    let worldMessages = [];
+
+    function speakToWorld(message, durationSec) {
+      if (!message) return;
+      if (durationSec <= 0) durationSec = 1;
+      worldMessages.push({
+        text: message,
+        timeLeft: durationSec
+      });
+    }
+
+    function updateWorldMessages(dt) {
+      for (let i = 0; i < worldMessages.length; i++) {
+        worldMessages[i].timeLeft -= dt;
+      }
+      worldMessages = worldMessages.filter(msg => msg.timeLeft > 0);
+
+      worldMessagesEl.innerHTML = "";
+      worldMessages.forEach(msg => {
+        const div = document.createElement("div");
+        div.className = "message";
+        div.textContent = msg.text;
+        worldMessagesEl.appendChild(div);
+      });
+    }
+
+    // ==================== REAL-TIME CLOCK (FULL DATE TO SECONDS) ====================
+    function formatDateTime(date) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth()+1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      const hour = String(date.getHours()).padStart(2, "0");
+      const min = String(date.getMinutes()).padStart(2, "0");
+      const sec = String(date.getSeconds()).padStart(2, "0");
+      return `${year}-${month}-${day} ${hour}:${min}:${sec}`;
+    }
+    function updateClock() {
+      const now = new Date();
+      document.getElementById("timeDisplay").textContent = formatDateTime(now);
+    }
+    setInterval(updateClock, 1000);
+    updateClock(); // initial
+
+    // ==================== RAYCAST RENDER LOOP (WITH PATTERN) ====================
+    function renderFrame() {
+      ctx.clearRect(0, 0, width, height);
+
+      for (let col = 0; col < width; col++) {
+        const rayAngle = (angle - fov/2) + (col/width)*fov;
+        let distanceToWall = 0;
+        let hitWall = false;
+
+        const stepX = Math.cos(rayAngle)*0.01;
+        const stepY = Math.sin(rayAngle)*0.01;
+        let testX = posX;
+        let testY = posY;
+
+        // cast ray
+        while (!hitWall && distanceToWall < maxDepth) {
+          distanceToWall += 0.01;
+          testX += stepX;
+          testY += stepY;
+
+          if (
+            testX < 0 || testX >= mapWidth ||
+            testY < 0 || testY >= mapHeight
+          ) {
+            // out of bounds
+            hitWall = true;
+            distanceToWall = maxDepth;
+          } else if (map[Math.floor(testY)][Math.floor(testX)] === 1) {
+            hitWall = true;
+          }
+        }
+
+        // wall slice
+        const wallHeight = Math.floor(height / distanceToWall);
+        const sliceTop = Math.floor((height - wallHeight)/2);
+        const sliceBottom = Math.floor((height + wallHeight)/2);
+
+        // figure out which cell we collided with for color indexing
+        let cellY = Math.floor(testY);
+        if (cellY < 0) cellY = 0;
+        if (cellY >= mapHeight) cellY = mapHeight - 1;
+        const baseColor = getWallBaseColor(Math.floor(testX), cellY);
+
+        // distance-based shading factor [0..1]
+        const shadeFactor = 1 - Math.min(1, distanceToWall / maxDepth);
+
+        // Now we draw pixel by pixel so we can apply a "pattern"
+        for (let row = sliceTop; row < sliceBottom; row++) {
+          // A simple checker pattern toggling every 8 pixels vertically/horizontally
+          // patternToggle in {0,1}
+          const patternToggle = (((row >> 3) + (col >> 3)) & 1);
+          // We adjust shadeFactor slightly if patternToggle=1
+          const finalFactor = patternToggle ? shadeFactor * 0.7 : shadeFactor;
+
+          const color = shadeColor(baseColor, finalFactor);
+          ctx.fillStyle = toCssRgb(color);
+          ctx.fillRect(col, row, 1, 1);
+        }
+      }
+
+      requestAnimationFrame(renderFrame);
+    }
+
+    // ==================== MAIN GAME LOOP (AI & Commands) ====================
+    function gameLoop() {
+      if (aiEnabled) {
+        aiUpdate();
+      } else {
+        // process manual commands if any
+        if (commandsQueue.length > 0) {
+          const cmd = commandsQueue[0];
+          const done = doOneCommandStep(cmd);
+          if (done) {
+            commandsQueue.shift();
+            updateCommandsListUI();
+          }
+        }
+      }
+      // update ephemeral messages
+      updateWorldMessages(0.03); // ~30 ms => 0.03s
+      setTimeout(gameLoop, 30);
+    }
+
+    // ==================== COLLISION CHECK HELPER ====================
+    function canMove(newX, newY) {
+      return map[Math.floor(newY)][Math.floor(newX)] === 0;
+    }
+
+    // ==================== DOM ELEMENTS & HANDLERS ====================
+    const statusEl = document.getElementById("status");
+    const btnLevel = document.getElementById("btnLevel");
+    const commandInput = document.getElementById("commandInput");
+    const commandsListEl = document.getElementById("commandsList");
+    const speakTextEl = document.getElementById("speakText");
+    const speakDurationEl = document.getElementById("speakDuration");
+
+    // 1) LEVEL BUTTON
+    btnLevel.addEventListener("click", () => {
+      level++;
+      if (level > 4) level = 1;
+      btnLevel.textContent = `Level: ${level}`;
+    });
+
+    // 2) TURN LEFT/RIGHT, FORWARD/BACK, STRAFE
+    document.getElementById("btnLeft").addEventListener("click", () => {
+      angle -= getRotSpeed() * 10;
+    });
+    document.getElementById("btnRight").addEventListener("click", () => {
+      angle += getRotSpeed() * 10;
+    });
+    document.getElementById("btnForward").addEventListener("click", () => {
+      const newX = posX + Math.cos(angle)*getMoveSpeed()*5;
+      const newY = posY + Math.sin(angle)*getMoveSpeed()*5;
+      if (canMove(newX, newY)) {
+        posX = newX;
+        posY = newY;
+      }
+    });
+    document.getElementById("btnBackward").addEventListener("click", () => {
+      const newX = posX - Math.cos(angle)*getMoveSpeed()*5;
+      const newY = posY - Math.sin(angle)*getMoveSpeed()*5;
+      if (canMove(newX, newY)) {
+        posX = newX;
+        posY = newY;
+      }
+    });
+    document.getElementById("btnStrafeLeft").addEventListener("click", () => {
+      // Move left relative to current angle (bearing)
+      // (angle - 90°) => dx = -sin(angle), dy = cos(angle)
+      const newX = posX - Math.sin(angle)*getMoveSpeed()*5;
+      const newY = posY + Math.cos(angle)*getMoveSpeed()*5;
+      if (canMove(newX, newY)) {
+        posX = newX;
+        posY = newY;
+      }
+    });
+    document.getElementById("btnStrafeRight").addEventListener("click", () => {
+      // Move right relative to current angle (bearing)
+      // (angle + 90°) => dx = sin(angle), dy = -cos(angle)
+      const newX = posX + Math.sin(angle)*getMoveSpeed()*5;
+      const newY = posY - Math.cos(angle)*getMoveSpeed()*5;
+      if (canMove(newX, newY)) {
+        posX = newX;
+        posY = newY;
+      }
+    });
+
+    // 3) TOGGLE AI
+    document.getElementById("btnToggleAI").addEventListener("click", () => {
+      aiEnabled = !aiEnabled;
+      if (aiEnabled) {
+        statusEl.textContent = "AI: ON";
+        setNewGoal();
+        commandsQueue.length = 0; // clear manual commands
+        updateCommandsListUI();
+      } else {
+        statusEl.textContent = "AI: OFF";
+      }
+    });
+
+    // 4) MULTI-STEP COMMANDS (Queue)
+    function updateCommandsListUI() {
+      commandsListEl.innerHTML = "";
+      commandsQueue.forEach((cmd, idx) => {
+        let line = cmd.type + " " + cmd.amount;
+        if (cmd.type.startsWith("turn")) {
+          line += ` (left: ${cmd.progress.toFixed(1)}°)`;
+        } else {
+          line += ` (left: ${cmd.progress.toFixed(1)})`;
+        }
+        const p = document.createElement("p");
+        p.textContent = `${idx+1}. ${line}`;
+        commandsListEl.appendChild(p);
+      });
+    }
+
+    function runInstructions() {
+      if (aiEnabled) {
+        alert("Turn AI OFF before running manual instructions!");
+        return;
+      }
+      const text = commandInput.value;
+      const newCmds = parseCommands(text);
+      if (newCmds.length > 0) {
+        commandsQueue.push(...newCmds);
+        updateCommandsListUI();
+      }
+    }
+    document.getElementById("btnRunCommands").addEventListener("click", runInstructions);
+    document.getElementById("btnClearCommands").addEventListener("click", () => {
+      commandsQueue.length = 0;
+      updateCommandsListUI();
+    });
+    commandInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        runInstructions();
+      }
+    });
+
+    // 5) SPEAK
+    document.getElementById("btnSpeak").addEventListener("click", () => {
+      const msg = speakTextEl.value.trim();
+      const dur = parseFloat(speakDurationEl.value) || 3;
+      if (msg) {
+        speakToWorld(msg, dur);
+        speakTextEl.value = "";
+      }
+    });
+
+    // ==================== START EVERYTHING ====================
+    renderFrame();   // starts the raycasting (requestAnimationFrame)
+    gameLoop();      // starts the AI/manual commands loop (~30 ms)
+  </script>
+</body>
+</html>
