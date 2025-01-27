@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>3D First-Person Robot Simulator (No WebGL)</title>
+  <style>
+    body {
+      margin: 0;
+      background: #444;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: sans-serif;
+    }
+    #canvasContainer {
+      position: relative;
+      margin: 10px 0;
+    }
+    canvas {
+      background: #000;
+      display: block;
+    }
+    #controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      justify-content: center;
+    }
+    button {
+      cursor: pointer;
+      font-size: 16px;
+      padding: 10px;
+      background: #666;
+      color: #fff;
+      border: none;
+      outline: none;
+      border-radius: 4px;
+    }
+    button:hover {
+      background: #888;
+    }
+  </style>
+</head>
+<body>
+  <h1 style="color: #fff;">3D First-Person Robot Simulator (No WebGL)</h1>
+
+  <div id="canvasContainer">
+    <canvas id="view" width="640" height="360"></canvas>
+  </div>
+
+  <div id="controls">
+    <button id="btnLeft">Turn Left</button>
+    <button id="btnRight">Turn Right</button>
+    <button id="btnForward">Forward</button>
+    <button id="btnBackward">Backward</button>
+  </div>
+
+  <script>
+    // ============ MAP DEFINITION ============
+    // 0 = empty, 1 = wall
+    const map = [
+      [1,1,1,1,1,1,1,1],
+      [1,0,0,0,0,0,0,1],
+      [1,0,0,1,0,0,0,1],
+      [1,0,0,0,0,0,0,1],
+      [1,0,0,0,0,1,0,1],
+      [1,0,1,0,0,0,0,1],
+      [1,0,0,0,0,0,0,1],
+      [1,1,1,1,1,1,1,1]
+    ];
+    const mapWidth = map[0].length;
+    const mapHeight = map.length;
+
+    // Robot/player starting position & angle (radians)
+    let posX = 3.5;   // X position in map (floating point)
+    let posY = 3.5;   // Y position in map (floating point)
+    let angle = 0;    // Angle in radians; 0 = facing east
+
+    // Movement settings
+    const moveSpeed = 0.05; 
+    const rotSpeed = 0.03;
+
+    // Canvas setup
+    const canvas = document.getElementById("view");
+    const ctx = canvas.getContext("2d");
+    const width = canvas.width;
+    const height = canvas.height;
+
+    // Raycasting parameters
+    const fov = Math.PI / 3;   // 60-degree field of view
+
+    // ============ MAIN RENDER LOOP ============
+    function render() {
+      // Clear screen
+      ctx.clearRect(0, 0, width, height);
+
+      // For each vertical column of the canvas
+      for (let x = 0; x < width; x++) {
+        // Calculate the ray angle for this column
+        const rayAngle = (angle - fov/2) + (x / width) * fov;
+        
+        // Distance traveled by the ray
+        let distanceToWall = 0;
+        let hitWall = false;
+        const maxDepth = 20; // how far the ray can travel
+
+        // Unit step for ray direction
+        const stepX = Math.cos(rayAngle) * 0.01;
+        const stepY = Math.sin(rayAngle) * 0.01;
+
+        // Ray start
+        let testX = posX;
+        let testY = posY;
+
+        // Incrementally step forward until we hit a wall or exceed max depth
+        while (!hitWall && distanceToWall < maxDepth) {
+          distanceToWall += 0.01;
+          testX += stepX;
+          testY += stepY;
+
+          // Check if out of bounds or inside wall
+          if (testX < 0 || testX >= mapWidth || testY < 0 || testY >= mapHeight) {
+            hitWall = true;
+            distanceToWall = maxDepth; // treat as a "far away" wall
+          } else {
+            if (map[Math.floor(testY)][Math.floor(testX)] === 1) {
+              // We have hit a wall
+              hitWall = true;
+            }
+          }
+        }
+
+        // Calculate ceiling and floor of the wall strip
+        const wallHeight = Math.floor(height / distanceToWall);
+        const start = Math.floor((height - wallHeight) / 2);
+        const end = Math.floor((height + wallHeight) / 2);
+
+        // Choose a shade based on distance (simple shading)
+        let shade = 255 - Math.min(255, (distanceToWall / maxDepth) * 255);
+        shade = Math.floor(shade);
+        ctx.fillStyle = `rgb(${shade}, ${shade}, ${shade})`;
+
+        // Draw the vertical column
+        ctx.fillRect(x, start, 1, end - start);
+      }
+      requestAnimationFrame(render);
+    }
+
+    // ============ CONTROLS ============
+    // Turn left
+    document.getElementById("btnLeft").addEventListener("click", () => {
+      angle -= rotSpeed * 10; // turn more quickly via button
+    });
+
+    // Turn right
+    document.getElementById("btnRight").addEventListener("click", () => {
+      angle += rotSpeed * 10;
+    });
+
+    // Move forward
+    document.getElementById("btnForward").addEventListener("click", () => {
+      const newX = posX + Math.cos(angle) * moveSpeed * 5;
+      const newY = posY + Math.sin(angle) * moveSpeed * 5;
+      // Check for collision with walls
+      if (map[Math.floor(newY)][Math.floor(newX)] === 0) {
+        posX = newX;
+        posY = newY;
+      }
+    });
+
+    // Move backward
+    document.getElementById("btnBackward").addEventListener("click", () => {
+      const newX = posX - Math.cos(angle) * moveSpeed * 5;
+      const newY = posY - Math.sin(angle) * moveSpeed * 5;
+      // Check for collision with walls
+      if (map[Math.floor(newY)][Math.floor(newX)] === 0) {
+        posX = newX;
+        posY = newY;
+      }
+    });
+
+    // Start rendering
+    render();
+  </script>
+</body>
+</html>
