@@ -1,0 +1,1454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Drone First-Person POV Simulation</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background-color: #222;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            color: white;
+        }
+        
+        h1 {
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        #simulation-container {
+            position: relative;
+            width: 800px;
+            height: 400px;
+            border: 2px solid #444;
+            margin: 10px 0;
+            overflow: hidden;
+            background-color: #000;
+        }
+        
+        #canvas-fallback {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(to bottom, #87CEEB 0%, #87CEEB 60%, #8B4513 60%, #8B4513 100%);
+            display: none;
+        }
+        
+        #canvas-message {
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 5px;
+            max-width: 80%;
+            text-align: center;
+        }
+        
+        #drone-camera {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        
+        /* Ground texture grid pattern */
+        .ground-texture {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 40%;
+            background-image: 
+                linear-gradient(0deg, rgba(139, 69, 19, 1) 0%, rgba(139, 69, 19, 0.9) 100%),
+                repeating-linear-gradient(0deg, transparent, transparent 20px, rgba(0, 0, 0, 0.1) 20px, rgba(0, 0, 0, 0.1) 40px),
+                repeating-linear-gradient(90deg, transparent, transparent 20px, rgba(0, 0, 0, 0.1) 20px, rgba(0, 0, 0, 0.1) 40px);
+            pointer-events: none;
+        }
+        
+        #hud-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            transform: translate(-50%, -50%);
+            border: 2px solid rgba(255, 255, 255, 0.7);
+            border-radius: 50%;
+        }
+        
+        #crosshair:before, #crosshair:after {
+            content: '';
+            position: absolute;
+            background-color: rgba(255, 255, 255, 0.7);
+        }
+        
+        #crosshair:before {
+            top: 9px;
+            left: -5px;
+            width: 30px;
+            height: 2px;
+        }
+        
+        #crosshair:after {
+            top: -5px;
+            left: 9px;
+            width: 2px;
+            height: 30px;
+        }
+        
+        #horizon-indicator {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 200px;
+            height: 2px;
+            background-color: rgba(255, 255, 255, 0.7);
+            transform: translate(-50%, -50%);
+        }
+        
+        .hud-indicator {
+            position: absolute;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 8px;
+            border-radius: 5px;
+            border: 1px solid #00FF00;
+            font-size: 14px;
+        }
+        
+        #altitude-indicator {
+            top: 10px;
+            right: 10px;
+        }
+        
+        #speed-indicator {
+            top: 50px;
+            right: 10px;
+        }
+        
+        #battery-indicator {
+            top: 90px;
+            right: 10px;
+        }
+        
+        #status-indicator {
+            top: 10px;
+            left: 10px;
+        }
+        
+        #direction-indicator {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            bottom: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 50%;
+            border: 1px solid #00FF00;
+        }
+        
+        #direction-arrow {
+            position: absolute;
+            top: 10px;
+            left: 40px;
+            width: 0;
+            height: 0;
+            border-left: 8px solid transparent;
+            border-right: 8px solid transparent;
+            border-bottom: 25px solid #00FF00;
+            transform-origin: bottom center;
+        }
+        
+        #target-distance {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 8px;
+            border-radius: 5px;
+            border: 1px solid #FF0000;
+            color: #FF0000;
+        }
+        
+        #time-display {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 8px 15px;
+            border-radius: 5px;
+            border: 1px solid #00FFFF;
+            color: #00FFFF;
+            font-size: 16px;
+            font-weight: bold;
+            min-width: 180px;
+            text-align: center;
+        }
+        
+        #gps-display {
+            position: absolute;
+            top: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 8px 15px;
+            border-radius: 5px;
+            border: 1px solid #FFFF00;
+            color: #FFFF00;
+            font-size: 14px;
+            min-width: 220px;
+            text-align: center;
+        }
+        
+        #control-panel {
+            display: flex;
+            flex-direction: column;
+            width: 800px;
+            margin: 10px 0;
+            border: 2px solid #444;
+            padding: 10px;
+            background-color: #333;
+            box-sizing: border-box;
+        }
+        
+        .control-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        
+        button {
+            padding: 8px 12px;
+            margin: 0 5px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            width: 120px;
+            height: 40px;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        
+        .arrow-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+        }
+        
+        button:hover {
+            background-color: #0056b3;
+        }
+        
+        button:active {
+            background-color: #004085;
+        }
+        
+        button.emergency {
+            background-color: #dc3545;
+        }
+        
+        button.emergency:hover {
+            background-color: #bd2130;
+        }
+        
+        #command-log {
+            width: 800px;
+            height: 100px;
+            overflow-y: auto;
+            border: 2px solid #444;
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #000;
+            color: #00FF00;
+            font-family: 'Courier New', monospace;
+            box-sizing: border-box;
+        }
+        
+        #api-controls {
+            width: 800px;
+            margin: 10px 0;
+            border: 2px solid #444;
+            padding: 10px;
+            background-color: #333;
+            box-sizing: border-box;
+        }
+        
+        #api-controls h3 {
+            margin-top: 0;
+            color: #00FF00;
+        }
+        
+        code {
+            background-color: #000;
+            color: #00FF00;
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
+
+        #render-stats {
+            position: absolute;
+            top: 150px;
+            left: 10px;
+            color: #00FF00;
+            font-size: 12px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 5px;
+            border-radius: 3px;
+        }
+
+        /* Simple drone view representation for fallback */
+        #simple-drone-view {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom, #87CEEB 0%, #87CEEB 60%, #8B4513 60%, #8B4513 100%);
+        }
+
+        .simple-obstacle {
+            position: absolute;
+            background-color: #8B4513;
+            border: 1px solid #333;
+        }
+
+        .simple-target {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            border: 2px dashed red;
+            border-radius: 50%;
+            opacity: 0.7;
+        }
+    </style>
+</head>
+<body>
+    <h1>AI Drone First-Person POV Simulation</h1>
+    
+    <div id="simulation-container">
+        <!-- Primary view: Canvas-based 3D rendering -->
+        <canvas id="drone-camera" width="800" height="400"></canvas>
+        
+        <!-- Fallback view for compatibility -->
+        <div id="simple-drone-view"></div>
+        
+        <!-- Complete fallback message if neither works -->
+        <div id="canvas-fallback">
+            <div id="canvas-message">
+                <p>Your browser may not support the 3D rendering required for the drone view.</p>
+                <p>Please try a different browser or enable WebGL.</p>
+            </div>
+        </div>
+        
+        <div id="hud-overlay">
+            <div id="crosshair"></div>
+            <div id="horizon-indicator"></div>
+            
+            <div id="altitude-indicator" class="hud-indicator">
+                ALT: <span id="altitude">0.0</span> m
+            </div>
+            
+            <div id="speed-indicator" class="hud-indicator">
+                SPD: <span id="speed">0.0</span> m/s
+            </div>
+            
+            <div id="battery-indicator" class="hud-indicator">
+                BAT: <span id="battery">100</span>%
+            </div>
+            
+            <div id="status-indicator" class="hud-indicator">
+                STATUS: <span id="status">READY</span>
+            </div>
+            
+            <div id="direction-indicator">
+                <div id="direction-arrow"></div>
+            </div>
+            
+            <div id="target-distance" class="hud-indicator">
+                TARGET: <span id="distance">0.0</span> m
+            </div>
+            
+            <div id="time-display">00:00:00</div>
+            <div id="gps-display">GPS: 00.000000, 000.000000</div>
+
+            <div id="render-stats"></div>
+        </div>
+    </div>
+    
+    <div id="control-panel">
+        <div class="control-row">
+            <button id="btn-forward" title="Move the drone forward (W key)" class="arrow-button">↑ FORWARD</button>
+            <button id="btn-up" title="Increase altitude (R key)" class="arrow-button">⬆ UP</button>
+            <button id="btn-takeoff" title="Take off from ground (Spacebar)">TAKEOFF</button>
+        </div>
+        <div class="control-row">
+            <button id="btn-left" title="Move the drone left (A key)" class="arrow-button">← LEFT</button>
+            <button id="btn-hover" title="Stop horizontal movement">HOVER</button>
+            <button id="btn-right" title="Move the drone right (D key)" class="arrow-button">RIGHT →</button>
+        </div>
+        <div class="control-row">
+            <button id="btn-rotate-left" title="Rotate drone left (Q key)">↺ ROTATE L</button>
+            <button id="btn-down" title="Decrease altitude (F key)" class="arrow-button">⬇ DOWN</button>
+            <button id="btn-rotate-right" title="Rotate drone right (E key)">ROTATE R ↻</button>
+        </div>
+        <div class="control-row">
+            <button id="btn-backward" title="Move the drone backward (S key)">BACKWARD</button>
+            <button id="btn-go-to" title="Move to target location (G key)">GO TO TARGET</button>
+            <button id="btn-land" class="emergency" title="Land the drone (Spacebar when flying)">LAND</button>
+        </div>
+        <div class="control-row">
+            <button id="btn-look-up" title="Look up (Up Arrow key)">LOOK UP</button>
+            <button id="btn-look-reset" title="Reset view angle">CENTER VIEW</button>
+            <button id="btn-look-down" title="Look down (Down Arrow key)">LOOK DOWN</button>
+        </div>
+        <div class="control-row">
+            <div></div>
+            <button id="btn-emergency" class="emergency" title="Emergency stop">EMERGENCY</button>
+            <div></div>
+        </div>
+    </div>
+    
+    <div id="command-log">
+        <div>AI Drone First-Person POV Simulation v1.0</div>
+        <div>Ready for operation. Use the controls or API functions to operate the drone.</div>
+    </div>
+    
+    <div id="api-controls">
+        <h3>API Controls for AI Agent:</h3>
+        <p>Available functions for programmatic control:</p>
+        <ul>
+            <li><code>Drone.takeOff()</code> - Take off from the ground</li>
+            <li><code>Drone.land()</code> - Land safely</li>
+            <li><code>Drone.emergencyStop()</code> - Emergency stop</li>
+            <li><code>Drone.move(direction, amount)</code> - Move in a direction</li>
+            <li><code>Drone.rotate(degrees)</code> - Rotate by degrees</li>
+            <li><code>Drone.goToTarget()</code> - Move to the target location</li>
+            <li><code>Drone.setTarget(x, y, z)</code> - Set target location</li>
+            <li><code>Drone.getStatus()</code> - Get complete status object</li>
+            <li><code>Drone.lookAt(pitch, yaw)</code> - Change camera angle</li>
+            <li><code>Drone.getVisualFeatures()</code> - Get features from camera view</li>
+        </ul>
+        <p>Example: <code>Drone.move('forward', 10)</code> will move the drone forward by 10 units</p>
+    </div>
+
+    <script>
+        // Detect if canvas is supported
+        const isCanvasSupported = !!document.createElement('canvas').getContext;
+        
+        // Check if we can use 3D context
+        let canUse3D = false;
+        if (isCanvasSupported) {
+            try {
+                const canvas = document.getElementById('drone-camera');
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                    canUse3D = true;
+                }
+            } catch (e) {
+                console.error("Error initializing canvas:", e);
+            }
+        }
+        
+        // 3D world setup
+        const world = {
+            obstacles: [
+                {x: -50, y: 0, z: -100, width: 20, height: 20, depth: 20, color: '#8B4513'},
+                {x: 30, y: 10, z: -80, width: 15, height: 40, depth: 15, color: '#8B4513'},
+                {x: -30, y: 0, z: -60, width: 10, height: 30, depth: 10, color: '#8B4513'},
+                {x: 0, y: 0, z: -200, width: 100, height: 40, depth: 5, color: '#8B4513'},
+                {x: 80, y: 0, z: -120, width: 20, height: 60, depth: 20, color: '#8B4513'}
+            ],
+            clouds: [],
+            target: {x: 0, y: 0, z: -150},
+            ground: {y: 0, color: '#8B4513'},
+            sky: {color: '#87CEEB'}
+        };
+        
+        // Initialize some clouds
+        for (let i = 0; i < 10; i++) {
+            world.clouds.push({
+                x: Math.random() * 600 - 300,
+                y: Math.random() * 100 + 50,
+                z: Math.random() * -300 - 50,
+                size: Math.random() * 30 + 20
+            });
+        }
+        
+        // Drone simulation state
+        const Drone = {
+            x: 0,
+            y: 0,
+            z: 0,
+            pitch: 0,
+            yaw: 0,
+            roll: 0,
+            altitude: 0,
+            battery: 100,
+            speed: 0,
+            status: 'READY',
+            flying: false,
+            renderMode: canUse3D ? '3d' : '2d',
+            canvas: document.getElementById('drone-camera'),
+            ctx: null,
+            simpleView: document.getElementById('simple-drone-view'),
+            lastRenderTime: 0,
+            frameCount: 0,
+            fps: 0,
+            
+            // Initialize the drone and canvas
+            init() {
+                try {
+                    if (this.renderMode === '3d') {
+                        this.ctx = this.canvas.getContext('2d');
+                        this.logMessage("Using 3D rendering mode");
+                    } else {
+                        // Use the simple 2D fallback
+                        this.canvas.style.display = 'none';
+                        this.simpleView.style.display = 'block';
+                        this.initSimpleView();
+                        this.logMessage("Using 2D simplified rendering mode");
+                    }
+                } catch (e) {
+                    // Complete fallback
+                    this.canvas.style.display = 'none';
+                    this.simpleView.style.display = 'none';
+                    document.getElementById('canvas-fallback').style.display = 'flex';
+                    this.renderMode = 'none';
+                    this.logMessage("Could not initialize rendering: " + e.message);
+                    console.error("Rendering initialization error:", e);
+                }
+                
+                this.updateHUD();
+                
+                // Decrement battery over time
+                setInterval(() => {
+                    if (this.flying) {
+                        this.battery = Math.max(0, this.battery - 0.1);
+                        this.updateHUD();
+                        
+                        if (this.battery < 20) {
+                            this.logMessage("WARNING: Battery low! " + this.battery.toFixed(0) + "%");
+                        }
+                        
+                        if (this.battery === 0) {
+                            this.emergencyStop();
+                            this.logMessage("CRITICAL: Battery depleted. Emergency landing initiated.");
+                        }
+                    }
+                    
+                    // Update time and GPS display
+                    this.updateTimeDisplay();
+                }, 1000);
+                
+                // Animation loop
+                this.animate();
+            },
+            
+            // Simple 2D view initialization
+            initSimpleView() {
+                // Clear any existing elements
+                this.simpleView.innerHTML = '';
+                
+                // Add obstacles to the simple view
+                world.obstacles.forEach((obs, index) => {
+                    const obstacle = document.createElement('div');
+                    obstacle.className = 'simple-obstacle';
+                    obstacle.id = 'obstacle-' + index;
+                    this.simpleView.appendChild(obstacle);
+                });
+                
+                // Add target marker
+                const target = document.createElement('div');
+                target.className = 'simple-target';
+                target.id = 'simple-target';
+                this.simpleView.appendChild(target);
+                
+                // Initialize positions
+                this.updateSimpleView();
+            },
+            
+            // Update simple 2D view
+            updateSimpleView() {
+                const containerWidth = this.simpleView.offsetWidth;
+                const containerHeight = this.simpleView.offsetHeight;
+                const horizonY = containerHeight * 0.6;
+                
+                // Scale factor for z-axis to screen depth
+                const zScale = 0.5;
+                
+                // Update obstacle positions
+                world.obstacles.forEach((obs, index) => {
+                    const element = document.getElementById('obstacle-' + index);
+                    if (!element) return;
+                    
+                    // Calculate relative position from drone
+                    let relX = obs.x - this.x;
+                    let relZ = obs.z - this.z;
+                    
+                    // Apply rotation based on yaw
+                    const cosYaw = Math.cos(this.yaw * Math.PI / 180);
+                    const sinYaw = Math.sin(this.yaw * Math.PI / 180);
+                    const rotX = relX * cosYaw - relZ * sinYaw;
+                    const rotZ = relX * sinYaw + relZ * cosYaw;
+                    
+                    // Skip if behind camera
+                    if (rotZ >= 0) {
+                        element.style.display = 'none';
+                        return;
+                    }
+                    
+                    // Calculate screen position
+                    const depth = Math.abs(rotZ);
+                    const scale = 1 / (depth * zScale);
+                    const screenX = containerWidth / 2 + rotX * scale * 100;
+                    
+                    // Calculate size based on depth
+                    const width = obs.width * scale * 50;
+                    const height = obs.height * scale * 50;
+                    
+                    // Calculate vertical position (y)
+                    const relY = obs.y - this.y;
+                    const screenY = horizonY - (relY + obs.height/2) * scale * 50;
+                    
+                    // Set position and size
+                    element.style.display = 'block';
+                    element.style.left = (screenX - width/2) + 'px';
+                    element.style.top = (screenY - height/2) + 'px';
+                    element.style.width = width + 'px';
+                    element.style.height = height + 'px';
+                    
+                    // Set opacity based on distance
+                    const opacity = Math.min(1, Math.max(0.3, 1 - depth/300));
+                    element.style.opacity = opacity;
+                });
+                
+                // Update target
+                const target = document.getElementById('simple-target');
+                if (target) {
+                    // Calculate relative position
+                    let relX = world.target.x - this.x;
+                    let relY = world.target.y - this.y;
+                    let relZ = world.target.z - this.z;
+                    
+                    // Apply rotation
+                    const cosYaw = Math.cos(this.yaw * Math.PI / 180);
+                    const sinYaw = Math.sin(this.yaw * Math.PI / 180);
+                    const rotX = relX * cosYaw - relZ * sinYaw;
+                    const rotZ = relX * sinYaw + relZ * cosYaw;
+                    
+                    if (rotZ >= 0) {
+                        target.style.display = 'none';
+                    } else {
+                        const depth = Math.abs(rotZ);
+                        const scale = 1 / (depth * zScale);
+                        const screenX = containerWidth / 2 + rotX * scale * 100;
+                        const screenY = horizonY - relY * scale * 50;
+                        
+                        // Size based on distance
+                        const size = 30 * scale;
+                        
+                        target.style.display = 'block';
+                        target.style.left = (screenX - size/2) + 'px';
+                        target.style.top = (screenY - size/2) + 'px';
+                        target.style.width = size + 'px';
+                        target.style.height = size + 'px';
+                        
+                        // Fade with distance
+                        const opacity = Math.min(1, Math.max(0.4, 1 - depth/300));
+                        target.style.opacity = opacity;
+                    }
+                }
+            },
+            
+            // Animation loop
+            animate(timestamp) {
+                if (this.renderMode === '3d') {
+                    this.renderScene();
+                } else if (this.renderMode === '2d') {
+                    this.updateSimpleView();
+                }
+                
+                // Calculate FPS
+                if (!this.lastRenderTime) {
+                    this.lastRenderTime = timestamp;
+                }
+                
+                this.frameCount++;
+                const elapsed = timestamp - this.lastRenderTime;
+                
+                if (elapsed >= 1000) {
+                    this.fps = Math.round((this.frameCount * 1000) / elapsed);
+                    this.frameCount = 0;
+                    this.lastRenderTime = timestamp;
+                    
+                    if (this.renderMode !== 'none') {
+                        document.getElementById('render-stats').textContent = 
+                            `FPS: ${this.fps} | Mode: ${this.renderMode}`;
+                    }
+                }
+                
+                requestAnimationFrame((ts) => this.animate(ts));
+            },
+            
+            // Calculate 3D projection
+            project(x, y, z) {
+                // Adjust coordinates based on drone position and rotation
+                const dx = x - this.x;
+                const dy = y - this.y;
+                const dz = z - this.z;
+                
+                // Apply yaw rotation (around Y axis)
+                const cosYaw = Math.cos(this.yaw * Math.PI / 180);
+                const sinYaw = Math.sin(this.yaw * Math.PI / 180);
+                
+                const rotatedX = dx * cosYaw - dz * sinYaw;
+                const rotatedZ = dx * sinYaw + dz * cosYaw;
+                
+                // Apply pitch rotation (around X axis)
+                const cosPitch = Math.cos(this.pitch * Math.PI / 180);
+                const sinPitch = Math.sin(this.pitch * Math.PI / 180);
+                
+                const finalY = dy * cosPitch - rotatedZ * sinPitch;
+                const finalZ = dy * sinPitch + rotatedZ * cosPitch;
+                
+                // Don't render if behind camera
+                if (finalZ >= 0) return null;
+                
+                // Perspective projection
+                const fov = 90;
+                const scale = this.canvas.width / (2 * Math.tan(fov * Math.PI / 360));
+                const projectedX = this.canvas.width / 2 + (rotatedX / -finalZ) * scale;
+                const projectedY = this.canvas.height / 2 + (finalY / -finalZ) * scale;
+                
+                return {
+                    x: projectedX,
+                    y: projectedY,
+                    z: finalZ,
+                    scale: scale / -finalZ
+                };
+            },
+            
+            // Render the 3D scene
+            renderScene() {
+                if (!this.ctx) return;
+                
+                const ctx = this.ctx;
+                
+                // Clear canvas
+                ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                // Draw sky
+                const skyGradient = ctx.createLinearGradient(0, 0, 0, this.canvas.height/2);
+                skyGradient.addColorStop(0, "#1E90FF");  // Darker blue at top
+                skyGradient.addColorStop(1, "#87CEEB");  // Lighter blue at horizon
+                ctx.fillStyle = skyGradient;
+                ctx.fillRect(0, 0, this.canvas.width, this.canvas.height / 2);
+                
+                // Draw ground with texture/pattern
+                const groundY = this.canvas.height / 2 + (this.pitch * 5);
+                
+                // Ground gradient
+                const groundGradient = ctx.createLinearGradient(0, groundY, 0, this.canvas.height);
+                groundGradient.addColorStop(0, "#8B5A2B");  // Light brown at horizon
+                groundGradient.addColorStop(1, "#654321");  // Darker brown at bottom
+                ctx.fillStyle = groundGradient;
+                ctx.fillRect(0, groundY, this.canvas.width, this.canvas.height - groundY);
+                
+                // Draw ground grid
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.lineWidth = 1;
+                
+                // Draw grid lines parallel to x-axis (more pronounced)
+                for (let z = Math.floor((this.z - 200) / 20) * 20; z <= Math.floor((this.z + 20) / 20) * 20; z += 20) {
+                    for (let x = -200; x <= 200; x += 20) {
+                        const start = this.project(x, world.ground.y, z);
+                        const end = this.project(x + 20, world.ground.y, z);
+                        
+                        if (start && end) {
+                            ctx.beginPath();
+                            ctx.moveTo(start.x, start.y);
+                            ctx.lineTo(end.x, end.y);
+                            ctx.stroke();
+                        }
+                    }
+                }
+                
+                // Draw grid lines parallel to z-axis
+                for (let x = Math.floor((this.x - 200) / 20) * 20; x <= Math.floor((this.x + 200) / 20) * 20; x += 20) {
+                    for (let z = -200; z <= 0; z += 20) {
+                        const start = this.project(x, world.ground.y, z);
+                        const end = this.project(x, world.ground.y, z + 20);
+                        
+                        if (start && end) {
+                            ctx.beginPath();
+                            ctx.moveTo(start.x, start.y);
+                            ctx.lineTo(end.x, end.y);
+                            ctx.stroke();
+                        }
+                    }
+                }
+                
+                // Draw a more pronounced horizon line
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(0, groundY);
+                ctx.lineTo(this.canvas.width, groundY);
+                ctx.stroke();
+                
+                // Draw clouds
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                world.clouds.forEach(cloud => {
+                    const projection = this.project(cloud.x, cloud.y, cloud.z);
+                    if (projection) {
+                        const size = cloud.size * projection.scale;
+                        ctx.beginPath();
+                        ctx.arc(projection.x, projection.y, size, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                });
+                
+                // Draw obstacles
+                world.obstacles.forEach(obs => {
+                    // Draw front face
+                    const frontTL = this.project(obs.x - obs.width/2, obs.y + obs.height, obs.z - obs.depth/2);
+                    const frontTR = this.project(obs.x + obs.width/2, obs.y + obs.height, obs.z - obs.depth/2);
+                    const frontBL = this.project(obs.x - obs.width/2, obs.y, obs.z - obs.depth/2);
+                    const frontBR = this.project(obs.x + obs.width/2, obs.y, obs.z - obs.depth/2);
+                    
+                    if (frontTL && frontTR && frontBL && frontBR) {
+                        ctx.fillStyle = obs.color;
+                        ctx.beginPath();
+                        ctx.moveTo(frontTL.x, frontTL.y);
+                        ctx.lineTo(frontTR.x, frontTR.y);
+                        ctx.lineTo(frontBR.x, frontBR.y);
+                        ctx.lineTo(frontBL.x, frontBL.y);
+                        ctx.closePath();
+                        ctx.fill();
+                        
+                        // Draw outline
+                        ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+                    }
+                    
+                    // Draw top face if visible
+                    const backTL = this.project(obs.x - obs.width/2, obs.y + obs.height, obs.z + obs.depth/2);
+                    const backTR = this.project(obs.x + obs.width/2, obs.y + obs.height, obs.z + obs.depth/2);
+                    
+                    if (frontTL && frontTR && backTL && backTR) {
+                        ctx.fillStyle = shadeColor(obs.color, -20);
+                        ctx.beginPath();
+                        ctx.moveTo(frontTL.x, frontTL.y);
+                        ctx.lineTo(frontTR.x, frontTR.y);
+                        ctx.lineTo(backTR.x, backTR.y);
+                        ctx.lineTo(backTL.x, backTL.y);
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.stroke();
+                    }
+                    
+                    // Draw side face if visible
+                    if (frontTR && frontBR && backTR) {
+                        const backBR = this.project(obs.x + obs.width/2, obs.y, obs.z + obs.depth/2);
+                        
+                        if (backBR) {
+                            ctx.fillStyle = shadeColor(obs.color, -40);
+                            ctx.beginPath();
+                            ctx.moveTo(frontTR.x, frontTR.y);
+                            ctx.lineTo(frontBR.x, frontBR.y);
+                            ctx.lineTo(backBR.x, backBR.y);
+                            ctx.lineTo(backTR.x, backTR.y);
+                            ctx.closePath();
+                            ctx.fill();
+                            ctx.stroke();
+                        }
+                    }
+                });
+                
+                // Draw target
+                const targetProj = this.project(world.target.x, world.target.y, world.target.z);
+                if (targetProj) {
+                    const size = 20 * targetProj.scale;
+                    
+                    // Target circle
+                    ctx.strokeStyle = '#FF0000';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(targetProj.x, targetProj.y, size, 0, Math.PI * 2);
+                    ctx.stroke();
+                    
+                    // Target crosshairs
+                    ctx.beginPath();
+                    ctx.moveTo(targetProj.x - size, targetProj.y);
+                    ctx.lineTo(targetProj.x + size, targetProj.y);
+                    ctx.moveTo(targetProj.x, targetProj.y - size);
+                    ctx.lineTo(targetProj.x, targetProj.y + size);
+                    ctx.stroke();
+                }
+                
+                // Update target distance indicator
+                this.updateTargetDistance();
+            },
+            
+            // Update the target distance indicator
+            updateTargetDistance() {
+                const dx = world.target.x - this.x;
+                const dy = world.target.y - this.y;
+                const dz = world.target.z - this.z;
+                const distance = Math.sqrt(dx*dx + dy*dy + dz*dz);
+                document.getElementById('distance').textContent = distance.toFixed(1);
+            },
+            
+            // Convert simulation coordinates to GPS coordinates
+            coordinatesToGPS() {
+                // Define a fictional reference point (0,0,0 in simulation)
+                const baseLatitude = 37.7749; // Example: San Francisco latitude
+                const baseLongitude = -122.4194; // Example: San Francisco longitude
+                
+                // Scale factors (how many meters per degree)
+                const latScale = 111111; // Approx meters per degree of latitude
+                const lngScale = 111111 * Math.cos(baseLatitude * Math.PI / 180); // Meters per degree of longitude
+                
+                // Convert drone's position to GPS coordinates
+                const latitude = baseLatitude + (this.z / latScale);
+                const longitude = baseLongitude + (this.x / lngScale);
+                
+                return {
+                    latitude: latitude,
+                    longitude: longitude,
+                    altitude: this.altitude
+                };
+            },
+            
+            // Update time display
+            updateTimeDisplay() {
+                const now = new Date();
+                const hours = String(now.getHours()).padStart(2, '0');
+                const minutes = String(now.getMinutes()).padStart(2, '0');
+                const seconds = String(now.getSeconds()).padStart(2, '0');
+                document.getElementById('time-display').textContent = `${hours}:${minutes}:${seconds}`;
+                
+                // Update GPS display
+                const gps = this.coordinatesToGPS();
+                document.getElementById('gps-display').textContent = 
+                    `GPS: ${gps.latitude.toFixed(6)}, ${gps.longitude.toFixed(6)} ALT: ${gps.altitude.toFixed(1)}m`;
+            },
+            
+            // Take off from the ground
+            takeOff() {
+                if (this.altitude === 0) {
+                    this.flying = true;
+                    
+                    // Simulate gradual take-off
+                    const takeoffInterval = setInterval(() => {
+                        this.altitude += 2;
+                        this.y += 2;
+                        this.updateHUD();
+                        
+                        if (this.altitude >= 20) {
+                            clearInterval(takeoffInterval);
+                            this.status = 'FLYING';
+                            this.logMessage("Drone is now airborne");
+                        }
+                    }, 100);
+                    
+                    this.status = 'TAKING OFF';
+                    this.logMessage("Drone taking off");
+                    this.updateHUD();
+                } else {
+                    this.logMessage("Drone is already in the air");
+                }
+            },
+            
+            // Land safely
+            land() {
+                if (this.flying) {
+                    this.logMessage("Drone landing");
+                    this.status = 'LANDING';
+                    
+                    // Gradually decrease altitude until landed
+                    const landingInterval = setInterval(() => {
+                        this.altitude = Math.max(0, this.altitude - 2);
+                        this.y = Math.max(0, this.y - 2);
+                        this.updateHUD();
+                        
+                        if (this.altitude === 0) {
+                            clearInterval(landingInterval);
+                            this.flying = false;
+                            this.status = 'READY';
+                            this.logMessage("Drone landed safely");
+                            this.updateHUD();
+                        }
+                    }, 100);
+                } else {
+                    this.logMessage("Drone is already on the ground");
+                }
+            },
+            
+            // Emergency stop (immediate landing)
+            emergencyStop() {
+                if (this.flying) {
+                    this.altitude = 0;
+                    this.y = 0;
+                    this.flying = false;
+                    this.status = 'EMERGENCY';
+                    this.logMessage("EMERGENCY STOP ACTIVATED");
+                    this.updateHUD();
+                    
+                    setTimeout(() => {
+                        this.status = 'READY';
+                        this.updateHUD();
+                    }, 3000);
+                }
+            },
+            
+            // Move in a specific direction
+            move(direction, amount) {
+                if (!this.flying && direction !== 'up') {
+                    this.logMessage("Cannot move while on the ground. Take off first.");
+                    return;
+                }
+                
+                amount = parseInt(amount) || 10;
+                this.speed = amount / 5;
+                
+                switch(direction.toLowerCase()) {
+                    case 'up':
+                        if (this.flying) {
+                            this.altitude = Math.min(100, this.altitude + amount);
+                            this.y = Math.min(100, this.y + amount);
+                            this.logMessage(`Ascending to ${this.altitude.toFixed(1)}m`);
+                        } else {
+                            this.takeOff();
+                        }
+                        break;
+                    case 'down':
+                        if (this.altitude <= amount) {
+                            this.altitude = 0;
+                            this.y = 0;
+                            this.logMessage("Landed on ground");
+                            if (this.speed === 0) {
+                                this.flying = false;
+                                this.status = 'READY';
+                            }
+                        } else {
+                            this.altitude -= amount;
+                            this.y -= amount;
+                            this.logMessage(`Descending to ${this.altitude.toFixed(1)}m`);
+                        }
+                        break;
+                    case 'left':
+                        // Move perpendicular to viewing direction
+                        this.x -= amount * Math.cos((this.yaw + 90) * Math.PI / 180);
+                        this.z -= amount * Math.sin((this.yaw + 90) * Math.PI / 180);
+                        this.roll = -15; // Bank for visual effect
+                        setTimeout(() => { this.roll = 0; }, 500);
+                        break;
+                    case 'right':
+                        // Move perpendicular to viewing direction
+                        this.x -= amount * Math.cos((this.yaw - 90) * Math.PI / 180);
+                        this.z -= amount * Math.sin((this.yaw - 90) * Math.PI / 180);
+                        this.roll = 15; // Bank for visual effect
+                        setTimeout(() => { this.roll = 0; }, 500);
+                        break;
+                    case 'forward':
+                        // Move in viewing direction
+                        this.x -= amount * Math.sin(this.yaw * Math.PI / 180);
+                        this.z -= amount * Math.cos(this.yaw * Math.PI / 180);
+                        this.pitch = -5; // Pitch for visual effect
+                        setTimeout(() => { this.pitch = 0; }, 500);
+                        break;
+                    case 'backward':
+                        // Move opposite to viewing direction
+                        this.x += amount * Math.sin(this.yaw * Math.PI / 180);
+                        this.z += amount * Math.cos(this.yaw * Math.PI / 180);
+                        this.pitch = 5; // Pitch for visual effect
+                        setTimeout(() => { this.pitch = 0; }, 500);
+                        break;
+                    default:
+                        this.logMessage("Unknown direction: " + direction);
+                        return;
+                }
+                
+                this.logMessage(`Moving ${direction} by ${amount} units`);
+                this.updateHUD();
+                
+                // Simulate gradual speed decrease
+                setTimeout(() => {
+                    this.speed = 0;
+                    this.updateHUD();
+                }, 1000);
+            },
+            
+            // Rotate the drone
+            rotate(degrees) {
+                if (!this.flying) {
+                    this.logMessage("Cannot rotate while on the ground. Take off first.");
+                    return;
+                }
+                
+                this.yaw = (this.yaw + degrees) % 360;
+                if (this.yaw < 0) this.yaw += 360;
+                
+                this.logMessage(`Rotating by ${degrees} degrees. New heading: ${Math.round(this.yaw)}°`);
+                this.updateHUD();
+                
+                // Update direction indicator arrow
+                document.getElementById('direction-arrow').style.transform = `rotate(${this.yaw}deg)`;
+            },
+            
+            // Change camera pitch and yaw
+            lookAt(pitch, yaw) {
+                this.pitch = Math.max(-45, Math.min(45, pitch));
+                if (yaw !== undefined) {
+                    this.yaw = yaw % 360;
+                    if (this.yaw < 0) this.yaw += 360;
+                    document.getElementById('direction-arrow').style.transform = `rotate(${this.yaw}deg)`;
+                }
+                this.logMessage(`Camera view changed to pitch: ${this.pitch}°, yaw: ${this.yaw}°`);
+            },
+            
+            // Move toward the target location
+            goToTarget() {
+                if (!this.flying) {
+                    this.logMessage("Cannot move to target while on the ground. Take off first.");
+                    return;
+                }
+                
+                const target = world.target;
+                this.logMessage(`Moving to target at (${target.x.toFixed(1)}, ${target.y.toFixed(1)}, ${target.z.toFixed(1)})`);
+                
+                // Calculate direction to target
+                const dx = target.x - this.x;
+                const dy = target.y - this.y;
+                const dz = target.z - this.z;
+                
+                // Set desired yaw toward target
+                const desiredYaw = (Math.atan2(dx, dz) * 180 / Math.PI + 180) % 360;
+                
+                // Simulate controlled flight to target
+                let steps = 0;
+                let prevDistance = Infinity;
+                const moveInterval = setInterval(() => {
+                    // Adjust altitude
+                    if (Math.abs(this.y - target.y) > 2) {
+                        this.y += (target.y > this.y) ? 1 : -1;
+                        this.altitude = this.y;
+                    }
+                    
+                    // Adjust rotation smoothly
+                    const yawDiff = ((desiredYaw - this.yaw + 180) % 360) - 180;
+                    this.yaw += Math.sign(yawDiff) * Math.min(5, Math.abs(yawDiff));
+                    if (this.yaw < 0) this.yaw += 360;
+                    
+                    // Move forward toward target
+                    const moveSpeed = 2;
+                    this.x -= moveSpeed * Math.sin(this.yaw * Math.PI / 180);
+                    this.z -= moveSpeed * Math.cos(this.yaw * Math.PI / 180);
+                    
+                    // Calculate new distance
+                    const newDx = target.x - this.x;
+                    const newDy = target.y - this.y;
+                    const newDz = target.z - this.z;
+                    const newDistance = Math.sqrt(newDx*newDx + newDy*newDy + newDz*newDz);
+                    
+                    // Stop if we're not making progress or have reached target
+                    if (newDistance < 10 || steps > 300 || (prevDistance - newDistance < 0.1 && steps > 30)) {
+                        clearInterval(moveInterval);
+                        this.logMessage("Reached target location");
+                        this.speed = 0;
+                    }
+                    
+                    prevDistance = newDistance;
+                    this.speed = moveSpeed;
+                    this.updateHUD();
+                    steps++;
+                }, 50);
+            },
+            
+            // Set the target location
+            setTarget(x, y, z) {
+                world.target.x = x !== undefined ? x : world.target.x;
+                world.target.y = y !== undefined ? y : world.target.y;
+                world.target.z = z !== undefined ? z : world.target.z;
+                this.logMessage(`Target set to (${world.target.x.toFixed(1)}, ${world.target.y.toFixed(1)}, ${world.target.z.toFixed(1)})`);
+                this.updateTargetDistance();
+            },
+            
+            // Analyze the camera view for features (simplified for simulation)
+            getVisualFeatures() {
+                // Create a simplified analysis of what's visible in the FOV
+                const features = {
+                    visibleObstacles: [],
+                    targetVisible: false,
+                    targetDirection: null,
+                    groundVisible: this.pitch > -10,
+                    skyVisible: this.pitch < 10,
+                    horizonAngle: this.pitch
+                };
+                
+                // Check which obstacles are visible
+                world.obstacles.forEach((obs, index) => {
+                    const center = this.project(obs.x, obs.y + obs.height/2, obs.z);
+                    if (center) {
+                        const distance = Math.sqrt(
+                            Math.pow(obs.x - this.x, 2) + 
+                            Math.pow(obs.y + obs.height/2 - this.y, 2) + 
+                            Math.pow(obs.z - this.z, 2)
+                        );
+                        
+                        features.visibleObstacles.push({
+                            id: index,
+                            screenX: center.x / this.canvas.width,  // Normalized 0-1
+                            screenY: center.y / this.canvas.height, // Normalized 0-1
+                            distance: distance,
+                            size: (obs.width + obs.height) / 2
+                        });
+                    }
+                });
+                
+                // Check if target is visible
+                const targetProj = this.project(world.target.x, world.target.y, world.target.z);
+                if (targetProj) {
+                    features.targetVisible = true;
+                    features.targetDirection = {
+                        screenX: targetProj.x / this.canvas.width,  // Normalized 0-1
+                        screenY: targetProj.y / this.canvas.height, // Normalized 0-1
+                        distance: Math.sqrt(
+                            Math.pow(world.target.x - this.x, 2) + 
+                            Math.pow(world.target.y - this.y, 2) + 
+                            Math.pow(world.target.z - this.z, 2)
+                        )
+                    };
+                }
+                
+                this.logMessage("Visual features analyzed");
+                return features;
+            },
+            
+            // Get the current status as an object
+            getStatus() {
+                return {
+                    position: {x: this.x, y: this.y, z: this.z},
+                    rotation: {pitch: this.pitch, yaw: this.yaw, roll: this.roll},
+                    altitude: this.altitude,
+                    battery: this.battery,
+                    speed: this.speed,
+                    status: this.status,
+                    flying: this.flying,
+                    target: world.target
+                };
+            },
+            
+            // Update the HUD values
+            updateHUD() {
+                document.getElementById('altitude').textContent = this.altitude.toFixed(1);
+                document.getElementById('battery').textContent = this.battery.toFixed(0);
+                document.getElementById('speed').textContent = this.speed.toFixed(1);
+                document.getElementById('status').textContent = this.status;
+                document.getElementById('horizon-indicator').style.transform = 
+                    `translate(-50%, -50%) rotate(${this.roll}deg)`;
+                
+                // Update direction indicator
+                document.getElementById('direction-arrow').style.transform = `rotate(${this.yaw}deg)`;
+                
+                // Update target distance
+                this.updateTargetDistance();
+                
+                // Update GPS coordinates immediately when position changes
+                this.updateTimeDisplay();
+                
+                // Visual battery indicator
+                const batteryEl = document.getElementById('battery');
+                if (this.battery < 20) {
+                    batteryEl.style.color = 'red';
+                } else if (this.battery < 50) {
+                    batteryEl.style.color = 'orange';
+                } else {
+                    batteryEl.style.color = '#00FF00';
+                }
+            },
+            
+            // Log a message to the command log
+            logMessage(message) {
+                const log = document.getElementById('command-log');
+                const entry = document.createElement('div');
+                entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+                log.appendChild(entry);
+                log.scrollTop = log.scrollHeight;
+            }
+        };
+        
+        // Helper function to shade a color darker or lighter
+        function shadeColor(color, percent) {
+            let R = parseInt(color.substring(1, 3), 16);
+            let G = parseInt(color.substring(3, 5), 16);
+            let B = parseInt(color.substring(5, 7), 16);
+
+            R = parseInt(R * (100 + percent) / 100);
+            G = parseInt(G * (100 + percent) / 100);
+            B = parseInt(B * (100 + percent) / 100);
+
+            R = (R < 255) ? R : 255;
+            G = (G < 255) ? G : 255;
+            B = (B < 255) ? B : 255;
+
+            R = Math.max(0, R).toString(16).padStart(2, '0');
+            G = Math.max(0, G).toString(16).padStart(2, '0');
+            B = Math.max(0, B).toString(16).padStart(2, '0');
+
+            return `#${R}${G}${B}`;
+        }
+        
+        // Initialize the drone when the page loads
+        window.addEventListener('load', () => {
+            try {
+                Drone.init();
+                Drone.logMessage("First-person POV simulation initialized. Ready for commands.");
+                
+                // Make Drone object available globally for API access
+                window.Drone = Drone;
+                
+                document.getElementById('btn-forward').addEventListener('click', () => Drone.move('forward', 10));
+                document.getElementById('btn-backward').addEventListener('click', () => Drone.move('backward', 10));
+                document.getElementById('btn-left').addEventListener('click', () => Drone.move('left', 10));
+                document.getElementById('btn-right').addEventListener('click', () => Drone.move('right', 10));
+                document.getElementById('btn-up').addEventListener('click', () => {
+                    Drone.logMessage("Moving UP - increasing altitude");
+                    Drone.move('up', 10);
+                });
+                
+                document.getElementById('btn-down').addEventListener('click', () => {
+                    Drone.logMessage("Moving DOWN - decreasing altitude");
+                    Drone.move('down', 10);
+                });
+                
+                document.getElementById('btn-hover').addEventListener('click', () => {
+                    Drone.speed = 0;
+                    Drone.updateHUD();
+                    Drone.logMessage("Drone holding position");
+                });
+                
+                document.getElementById('btn-rotate-left').addEventListener('click', () => Drone.rotate(-30));
+                document.getElementById('btn-rotate-right').addEventListener('click', () => Drone.rotate(30));
+                
+                document.getElementById('btn-look-up').addEventListener('click', () => Drone.lookAt(Drone.pitch - 10));
+                document.getElementById('btn-look-down').addEventListener('click', () => Drone.lookAt(Drone.pitch + 10));
+                document.getElementById('btn-look-reset').addEventListener('click', () => Drone.lookAt(0));
+                
+                document.getElementById('btn-takeoff').addEventListener('click', () => Drone.takeOff());
+                document.getElementById('btn-land').addEventListener('click', () => Drone.land());
+                document.getElementById('btn-emergency').addEventListener('click', () => Drone.emergencyStop());
+                document.getElementById('btn-go-to').addEventListener('click', () => Drone.goToTarget());
+                
+                // Set up keyboard controls for testing
+                window.addEventListener('keydown', (e) => {
+                    if (!e.repeat) {
+                        switch(e.key) {
+                            case 'w': Drone.move('forward', 10); break;
+                            case 's': Drone.move('backward', 10); break;
+                            case 'a': Drone.move('left', 10); break;
+                            case 'd': Drone.move('right', 10); break;
+                            case 'q': Drone.rotate(-15); break;
+                            case 'e': Drone.rotate(15); break;
+                            case 'r': 
+                                Drone.logMessage("Moving UP - increasing altitude");
+                                Drone.move('up', 10); 
+                                break;
+                            case 'f': 
+                                Drone.logMessage("Moving DOWN - decreasing altitude");
+                                Drone.move('down', 10); 
+                                break;
+                            case ' ': Drone.flying ? Drone.land() : Drone.takeOff(); break;
+                            case 'g': Drone.goToTarget(); break;
+                            case 'ArrowUp': Drone.lookAt(Drone.pitch - 5); break;
+                            case 'ArrowDown': Drone.lookAt(Drone.pitch + 5); break;
+                        }
+                    }
+                });
+                
+                // Allow setting target by clicking in the simulation area
+                const container = document.getElementById('simulation-container');
+                container.addEventListener('click', (e) => {
+                    if (Drone.renderMode === 'none') return;
+                    
+                    const rect = container.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    
+                    // Calculate approximate 3D position from 2D click
+                    const depth = -100; // Default depth
+                    
+                    // Convert screen coordinates to world coordinates (approximate)
+                    const screenX = (x / container.offsetWidth) * 2 - 1;
+                    const screenY = -((y / container.offsetHeight) * 2 - 1);
+                    
+                    const yawRad = Drone.yaw * Math.PI / 180;
+                    const pitchRad = Drone.pitch * Math.PI / 180;
+                    
+                    // Calculate target position based on click and current view
+                    const targetX = Drone.x + Math.sin(yawRad + screenX) * depth;
+                    const targetZ = Drone.z + Math.cos(yawRad + screenX) * depth;
+                    const targetY = Drone.y + Math.sin(pitchRad + screenY) * depth * 0.5;
+                    
+                    Drone.setTarget(targetX, targetY, targetZ);
+                });
+                
+                // Add explanatory instructions
+                const helpText = document.createElement('div');
+                helpText.style.cssText = `
+                    position: absolute;
+                    bottom: 5px;
+                    left: 5px;
+                    background-color: rgba(0,0,0,0.7);
+                    color: white;
+                    padding: 5px;
+                    border-radius: 5px;
+                    font-size: 12px;
+                    max-width: 250px;
+                `;
+                helpText.innerHTML = `
+                    <div><b>Keyboard Controls:</b></div>
+                    <div>WASD - Move drone</div>
+                    <div>R/F - Altitude up/down</div>
+                    <div>Q/E - Rotate left/right</div>
+                    <div>Arrow keys - Look up/down</div>
+                    <div>Space - Takeoff/Land</div>
+                `;
+                document.getElementById('simulation-container').appendChild(helpText);
+            } catch (e) {
+                console.error("Error initializing drone simulation:", e);
+                document.getElementById('command-log').innerHTML += 
+                    `<div>ERROR: Could not initialize simulation: ${e.message}</div>`;
+                document.getElementById('canvas-fallback').style.display = 'flex';
+            }
+        });
+    </script>
+</body>
+</html>
