@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Forest Runner</title>
+  <style>
+    body {
+      background-color: #222;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+    }
+    canvas {
+      box-shadow: 0 0 20px rgba(0,0,0,0.8);
+      cursor: pointer;
+    }
+    #instructions {
+      position: absolute;
+      top: 20px;
+      color: white;
+      background-color: rgba(0,0,0,0.7);
+      padding: 10px 20px;
+      border-radius: 5px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="instructions">Click or press SPACE to jump. Avoid obstacles!</div>
+  <canvas id="gameCanvas" width="800" height="400"></canvas>
+
+  <script>
+    // Game canvas setup
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Game state
+    let gameStarted = false;
+    let gameOver = false;
+    let score = 0;
+    let obstacles = [];
+    let bgElements = [];
+    let forestElements = [];
+    let cloudElements = [];
+    let backgroundSpeed = 2;
+    let obstacleSpeed = 5;
+    let spawnRate = 1500; // milliseconds
+    let lastSpawnTime = 0;
+    let animationId;
+    
+    // Player properties
+    const player = {
+      x: 100,
+      y: 300,
+      width: 40,
+      height: 60,
+      jumping: false,
+      jumpHeight: 150,
+      jumpSpeed: 0,
+      gravity: 0.8,
+      draw: function() {
+        // Draw a simple character
+        ctx.fillStyle = '#3a5e8c';
+        
+        // Body
+        ctx.beginPath();
+        ctx.ellipse(this.x, this.y - this.height/2, this.width/2, this.height/2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Head
+        ctx.beginPath();
+        ctx.arc(this.x, this.y - this.height + 15, 15, 0, Math.PI * 2);
+        ctx.fillStyle = '#e0c8a0';
+        ctx.fill();
+        
+        // Eyes
+        ctx.beginPath();
+        ctx.arc(this.x - 6, this.y - this.height + 12, 3, 0, Math.PI * 2);
+        ctx.fillStyle = 'white';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(this.x + 6, this.y - this.height + 12, 3, 0, Math.PI * 2);
+        ctx.fillStyle = 'white';
+        ctx.fill();
+        
+        ctx.beginPath();
+        ctx.arc(this.x - 6, this.y - this.height + 12, 1.5, 0, Math.PI * 2);
+        ctx.fillStyle = 'black';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(this.x + 6, this.y - this.height + 12, 1.5, 0, Math.PI * 2);
+        ctx.fillStyle = 'black';
+        ctx.fill();
+        
+        // Arms
+        if (this.jumping) {
+          // Arms up when jumping
+          ctx.beginPath();
+          ctx.moveTo(this.x - 15, this.y - this.height + 30);
+          ctx.lineTo(this.x - 25, this.y - this.height + 60);
+          ctx.lineWidth = 6;
+          ctx.strokeStyle = '#3a5e8c';
+          ctx.stroke();
+          
+          ctx.beginPath();
+          ctx.moveTo(this.x + 15, this.y - this.height + 30);
+          ctx.lineTo(this.x + 25, this.y - this.height + 60);
+          ctx.lineWidth = 6;
+          ctx.strokeStyle = '#3a5e8c';
+          ctx.stroke();
+        } else {
+          // Arms swinging when running
+          const armSwing = Math.sin(Date.now() / 100) * 10;
+          
+          ctx.beginPath();
+          ctx.moveTo(this.x - 15, this.y - this.height + 30);
+          ctx.lineTo(this.x - 25, this.y - this.height + 40 + armSwing);
+          ctx.lineWidth = 6;
+          ctx.strokeStyle = '#3a5e8c';
+          ctx.stroke();
+          
+          ctx.beginPath();
+          ctx.moveTo(this.x + 15, this.y - this.height + 30);
+          ctx.lineTo(this.x + 25, this.y - this.height + 40 - armSwing);
+          ctx.lineWidth = 6;
+          ctx.strokeStyle = '#3a5e8c';
+          ctx.stroke();
+        }
+        
+        // Legs
+        if (this.jumping) {
+          // Legs tucked when jumping
+          ctx.beginPath();
+          ctx.moveTo(this.x - 10, this.y - 20);
+          ctx.lineTo(this.x - 15, this.y - 5);
+          ctx.lineWidth = 8;
+          ctx.strokeStyle = '#2a4060';
+          ctx.stroke();
+          
+          ctx.beginPath();
+          ctx.moveTo(this.x + 10, this.y - 20);
+          ctx.lineTo(this.x + 15, this.y - 5);
+          ctx.lineWidth = 8;
+          ctx.strokeStyle = '#2a4060';
+          ctx.stroke();
+        } else {
+          // Legs running
+          const legSwing = Math.sin(Date.now() / 100) * 15;
+          
+          ctx.beginPath();
+          ctx.moveTo(this.x - 10, this.y - 30);
+          ctx.lineTo(this.x - 15, this.y - legSwing);
+          ctx.lineWidth = 8;
+          ctx.strokeStyle = '#2a4060';
+          ctx.stroke();
+          
+          ctx.beginPath();
+          ctx.moveTo(this.x + 10, this.y - 30);
+          ctx.lineTo(this.x + 15, this.y + legSwing);
+          ctx.lineWidth = 8;
+          ctx.strokeStyle = '#2a4060';
+          ctx.stroke();
+        }
+      },
+      jump: function() {
+        if (!this.jumping && !gameOver) {
+          this.jumping = true;
+          this.jumpSpeed = -15;
+        }
+      },
+      update: function() {
+        if (this.jumping) {
+          this.y += this.jumpSpeed;
+          this.jumpSpeed += this.gravity;
+          
+          // Check if landed
+          if (this.y >= 300) {
+            this.y = 300;
+            this.jumping = false;
+            this.jumpSpeed = 0;
+          }
+        }
+      }
+    };
+    
+    // Random utility function
+    function random(min, max) {
+      return Math.random() * (max - min) + min;
+    }
+    
+    // Background element types
+    const bgTypes = [
+      {
+        type: 'mountain',
+        draw: function(x, y, scale) {
+          // Mountain with snowy peak
+          const width = 250 * scale;
+          const height = 180 * scale;
+          
+          // Mountain body
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(x + width/2, y - height);
+          ctx.lineTo(x + width, y);
+          ctx.closePath();
+          
+          const mountainGradient = ctx.createLinearGradient(x, y, x + width/2, y - height);
+          mountainGradient.addColorStop(0, '#3d5e3a');
+          mountainGradient.addColorStop(0.6, '#2d483a');
+          mountainGradient.addColorStop(0.8, '#8f9e9c');
+          mountainGradient.addColorStop(1, '#ffffff');
+          
+          ctx.fillStyle = mountainGradient;
+          ctx.fill();
+        }
+      },
+      {
+        type: 'hill',
+        draw: function(x, y, scale) {
+          // Rolling hill
+          const width = 200 * scale;
+          const height = 100 * scale;
+          
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.quadraticCurveTo(x + width/2, y - height, x + width, y);
+          ctx.lineTo(x + width, y + 50);
+          ctx.lineTo(x, y + 50);
+          ctx.closePath();
+          
+          const hillGradient = ctx.createLinearGradient(x, y, x, y + 50);
+          hillGradient.addColorStop(0, '#3a6e40');
+          hillGradient.addColorStop(1, '#2d5e32');
+          
+          ctx.fillStyle = hillGradient;
+          ctx.fill();
+        }
+      }
+    ];
+    
+    // Obstacle types
+    const obstacleTypes = [
+      {
+        type: 'rock',
+        width: 50,
+        height: 50,
+        draw: function(x, y) {
+          // Rock obstacle
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(x + 20, y - 30);
+          ctx.lineTo(x + 50, y - 10);
+          ctx.lineTo(x + 40, y);
+          ctx.closePath();
+          
+          const rockGradient = ctx.createLinearGradient(x, y, x, y - 30);
+          rockGradient.addColorStop(0, '#555');
+          rockGradient.addColorStop(0.5, '#777');
+          rockGradient.addColorStop(1, '#999');
+          
+          ctx.fillStyle = rockGradient;
+          ctx.fill();
+          
+          // Add rock detail
+          ctx.beginPath();
+          ctx.moveTo(x + 15, y - 10);
+          ctx.lineTo(x + 25, y - 20);
+          ctx.lineTo(x + 35, y - 15);
+          ctx.strokeStyle = '#444';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+      },
+      {
+        type: 'log',
+        width: 70,
+        height: 30,
+        draw: function(x, y) {
+          // Log obstacle
+          ctx.beginPath();
+          ctx.ellipse(x + 35, y - 15, 35, 15, 0, 0, Math.PI * 2);
+          
+          const logGradient = ctx.createLinearGradient(x, y, x, y - 30);
+          logGradient.addColorStop(0, '#8b5a2b');
+          logGradient.addColorStop(0.5, '#a67c52');
+          logGradient.addColorStop(1, '#8b5a2b');
+          
+          ctx.fillStyle = logGradient;
+          ctx.fill();
+          
+          // Add log rings
+          ctx.beginPath();
+          ctx.arc(x + 10, y - 15, 10, 0, Math.PI * 2);
+          ctx.strokeStyle = '#704214';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          
+          ctx.beginPath();
+          ctx.arc(x + 10, y - 15, 5, 0, Math.PI * 2);
+          ctx.stroke();
+          
+          // Add texture lines
+          for (let i = 0; i < 5; i++) {
+            ctx.beginPath();
+            ctx.moveTo(x + 20, y - 20 + i * 5);
+            ctx.lineTo(x + 70, y - 20 + i * 5);
+            ctx.stroke();
+          }
+        }
+      },
+      {
+        type: 'bush',
+        width: 60,
+        height: 40,
+        draw: function(x, y) {
+          // Bush obstacle
+          for (let i = 0; i < 5; i++) {
+            ctx.beginPath();
+            ctx.arc(x + 15 + i * 10, y - 20, 20, 0, Math.PI * 2);
+            
+            const bushGradient = ctx.createRadialGradient(x + 15 + i * 10, y - 20, 5, x + 15 + i * 10, y - 20, 20);
+            bushGradient.addColorStop(0, '#4a7a3d');
+            bushGradient.addColorStop(1, '#2d5e32');
+            
+            ctx.fillStyle = bushGradient;
+            ctx.fill();
+          }
+          
+          // Add some red berries
+          for (let i = 0; i < 8; i++) {
+            ctx.beginPath();
+            ctx.arc(x + 10 + i * 8, y - 15 - Math.sin(i) * 15, 3, 0, Math.PI * 2);
+            ctx.fillStyle = '#c13e3e';
+            ctx.fill();
+          }
+        }
+      }
+    ];
+    
+    // Forest element types
+    const forestTypes = [
+      {
+        type: 'tree',
+        draw: function(x, y, scale) {
+          const trunkWidth = 15 * scale;
+          const trunkHeight = 80 * scale;
+          const leafSize = 40 * scale;
+          
+          // Trunk
+          ctx.fillStyle = '#7d5a38';
+          ctx.fillRect(x - trunkWidth/2, y - trunkHeight, trunkWidth, trunkHeight);
+          
+          // Tree layers
+          for (let i = 0; i < 3; i++) {
+            ctx.beginPath();
+            ctx.moveTo(x - leafSize, y - trunkHeight + 10 + i * 20 * scale);
+            ctx.lineTo(x, y - trunkHeight - leafSize + i * 10 * scale);
+            ctx.lineTo(x + leafSize, y - trunkHeight + 10 + i * 20 * scale);
+            ctx.closePath();
+            
+            const treeGradient = ctx.createLinearGradient(
+              x, y - trunkHeight - leafSize + i * 10 * scale,
+              x, y - trunkHeight + 10 + i * 20 * scale
+            );
+            treeGradient.addColorStop(0, '#1d3d1c');
+            treeGradient.addColorStop(1, '#2d5e32');
+            
+            ctx.fillStyle = treeGradient;
+            ctx.fill();
+          }
+        }
+      },
+      {
+        type: 'bush',
+        draw: function(x, y, scale) {
+          const size = 30 * scale;
+          
+          // Multiple circles for the bush
+          for (let i = 0; i < 3; i++) {
+            for (let j = 0; j < 2; j++) {
+              ctx.beginPath();
+              ctx.arc(x + (i - 1) * size/2, y - j * size/2, size/2, 0, Math.PI * 2);
+              
+              const bushGradient = ctx.createRadialGradient(
+                x + (i - 1) * size/2, y - j * size/2, size/10,
+                x + (i - 1) * size/2, y - j * size/2, size/2
+              );
+              bushGradient.addColorStop(0, '#3a6b35');
+              bushGradient.addColorStop(1, '#2a5a2a');
+              
+              ctx.fillStyle = bushGradient;
+              ctx.fill();
+            }
+          }
+        }
+      }
+    ];
+    
+    // Initialize background elements
+    function initBackground() {
+      // Create mountains and hills
+      for (let i = 0; i < 5; i++) {
+        bgElements.push({
+          type: bgTypes[0], // Mountain
+          x: i * 400,
+          y: 300,
+          scale: 0.8 + Math.random() * 0.4
+        });
+      }
+      
+      for (let i = 0; i < 8; i++) {
+        bgElements.push({
+          type: bgTypes[1], // Hill
+          x: i * 250,
+          y: 300,
+          scale: 0.6 + Math.random() * 0.4
+        });
+      }
+      
+      // Create forest elements
+      for (let i = 0; i < 15; i++) {
+        forestElements.push({
+          type: forestTypes[0], // Tree
+          x: i * 150 + Math.random() * 50,
+          y: 300,
+          scale: 0.5 + Math.random() * 0.4
+        });
+      }
+      
+      for (let i = 0; i < 10; i++) {
+        forestElements.push({
+          type: forestTypes[1], // Bush
+          x: i * 200 + Math.random() * 100,
+          y: 300,
+          scale: 0.6 + Math.random() * 0.4
+        });
+      }
+      
+      // Create clouds
+      for (let i = 0; i < 8; i++) {
+        createCloud();
+      }
+    }
+    
+    // Create a new cloud
+    function createCloud() {
+      cloudElements.push({
+        x: Math.random() * canvas.width * 2,
+        y: Math.random() * 100 + 20,
+        width: Math.random() * 100 + 100,
+        height: Math.random() * 40 + 40,
+        speed: Math.random() * 0.5 + 0.2
+      });
+    }
+    
+    // Create a new obstacle
+    function createObstacle() {
+      const type = obstacleTypes[Math.floor(Math.random() * obstacleTypes.length)];
+      obstacles.push({
+        type: type,
+        x: canvas.width,
+        y: 300
+      });
+    }
+    
+    // Draw clouds
+    function drawClouds() {
+      cloudElements.forEach(cloud => {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        
+        // Draw multiple circles for fluffy cloud
+        for (let i = 0; i < 5; i++) {
+          ctx.beginPath();
+          ctx.arc(
+            cloud.x + i * (cloud.width / 6), 
+            cloud.y + Math.sin(i) * (cloud.height / 6),
+            cloud.height / 2,
+            0, Math.PI * 2
+          );
+          ctx.fill();
+        }
+      });
+    }
+    
+    // Draw the ground
+    function drawGround() {
+      // Ground base
+      ctx.fillStyle = '#3a523a';
+      ctx.fillRect(0, 300, canvas.width, canvas.height - 300);
+      
+      // Ground detail
+      ctx.fillStyle = '#325132';
+      for (let i = 0; i < canvas.width; i += 20) {
+        const height = Math.random() * 5 + 2;
+        ctx.fillRect(i, 300 - height, 15, height);
+      }
+      
+      // Ground stripes
+      ctx.strokeStyle = 'rgba(60, 100, 60, 0.2)';
+      ctx.lineWidth = 1;
+      for (let i = 0; i < canvas.width; i += 30) {
+        ctx.beginPath();
+        ctx.moveTo(i, 300);
+        ctx.lineTo(i + 20, 300);
+        ctx.stroke();
+      }
+    }
+    
+    // Check collision between player and obstacle
+    function checkCollision(player, obstacle) {
+      // Simple bounding box collision detection
+      return (
+        player.x + player.width / 2 > obstacle.x &&
+        player.x - player.width / 2 < obstacle.x + obstacle.type.width &&
+        player.y > obstacle.y - obstacle.type.height
+      );
+    }
+    
+    // Display the score
+    function drawScore() {
+      ctx.fillStyle = 'white';
+      ctx.font = '24px Arial';
+      ctx.fillText(`Score: ${Math.floor(score)}`, 20, 40);
+    }
+    
+    // Display game over message
+    function drawGameOver() {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.fillRect(canvas.width / 2 - 200, canvas.height / 2 - 100, 400, 200);
+      
+      ctx.fillStyle = 'white';
+      ctx.font = '36px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('Game Over', canvas.width / 2, canvas.height / 2 - 40);
+      
+      ctx.font = '24px Arial';
+      ctx.fillText(`Score: ${Math.floor(score)}`, canvas.width / 2, canvas.height / 2);
+      
+      ctx.font = '18px Arial';
+      ctx.fillText('Click or press SPACE to play again', canvas.width / 2, canvas.height / 2 + 40);
+      
+      ctx.textAlign = 'left';
+    }
+    
+    // Draw start screen
+    function drawStartScreen() {
+      // Draw a nice title screen
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.fillRect(canvas.width / 2 - 200, canvas.height / 2 - 100, 400, 200);
+      
+      ctx.fillStyle = 'white';
+      ctx.font = '36px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('Forest Runner', canvas.width / 2, canvas.height / 2 - 40);
+      
+      ctx.font = '18px Arial';
+      ctx.fillText('Click or press SPACE to start', canvas.width / 2, canvas.height / 2 + 20);
+      
+      ctx.textAlign = 'left';
+    }
+    
+    // Reset game
+    function resetGame() {
+      gameStarted = true;
+      gameOver = false;
+      score = 0;
+      obstacles = [];
+      lastSpawnTime = 0;
+      obstacleSpeed = 5;
+      spawnRate = 1500;
+    }
+    
+    // Draw scene with parallax effect
+    function drawScene() {
+      // Clear canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Draw sky gradient
+      const skyGradient = ctx.createLinearGradient(0, 0, 0, 300);
+      skyGradient.addColorStop(0, '#64b0ff');
+      skyGradient.addColorStop(1, '#a0cfff');
+      ctx.fillStyle = skyGradient;
+      ctx.fillRect(0, 0, canvas.width, 300);
+      
+      // Draw clouds
+      drawClouds();
+      
+      // Draw mountains and hills (background)
+      bgElements.forEach(element => {
+        element.type.draw(element.x, element.y, element.scale);
+      });
+      
+      // Draw trees and bushes (mid-ground)
+      forestElements.forEach(element => {
+        element.type.draw(element.x, element.y, element.scale);
+      });
+      
+      // Draw ground
+      drawGround();
+      
+      // Draw player
+      player.draw();
+      
+      // Draw obstacles
+      obstacles.forEach(obstacle => {
+        obstacle.type.draw(obstacle.x, obstacle.y);
+      });
+      
+      // Draw score
+      drawScore();
+      
+      if (!gameStarted) {
+        drawStartScreen();
+      } else if (gameOver) {
+        drawGameOver();
+      }
+    }
+    
+    // Update game state
+    function updateGame() {
+      if (!gameStarted || gameOver) return;
+      
+      // Increase score
+      score += 0.1;
+      
+      // Increase difficulty over time
+      obstacleSpeed = 5 + Math.floor(score / 100);
+      spawnRate = Math.max(500, 1500 - Math.floor(score / 10) * 50);
+      
+      // Update player
+      player.update();
+      
+      // Update clouds
+      cloudElements.forEach(cloud => {
+        cloud.x -= cloud.speed;
+        if (cloud.x + cloud.width < 0) {
+          cloud.x = canvas.width + cloud.width;
+          cloud.y = Math.random() * 100 + 20;
+        }
+      });
+      
+      // Update background elements (parallax scrolling)
+      bgElements.forEach(element => {
+        element.x -= backgroundSpeed * 0.5; // Slower for background
+        if (element.x + (element.type.type === 'mountain' ? 250 : 200) * element.scale < 0) {
+          element.x = canvas.width;
+        }
+      });
+      
+      // Update forest elements
+      forestElements.forEach(element => {
+        element.x -= backgroundSpeed;
+        if (element.x + (element.type.type === 'tree' ? 50 : 30) * element.scale < 0) {
+          element.x = canvas.width;
+        }
+      });
+      
+      // Update obstacles
+      obstacles.forEach((obstacle, index) => {
+        obstacle.x -= obstacleSpeed;
+        
+        // Remove obstacles that are off screen
+        if (obstacle.x + obstacle.type.width < 0) {
+          obstacles.splice(index, 1);
+        }
+        
+        // Check for collision
+        if (checkCollision(player, obstacle)) {
+          gameOver = true;
+        }
+      });
+      
+      // Create new obstacles
+      const currentTime = Date.now();
+      if (currentTime - lastSpawnTime > spawnRate) {
+        createObstacle();
+        lastSpawnTime = currentTime;
+      }
+    }
+    
+    // Game loop
+    function gameLoop() {
+      updateGame();
+      drawScene();
+      animationId = requestAnimationFrame(gameLoop);
+    }
+    
+    // Initialize game
+    function init() {
+      initBackground();
+      gameLoop();
+      
+      // Event listeners
+      canvas.addEventListener('click', () => {
+        if (!gameStarted) {
+          resetGame();
+        } else if (gameOver) {
+          resetGame();
+        } else {
+          player.jump();
+        }
+      });
+      
+      window.addEventListener('keydown', (e) => {
+        if (e.code === 'Space') {
+          if (!gameStarted) {
+            resetGame();
+          } else if (gameOver) {
+            resetGame();
+          } else {
+            player.jump();
+          }
+        }
+      });
+    }
+    
+    // Start the game
+    init();
+  </script>
+</body>
+</html>
