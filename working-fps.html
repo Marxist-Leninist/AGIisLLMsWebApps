@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Working FPS</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background-color: #111;
+      font-family: Arial, sans-serif;
+    }
+    #gameCanvas {
+      display: block;
+      background-color: #000;
+    }
+    #startScreen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.8);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: white;
+    }
+    #hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    .hudElement {
+      position: absolute;
+      color: white;
+      font-size: 20px;
+      background-color: rgba(0, 0, 0, 0.5);
+      padding: 5px 10px;
+      border-radius: 5px;
+    }
+    #health {
+      left: 20px;
+      bottom: 20px;
+    }
+    #ammo {
+      right: 20px;
+      bottom: 20px;
+    }
+    #score {
+      left: 20px;
+      top: 20px;
+    }
+    #enemies {
+      right: 20px;
+      top: 20px;
+    }
+    #debug {
+      left: 50%;
+      transform: translateX(-50%);
+      top: 20px;
+    }
+    #crosshair {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 24px;
+      pointer-events: none;
+    }
+    #minimap {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: rgba(0, 0, 0, 0.5);
+      border: 2px solid white;
+    }
+    button {
+      background-color: #ff3333;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      font-size: 18px;
+      cursor: pointer;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+  <canvas id="minimap" width="150" height="150"></canvas>
+  
+  <div id="hud">
+    <div id="crosshair">+</div>
+    <div id="health" class="hudElement">Health: 100</div>
+    <div id="ammo" class="hudElement">Ammo: 10/30</div>
+    <div id="score" class="hudElement">Score: 0</div>
+    <div id="enemies" class="hudElement">Enemies: 0</div>
+    <div id="debug" class="hudElement">Debug: Initialized</div>
+  </div>
+  
+  <div id="startScreen">
+    <h1>FPS GAME</h1>
+    <p>WASD to move, Mouse to look around</p>
+    <p>Click to shoot</p>
+    <button id="startButton">START GAME</button>
+  </div>
+
+  <script>
+    // Debug mode - log to console
+    const DEBUG = true;
+    function log(msg) {
+      if (DEBUG) {
+        console.log(msg);
+        document.getElementById('debug').textContent = "Debug: " + msg;
+      }
+    }
+    
+    log("Script started");
+    
+    // Canvas setup
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Minimap setup
+    const minimapCanvas = document.getElementById('minimap');
+    const minimapCtx = minimapCanvas.getContext('2d');
+    
+    // Set canvas to window size
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      log(`Canvas resized to ${canvas.width}x${canvas.height}`);
+    }
+    
+    // Initial resize
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+    
+    // Game elements
+    const startScreen = document.getElementById('startScreen');
+    const startButton = document.getElementById('startButton');
+    const healthDisplay = document.getElementById('health');
+    const ammoDisplay = document.getElementById('ammo');
+    const scoreDisplay = document.getElementById('score');
+    const enemiesDisplay = document.getElementById('enemies');
+    
+    // Game state
+    let gameStarted = false;
+    let health = 100;
+    let ammo = 10;
+    let totalAmmo = 30;
+    let score = 0;
+    let enemies = 3;
+    
+    // Player with improved movement
+    const player = {
+      x: 5,
+      y: 5,
+      angle: 0,
+      moveSpeed: 0.005,
+      rotateSpeed: 0.003
+    };
+    
+    // Wall colors
+    const WALL_COLORS = [
+      '#8B4513', // Brown
+      '#A52A2A', // Brown-red
+      '#556B2F', // Dark olive green
+      '#2F4F4F'  // Dark slate gray
+    ];
+    
+    // Simplified but larger map (1 = wall, 0 = empty)
+    const map = [
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,0,0,1,1,1,0,0,0,0,1,1,1,0,0,1],
+      [1,0,0,1,0,0,0,0,0,0,0,0,1,0,0,1],
+      [1,0,0,1,0,0,0,0,0,0,0,0,1,0,0,1],
+      [1,0,0,0,0,0,1,1,1,1,0,0,0,0,0,1],
+      [1,0,0,0,0,0,1,0,0,1,0,0,0,0,0,1],
+      [1,0,0,0,0,0,1,0,0,1,0,0,0,0,0,1],
+      [1,0,0,0,0,0,1,1,1,1,0,0,0,0,0,1],
+      [1,0,0,1,0,0,0,0,0,0,0,0,1,0,0,1],
+      [1,0,0,1,0,0,0,0,0,0,0,0,1,0,0,1],
+      [1,0,0,1,1,1,0,0,0,0,1,1,1,0,0,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+    ];
+    
+    // Check if a position is a wall
+    function isWall(x, y) {
+      const mapX = Math.floor(x);
+      const mapY = Math.floor(y);
+      
+      // Check map bounds
+      if (mapX < 0 || mapX >= map[0].length || mapY < 0 || mapY >= map.length) {
+        return true;
+      }
+      
+      return map[mapY][mapX] === 1;
+    }
+    
+    // Input handling
+    const keys = {};
+    
+    window.addEventListener('keydown', function(e) {
+      keys[e.key.toLowerCase()] = true;
+      log(`Key down: ${e.key}`);
+    });
+    
+    window.addEventListener('keyup', function(e) {
+      keys[e.key.toLowerCase()] = false;
+    });
+    
+    // Handle mouse movement for rotation
+    document.addEventListener('mousemove', function(e) {
+      if (!gameStarted) return;
+      
+      const sensitivity = 0.003;
+      const dx = e.movementX || e.mozMovementX || e.webkitMovementX || 0;
+      player.angle += dx * sensitivity;
+      
+      // Keep angle between 0 and 2π
+      player.angle = player.angle % (Math.PI * 2);
+      if (player.angle < 0) player.angle += Math.PI * 2;
+    });
+    
+    // Lock pointer on click
+    canvas.addEventListener('click', function() {
+      if (!gameStarted) return;
+      
+      canvas.requestPointerLock = canvas.requestPointerLock || 
+                                  canvas.mozRequestPointerLock || 
+                                  canvas.webkitRequestPointerLock;
+      canvas.requestPointerLock();
+      
+      // Shooting
+      if (ammo > 0) {
+        ammo--;
+        ammoDisplay.textContent = `Ammo: ${ammo}/${totalAmmo}`;
+      }
+    });
+    
+    // Update player position and handle movement
+    function updatePlayer(dt) {
+      log(`Movement update: x=${player.x.toFixed(2)}, y=${player.y.toFixed(2)}, angle=${player.angle.toFixed(2)}`);
+      
+      let moveX = 0;
+      let moveY = 0;
+      
+      // Forward/backward movement
+      if (keys['w'] || keys['arrowup']) {
+        moveX += Math.cos(player.angle) * player.moveSpeed * dt;
+        moveY += Math.sin(player.angle) * player.moveSpeed * dt;
+        log('Moving forward');
+      }
+      if (keys['s'] || keys['arrowdown']) {
+        moveX -= Math.cos(player.angle) * player.moveSpeed * dt;
+        moveY -= Math.sin(player.angle) * player.moveSpeed * dt;
+        log('Moving backward');
+      }
+      
+      // Strafe left/right
+      if (keys['a'] || keys['arrowleft']) {
+        moveX += Math.cos(player.angle - Math.PI/2) * player.moveSpeed * dt;
+        moveY += Math.sin(player.angle - Math.PI/2) * player.moveSpeed * dt;
+        log('Moving left');
+      }
+      if (keys['d'] || keys['arrowright']) {
+        moveX += Math.cos(player.angle + Math.PI/2) * player.moveSpeed * dt;
+        moveY += Math.sin(player.angle + Math.PI/2) * player.moveSpeed * dt;
+        log('Moving right');
+      }
+      
+      // Check movement along X axis
+      if (moveX !== 0) {
+        const newX = player.x + moveX;
+        // Check for collision
+        if (!isWall(newX, player.y)) {
+          player.x = newX;
+          log(`X position updated to ${player.x.toFixed(2)}`);
+        } else {
+          log('X movement blocked by wall');
+        }
+      }
+      
+      // Check movement along Y axis
+      if (moveY !== 0) {
+        const newY = player.y + moveY;
+        // Check for collision
+        if (!isWall(player.x, newY)) {
+          player.y = newY;
+          log(`Y position updated to ${player.y.toFixed(2)}`);
+        } else {
+          log('Y movement blocked by wall');
+        }
+      }
+    }
+    
+    // Draw walls with raycasting
+    function drawWalls() {
+      const FOV = Math.PI / 3; // 60 degrees
+      const HALF_FOV = FOV / 2;
+      const WALL_HEIGHT = 500;
+      const rayCount = canvas.width;
+      const rayStep = FOV / rayCount;
+      
+      for (let i = 0; i < rayCount; i++) {
+        // Calculate ray angle
+        const rayAngle = player.angle - HALF_FOV + i * rayStep;
+        
+        // Normalize angle
+        let normalizedAngle = rayAngle;
+        while (normalizedAngle < 0) normalizedAngle += Math.PI * 2;
+        while (normalizedAngle >= Math.PI * 2) normalizedAngle -= Math.PI * 2;
+        
+        // Ray components
+        const rayDirX = Math.cos(normalizedAngle);
+        const rayDirY = Math.sin(normalizedAngle);
+        
+        // Ray casting
+        let distance = 0;
+        let hitWall = false;
+        let wallType = 0;
+        
+        // Ray position
+        let rayX = player.x;
+        let rayY = player.y;
+        
+        // Step size
+        const step = 0.05;
+        
+        // Cast ray until hit wall or max distance
+        const maxDist = 20;
+        
+        while (!hitWall && distance < maxDist) {
+          distance += step;
+          
+          // Calculate new position
+          rayX = player.x + rayDirX * distance;
+          rayY = player.y + rayDirY * distance;
+          
+          // Check if ray hit a wall
+          if (isWall(rayX, rayY)) {
+            hitWall = true;
+            
+            // Determine wall type based on direction
+            if (Math.abs(rayX - Math.floor(rayX)) < 0.01) {
+              wallType = 0; // Vertical wall (East-West)
+            } else if (Math.abs(rayY - Math.floor(rayY)) < 0.01) {
+              wallType = 1; // Horizontal wall (North-South)
+            } else {
+              // Randomize wall type for corners
+              wallType = Math.floor(Math.random() * WALL_COLORS.length);
+            }
+          }
+        }
+        
+        // Fix fishbowl effect
+        distance = distance * Math.cos(player.angle - normalizedAngle);
+        
+        // Calculate wall height
+        const wallHeight = hitWall ? Math.min(canvas.height, WALL_HEIGHT / distance) : 0;
+        
+        // Wall top and bottom positions
+        const wallTop = (canvas.height - wallHeight) / 2;
+        const wallBottom = wallTop + wallHeight;
+        
+        // Draw wall
+        if (hitWall) {
+          // Get wall color with shading based on distance
+          const shade = 1 - Math.min(distance / maxDist, 0.8);
+          const colorIndex = wallType % WALL_COLORS.length;
+          
+          // Parse hex color to RGB for shading
+          const hex = WALL_COLORS[colorIndex].replace('#', '');
+          const r = parseInt(hex.substr(0, 2), 16);
+          const g = parseInt(hex.substr(2, 2), 16);
+          const b = parseInt(hex.substr(4, 2), 16);
+          
+          // Apply shading
+          const shadedR = Math.floor(r * shade);
+          const shadedG = Math.floor(g * shade);
+          const shadedB = Math.floor(b * shade);
+          
+          ctx.fillStyle = `rgb(${shadedR}, ${shadedG}, ${shadedB})`;
+          ctx.fillRect(i, wallTop, 1, wallHeight);
+        }
+      }
+    }
+    
+    // Draw the minimap
+    function drawMinimap() {
+      const cellSize = 8;
+      const mapWidth = map[0].length * cellSize;
+      const mapHeight = map.length * cellSize;
+      
+      // Clear minimap
+      minimapCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      minimapCtx.fillRect(0, 0, minimapCanvas.width, minimapCanvas.height);
+      
+      // Center the map in the minimap canvas
+      const offsetX = (minimapCanvas.width - mapWidth) / 2;
+      const offsetY = (minimapCanvas.height - mapHeight) / 2;
+      
+      // Draw map cells
+      for (let y = 0; y < map.length; y++) {
+        for (let x = 0; x < map[y].length; x++) {
+          const cellX = offsetX + x * cellSize;
+          const cellY = offsetY + y * cellSize;
+          
+          if (map[y][x] === 1) {
+            // Wall
+            minimapCtx.fillStyle = '#888';
+          } else {
+            // Empty space
+            minimapCtx.fillStyle = '#444';
+          }
+          
+          minimapCtx.fillRect(cellX, cellY, cellSize, cellSize);
+        }
+      }
+      
+      // Draw player position
+      const playerX = offsetX + player.x * cellSize;
+      const playerY = offsetY + player.y * cellSize;
+      
+      minimapCtx.fillStyle = '#ff0000';
+      minimapCtx.beginPath();
+      minimapCtx.arc(playerX, playerY, 3, 0, Math.PI * 2);
+      minimapCtx.fill();
+      
+      // Draw player direction line
+      minimapCtx.strokeStyle = '#ff0000';
+      minimapCtx.lineWidth = 1;
+      minimapCtx.beginPath();
+      minimapCtx.moveTo(playerX, playerY);
+      minimapCtx.lineTo(
+        playerX + Math.cos(player.angle) * 10,
+        playerY + Math.sin(player.angle) * 10
+      );
+      minimapCtx.stroke();
+    }
+    
+    // Render the entire scene
+    function render() {
+      // Clear the canvas
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Draw sky
+      const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height / 2);
+      skyGradient.addColorStop(0, '#1E3D5C');
+      skyGradient.addColorStop(1, '#3A6BA4');
+      ctx.fillStyle = skyGradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height / 2);
+      
+      // Draw ground
+      const groundGradient = ctx.createLinearGradient(0, canvas.height / 2, 0, canvas.height);
+      groundGradient.addColorStop(0, '#3D3D3D');
+      groundGradient.addColorStop(1, '#1A1A1A');
+      ctx.fillStyle = groundGradient;
+      ctx.fillRect(0, canvas.height / 2, canvas.width, canvas.height / 2);
+      
+      // Draw walls using raycasting
+      drawWalls();
+      
+      // Draw the minimap
+      drawMinimap();
+      
+      // Draw weapon
+      ctx.fillStyle = '#333333';
+      ctx.fillRect(
+        canvas.width / 2 - 5,
+        canvas.height - 100,
+        10,
+        70
+      );
+      ctx.fillStyle = '#222222';
+      ctx.fillRect(
+        canvas.width / 2 - 15,
+        canvas.height - 50,
+        30,
+        30
+      );
+    }
+    
+    // Start game
+    function startGame() {
+      log("Game started");
+      gameStarted = true;
+      startScreen.style.display = 'none';
+      lastFrameTime = performance.now();
+      requestAnimationFrame(gameLoop);
+    }
+    
+    // Game loop
+    let lastFrameTime = 0;
+    let frameCount = 0;
+    let fpsTime = 0;
+    let fps = 0;
+    
+    function gameLoop(timestamp) {
+      // Calculate delta time
+      const deltaTime = timestamp - lastFrameTime;
+      lastFrameTime = timestamp;
+      
+      // FPS calculation
+      frameCount++;
+      fpsTime += deltaTime;
+      if (fpsTime >= 1000) {
+        fps = Math.round((frameCount * 1000) / fpsTime);
+        fpsTime -= 1000;
+        frameCount = 0;
+        log(`FPS: ${fps}, Position: (${player.x.toFixed(2)}, ${player.y.toFixed(2)})`);
+      }
+      
+      // Update game state
+      if (gameStarted) {
+        updatePlayer(deltaTime);
+      }
+      
+      // Render everything
+      render();
+      
+      // Continue the loop
+      requestAnimationFrame(gameLoop);
+    }
+    
+    // Start button listener
+    startButton.addEventListener('click', startGame);
+    
+    log("Initialization complete");
+  </script>
+</body>
+</html>

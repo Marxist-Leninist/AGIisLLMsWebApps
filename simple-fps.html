@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Simple FPS</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #000;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+    }
+    canvas {
+      display: block;
+      cursor: none;
+    }
+    #hud {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    #crosshair {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 20px;
+      height: 20px;
+      transform: translate(-50%, -50%);
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 24px;
+    }
+    #score {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      color: white;
+      font-size: 18px;
+      text-shadow: 1px 1px 2px #000;
+    }
+    #ammo {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      color: white;
+      font-size: 18px;
+      text-shadow: 1px 1px 2px #000;
+    }
+    #health {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      color: white;
+      font-size: 18px;
+      text-shadow: 1px 1px 2px #000;
+    }
+    #enemies {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      color: white;
+      font-size: 18px;
+      text-shadow: 1px 1px 2px #000;
+    }
+    #damageOverlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(255, 0, 0, 0);
+      pointer-events: none;
+      transition: background-color 0.2s;
+    }
+    #hitMarker {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 30px;
+      height: 30px;
+      transform: translate(-50%, -50%);
+      color: #ff3333;
+      font-size: 30px;
+      opacity: 0;
+      transition: opacity 0.1s;
+    }
+    #gameOverScreen, #startScreen {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.8);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+    #gameOverScreen {
+      visibility: hidden;
+    }
+    h1 {
+      color: #ff3333;
+      font-size: 48px;
+      margin-bottom: 20px;
+      text-shadow: 0 0 10px rgba(255, 0, 0, 0.7);
+    }
+    p {
+      color: white;
+      font-size: 18px;
+      margin-bottom: 10px;
+      text-align: center;
+      text-shadow: 1px 1px 2px #000;
+    }
+    button {
+      background-color: #ff3333;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      font-size: 18px;
+      cursor: pointer;
+      border-radius: 5px;
+      margin-top: 20px;
+      box-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
+      transition: all 0.2s;
+    }
+    button:hover {
+      background-color: #ff5555;
+      transform: scale(1.05);
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <div id="hud">
+    <div id="crosshair">+</div>
+    <div id="score">Score: 0</div>
+    <div id="ammo">Ammo: 10 / 30</div>
+    <div id="health">Health: 100</div>
+    <div id="enemies">Enemies: 0</div>
+    <div id="hitMarker">×</div>
+    <div id="damageOverlay"></div>
+  </div>
+  <div id="gameOverScreen">
+    <h1>GAME OVER</h1>
+    <p id="finalScore">Your score: 0</p>
+    <button id="restartButton">Play Again</button>
+  </div>
+  <div id="startScreen">
+    <h1>FPS GAME</h1>
+    <p>WASD to move, Mouse to aim, Left Click to shoot</p>
+    <p>R to reload, Shift to run</p>
+    <p>Defeat all enemies to survive</p>
+    <button id="startButton">Start Game</button>
+  </div>
+
+  <script>
+    // Canvas setup
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    // HUD elements
+    const scoreDisplay = document.getElementById('score');
+    const ammoDisplay = document.getElementById('ammo');
+    const healthDisplay = document.getElementById('health');
+    const enemiesDisplay = document.getElementById('enemies');
+    const gameOverScreen = document.getElementById('gameOverScreen');
+    const finalScoreDisplay = document.getElementById('finalScore');
+    const restartButton = document.getElementById('restartButton');
+    const startScreen = document.getElementById('startScreen');
+    const startButton = document.getElementById('startButton');
+    const hitMarker = document.getElementById('hitMarker');
+    const damageOverlay = document.getElementById('damageOverlay');
+
+    // Game state
+    let gameStarted = false;
+    let score = 0;
+    let currentAmmo = 10;
+    let totalAmmo = 30;
+    let health = 100;
+    let gameOver = false;
+    let reloading = false;
+    let lastShot = 0;
+    let fireRate = 150; // milliseconds between shots
+    
+    // Map definition (1 = wall, 0 = empty space)
+    const mapSize = 16;
+    const map = [
+      [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+      [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+      [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+      [1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1],
+      [1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1],
+      [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+      [1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1],
+      [1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1],
+      [1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1],
+      [1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1],
+      [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+      [1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1],
+      [1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1],
+      [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+      [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+      [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+    ];
+
+    // Wall colors for different sides
+    const wallColors = [
+      "#8B4513", // North
+      "#A0522D", // East 
+      "#CD853F", // South
+      "#D2691E"  // West
+    ];
+
+    // Player settings
+    const player = {
+      x: 2.5,
+      y: 2.5,
+      angle: 0,
+      speed: 0.05,
+      rotationSpeed: 0.03,
+      fov: Math.PI / 3,
+      running: false
+    };
+
+    // Weapon settings
+    let weapon = {
+      recoil: 0,
+      maxRecoil: 10,
+      recover: true,
+      bobAmount: 0
+    };
+
+    // Enemy class
+    class Enemy {
+      constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.health = 100;
+        this.speed = 0.015 + Math.random() * 0.01;
+        this.state = 'idle';
+        this.damage = 10;
+        this.attackRange = 0.6;
+        this.attackCooldown = 1000;
+        this.lastAttack = 0;
+        this.detectionRange = 7;
+        this.hitTime = 0;
+        this.lastMove = Date.now();
+        // Random bobbing for more lifelike movement
+        this.bobAmount = 0;
+        this.bobDirection = Math.random() < 0.5 ? 1 : -1;
+        this.bobSpeed = 0.003 + Math.random() * 0.002;
+      }
+
+      update(dt) {
+        if (this.state === 'dead') return;
+
+        // Calculate distance to player
+        const dx = player.x - this.x;
+        const dy = player.y - this.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        // Update bobbing animation
+        this.bobAmount += this.bobSpeed * this.bobDirection * dt;
+        if (Math.abs(this.bobAmount) > 0.1) {
+          this.bobDirection *= -1;
+        }
+
+        // State management
+        if (distance < this.attackRange) {
+          this.state = 'attack';
+        } else if (distance < this.detectionRange) {
+          this.state = 'chase';
+        } else {
+          this.state = 'idle';
+        }
+
+        // Handle different states
+        switch (this.state) {
+          case 'chase':
+            const now = Date.now();
+            const moveTime = now - this.lastMove;
+            this.lastMove = now;
+            
+            // Simple pathfinding (move towards player)
+            let moveX = dx / distance * this.speed * moveTime;
+            let moveY = dy / distance * this.speed * moveTime;
+            
+            // Try to move in X direction
+            let newX = this.x + moveX;
+            if (!isWall(newX, this.y)) {
+              this.x = newX;
+            }
+            
+            // Try to move in Y direction
+            let newY = this.y + moveY;
+            if (!isWall(this.x, newY)) {
+              this.y = newY;
+            }
+            break;
+            
+          case 'attack':
+            const attackTime = Date.now();
+            if (attackTime - this.lastAttack > this.attackCooldown) {
+              this.lastAttack = attackTime;
+              if (!gameOver) {
+                health -= this.damage;
+                showDamage();
+                healthDisplay.textContent = `Health: ${health}`;
+                
+                if (health <= 0) {
+                  endGame();
+                }
+              }
+            }
+            break;
+        }
+      }
+
+      hit() {
+        this.health -= 25;
+        this.hitTime = Date.now();
+        if (this.health <= 0) {
+          this.state = 'dead';
+          score += 100;
+          scoreDisplay.textContent = `Score: ${Math.floor(score)}`;
+          return true;
+        }
+        return false;
+      }
+    }
+
+    // Initial enemies
+    let enemies = [];
+
+    function spawnEnemies(count) {
+      enemies = [];
+      for (let i = 0; i < count; i++) {
+        // Find a valid spawn position
+        let x, y;
+        do {
+          x = Math.floor(Math.random() * (mapSize - 2)) + 1;
+          y = Math.floor(Math.random() * (mapSize - 2)) + 1;
+        } while (
+          map[Math.floor(y)][Math.floor(x)] === 1 || 
+          (Math.abs(x - player.x) < 3 && Math.abs(y - player.y) < 3)
+        );
+        
+        enemies.push(new Enemy(x + 0.5, y + 0.5));
+      }
+      
+      enemiesDisplay.textContent = `Enemies: ${enemies.length}`;
+    }
+
+    // Check if a position is a wall
+    function isWall(x, y) {
+      const gridX = Math.floor(x);
+      const gridY = Math.floor(y);
+      
+      if (gridX < 0 || gridX >= mapSize || gridY < 0 || gridY >= mapSize) {
+        return true;
+      }
+      
+      return map[gridY][gridX] === 1;
+    }
+
+    // Handle mouse movement for look
+    let mouseX = 0;
+    let mouseY = 0;
+
+    canvas.addEventListener('mousemove', (e) => {
+      if (!gameStarted || gameOver) return;
+      
+      const sensitivity = 0.002;
+      
+      // Apply horizontal mouse movement for rotation
+      const dx = e.movementX || e.mozMovementX || e.webkitMovementX || 0;
+      player.angle += dx * sensitivity;
+    });
+
+    // Lock pointer on click
+    canvas.addEventListener('click', () => {
+      if (!gameStarted || gameOver) return;
+      
+      canvas.requestPointerLock = canvas.requestPointerLock || 
+                                  canvas.mozRequestPointerLock || 
+                                  canvas.webkitRequestPointerLock;
+      canvas.requestPointerLock();
+      
+      // Shoot
+      shoot();
+    });
+
+    // Handle key presses
+    const keys = {};
+
+    window.addEventListener('keydown', (e) => {
+      keys[e.key.toLowerCase()] = true;
+      
+      if (e.key.toLowerCase() === 'r' && !reloading && currentAmmo < 10 && totalAmmo > 0) {
+        reload();
+      }
+      
+      if (e.key.toLowerCase() === 'shift') {
+        player.running = true;
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      keys[e.key.toLowerCase()] = false;
+      
+      if (e.key.toLowerCase() === 'shift') {
+        player.running = false;
+      }
+    });
+
+    // Player movement
+    function updatePlayerMovement(dt) {
+      // Rotation from keyboard
+      if (keys['arrowleft'] || keys['a']) {
+        player.angle -= player.rotationSpeed * dt;
+      }
+      if (keys['arrowright'] || keys['d']) {
+        player.angle += player.rotationSpeed * dt;
+      }
+
+      // Forward/backward movement
+      const speedModifier = player.running ? 1.5 : 1;
+      let dx = 0;
+      let dy = 0;
+      
+      if (keys['arrowup'] || keys['w']) {
+        dx += Math.cos(player.angle) * player.speed * speedModifier * dt;
+        dy += Math.sin(player.angle) * player.speed * speedModifier * dt;
+      }
+      if (keys['arrowdown'] || keys['s']) {
+        dx -= Math.cos(player.angle) * player.speed * speedModifier * dt;
+        dy -= Math.sin(player.angle) * player.speed * speedModifier * dt;
+      }
+      
+      // Strafe movement
+      if (keys['q'] || keys['a']) {
+        dx += Math.cos(player.angle - Math.PI / 2) * player.speed * dt;
+        dy += Math.sin(player.angle - Math.PI / 2) * player.speed * dt;
+      }
+      if (keys['e'] || keys['d']) {
+        dx += Math.cos(player.angle + Math.PI / 2) * player.speed * dt;
+        dy += Math.sin(player.angle + Math.PI / 2) * player.speed * dt;
+      }
+      
+      // Check if the new position is valid (not inside a wall)
+      const newX = player.x + dx;
+      const newY = player.y + dy;
+      
+      // Allow sliding along walls by checking x and y movement separately
+      if (!isWall(newX, player.y)) {
+        player.x = newX;
+      }
+      
+      if (!isWall(player.x, newY)) {
+        player.y = newY;
+      }
+      
+      // Update weapon bobbing based on movement
+      if (dx !== 0 || dy !== 0) {
+        weapon.bobAmount = Math.sin(Date.now() * 0.01) * 5;
+        
+        if (player.running) {
+          weapon.bobAmount *= 1.5;
+        }
+      } else {
+        weapon.bobAmount *= 0.9;
+      }
+    }
+
+    // Show damage effect
+    function showDamage() {
+      damageOverlay.style.backgroundColor = 'rgba(255, 0, 0, 0.3)';
+      setTimeout(() => {
+        damageOverlay.style.backgroundColor = 'rgba(255, 0, 0, 0)';
+      }, 200);
+    }
+
+    // Shoot weapon
+    function shoot() {
+      if (reloading || currentAmmo <= 0 || Date.now() - lastShot < fireRate) return;
+      
+      lastShot = Date.now();
+      currentAmmo--;
+      ammoDisplay.textContent = `Ammo: ${currentAmmo} / ${totalAmmo}`;
+      
+      weapon.recoil = weapon.maxRecoil;
+      weapon.recover = false;
+      setTimeout(() => {
+        weapon.recover = true;
+      }, 50);
+      
+      // Raycasting for shooting
+      const rayAngle = player.angle;
+      const rayDirX = Math.cos(rayAngle);
+      const rayDirY = Math.sin(rayAngle);
+      
+      // Distance to wall
+      let distanceToWall = 0;
+      let hitWall = false;
+      
+      const maxDistance = 20;
+      const stepSize = 0.05;
+      
+      let rayX = player.x;
+      let rayY = player.y;
+      
+      let hitEnemy = false;
+      let hitEnemyIndex = -1;
+      
+      while (!hitWall && distanceToWall < maxDistance) {
+        distanceToWall += stepSize;
+        
+        rayX = player.x + rayDirX * distanceToWall;
+        rayY = player.y + rayDirY * distanceToWall;
+        
+        // Check if ray hit a wall
+        if (isWall(rayX, rayY)) {
+          hitWall = true;
+        }
+        
+        // Check if ray hit an enemy
+        for (let i = 0; i < enemies.length; i++) {
+          const enemy = enemies[i];
+          if (enemy.state === 'dead') continue;
+          
+          const dx = rayX - enemy.x;
+          const dy = rayY - enemy.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          
+          if (distance < 0.4) { // Enemy hit box size
+            hitEnemy = true;
+            hitEnemyIndex = i;
+            break;
+          }
+        }
+        
+        if (hitEnemy) break;
+      }
+      
+      if (hitEnemy) {
+        // Show hit marker
+        hitMarker.style.opacity = 1;
+        setTimeout(() => {
+          hitMarker.style.opacity = 0;
+        }, 100);
+        
+        // Damage enemy
+        const killed = enemies[hitEnemyIndex].hit();
+        if (killed) {
+          // Update enemies count
+          const aliveEnemies = enemies.filter(e => e.state !== 'dead').length;
+          enemiesDisplay.textContent = `Enemies: ${aliveEnemies}`;
+          
+          if (aliveEnemies === 0) {
+            // All enemies defeated
+            setTimeout(() => {
+              startNewLevel();
+            }, 1000);
+          }
+        }
+      }
+    }
+
+    // Reload weapon
+    function reload() {
+      if (totalAmmo <= 0) return;
+      
+      reloading = true;
+      ammoDisplay.textContent = 'Reloading...';
+      
+      setTimeout(() => {
+        const ammoNeeded = 10 - currentAmmo;
+        const ammoToLoad = Math.min(ammoNeeded, totalAmmo);
+        
+        currentAmmo += ammoToLoad;
+        totalAmmo -= ammoToLoad;
+        
+        ammoDisplay.textContent = `Ammo: ${currentAmmo} / ${totalAmmo}`;
+        reloading = false;
+      }, 1500);
+    }
+
+    // Start a new level
+    function startNewLevel() {
+      // Increase difficulty
+      const enemyCount = Math.min(Math.floor(score / 500) + 3, 10);
+      spawnEnemies(enemyCount);
+      
+      // Replenish ammo
+      totalAmmo += 20;
+      ammoDisplay.textContent = `Ammo: ${currentAmmo} / ${totalAmmo}`;
+      
+      // Replenish some health
+      health = Math.min(health + 20, 100);
+      healthDisplay.textContent = `Health: ${health}`;
+    }
+
+    // End game
+    function endGame() {
+      gameOver = true;
+      finalScoreDisplay.textContent = `Your score: ${Math.floor(score)}`;
+      gameOverScreen.style.visibility = 'visible';
+    }
+
+    // Restart game
+    function restartGame() {
+      // Reset game state
+      score = 0;
+      currentAmmo = 10;
+      totalAmmo = 30;
+      health = 100;
+      gameOver = false;
+      
+      // Reset player position
+      player.x = 2.5;
+      player.y = 2.5;
+      player.angle = 0;
+      
+      // Update displays
+      scoreDisplay.textContent = `Score: ${score}`;
+      ammoDisplay.textContent = `Ammo: ${currentAmmo} / ${totalAmmo}`;
+      healthDisplay.textContent = `Health: ${health}`;
+      
+      // Spawn new enemies
+      spawnEnemies(3);
+      
+      // Hide game over screen
+      gameOverScreen.style.visibility = 'hidden';
+    }
+
+    // Start the game
+    function startGame() {
+      gameStarted = true;
+      startScreen.style.display = 'none';
+      spawnEnemies(3);
+      lastTime = Date.now();
+      requestAnimationFrame(gameLoop);
+    }
+
+    // Event listeners for buttons
+    startButton.addEventListener('click', startGame);
+    restartButton.addEventListener('click', restartGame);
+
+    // Simple raycaster rendering
+    function render() {
+      // Clear screen
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Draw ceiling
+      ctx.fillStyle = '#333';
+      ctx.fillRect(0, 0, canvas.width, canvas.height / 2);
+      
+      // Draw floor
+      ctx.fillStyle = '#555';
+      ctx.fillRect(0, canvas.height / 2, canvas.width, canvas.height / 2);
+      
+      // Calculate the height of the walls
+      const halfHeight = canvas.height / 2;
+      
+      // For each column on the screen
+      const columnWidth = 2; // Increase for better performance, decrease for better quality
+      for (let x = 0; x < canvas.width; x += columnWidth) {
+        // Calculate the ray angle
+        const rayAngle = (player.angle - player.fov / 2) + (x / canvas.width) * player.fov;
+        
+        // Calculate ray direction
+        const rayDirX = Math.cos(rayAngle);
+        const rayDirY = Math.sin(rayAngle);
+        
+        // Distance to wall
+        let distanceToWall = 0;
+        let hitWall = false;
+        let wallType = 0; // 0 = NS wall, 1 = EW wall
+        
+        const maxDistance = 20;
+        const stepSize = 0.05;
+        
+        let rayX = player.x;
+        let rayY = player.y;
+        
+        // Cast ray until we hit a wall or reach max distance
+        while (!hitWall && distanceToWall < maxDistance) {
+          distanceToWall += stepSize;
+          
+          rayX = player.x + rayDirX * distanceToWall;
+          rayY = player.y + rayDirY * distanceToWall;
+          
+          // Check if ray hit a wall
+          if (isWall(rayX, rayY)) {
+            hitWall = true;
+            
+            // Determine which face of the wall we hit
+            const cellX = Math.floor(rayX);
+            const cellY = Math.floor(rayY);
+            
+            // Check distances to all cell boundaries
+            const distToWestEdge = rayX - cellX;
+            const distToEastEdge = (cellX + 1) - rayX;
+            const distToNorthEdge = rayY - cellY;
+            const distToSouthEdge = (cellY + 1) - rayY;
+            
+            // Find the closest edge
+            const minDist = Math.min(distToWestEdge, distToEastEdge, distToNorthEdge, distToSouthEdge);
+            
+            if (minDist === distToWestEdge) wallType = 3; // West wall
+            else if (minDist === distToEastEdge) wallType = 1; // East wall
+            else if (minDist === distToNorthEdge) wallType = 0; // North wall
+            else if (minDist === distToSouthEdge) wallType = 2; // South wall
+          }
+        }
+        
+        // Calculate wall height based on distance
+        let wallHeight = hitWall ? Math.min(canvas.height, canvas.height / distanceToWall) : 0;
+        
+        // Fix fisheye effect
+        distanceToWall *= Math.cos(player.angle - rayAngle);
+        
+        // Recalculate wall height with fisheye correction
+        wallHeight = hitWall ? Math.min(canvas.height, canvas.height / distanceToWall) : 0;
+        
+        // Calculate wall top and bottom positions
+        const wallTop = halfHeight - wallHeight / 2;
+        const wallBottom = halfHeight + wallHeight / 2;
+        
+        // Draw wall
+        if (hitWall) {
+          ctx.fillStyle = wallColors[wallType];
+          ctx.fillRect(x, wallTop, columnWidth, wallHeight);
+          
+          // Add shading based on distance
+          const shade = 1 - Math.min(distanceToWall / maxDistance, 0.8);
+          ctx.fillStyle = `rgba(0, 0, 0, ${1 - shade})`;
+          ctx.fillRect(x, wallTop, columnWidth, wallHeight);
+        }
+      }
+      
+      // Draw enemies (sprite rendering)
+      // Sort from furthest to closest for proper rendering
+      enemies.sort((a, b) => {
+        const distA = Math.sqrt((a.x - player.x) * (a.x - player.x) + (a.y - player.y) * (a.y - player.y));
+        const distB = Math.sqrt((b.x - player.x) * (b.x - player.x) + (b.y - player.y) * (b.y - player.y));
+        return distB - distA;
+      });
+      
+      // Render each enemy
+      enemies.forEach(enemy => {
+        if (enemy.state === 'dead') return;
+        
+        // Direction to enemy
+        const dirX = enemy.x - player.x;
+        const dirY = enemy.y - player.y;
+        
+        // Distance to enemy
+        const distance = Math.sqrt(dirX * dirX + dirY * dirY);
+        
+        // Angle to enemy relative to player's view
+        let angle = Math.atan2(dirY, dirX) - player.angle;
+        
+        // Normalize angle
+        if (angle < -Math.PI) angle += 2 * Math.PI;
+        if (angle > Math.PI) angle -= 2 * Math.PI;
+        
+        // Check if enemy is in view
+        if (Math.abs(angle) > player.fov / 1.5) return;
+        
+        // Calculate screen position
+        const screenX = (0.5 + angle / player.fov) * canvas.width;
+        
+        // Calculate sprite size
+        const spriteSize = Math.min(canvas.height, canvas.height / distance * 0.8);
+        
+        // Draw sprite as a simple rectangle for now
+        const spriteTop = halfHeight - spriteSize / 2 + enemy.bobAmount * spriteSize / 5;
+        const spriteLeft = screenX - spriteSize / 2;
+        
+        // Apply hit effect
+        const timeSinceHit = Date.now() - enemy.hitTime;
+        const hitEffect = timeSinceHit < 200;
+        
+        // Draw enemy
+        ctx.fillStyle = hitEffect ? '#ff3333' : '#880000';
+        ctx.fillRect(spriteLeft, spriteTop, spriteSize, spriteSize);
+        
+        // Draw eyes (more visible)
+        ctx.fillStyle = '#ff0000';
+        ctx.fillRect(spriteLeft + spriteSize * 0.3, spriteTop + spriteSize * 0.3, spriteSize * 0.15, spriteSize * 0.15);
+        ctx.fillRect(spriteLeft + spriteSize * 0.6, spriteTop + spriteSize * 0.3, spriteSize * 0.15, spriteSize * 0.15);
+        
+        // Draw health bar if damaged
+        if (enemy.health < 100) {
+          const barWidth = spriteSize * 0.6;
+          const barHeight = 4;
+          const barLeft = spriteLeft + spriteSize * 0.2;
+          const barTop = spriteTop - 12;
+          
+          // Background
+          ctx.fillStyle = '#333';
+          ctx.fillRect(barLeft, barTop, barWidth, barHeight);
+          
+          // Health
+          ctx.fillStyle = '#f00';
+          ctx.fillRect(barLeft, barTop, barWidth * (enemy.health / 100), barHeight);
+        }
+      });
+      
+      // Draw weapon
+      drawWeapon();
+    }
+
+    // Draw simple weapon
+    function drawWeapon() {
+      // Weapon recoil animation
+      let recoilOffset = 0;
+      if (!weapon.recover) {
+        recoilOffset = weapon.recoil;
+      } else if (weapon.recoil > 0) {
+        weapon.recoil -= 1;
+      }
+      
+      // Apply bobbing effect
+      const bobOffset = weapon.bobAmount;
+      
+      // Gun barrel
+      ctx.fillStyle = '#444';
+      ctx.fillRect(
+        canvas.width / 2 - 5,
+        canvas.height - 150 + recoilOffset + bobOffset,
+        10,
+        80
+      );
+      
+      // Gun body
+      ctx.fillStyle = '#333';
+      ctx.fillRect(
+        canvas.width / 2 - 20,
+        canvas.height - 100 + recoilOffset + bobOffset,
+        40,
+        70
+      );
+      
+      // Gun handle
+      ctx.fillStyle = '#222';
+      ctx.fillRect(
+        canvas.width / 2 - 10,
+        canvas.height - 60 + recoilOffset + bobOffset,
+        20,
+        60
+      );
+      
+      // Ammo indicator
+      ctx.fillStyle = currentAmmo > 0 ? '#0f0' : '#f00';
+      ctx.fillRect(
+        canvas.width / 2 + 15,
+        canvas.height - 50 + recoilOffset + bobOffset,
+        5,
+        5
+      );
+    }
+
+    // Game loop
+    let lastTime = 0;
+
+    function gameLoop(timestamp) {
+      if (!gameStarted) return;
+      
+      const dt = timestamp - lastTime;
+      lastTime = timestamp;
+      
+      if (!gameOver) {
+        // Update player
+        updatePlayerMovement(dt);
+        
+        // Update enemies
+        enemies.forEach(enemy => {
+          enemy.update(dt);
+        });
+        
+        // Update score over time
+        score += dt / 1000; // 1 point per second
+        scoreDisplay.textContent = `Score: ${Math.floor(score)}`;
+      }
+      
+      // Render scene
+      render();
+      
+      // Request next frame
+      requestAnimationFrame(gameLoop);
+    }
+
+    // Handle window resize
+    window.addEventListener('resize', () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    });
+  </script>
+</body>
+</html>

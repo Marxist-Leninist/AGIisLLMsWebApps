@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Minimal FPS</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background-color: #111;
+      font-family: Arial, sans-serif;
+    }
+    #gameCanvas {
+      display: block;
+      background-color: #000;
+    }
+    #startScreen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.8);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: white;
+    }
+    #hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    .hudElement {
+      position: absolute;
+      color: white;
+      font-size: 20px;
+    }
+    #health {
+      left: 20px;
+      bottom: 20px;
+    }
+    #ammo {
+      right: 20px;
+      bottom: 20px;
+    }
+    #score {
+      left: 20px;
+      top: 20px;
+    }
+    #enemies {
+      right: 20px;
+      top: 20px;
+    }
+    #crosshair {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 24px;
+      pointer-events: none;
+    }
+    button {
+      background-color: #ff3333;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      font-size: 18px;
+      cursor: pointer;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+  
+  <div id="hud">
+    <div id="crosshair">+</div>
+    <div id="health" class="hudElement">Health: 100</div>
+    <div id="ammo" class="hudElement">Ammo: 10/30</div>
+    <div id="score" class="hudElement">Score: 0</div>
+    <div id="enemies" class="hudElement">Enemies: 0</div>
+  </div>
+  
+  <div id="startScreen">
+    <h1>BASIC FPS</h1>
+    <p>Click the button to start</p>
+    <button id="startButton">START GAME</button>
+  </div>
+
+  <script>
+    // Debug mode - log to console
+    const DEBUG = true;
+    function log(msg) {
+      if (DEBUG) {
+        console.log(msg);
+      }
+    }
+    
+    log("Script started");
+    
+    // Canvas setup
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Set canvas to window size
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      log(`Canvas resized to ${canvas.width}x${canvas.height}`);
+    }
+    
+    // Initial resize
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+    
+    // Game elements
+    const startScreen = document.getElementById('startScreen');
+    const startButton = document.getElementById('startButton');
+    const healthDisplay = document.getElementById('health');
+    const ammoDisplay = document.getElementById('ammo');
+    const scoreDisplay = document.getElementById('score');
+    const enemiesDisplay = document.getElementById('enemies');
+    
+    // Game state
+    let gameStarted = false;
+    let health = 100;
+    let ammo = 10;
+    let totalAmmo = 30;
+    let score = 0;
+    let enemies = 3;
+    
+    // Simple player
+    const player = {
+      x: 5,
+      y: 5,
+      angle: 0,
+      speed: 0.05
+    };
+    
+    // Simplified map (1 = wall, 0 = empty)
+    const map = [
+      [1,1,1,1,1,1,1,1,1,1],
+      [1,0,0,0,0,0,0,0,0,1],
+      [1,0,1,0,0,0,0,1,0,1],
+      [1,0,0,0,0,0,0,0,0,1],
+      [1,0,0,0,0,0,0,0,0,1],
+      [1,0,1,0,0,0,0,1,0,1],
+      [1,0,0,0,0,0,0,0,0,1],
+      [1,0,0,0,0,0,0,0,0,1],
+      [1,0,0,0,0,0,0,0,0,1],
+      [1,1,1,1,1,1,1,1,1,1]
+    ];
+    
+    // Input handling
+    const keys = {};
+    
+    window.addEventListener('keydown', (e) => {
+      keys[e.key.toLowerCase()] = true;
+    });
+    
+    window.addEventListener('keyup', (e) => {
+      keys[e.key.toLowerCase()] = false;
+    });
+    
+    // Handle mouse movement
+    canvas.addEventListener('mousemove', (e) => {
+      if (!gameStarted) return;
+      
+      const sensitivity = 0.003;
+      const dx = e.movementX || e.mozMovementX || e.webkitMovementX || 0;
+      player.angle += dx * sensitivity;
+    });
+    
+    // Lock pointer on click
+    canvas.addEventListener('click', () => {
+      if (!gameStarted) return;
+      
+      canvas.requestPointerLock = canvas.requestPointerLock || 
+                                  canvas.mozRequestPointerLock || 
+                                  canvas.webkitRequestPointerLock;
+      canvas.requestPointerLock();
+      
+      // Simulate shooting
+      if (ammo > 0) {
+        ammo--;
+        ammoDisplay.textContent = `Ammo: ${ammo}/${totalAmmo}`;
+      }
+    });
+    
+    // Simple movement
+    function updatePlayer(dt) {
+      let dx = 0, dy = 0;
+      
+      if (keys['w'] || keys['arrowup']) {
+        dx += Math.cos(player.angle) * player.speed * dt;
+        dy += Math.sin(player.angle) * player.speed * dt;
+      }
+      if (keys['s'] || keys['arrowdown']) {
+        dx -= Math.cos(player.angle) * player.speed * dt;
+        dy -= Math.sin(player.angle) * player.speed * dt;
+      }
+      if (keys['a'] || keys['arrowleft']) {
+        dx += Math.cos(player.angle - Math.PI/2) * player.speed * dt;
+        dy += Math.sin(player.angle - Math.PI/2) * player.speed * dt;
+      }
+      if (keys['d'] || keys['arrowright']) {
+        dx += Math.cos(player.angle + Math.PI/2) * player.speed * dt;
+        dy += Math.sin(player.angle + Math.PI/2) * player.speed * dt;
+      }
+      
+      // Very basic collision - don't update if would go out of bounds
+      const newX = player.x + dx;
+      const newY = player.y + dy;
+      
+      if (newX > 1 && newX < map[0].length-1) {
+        player.x = newX;
+      }
+      
+      if (newY > 1 && newY < map.length-1) {
+        player.y = newY;
+      }
+    }
+    
+    // Very basic rendering
+    function render() {
+      // Clear the screen
+      ctx.fillStyle = 'black';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Draw sky
+      ctx.fillStyle = '#4488ff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height/2);
+      
+      // Draw ground
+      ctx.fillStyle = '#228822';
+      ctx.fillRect(0, canvas.height/2, canvas.width, canvas.height/2);
+      
+      // Draw some walls
+      const wallWidth = 100;
+      const wallHeight = 200;
+      
+      ctx.fillStyle = '#883322';
+      for (let i = 0; i < 3; i++) {
+        ctx.fillRect(
+          canvas.width/4 * i + 100, 
+          canvas.height/2 - wallHeight/2, 
+          wallWidth, 
+          wallHeight
+        );
+      }
+      
+      // Draw a weapon
+      ctx.fillStyle = '#333333';
+      ctx.fillRect(
+        canvas.width/2 - 10,
+        canvas.height - 100,
+        20,
+        100
+      );
+    }
+    
+    // Start game
+    function startGame() {
+      log("Game started");
+      gameStarted = true;
+      startScreen.style.display = 'none';
+      lastTime = performance.now();
+      requestAnimationFrame(gameLoop);
+    }
+    
+    // Game loop
+    let lastTime = 0;
+    
+    function gameLoop(timestamp) {
+      // Calculate delta time
+      const dt = timestamp - lastTime;
+      lastTime = timestamp;
+      
+      // Update game state
+      if (gameStarted) {
+        updatePlayer(dt);
+      }
+      
+      // Render everything
+      render();
+      
+      // Continue the loop
+      requestAnimationFrame(gameLoop);
+    }
+    
+    // Start button listener
+    startButton.addEventListener('click', startGame);
+    
+    log("Initialization complete");
+  </script>
+</body>
+</html>
