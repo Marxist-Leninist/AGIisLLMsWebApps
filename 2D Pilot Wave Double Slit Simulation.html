@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<!-- saved from url=(0060)file:///C:/Users/Scott/Downloads/double-slit-pilot-wave.html -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2D Pilot Wave Double Slit Simulation</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background-color: #f5f5f5;
+      overflow-x: hidden;
+    }
+    .container {
+      max-width: 800px;
+      width: 100%;
+    }
+    canvas {
+      background-color: #000;
+      margin: 20px 0;
+      box-shadow: 0 0 10px rgba(0,0,0,0.3);
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      margin-right: 20px;
+    }
+    label {
+      margin-bottom: 5px;
+    }
+    button {
+      padding: 8px 16px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-right: 10px;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    h1 {
+      color: #333;
+    }
+    .info {
+      margin-top: 20px;
+      background-color: #fff;
+      padding: 15px;
+      border-radius: 5px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.1);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>2D Pilot Wave Double Slit Simulation</h1>
+    <div class="controls">
+      <div class="control-group">
+        <label for="particleCount">Particles: <span id="particleCountValue">200</span></label>
+        <input type="range" id="particleCount" min="10" max="200" value="50">
+      </div>
+      <div class="control-group">
+        <label for="waveDamping">Wave Damping: <span id="waveDampingValue">0.99</span></label>
+        <input type="range" id="waveDamping" min="80" max="99" value="98">
+      </div>
+      <div class="control-group">
+        <label for="waveResolution">Wave Resolution: <span id="waveResolutionValue">5</span></label>
+        <input type="range" id="waveResolution" min="1" max="5" value="2">
+      </div>
+      <div class="control-group">
+        <label for="particleSize">Particle Size: <span id="particleSizeValue">5</span></label>
+        <input type="range" id="particleSize" min="1" max="5" value="2">
+      </div>
+    </div>
+    <div class="button-controls">
+      <button id="reset">Reset</button>
+      <button id="toggleParticles">Hide Particles</button>
+      <button id="toggleWave">Hide Wave</button>
+    </div>
+    <canvas id="canvas" width="800" height="600"></canvas>
+    <div class="info">
+      <p>This simulation demonstrates a pilot wave interpretation of the double slit experiment. The particles (shown as white dots) follow trajectories guided by an underlying wave field (shown in blue). As particles pass through the slits, they create ripples in the wave field which then influence the paths of other particles, creating an interference pattern.</p>
+      <p>In pilot wave theory (also known as Bohmian mechanics), particles have definite positions and follow deterministic trajectories, but their paths are influenced by a guiding "pilot wave" that evolves according to Schrödinger's equation.</p>
+    </div>
+  </div>
+
+  <script>
+    // Simulation parameters
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Get slider elements
+    const particleCountSlider = document.getElementById('particleCount');
+    const waveDampingSlider = document.getElementById('waveDamping');
+    const waveResolutionSlider = document.getElementById('waveResolution');
+    const particleSizeSlider = document.getElementById('particleSize');
+    
+    // Get value display elements
+    const particleCountValue = document.getElementById('particleCountValue');
+    const waveDampingValue = document.getElementById('waveDampingValue');
+    const waveResolutionValue = document.getElementById('waveResolutionValue');
+    const particleSizeValue = document.getElementById('particleSizeValue');
+    
+    // Buttons
+    const resetButton = document.getElementById('reset');
+    const toggleParticlesButton = document.getElementById('toggleParticles');
+    const toggleWaveButton = document.getElementById('toggleWave');
+    
+    // State variables
+    let showParticles = true;
+    let showWave = true;
+    
+    // Simulation parameters
+    let resolution; // Cells per pixel
+    let gridWidth, gridHeight;
+    let waveDamping;
+    let particleCount;
+    let particleSize;
+    let wave1, wave2;
+    let particles = [];
+    
+    // Simulation constants
+    const waveSpeed = 0.2;
+    const particleInteraction = 0.2;
+    const sourceX = 100;
+    const sourceY = canvas.height / 2;
+    const screenX = canvas.width - 100;
+    const slitWidth = 20;
+    const slitSpacing = 60;
+    const barrierX = canvas.width / 2;
+    const slitY1 = canvas.height / 2 - slitSpacing / 2 - slitWidth / 2;
+    const slitY2 = canvas.height / 2 + slitSpacing / 2 - slitWidth / 2;
+    
+    // Particle class
+    class Particle {
+      constructor() {
+        this.reset();
+      }
+      
+      reset() {
+        this.x = sourceX;
+        this.y = sourceY + (Math.random() - 0.5) * 20;
+        this.vx = 1.5 + Math.random() * 0.5;
+        this.vy = 0;
+        this.active = true;
+        this.interactionStrength = 0.5 + Math.random() * 0.5;
+        this.trail = [];
+      }
+      
+      update(wave1, wave2) {
+        if (!this.active) return;
+        
+        // Sample the wave gradient around the particle to determine wave-particle interaction
+        const gx = canvas.width / gridWidth;
+        const gy = canvas.height / gridHeight;
+        
+        const ix = Math.floor(this.x / gx);
+        const iy = Math.floor(this.y / gy);
+        
+        // Check boundaries
+        if (ix < 1 || ix >= gridWidth - 1 || iy < 1 || iy >= gridHeight - 1) {
+          this.active = false;
+          return;
+        }
+        
+        // Calculate wave gradient
+        const rightVal = wave1[ix+1][iy] + wave2[ix+1][iy];
+        const leftVal = wave1[ix-1][iy] + wave2[ix-1][iy];
+        const topVal = wave1[ix][iy-1] + wave2[ix][iy-1];
+        const bottomVal = wave1[ix][iy+1] + wave2[ix][iy+1];
+        
+        // Determine force from wave gradient
+        const forceX = (rightVal - leftVal) * particleInteraction * this.interactionStrength;
+        const forceY = (bottomVal - topVal) * particleInteraction * this.interactionStrength;
+        
+        // Update velocity
+        this.vx += forceX;
+        this.vy += forceY;
+        
+        // Ensure constant speed
+        const speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+        if (speed > 0) {
+          const targetSpeed = 1.5 + Math.random() * 0.5;
+          this.vx = (this.vx / speed) * targetSpeed;
+          this.vy = (this.vy / speed) * targetSpeed;
+        }
+        
+        // Update position
+        this.x += this.vx;
+        this.y += this.vy;
+        
+        // Check if particle hit the barrier
+        if (this.x >= barrierX - 5 && this.x <= barrierX + 5) {
+          // Check if particle is outside the slits
+          if ((this.y < slitY1 || this.y > slitY1 + slitWidth) && 
+              (this.y < slitY2 || this.y > slitY2 + slitWidth)) {
+            this.active = false;
+            return;
+          }
+        }
+        
+        // Check if the particle reached the screen
+        if (this.x >= screenX) {
+          this.active = false;
+          return;
+        }
+        
+        // Add to trail (for visualization purposes)
+        if (Math.random() < 0.2) {
+          this.trail.push({ x: this.x, y: this.y });
+          if (this.trail.length > 30) {
+            this.trail.shift();
+          }
+        }
+        
+        // Particle interacts with the wave
+        const cellX = Math.floor(this.x / gx);
+        const cellY = Math.floor(this.y / gy);
+        if (cellX >= 0 && cellX < gridWidth && cellY >= 0 && cellY < gridHeight) {
+          // Add disturbance to the wave field
+          const disturbance = 0.5 * this.interactionStrength;
+          wave1[cellX][cellY] += disturbance;
+        }
+      }
+      
+      draw(ctx) {
+        if (!showParticles) return;
+        
+        // Draw the particle
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, particleSize, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Optionally draw trail
+        if (this.active && this.trail.length > 1) {
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+          ctx.beginPath();
+          ctx.moveTo(this.trail[0].x, this.trail[0].y);
+          for (let i = 1; i < this.trail.length; i++) {
+            ctx.lineTo(this.trail[i].x, this.trail[i].y);
+          }
+          ctx.stroke();
+        }
+      }
+    }
+    
+    // Initialize simulation
+    function initSimulation() {
+      // Get current parameter values from sliders
+      resolution = parseInt(waveResolutionSlider.value);
+      waveDamping = parseFloat(waveDampingSlider.value) / 100;
+      particleCount = parseInt(particleCountSlider.value);
+      particleSize = parseInt(particleSizeSlider.value);
+      
+      // Update display values
+      particleCountValue.textContent = particleCount;
+      waveDampingValue.textContent = waveDamping.toFixed(2);
+      waveResolutionValue.textContent = resolution;
+      particleSizeValue.textContent = particleSize;
+      
+      // Calculate grid size based on resolution
+      gridWidth = Math.ceil(canvas.width / resolution);
+      gridHeight = Math.ceil(canvas.height / resolution);
+      
+      // Initialize wave arrays
+      wave1 = Array(gridWidth).fill().map(() => Array(gridHeight).fill(0));
+      wave2 = Array(gridWidth).fill().map(() => Array(gridHeight).fill(0));
+      
+      // Initialize particles
+      particles = [];
+      for (let i = 0; i < particleCount; i++) {
+        particles.push(new Particle());
+      }
+    }
+    
+    // Update wave field using a simple wave equation
+    function updateWave() {
+      const nextWave = Array(gridWidth).fill().map(() => Array(gridHeight).fill(0));
+      
+      for (let i = 1; i < gridWidth - 1; i++) {
+        for (let j = 1; j < gridHeight - 1; j++) {
+          // Skip updating points in the barrier
+          if (i === Math.floor(barrierX / canvas.width * gridWidth)) {
+            const gridY1 = Math.floor(slitY1 / canvas.height * gridHeight);
+            const gridY2 = Math.floor(slitY2 / canvas.height * gridHeight);
+            const slitHeightGrid = Math.floor(slitWidth / canvas.height * gridHeight);
+            
+            // Skip if not in one of the two slits
+            const inSlit1 = j >= gridY1 && j < gridY1 + slitHeightGrid;
+            const inSlit2 = j >= gridY2 && j < gridY2 + slitHeightGrid;
+            if (!inSlit1 && !inSlit2) {
+              continue;
+            }
+          }
+          
+          // Calculate the new value based on surrounding cells (wave equation)
+          nextWave[i][j] = (
+            wave1[i+1][j] + 
+            wave1[i-1][j] + 
+            wave1[i][j+1] + 
+            wave1[i][j-1]
+          ) / 2 - wave2[i][j];
+          
+          // Apply damping
+          nextWave[i][j] *= waveDamping;
+        }
+      }
+      
+      // Shift waves (wave2 becomes wave1, nextWave becomes wave2)
+      wave2 = wave1;
+      wave1 = nextWave;
+    }
+    
+    // Draw the wave field
+    function drawWave() {
+      if (!showWave) return;
+      
+      const gx = canvas.width / gridWidth;
+      const gy = canvas.height / gridHeight;
+      
+      // Draw the wave field
+      for (let i = 0; i < gridWidth; i++) {
+        for (let j = 0; j < gridHeight; j++) {
+          const value = wave1[i][j] + wave2[i][j];
+          
+          // Only draw significant wave values for performance
+          if (Math.abs(value) > 0.01) {
+            const intensity = Math.min(Math.abs(value) * 100, 255);
+            const color = value > 0 ? 
+              `rgba(64, 164, 223, ${intensity/255})` : 
+              `rgba(20, 80, 140, ${intensity/255})`;
+            
+            ctx.fillStyle = color;
+            ctx.fillRect(i * gx, j * gy, gx, gy);
+          }
+        }
+      }
+    }
+    
+    // Draw the barrier with slits
+    function drawBarrier() {
+      ctx.fillStyle = 'rgba(200, 200, 200, 0.7)';
+      
+      // Draw top part of barrier
+      ctx.fillRect(barrierX - 5, 0, 10, slitY1);
+      
+      // Draw middle part (between slits)
+      ctx.fillRect(barrierX - 5, slitY1 + slitWidth, 10, slitY2 - (slitY1 + slitWidth));
+      
+      // Draw bottom part of barrier
+      ctx.fillRect(barrierX - 5, slitY2 + slitWidth, 10, canvas.height - (slitY2 + slitWidth));
+      
+      // Draw source
+      ctx.fillStyle = 'rgba(255, 255, 0, 0.7)';
+      ctx.beginPath();
+      ctx.arc(sourceX, sourceY, 8, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Draw screen
+      ctx.fillStyle = 'rgba(100, 100, 100, 0.5)';
+      ctx.fillRect(screenX, 0, 2, canvas.height);
+    }
+    
+    // Animation loop
+    function animate() {
+      // Clear canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Draw background (black)
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Update wave field
+      updateWave();
+      
+      // Draw the wave field
+      drawWave();
+      
+      // Update and draw particles
+      for (let i = 0; i < particles.length; i++) {
+        particles[i].update(wave1, wave2);
+        particles[i].draw(ctx);
+        
+        // If particle is no longer active, reset it
+        if (!particles[i].active && Math.random() < 0.01) {
+          particles[i].reset();
+        }
+      }
+      
+      // Draw barrier and screen
+      drawBarrier();
+      
+      // Continue animation
+      requestAnimationFrame(animate);
+    }
+    
+    // Event listeners for sliders
+    particleCountSlider.addEventListener('input', function() {
+      particleCount = parseInt(this.value);
+      particleCountValue.textContent = particleCount;
+      
+      // Update number of particles
+      while (particles.length < particleCount) {
+        particles.push(new Particle());
+      }
+      // Excess particles will become inactive naturally
+    });
+    
+    waveDampingSlider.addEventListener('input', function() {
+      waveDamping = parseFloat(this.value) / 100;
+      waveDampingValue.textContent = waveDamping.toFixed(2);
+    });
+    
+    waveResolutionSlider.addEventListener('input', function() {
+      // Reinitialize simulation with new resolution
+      initSimulation();
+    });
+    
+    particleSizeSlider.addEventListener('input', function() {
+      particleSize = parseInt(this.value);
+      particleSizeValue.textContent = particleSize;
+    });
+    
+    // Reset button
+    resetButton.addEventListener('click', function() {
+      initSimulation();
+    });
+    
+    // Toggle particles button
+    toggleParticlesButton.addEventListener('click', function() {
+      showParticles = !showParticles;
+      this.textContent = showParticles ? 'Hide Particles' : 'Show Particles';
+    });
+    
+    // Toggle wave button
+    toggleWaveButton.addEventListener('click', function() {
+      showWave = !showWave;
+      this.textContent = showWave ? 'Hide Wave' : 'Show Wave';
+    });
+    
+    // Initialize simulation
+    initSimulation();
+    
+    // Start animation
+    animate();
+  </script>
+
+</body></html>

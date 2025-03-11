@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<!-- saved from url=(0063)file:///C:/Users/Scott/Downloads/hydrogen-pilot-wave%20(2).html -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hydrogen Atom Pilot Wave Simulation</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background-color: #f5f5f5;
+      overflow-x: hidden;
+    }
+    .container {
+      max-width: 800px;
+      width: 100%;
+    }
+    canvas {
+      background-color: #000;
+      margin: 20px 0;
+      box-shadow: 0 0 10px rgba(0,0,0,0.3);
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      margin-right: 20px;
+    }
+    label {
+      margin-bottom: 5px;
+    }
+    button {
+      padding: 8px 16px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-right: 10px;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    select {
+      padding: 5px;
+      margin-bottom: 10px;
+    }
+    h1 {
+      color: #333;
+    }
+    .info {
+      margin-top: 20px;
+      background-color: #fff;
+      padding: 15px;
+      border-radius: 5px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.1);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Hydrogen Atom Pilot Wave Simulation</h1>
+    <div class="controls">
+      <div class="control-group">
+        <label for="quantum-state">Quantum State:</label>
+        <select id="quantum-state">
+          <option value="1s">1s (Ground State: -13.6 eV)</option>
+          <option value="2s">2s (-3.4 eV)</option>
+          <option value="2p">2p (-3.4 eV)</option>
+          <option value="3s">3s (-1.51 eV)</option>
+          <option value="3p">3p (-1.51 eV)</option>
+          <option value="3d">3d (-1.51 eV)</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>Scale: 1 Bohr radius (0.0529 nm) = 100px</label>
+      </div>
+      <div class="control-group">
+        <label for="electronVelocity">Electron Speed: <span id="electronVelocityValue">0.5</span></label>
+        <input type="range" id="electronVelocity" min="1" max="10" value="5">
+      </div>
+      <div class="control-group">
+        <label for="waveIntensity">Wave Intensity: <span id="waveIntensityValue">0.7</span></label>
+        <input type="range" id="waveIntensity" min="1" max="10" value="7">
+      </div>
+      <div class="control-group">
+        <label for="trailLength">Trail Length: <span id="trailLengthValue">500</span></label>
+        <input type="range" id="trailLength" min="0" max="500" value="100">
+      </div>
+    </div>
+    <div class="button-controls">
+      <button id="reset">Reset</button>
+      <button id="toggleElectron">Hide Electron</button>
+      <button id="toggleWave">Show Wave</button>
+      <button id="toggleRotation">Resume Rotation</button>
+    </div>
+    <canvas id="canvas" width="800" height="600"></canvas>
+      <div class="info">
+      <p>This simulation demonstrates a pilot wave (Bohmian mechanics) interpretation of the hydrogen atom using actual physical parameters. In this interpretation, the electron has a definite position and follows a deterministic trajectory guided by a quantum wave function.</p>
+      
+      <h3>Real Physical Values:</h3>
+      <ul>
+        <li>Bohr Radius: 5.29 × 10⁻¹¹ meters (0.0529 nm)</li>
+        <li>Ground State Energy: -13.6 eV</li>
+        <li>De Broglie Wavelength: 0.33 nm</li>
+      </ul>
+      
+      <h3>Current Simulation Parameters in Real Units:</h3>
+      <div id="real-values">
+        <p><strong>Electron Velocity:</strong> <span id="real-velocity">1.10 × 10⁶ m/s</span> (varies by state)</p>
+        <p><strong>Wave Intensity:</strong> <span id="real-intensity">70%</span> of quantum potential strength</p>
+        <p><strong>Trail Length:</strong> <span id="real-trail">~2 × 10⁻¹⁷</span> seconds of orbital history</p>
+      </div>
+      
+      <p>You can select different quantum states to see how the electron's behavior and the guiding wave change with different energy levels and angular momentum states. The wavefunctions have been implemented using the actual mathematical formulas from quantum mechanics.</p>
+    </div>
+  </div>
+
+  <script>
+    // Canvas setup
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    // UI Controls
+    const stateSelector = document.getElementById('quantum-state');
+    const electronVelocitySlider = document.getElementById('electronVelocity');
+    const waveIntensitySlider = document.getElementById('waveIntensity');
+    const trailLengthSlider = document.getElementById('trailLength');
+    const electronVelocityValue = document.getElementById('electronVelocityValue');
+    const waveIntensityValue = document.getElementById('waveIntensityValue');
+    const trailLengthValue = document.getElementById('trailLengthValue');
+    
+    // Buttons
+    const resetButton = document.getElementById('reset');
+    const toggleElectronButton = document.getElementById('toggleElectron');
+    const toggleWaveButton = document.getElementById('toggleWave');
+    const toggleRotationButton = document.getElementById('toggleRotation');
+    
+    // Global state
+    let showElectron = true;
+    let showWave = true;
+    let rotate = true;
+    let quantumState = '1s';
+    let electronVelocity = 0.5;
+    let waveIntensity = 0.7;
+    let trailLength = 100;
+    let cameraAngleX = 0;
+    let cameraAngleY = 0;
+    
+    // Physical constants (actual values)
+    const REAL_BOHR_RADIUS = 5.29e-11; // meters
+    const REAL_ELECTRON_VELOCITY = 2.19e6; // m/s
+    const GROUND_STATE_ENERGY = -13.6; // eV
+    const FINE_STRUCTURE_CONSTANT = 1/137;
+    const PLANCK_CONSTANT = 6.63e-34; // J·s
+    const ELECTRON_MASS = 9.11e-31; // kg
+    
+    // Visualization scale - we'll use 100 pixels to represent one Bohr radius
+    const bohrRadius = 100; // Visualization scale for Bohr radius
+    const velocityScale = 0.5; // Adjust based on REAL_ELECTRON_VELOCITY
+    
+    // 3D coordinates
+    class Vector3 {
+      constructor(x, y, z) {
+        this.x = x;
+        this.y = y;
+        this.z = z;
+      }
+      
+      length() {
+        return Math.sqrt(this.x * this.x + this.y * this.y + this.z * this.z);
+      }
+      
+      normalize() {
+        const len = this.length();
+        if (len === 0) return new Vector3(0, 0, 0);
+        return new Vector3(this.x / len, this.y / len, this.z / len);
+      }
+      
+      scale(factor) {
+        return new Vector3(this.x * factor, this.y * factor, this.z * factor);
+      }
+      
+      add(v) {
+        return new Vector3(this.x + v.x, this.y + v.y, this.z + v.z);
+      }
+      
+      subtract(v) {
+        return new Vector3(this.x - v.x, this.y - v.y, this.z - v.z);
+      }
+      
+      dot(v) {
+        return this.x * v.x + this.y * v.y + this.z * v.z;
+      }
+      
+      cross(v) {
+        return new Vector3(
+          this.y * v.z - this.z * v.y,
+          this.z * v.x - this.x * v.z,
+          this.x * v.y - this.y * v.x
+        );
+      }
+    }
+    
+    // Electron class
+    class Electron {
+      constructor() {
+        this.reset();
+      }
+      
+      reset() {
+        // Initialize with random position on a sphere with radius = bohrRadius
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        const r = bohrRadius * (0.8 + 0.4 * Math.random());
+        
+        this.position = new Vector3(
+          r * Math.sin(phi) * Math.cos(theta),
+          r * Math.sin(phi) * Math.sin(theta),
+          r * Math.cos(phi)
+        );
+        
+        // Initial velocity perpendicular to radius
+        const radialDir = this.position.normalize();
+        let perpDir;
+        if (Math.abs(radialDir.y) < 0.9) {
+          const up = new Vector3(0, 1, 0);
+          perpDir = radialDir.cross(up).normalize();
+        } else {
+          const fwd = new Vector3(0, 0, 1);
+          perpDir = radialDir.cross(fwd).normalize();
+        }
+        
+        // Angular component
+        const perpDir2 = radialDir.cross(perpDir).normalize();
+        
+        // Initialize velocity
+        this.velocity = perpDir.scale(Math.random() - 0.5).add(
+          perpDir2.scale(Math.random() - 0.5)
+        ).normalize().scale(electronVelocity);
+        
+        // Trail for visualization
+        this.trail = [];
+      }
+      
+      update(dt, waveFunction) {
+        // Calculate radius
+        const r = this.position.length();
+        
+        // Get normalized position
+        const normalizedPos = this.position.normalize();
+        
+        // Determine wave gradient at current position (quantum force)
+        // This is a simplified approximation of the quantum potential
+        const gradientVector = this.calculateWaveGradient(waveFunction);
+        
+        // Coulomb force (attraction to nucleus) - drops off with 1/r²
+        const coulombForce = normalizedPos.scale(-1 / Math.max(r * r, 0.001));
+        
+        // Total force
+        const force = coulombForce.add(gradientVector);
+        
+        // Update velocity (simplified dynamics)
+        this.velocity = this.velocity.add(force.scale(dt));
+        
+        // Adjust to maintain realistic orbital velocities based on quantum state
+        // Speed varies by energy level: v ∝ 1/n where n is principal quantum number
+        const n = parseInt(quantumState.charAt(0)) || 1; // Get principal quantum number from state
+        const speed = this.velocity.length();
+        
+        // In Bohmian mechanics, the velocity is determined by the gradient of the phase of the wave function
+        // divided by the probability density. For visualization, we'll scale it with realistic proportions.
+        // Actual velocity in ground state is about 1/137 of light speed = 2.19 × 10⁶ m/s
+        const targetSpeed = electronVelocity * (1/n) * (0.9 + 0.2 * Math.sin(Date.now() / 1000));
+        
+        if (speed > 0) {
+          this.velocity = this.velocity.scale(targetSpeed / speed);
+        }
+        
+        // Update position
+        this.position = this.position.add(this.velocity.scale(dt));
+        
+        // Add to trail
+        if (Math.random() < 0.1) {
+          this.trail.push({
+            position: new Vector3(this.position.x, this.position.y, this.position.z),
+            time: Date.now()
+          });
+          
+          // Limit trail length
+          while (this.trail.length > trailLength) {
+            this.trail.shift();
+          }
+        }
+      }
+      
+      calculateWaveGradient(waveFunction) {
+        // Calculate quantum potential using the wave function
+        // In pilot wave theory, the quantum force comes from the gradient of the quantum potential
+        // Q = -ħ²/2m * ∇²R/R where R is the amplitude of the wave function
+        
+        const epsilon = 5.0; // Small displacement for gradient calculation
+        const pos = this.position;
+        
+        // Get current wave function value
+        const psi = waveFunction(pos.x, pos.y, pos.z);
+        
+        // Early return if wave function is zero at this point (avoid division by zero)
+        if (Math.abs(psi) < 1e-10) {
+          return new Vector3(0, 0, 0);
+        }
+        
+        // Sample wave function at displaced points
+        const psiX1 = waveFunction(pos.x + epsilon, pos.y, pos.z);
+        const psiX2 = waveFunction(pos.x - epsilon, pos.y, pos.z);
+        const psiY1 = waveFunction(pos.x, pos.y + epsilon, pos.z);
+        const psiY2 = waveFunction(pos.x, pos.y - epsilon, pos.z);
+        const psiZ1 = waveFunction(pos.x, pos.y, pos.z + epsilon);
+        const psiZ2 = waveFunction(pos.x, pos.y, pos.z - epsilon);
+        
+        // Calculate first derivatives (gradient)
+        const gradX = (psiX1 - psiX2) / (2 * epsilon);
+        const gradY = (psiY1 - psiY2) / (2 * epsilon);
+        const gradZ = (psiZ1 - psiZ2) / (2 * epsilon);
+        
+        // Calculate approximation of second derivatives (Laplacian components)
+        const lapX = (psiX1 + psiX2 - 2 * psi) / (epsilon * epsilon);
+        const lapY = (psiY1 + psiY2 - 2 * psi) / (epsilon * epsilon);
+        const lapZ = (psiZ1 + psiZ2 - 2 * psi) / (epsilon * epsilon);
+        
+        // Quantum potential term (simplified) Q = -ħ²/2m * ∇²R/R
+        // We'll use log derivative ∇R/R = ∇log(R) = ∇log(|Ψ|) = ∇|Ψ|/|Ψ|
+        const laplacian = lapX + lapY + lapZ;
+        
+        // Bohmian quantum force: F = -∇Q
+        // For visualization purposes, we simplify and scale
+        const quantumForce = new Vector3(gradX, gradY, gradZ).scale(1/Math.max(Math.abs(psi), 0.01));
+        
+        // Scale the force by wave intensity parameter (user control)
+        return quantumForce.scale(waveIntensity);
+      }
+    }
+    
+    // Wave functions for different quantum states
+    function getWaveFunction(state) {
+      // These are simplified versions of hydrogen atom wave functions
+      // Real quantum mechanics uses complex wave functions with phase information
+      
+      switch (state) {
+        case '1s':
+          // 1s orbital: accurate ground state wavefunction ψ₁ₛ(r) = (1/√(πa₀³)) × e^(-r/a₀)
+          return function(x, y, z) {
+            const r = Math.sqrt(x*x + y*y + z*z);
+            // Normalization factor: 1/√(π*bohrRadius³)
+            const normalization = 1 / Math.sqrt(Math.PI * Math.pow(bohrRadius, 3));
+            return normalization * Math.exp(-r / bohrRadius) * 5;
+          };
+        
+        case '2s':
+          // 2s orbital: accurate first excited spherical state with node at 2a₀
+          return function(x, y, z) {
+            const r = Math.sqrt(x*x + y*y + z*z);
+            const n = 1 / (4 * Math.sqrt(2 * Math.PI * Math.pow(bohrRadius, 3)));
+            return n * (2 - r / bohrRadius) * Math.exp(-r / (2 * bohrRadius)) * 10;
+          };
+        
+        case '2p':
+          // 2p orbital: accurate p orbital along z-axis
+          return function(x, y, z) {
+            const r = Math.sqrt(x*x + y*y + z*z);
+            if (r === 0) return 0;
+            const n = 1 / (4 * Math.sqrt(2 * Math.PI * Math.pow(bohrRadius, 3)));
+            // z/r = cos(θ)
+            const cosTheta = z / r;
+            return n * (r / bohrRadius) * Math.exp(-r / (2 * bohrRadius)) * cosTheta * 10;
+          };
+        
+        case '3s':
+          // 3s orbital: accurate 3s orbital with two nodes
+          return function(x, y, z) {
+            const r = Math.sqrt(x*x + y*y + z*z);
+            const n = 1 / (81 * Math.sqrt(3 * Math.PI * Math.pow(bohrRadius, 3)));
+            return n * (27 - 18 * (r / bohrRadius) + 2 * Math.pow(r / bohrRadius, 2)) * 
+                   Math.exp(-r / (3 * bohrRadius)) * 15;
+          };
+        
+        case '3p':
+          // 3p orbital: accurate 3p orbital
+          return function(x, y, z) {
+            const r = Math.sqrt(x*x + y*y + z*z);
+            if (r === 0) return 0;
+            const n = 1 / (81 * Math.sqrt(6 * Math.PI * Math.pow(bohrRadius, 3)));
+            const cosTheta = z / r;
+            return n * (r / bohrRadius) * (6 - r / bohrRadius) * 
+                   Math.exp(-r / (3 * bohrRadius)) * cosTheta * 15;
+          };
+        
+        case '3d':
+          // 3d_z² orbital: accurate version with angular dependence
+          return function(x, y, z) {
+            const r = Math.sqrt(x*x + y*y + z*z);
+            if (r === 0) return 0;
+            const n = 1 / (81 * Math.sqrt(30 * Math.PI * Math.pow(bohrRadius, 3)));
+            // (3z² - r²)/r² = 3cos²θ - 1
+            const cosTheta = z / r;
+            return n * Math.pow(r / bohrRadius, 2) * (3 * cosTheta * cosTheta - 1) * 
+                   Math.exp(-r / (3 * bohrRadius)) * 15;
+          };
+        
+        default:
+          return function(x, y, z) {
+            const r = Math.sqrt(x*x + y*y + z*z);
+            return Math.exp(-r / bohrRadius) * 0.05;
+          };
+      }
+    }
+    
+    // Create an electron
+    const electron = new Electron();
+    
+    // Generate random points on a grid for wave visualization
+    const gridSize = 20;
+    const gridSpacing = 2 * bohrRadius / gridSize;
+    const wavePoints = [];
+    
+    for (let i = 0; i < 1000; i++) {
+      // Random positions within a sphere
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      const r = bohrRadius * 1.5 * Math.random();
+      
+      wavePoints.push({
+        position: new Vector3(
+          r * Math.sin(phi) * Math.cos(theta),
+          r * Math.sin(phi) * Math.sin(theta),
+          r * Math.cos(phi)
+        ),
+        value: 0,
+        size: 2 + Math.random() * 3
+      });
+    }
+    
+    // 3D to 2D projection
+    function project(point3D) {
+      // Rotate point around Y axis
+      const cosY = Math.cos(cameraAngleY);
+      const sinY = Math.sin(cameraAngleY);
+      
+      const x1 = point3D.x * cosY - point3D.z * sinY;
+      const z1 = point3D.x * sinY + point3D.z * cosY;
+      
+      // Rotate point around X axis
+      const cosX = Math.cos(cameraAngleX);
+      const sinX = Math.sin(cameraAngleX);
+      
+      const y2 = point3D.y * cosX - z1 * sinX;
+      const z2 = point3D.y * sinX + z1 * cosX;
+      
+      // Perspective projection
+      const focalLength = 400;
+      const depth = focalLength + z2;
+      
+      if (depth <= 0) return null;  // Behind camera
+      
+      const projectedX = canvas.width / 2 + x1 * focalLength / depth;
+      const projectedY = canvas.height / 2 + y2 * focalLength / depth;
+      
+      return {
+        x: projectedX,
+        y: projectedY,
+        depth: depth
+      };
+    }
+    
+    // Draw function
+    function draw() {
+      // Clear canvas
+      ctx.fillStyle = 'black';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Update camera rotation
+      if (rotate) {
+        cameraAngleY += 0.003;
+        cameraAngleX = Math.sin(Date.now() / 5000) * 0.3;
+      }
+      
+      // The current wave function based on quantum state
+      const waveFunction = getWaveFunction(quantumState);
+      
+      // Sort wave points by depth for correct rendering order
+      const sortedWavePoints = [...wavePoints].map(point => {
+        const projected = project(point.position);
+        if (!projected) return null;
+        
+        // Calculate wave intensity at this point
+        const value = waveFunction(
+          point.position.x,
+          point.position.y,
+          point.position.z
+        );
+        
+        return {
+          ...point,
+          value: value,
+          projected: projected
+        };
+      }).filter(p => p !== null)
+        .sort((a, b) => b.projected.depth - a.projected.depth);
+      
+      // Draw wave function
+      if (showWave) {
+        for (const point of sortedWavePoints) {
+          // Map wave value to color
+          const intensity = Math.min(Math.abs(point.value) * 500, 1);
+          
+          // For 1s, use blue color scheme
+          // For p orbitals, use green/blue
+          // For d orbitals, use red/orange
+          
+          let color;
+          if (quantumState.includes('1s')) {
+            color = `rgba(100, 100, 255, ${intensity})`;
+          } else if (quantumState.includes('p')) {
+            if (point.value > 0) {
+              color = `rgba(100, 255, 100, ${intensity})`;
+            } else {
+              color = `rgba(100, 100, 255, ${intensity})`;
+            }
+          } else if (quantumState.includes('d')) {
+            if (point.value > 0) {
+              color = `rgba(255, 100, 0, ${intensity})`;
+            } else {
+              color = `rgba(255, 200, 0, ${intensity})`;
+            }
+          } else {
+            color = `rgba(100, 255, 255, ${intensity})`;
+          }
+          
+          // Draw wave point
+          const size = point.size * (0.5 + intensity * 1.5);
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.arc(point.projected.x, point.projected.y, size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      
+      // Project the electron
+      if (showElectron) {
+        const electronProjected = project(electron.position);
+        if (electronProjected) {
+          // Draw electron trail
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+          ctx.lineWidth = 1;
+          
+          if (electron.trail.length > 1) {
+            ctx.beginPath();
+            
+            let first = true;
+            for (let i = 0; i < electron.trail.length; i++) {
+              const trailPoint = project(electron.trail[i].position);
+              if (trailPoint) {
+                if (first) {
+                  ctx.moveTo(trailPoint.x, trailPoint.y);
+                  first = false;
+                } else {
+                  ctx.lineTo(trailPoint.x, trailPoint.y);
+                }
+              }
+            }
+            
+            ctx.stroke();
+          }
+          
+          // Draw electron
+          ctx.fillStyle = 'white';
+          ctx.beginPath();
+          ctx.arc(electronProjected.x, electronProjected.y, 4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      
+      // Draw proton at the center
+      const protonProjected = project(new Vector3(0, 0, 0));
+      if (protonProjected) {
+        ctx.fillStyle = 'red';
+        ctx.beginPath();
+        ctx.arc(protonProjected.x, protonProjected.y, 8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    
+    // Simulation loop
+    function simulate() {
+      // Update parameters from UI
+      electronVelocity = electronVelocitySlider.value / 10;
+      electronVelocityValue.textContent = electronVelocity.toFixed(1);
+      
+      waveIntensity = waveIntensitySlider.value / 10;
+      waveIntensityValue.textContent = waveIntensity.toFixed(1);
+      
+      trailLength = parseInt(trailLengthSlider.value);
+      trailLengthValue.textContent = trailLength;
+      
+      quantumState = stateSelector.value;
+      
+      // Get the current wave function
+      const waveFunction = getWaveFunction(quantumState);
+      
+      // Update electron
+      electron.update(0.1, waveFunction);
+      
+      // Draw the scene
+      draw();
+      
+      // Continue simulation
+      requestAnimationFrame(simulate);
+    }
+    
+    // Event listeners
+    resetButton.addEventListener('click', function() {
+      electron.reset();
+    });
+    
+    toggleElectronButton.addEventListener('click', function() {
+      showElectron = !showElectron;
+      this.textContent = showElectron ? 'Hide Electron' : 'Show Electron';
+    });
+    
+    toggleWaveButton.addEventListener('click', function() {
+      showWave = !showWave;
+      this.textContent = showWave ? 'Hide Wave' : 'Show Wave';
+    });
+    
+    toggleRotationButton.addEventListener('click', function() {
+      rotate = !rotate;
+      this.textContent = rotate ? 'Pause Rotation' : 'Resume Rotation';
+    });
+    
+    // Add event listeners for slider updates
+    electronVelocitySlider.addEventListener('input', function() {
+      electronVelocity = this.value / 10;
+      electronVelocityValue.textContent = electronVelocity.toFixed(1);
+      updateRealValueDisplays();
+    });
+    
+    waveIntensitySlider.addEventListener('input', function() {
+      waveIntensity = this.value / 10;
+      waveIntensityValue.textContent = waveIntensity.toFixed(1);
+      updateRealValueDisplays();
+    });
+    
+    trailLengthSlider.addEventListener('input', function() {
+      trailLength = parseInt(this.value);
+      trailLengthValue.textContent = trailLength;
+      updateRealValueDisplays();
+    });
+    
+    stateSelector.addEventListener('change', function() {
+      quantumState = this.value;
+      updateRealValueDisplays();
+    });
+    
+    // Start simulation
+    simulate();
+  </script>
+
+</body></html>
