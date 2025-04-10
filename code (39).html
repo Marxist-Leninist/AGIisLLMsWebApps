@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Field Superposition (2D Slice Viewer)</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            line-height: 1.6;
+            padding: 15px;
+            background-color: #f0f0f0;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1, h2 {
+            text-align: center;
+            color: #0056b3;
+        }
+        canvas {
+            border: 1px solid #777;
+            background-color: #ccc; /* Placeholder background */
+            margin-top: 10px;
+            margin-bottom: 15px;
+            box-shadow: 3px 3px 8px rgba(0,0,0,0.2);
+            cursor: crosshair;
+        }
+        .main-container {
+            display: flex;
+            flex-direction: column; /* Stack canvas/info and controls */
+            align-items: center;
+            width: 100%;
+            max-width: 800px; /* Adjust max width */
+        }
+        .visualization-area {
+             display: flex;
+             align-items: flex-start; /* Align canvas and slice control */
+             margin-bottom: 15px;
+        }
+        #slice-control-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-left: 15px;
+            padding: 10px;
+            background-color: #e9e9e9;
+            border-radius: 5px;
+            height: 402px; /* Match canvas height + border */
+            box-sizing: border-box;
+        }
+         #slice-control-container label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+            white-space: nowrap;
+         }
+        #sliceZ {
+             /* Style for vertical slider */
+            writing-mode: bt-lr; /* IE/Edge */
+            -webkit-appearance: slider-vertical; /* WebKit */
+            width: 8px;
+            height: 320px; /* Adjust height */
+            padding: 0 5px;
+            cursor: pointer;
+        }
+         #sliceZ-val {
+            margin-top: 8px;
+            font-family: monospace;
+            font-size: 0.9em;
+            background-color: #ddd;
+            padding: 2px 4px;
+            border-radius: 3px;
+            min-width: 40px;
+            text-align: center;
+         }
+
+        .controls-container {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            flex-wrap: wrap;
+            background-color: #e0e0e0;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 15px;
+        }
+        .wave-controls {
+            border: 1px solid #bbb;
+            padding: 10px 15px;
+            margin: 5px;
+            border-radius: 5px;
+            background-color: #f0f0f0;
+            min-width: 320px; /* Adjust as needed */
+        }
+         .wave-controls h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            text-align: center;
+            font-size: 1.1em;
+         }
+        .control-item {
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.9em;
+        }
+        .control-item label {
+            margin-right: 8px;
+            min-width: 90px; /* Adjust label width */
+        }
+        .control-item input[type="range"] {
+            flex-grow: 1;
+            margin: 0 5px;
+            cursor: pointer;
+        }
+        .control-item span {
+            min-width: 45px;
+            text-align: right;
+            font-family: monospace;
+            font-size: 0.95em;
+            background-color: #eee;
+            padding: 1px 3px;
+            border-radius: 3px;
+        }
+        p {
+            max-width: 800px;
+            text-align: justify;
+            background-color: #fff;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 1px 1px 3px rgba(0,0,0,0.1);
+            font-size: 0.95em;
+            margin-bottom: 15px;
+        }
+        #infoBox {
+            font-family: monospace;
+            font-size: 0.9em;
+            margin-top: 5px;
+            padding: 5px;
+            background-color: #e0e0ff;
+            border: 1px solid #aab;
+            border-radius: 4px;
+            min-height: 1.2em;
+            text-align: center;
+            width: 400px; /* Match canvas width */
+            box-sizing: border-box;
+        }
+        code { font-family: monospace; background-color: #eee; padding: 1px 3px; border-radius: 2px;}
+    </style>
+</head>
+<body>
+
+    <h1>3D Field Superposition (2D Slice Viewer)</h1>
+    <p>
+        This simulation calculates the superposition of two 3D plane waves but visualizes the result as a 2D cross-section (slice) on the XY plane. Use the vertical slider to change the position (Z-depth) of the slice within the 3D volume. The brightness of each pixel on the canvas represents the calculated field value at that <code>(x, y, z)</code> coordinate.
+    </p>
+    <p>
+        A 3D plane wave is described by <code>A * sin(k_x*x + k_y*y + k_z*z + phase)</code>, where <code>(k_x, k_y, k_z)</code> is the 3D wavevector. Its magnitude <code>k = sqrt(k_x²+k_y²+k_z²)</code> relates to frequency/wavelength, and its direction (defined by angles θ and φ) determines wave propagation. We control Amplitude (A), Frequency (k), Azimuthal Angle θ (0-360°, in XY plane from X+), and Polar Angle φ (0-180°, from Z+ axis).
+    </p>
+
+    <div class="main-container">
+        <div class="visualization-area">
+            <canvas id="fieldCanvas" width="400" height="400"></canvas>
+            <div id="slice-control-container">
+                <label for="sliceZ">Slice Z</label>
+                <input type="range" id="sliceZ" min="-1" max="1" value="0" step="0.02" orient="vertical">
+                 <span id="sliceZ-val">0.00</span>
+            </div>
+        </div>
+         <div id="infoBox">Hover over canvas for field value at (x, y, slice_z)...</div>
+
+        <div class="controls-container">
+            <div class="wave-controls" id="wave1-controls">
+                <h3>Wave 1</h3>
+                <div class="control-item">
+                    <label for="amp1">Amplitude:</label>
+                    <input type="range" id="amp1" min="0" max="1" value="0.7" step="0.05">
+                    <span id="amp1-val">0.70</span>
+                </div>
+                <div class="control-item">
+                    <label for="freq1">Frequency (k):</label>
+                    <input type="range" id="freq1" min="0.5" max="10" value="4" step="0.1">
+                    <span id="freq1-val">4.0</span>
+                </div>
+                <div class="control-item">
+                    <label for="theta1">Angle θ (azi):</label>
+                    <input type="range" id="theta1" min="0" max="360" value="0" step="1">
+                    <span id="theta1-val">0°</span>
+                </div>
+                 <div class="control-item">
+                    <label for="phi1">Angle φ (pol):</label>
+                    <input type="range" id="phi1" min="0" max="180" value="90" step="1">
+                    <span id="phi1-val">90°</span>
+                </div>
+            </div>
+
+            <div class="wave-controls" id="wave2-controls">
+                <h3>Wave 2</h3>
+                 <div class="control-item">
+                    <label for="amp2">Amplitude:</label>
+                    <input type="range" id="amp2" min="0" max="1" value="0.7" step="0.05">
+                    <span id="amp2-val">0.70</span>
+                </div>
+                <div class="control-item">
+                    <label for="freq2">Frequency (k):</label>
+                    <input type="range" id="freq2" min="0.5" max="10" value="5" step="0.1">
+                    <span id="freq2-val">5.0</span>
+                </div>
+                <div class="control-item">
+                    <label for="theta2">Angle θ (azi):</label>
+                    <input type="range" id="theta2" min="0" max="360" value="60" step="1">
+                    <span id="theta2-val">60°</span>
+                </div>
+                 <div class="control-item">
+                    <label for="phi2">Angle φ (pol):</label>
+                    <input type="range" id="phi2" min="0" max="180" value="45" step="1">
+                    <span id="phi2-val">45°</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        const canvas = document.getElementById('fieldCanvas');
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        const infoBox = document.getElementById('infoBox');
+
+        const imageData = ctx.createImageData(width, height);
+        const data = imageData.data;
+
+        // Control elements mapping
+        const controls = {
+            amp1: document.getElementById('amp1'),
+            freq1: document.getElementById('freq1'),
+            theta1: document.getElementById('theta1'),
+            phi1: document.getElementById('phi1'),
+            amp2: document.getElementById('amp2'),
+            freq2: document.getElementById('freq2'),
+            theta2: document.getElementById('theta2'),
+            phi2: document.getElementById('phi2'),
+            sliceZ: document.getElementById('sliceZ'),
+        };
+
+        const values = {
+            amp1: document.getElementById('amp1-val'),
+            freq1: document.getElementById('freq1-val'),
+            theta1: document.getElementById('theta1-val'),
+            phi1: document.getElementById('phi1-val'),
+            amp2: document.getElementById('amp2-val'),
+            freq2: document.getElementById('freq2-val'),
+            theta2: document.getElementById('theta2-val'),
+            phi2: document.getElementById('phi2-val'),
+            sliceZ: document.getElementById('sliceZ-val'),
+        };
+
+        // Wave parameters state (3D)
+        let waveParams = [
+            // Wave 1: { amp, k, thetaRad, phiRad, kx, ky, kz }
+            { amp: 0, k: 0, thetaRad: 0, phiRad: 0, kx: 0, ky: 0, kz: 0 },
+            // Wave 2: { amp, k, thetaRad, phiRad, kx, ky, kz }
+            { amp: 0, k: 0, thetaRad: 0, phiRad: 0, kx: 0, ky: 0, kz: 0 }
+        ];
+
+        let currentSliceZ = 0; // Current Z-depth of the slice
+
+        // Spatial coordinate range (map canvas edges to this range)
+        const spatialRange = Math.PI; // e.g., -PI to +PI
+
+        // --- Calculation Functions ---
+
+        // Convert Spherical(k, theta, phi) to Cartesian(kx, ky, kz)
+        // Using physics convention: theta=azimuth, phi=polar angle from Z+
+        function calculateKVector(k, thetaRad, phiRad) {
+            const sinPhi = Math.sin(phiRad);
+            const kx = k * sinPhi * Math.cos(thetaRad);
+            const ky = k * sinPhi * Math.sin(thetaRad);
+            const kz = k * Math.cos(phiRad);
+            return { kx, ky, kz };
+        }
+
+        function updateWaveParams() {
+            // Wave 1
+            waveParams[0].amp = parseFloat(controls.amp1.value);
+            waveParams[0].k = parseFloat(controls.freq1.value);
+            const theta1Deg = parseFloat(controls.theta1.value);
+            const phi1Deg = parseFloat(controls.phi1.value);
+            waveParams[0].thetaRad = theta1Deg * Math.PI / 180.0;
+            waveParams[0].phiRad = phi1Deg * Math.PI / 180.0;
+            const kVec1 = calculateKVector(waveParams[0].k, waveParams[0].thetaRad, waveParams[0].phiRad);
+            waveParams[0].kx = kVec1.kx;
+            waveParams[0].ky = kVec1.ky;
+            waveParams[0].kz = kVec1.kz;
+
+            // Wave 2
+            waveParams[1].amp = parseFloat(controls.amp2.value);
+            waveParams[1].k = parseFloat(controls.freq2.value);
+            const theta2Deg = parseFloat(controls.theta2.value);
+            const phi2Deg = parseFloat(controls.phi2.value);
+            waveParams[1].thetaRad = theta2Deg * Math.PI / 180.0;
+            waveParams[1].phiRad = phi2Deg * Math.PI / 180.0;
+            const kVec2 = calculateKVector(waveParams[1].k, waveParams[1].thetaRad, waveParams[1].phiRad);
+            waveParams[1].kx = kVec2.kx;
+            waveParams[1].ky = kVec2.ky;
+            waveParams[1].kz = kVec2.kz;
+
+            // Slice position
+            // Map slider value [-1, 1] to spatial Z range [-spatialRange, +spatialRange]
+            currentSliceZ = parseFloat(controls.sliceZ.value) * spatialRange;
+
+            // Update displayed values
+            values.amp1.textContent = waveParams[0].amp.toFixed(2);
+            values.freq1.textContent = waveParams[0].k.toFixed(1);
+            values.theta1.textContent = `${theta1Deg}°`;
+            values.phi1.textContent = `${phi1Deg}°`;
+            values.amp2.textContent = waveParams[1].amp.toFixed(2);
+            values.freq2.textContent = waveParams[1].k.toFixed(1);
+            values.theta2.textContent = `${theta2Deg}°`;
+            values.phi2.textContent = `${phi2Deg}°`;
+            values.sliceZ.textContent = currentSliceZ.toFixed(2);
+
+            drawScene(); // Redraw after params change
+        }
+
+        // Calculate the 3D field value at a given spatial coordinate (x, y, z)
+        function calculateFieldValue(x, y, z) {
+            let totalValue = 0;
+            totalValue += waveParams[0].amp * Math.sin(waveParams[0].kx * x + waveParams[0].ky * y + waveParams[0].kz * z);
+            totalValue += waveParams[1].amp * Math.sin(waveParams[1].kx * x + waveParams[1].ky * y + waveParams[1].kz * z);
+            return totalValue;
+        }
+
+         // --- Drawing Function ---
+
+        function drawScene() {
+            const maxPossibleAmp = waveParams[0].amp + waveParams[1].amp;
+            const normalizationFactor = maxPossibleAmp > 1e-6 ? 1.0 / maxPossibleAmp : 1.0;
+
+            // Get the fixed Z value for this slice
+            const z = currentSliceZ;
+
+            for (let py = 0; py < height; py++) {
+                for (let px = 0; px < width; px++) {
+                    // Map pixel (px, py) to spatial (x, y) in the slice
+                    const x = ((px / (width - 1)) * 2 - 1) * spatialRange;
+                    // Invert y-axis mapping: pixel Y down -> spatial Y up
+                    const y = ((1 - (py / (height - 1))) * 2 - 1) * spatialRange;
+
+                    // Calculate the superimposed field value at (x, y, z)
+                    const fieldValue = calculateFieldValue(x, y, z);
+
+                    // Normalize and map to grayscale
+                    const normalizedValue = fieldValue * normalizationFactor;
+                    const grayValue = Math.floor(((normalizedValue + 1) / 2) * 255);
+                    const clampedGray = Math.max(0, Math.min(255, grayValue));
+
+                    // Update ImageData
+                    const index = (py * width + px) * 4;
+                    data[index]     = clampedGray; // R
+                    data[index + 1] = clampedGray; // G
+                    data[index + 2] = clampedGray; // B
+                    data[index + 3] = 255;         // A
+                }
+            }
+
+            // Put the image data onto the canvas
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        // --- Event Listeners ---
+
+        // Update visualization when sliders change
+        for (const key in controls) {
+            controls[key].addEventListener('input', updateWaveParams);
+        }
+
+        // Show field value on hover
+        canvas.addEventListener('mousemove', (event) => {
+            const rect = canvas.getBoundingClientRect();
+            const px = event.clientX - rect.left;
+            const py = event.clientY - rect.top;
+
+            if (px >= 0 && px < width && py >= 0 && py < height) {
+                 // Map pixel coordinates back to spatial coordinates (x, y) for this slice
+                 const x = ((px / (width - 1)) * 2 - 1) * spatialRange;
+                 const y = ((1 - (py / (height - 1))) * 2 - 1) * spatialRange; // Invert y mapping
+                 const z = currentSliceZ; // Z is fixed for the current slice
+                 const value = calculateFieldValue(x, y, z);
+                 infoBox.textContent = `Pos: (${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)})  Value: ${value.toFixed(3)}`;
+            } else {
+                 infoBox.textContent = `Hover over canvas for field value at (x, y, z=${currentSliceZ.toFixed(2)})...`;
+            }
+        });
+
+         canvas.addEventListener('mouseleave', () => {
+             infoBox.textContent = `Hover over canvas for field value at (x, y, z=${currentSliceZ.toFixed(2)})...`;
+         });
+
+
+        // --- Initial Setup ---
+        updateWaveParams(); // Initialize parameters and draw the first frame
+
+    </script>
+
+</body>
+</html>

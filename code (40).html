@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Field Superposition (Deformed Mesh Slice)</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow-x: hidden; /* Prevent horizontal scroll */
+        }
+        #container {
+            width: 100%;
+            max-width: 900px; /* Increased width */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 15px;
+            box-sizing: border-box;
+        }
+        h1, h2 {
+            text-align: center;
+            color: #0056b3;
+            margin-top: 10px;
+            margin-bottom: 10px;
+        }
+        #canvas-container {
+            position: relative; /* Needed for absolute positioning of info */
+            width: 100%;
+            max-width: 600px; /* Canvas size */
+            height: 500px; /* Canvas height */
+            margin-bottom: 15px;
+            border: 1px solid #777;
+            box-shadow: 3px 3px 8px rgba(0,0,0,0.2);
+            background-color: #111; /* Dark background for contrast */
+            cursor: grab;
+        }
+        #infoBox {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 5px 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9em;
+            color: #000;
+            pointer-events: none; /* Don't interfere with controls */
+        }
+        .controls-section {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            flex-wrap: wrap;
+            background-color: #e0e0e0;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 15px;
+        }
+        .wave-controls, .slice-controls {
+            border: 1px solid #bbb;
+            padding: 10px 15px;
+            margin: 5px;
+            border-radius: 5px;
+            background-color: #f0f0f0;
+            min-width: 350px; /* Adjust as needed */
+        }
+         .wave-controls h3, .slice-controls h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            text-align: center;
+            font-size: 1.1em;
+         }
+        .control-item {
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.9em;
+        }
+        .control-item label {
+            margin-right: 8px;
+            min-width: 90px;
+        }
+        .control-item input[type="range"] {
+            flex-grow: 1;
+            margin: 0 5px;
+            cursor: pointer;
+        }
+        .control-item span {
+            min-width: 45px;
+            text-align: right;
+            font-family: monospace;
+            font-size: 0.95em;
+            background-color: #eee;
+            padding: 1px 3px;
+            border-radius: 3px;
+        }
+        p {
+            max-width: 800px;
+            text-align: justify;
+            background-color: #fff;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 1px 1px 3px rgba(0,0,0,0.1);
+            font-size: 0.95em;
+            margin-bottom: 15px;
+        }
+        code { font-family: monospace; background-color: #eee; padding: 1px 3px; border-radius: 2px;}
+    </style>
+</head>
+<body>
+
+    <div id="container">
+        <h1>3D Field Superposition (Deformed Mesh Slice)</h1>
+        <p>
+            This simulation uses <strong>Three.js (WebGL)</strong> to visualize a slice of a 3D field superposition. Instead of just color, the field value at each point <code>(x, y)</code> in the selected Z-slice is used to displace a mesh vertex vertically (along its local Z-axis). This creates a 3D surface representing the field strength across the slice. Use your mouse to rotate (left-click drag), zoom (scroll), and pan (right-click drag) the view. Use the sliders to control the wave parameters and the Z-position of the slice.
+        </p>
+
+        <div id="canvas-container">
+            <!-- Three.js canvas will be inserted here by script -->
+             <div id="infoBox">Z-Slice: 0.00</div>
+        </div>
+
+        <div class="controls-section">
+             <div class="slice-controls">
+                <h3>Slice & View Controls</h3>
+                 <div class="control-item">
+                    <label for="sliceZ">Slice Z:</label>
+                    <input type="range" id="sliceZ" min="-1" max="1" value="0" step="0.02">
+                    <span id="sliceZ-val">0.00</span>
+                </div>
+                 <div class="control-item">
+                    <label for="deformationScale">Deformation:</label>
+                    <input type="range" id="deformationScale" min="0" max="5" value="1" step="0.1">
+                    <span id="deformationScale-val">1.0</span>
+                </div>
+                 <button id="resetView">Reset View</button>
+             </div>
+        </div>
+
+
+        <div class="controls-section">
+            <div class="wave-controls" id="wave1-controls">
+                <h3>Wave 1</h3>
+                <div class="control-item">
+                    <label for="amp1">Amplitude:</label>
+                    <input type="range" id="amp1" min="0" max="1" value="0.7" step="0.05">
+                    <span id="amp1-val">0.70</span>
+                </div>
+                <div class="control-item">
+                    <label for="freq1">Frequency (k):</label>
+                    <input type="range" id="freq1" min="0.5" max="10" value="4" step="0.1">
+                    <span id="freq1-val">4.0</span>
+                </div>
+                <div class="control-item">
+                    <label for="theta1">Angle θ (azi):</label>
+                    <input type="range" id="theta1" min="0" max="360" value="0" step="1">
+                    <span id="theta1-val">0°</span>
+                </div>
+                 <div class="control-item">
+                    <label for="phi1">Angle φ (pol):</label>
+                    <input type="range" id="phi1" min="0" max="180" value="90" step="1">
+                    <span id="phi1-val">90°</span>
+                </div>
+            </div>
+
+            <div class="wave-controls" id="wave2-controls">
+                <h3>Wave 2</h3>
+                 <div class="control-item">
+                    <label for="amp2">Amplitude:</label>
+                    <input type="range" id="amp2" min="0" max="1" value="0.7" step="0.05">
+                    <span id="amp2-val">0.70</span>
+                </div>
+                <div class="control-item">
+                    <label for="freq2">Frequency (k):</label>
+                    <input type="range" id="freq2" min="0.5" max="10" value="5" step="0.1">
+                    <span id="freq2-val">5.0</span>
+                </div>
+                <div class="control-item">
+                    <label for="theta2">Angle θ (azi):</label>
+                    <input type="range" id="theta2" min="0" max="360" value="60" step="1">
+                    <span id="theta2-val">60°</span>
+                </div>
+                 <div class="control-item">
+                    <label for="phi2">Angle φ (pol):</label>
+                    <input type="range" id="phi2" min="0" max="180" value="45" step="1">
+                    <span id="phi2-val">45°</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import Three.js and OrbitControls -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        let scene, camera, renderer, controls, mesh, material;
+        let planeGeometry; // Keep reference to update vertices
+        const canvasContainer = document.getElementById('canvas-container');
+        const infoBox = document.getElementById('infoBox');
+
+        // --- Control elements mapping ---
+        const uiControls = {
+            amp1: document.getElementById('amp1'), freq1: document.getElementById('freq1'),
+            theta1: document.getElementById('theta1'), phi1: document.getElementById('phi1'),
+            amp2: document.getElementById('amp2'), freq2: document.getElementById('freq2'),
+            theta2: document.getElementById('theta2'), phi2: document.getElementById('phi2'),
+            sliceZ: document.getElementById('sliceZ'),
+            deformationScale: document.getElementById('deformationScale'),
+            resetView: document.getElementById('resetView')
+        };
+
+        const uiValues = {
+            amp1: document.getElementById('amp1-val'), freq1: document.getElementById('freq1-val'),
+            theta1: document.getElementById('theta1-val'), phi1: document.getElementById('phi1-val'),
+            amp2: document.getElementById('amp2-val'), freq2: document.getElementById('freq2-val'),
+            theta2: document.getElementById('theta2-val'), phi2: document.getElementById('phi2-val'),
+            sliceZ: document.getElementById('sliceZ-val'),
+            deformationScale: document.getElementById('deformationScale-val')
+        };
+
+        // --- Wave parameters state (3D) ---
+        let waveParams = [
+            { amp: 0, k: 0, thetaRad: 0, phiRad: 0, kx: 0, ky: 0, kz: 0 },
+            { amp: 0, k: 0, thetaRad: 0, phiRad: 0, kx: 0, ky: 0, kz: 0 }
+        ];
+        let currentSliceZ = 0;
+        let deformationScale = 1;
+
+        // --- Constants ---
+        const spatialRange = Math.PI * 2; // Visual range for X and Y on the plane
+        const planeSize = 10; // Size of the plane mesh in world units
+        const planeSegments = 60; // Resolution of the mesh (more segments = smoother but slower)
+
+        // --- Initialization ---
+        function init() {
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x111111);
+
+            // Camera
+            const aspect = canvasContainer.clientWidth / canvasContainer.clientHeight;
+            camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 100);
+            camera.position.set(planeSize * 0.7, planeSize * 0.7, planeSize * 0.9); // Adjusted initial view
+            camera.lookAt(0, 0, 0);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+            canvasContainer.appendChild(renderer.domElement);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xcccccc, 0.6); // Soft ambient light
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8); // Main light source
+            directionalLight.position.set(1, 1, 0.5).normalize();
+            scene.add(directionalLight);
+
+            // Plane Geometry (will be updated)
+            planeGeometry = new THREE.PlaneGeometry(planeSize, planeSize, planeSegments, planeSegments);
+
+            // Material with Vertex Colors
+            material = new THREE.MeshPhongMaterial({
+                //color: 0xaaaaaa, // Base color (less important with vertex colors)
+                side: THREE.DoubleSide, // Render both sides
+                flatShading: false, // Use smooth shading
+                vertexColors: true, // Enable vertex colors
+                shininess: 30
+            });
+
+            // Create Mesh
+            mesh = new THREE.Mesh(planeGeometry, material);
+            mesh.rotation.x = -Math.PI / 2; // Rotate plane to be horizontal (on XZ plane)
+            scene.add(mesh);
+
+            // Orbit Controls
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true; // Smooths movement
+            controls.dampingFactor = 0.1;
+            controls.screenSpacePanning = false; // Keep panning relative to ground plane
+            controls.target.set(0, 0, 0); // Look at the center
+
+            // Initial parameter update and mesh deformation
+            updateParameters();
+
+            // Event Listeners
+            for (const key in uiControls) {
+                if (key !== 'resetView') { // Exclude button
+                    uiControls[key].addEventListener('input', updateParameters);
+                }
+            }
+            uiControls.resetView.addEventListener('click', () => {
+                controls.reset(); // Reset camera position/rotation
+                camera.position.set(planeSize * 0.7, planeSize * 0.7, planeSize * 0.9); // Re-apply initial position if needed
+                controls.target.set(0, 0, 0);
+            });
+            window.addEventListener('resize', onWindowResize);
+
+            // Start animation loop
+            animate();
+        }
+
+        // --- Update & Calculation Functions ---
+
+        function calculateKVector(k, thetaRad, phiRad) {
+            const sinPhi = Math.sin(phiRad);
+            const kx = k * sinPhi * Math.cos(thetaRad);
+            const ky = k * sinPhi * Math.sin(thetaRad); // Y component in math space
+            const kz = k * Math.cos(phiRad);
+            return { kx, ky, kz };
+        }
+
+        function calculateFieldValue(x, y, z) { // x, y, z are spatial coordinates
+            let totalValue = 0;
+            totalValue += waveParams[0].amp * Math.sin(waveParams[0].kx * x + waveParams[0].ky * y + waveParams[0].kz * z);
+            totalValue += waveParams[1].amp * Math.sin(waveParams[1].kx * x + waveParams[1].ky * y + waveParams[1].kz * z);
+            return totalValue;
+        }
+
+        // Function to map a value from [-maxAmp, maxAmp] to a color
+        function valueToColor(value, maxAmp) {
+            // Map value from [-maxAmp, maxAmp] to [0, 1]
+            const normalized = (value / maxAmp + 1) / 2;
+            // Simple Blue (low) -> Green (mid) -> Red (high) colormap
+            const color = new THREE.Color();
+            color.setHSL( (1.0 - normalized) * 0.66, 0.8, 0.5); // Hue from Blue (0.66) to Red (0.0)
+            return color;
+        }
+
+
+        function updateParameters() {
+            // Read UI values
+            waveParams[0].amp = parseFloat(uiControls.amp1.value);
+            waveParams[0].k = parseFloat(uiControls.freq1.value);
+            const theta1Deg = parseFloat(uiControls.theta1.value);
+            const phi1Deg = parseFloat(uiControls.phi1.value);
+            waveParams[0].thetaRad = theta1Deg * Math.PI / 180.0;
+            waveParams[0].phiRad = phi1Deg * Math.PI / 180.0;
+            const kVec1 = calculateKVector(waveParams[0].k, waveParams[0].thetaRad, waveParams[0].phiRad);
+            waveParams[0].kx = kVec1.kx; waveParams[0].ky = kVec1.ky; waveParams[0].kz = kVec1.kz;
+
+            waveParams[1].amp = parseFloat(uiControls.amp2.value);
+            waveParams[1].k = parseFloat(uiControls.freq2.value);
+            const theta2Deg = parseFloat(uiControls.theta2.value);
+            const phi2Deg = parseFloat(uiControls.phi2.value);
+            waveParams[1].thetaRad = theta2Deg * Math.PI / 180.0;
+            waveParams[1].phiRad = phi2Deg * Math.PI / 180.0;
+            const kVec2 = calculateKVector(waveParams[1].k, waveParams[1].thetaRad, waveParams[1].phiRad);
+            waveParams[1].kx = kVec2.kx; waveParams[1].ky = kVec2.ky; waveParams[1].kz = kVec2.kz;
+
+            // Map slider value [-1, 1] to spatial Z range [-spatialRange/2, +spatialRange/2] (adjust range if needed)
+            currentSliceZ = parseFloat(uiControls.sliceZ.value) * (spatialRange / 2);
+            deformationScale = parseFloat(uiControls.deformationScale.value);
+
+            // Update displayed values in UI
+            uiValues.amp1.textContent = waveParams[0].amp.toFixed(2);
+            uiValues.freq1.textContent = waveParams[0].k.toFixed(1);
+            uiValues.theta1.textContent = `${theta1Deg}°`;
+            uiValues.phi1.textContent = `${phi1Deg}°`;
+            uiValues.amp2.textContent = waveParams[1].amp.toFixed(2);
+            uiValues.freq2.textContent = waveParams[1].k.toFixed(1);
+            uiValues.theta2.textContent = `${theta2Deg}°`;
+            uiValues.phi2.textContent = `${phi2Deg}°`;
+            uiValues.sliceZ.textContent = currentSliceZ.toFixed(2);
+            uiValues.deformationScale.textContent = deformationScale.toFixed(1);
+            infoBox.textContent = `Z-Slice: ${currentSliceZ.toFixed(2)}`;
+
+            // Deform the mesh based on new parameters
+            deformMesh();
+        }
+
+        function deformMesh() {
+            if (!planeGeometry) return;
+
+            const positions = planeGeometry.attributes.position; // Access vertex positions
+            const colors = planeGeometry.attributes.color; // Access vertex colors (or create if needed)
+
+            // Ensure color attribute exists
+             if (!colors) {
+                // Create a Float32Array for colors (R, G, B per vertex)
+                const colorData = new Float32Array(positions.count * 3);
+                planeGeometry.setAttribute('color', new THREE.BufferAttribute(colorData, 3));
+            }
+            const colorAttribute = planeGeometry.attributes.color;
+
+
+            const maxPossibleAmp = waveParams[0].amp + waveParams[1].amp + 1e-6; // Avoid zero division
+            const z = currentSliceZ; // Fixed Z for this slice
+
+            for (let i = 0; i < positions.count; i++) {
+                // Get original vertex position (relative to the plane's center)
+                // Note: PlaneGeometry vertices are initially on XY plane in local space
+                const localX = positions.getX(i);
+                const localY = positions.getY(i); // This corresponds to Z in world space because of rotation
+
+                // Map local plane coordinates to spatial coordinates
+                // Map [-planeSize/2, +planeSize/2] to [-spatialRange/2, +spatialRange/2]
+                const spatialX = (localX / (planeSize / 2)) * (spatialRange / 2);
+                const spatialY = (localY / (planeSize / 2)) * (spatialRange / 2); // Use local Y for spatial Z
+
+                // Calculate field value at (spatialX, spatialY, currentSliceZ)
+                // IMPORTANT: The mesh is rotated, so local Y maps to world Z, local X maps to world X.
+                // We need to calculate the field at the world coordinates corresponding to the vertex.
+                // Since the mesh lies on the XZ plane in world space after rotation:
+                // World X = localX
+                // World Y = 0 (before deformation)
+                // World Z = localY
+                // We calculate the field at (WorldX, WorldZ, currentSliceZ) - BUT the field function expects (x, y, z)
+                // Let's stick to calculating field based on the *plane's* coordinates mapped to spatial range,
+                // and use the fixed `currentSliceZ` for the third dimension in the field calculation.
+                // Field function uses (spatialX, spatialY, z) where spatialY represents the second dimension *on the plane*.
+                const fieldValue = calculateFieldValue(spatialX, spatialY, z);
+
+                // Apply deformation along the vertex normal (which is local Z after rotation)
+                // The plane's local Z axis points along the world Y axis after rotation.
+                positions.setZ(i, fieldValue * deformationScale); // Modify the Z component (which is vertical displacement)
+
+                // Calculate and set vertex color based on field value
+                const color = valueToColor(fieldValue, maxPossibleAmp);
+                colorAttribute.setXYZ(i, color.r, color.g, color.b);
+            }
+
+            // Tell Three.js that attributes have changed
+            positions.needsUpdate = true;
+            colorAttribute.needsUpdate = true;
+            planeGeometry.computeVertexNormals(); // Recalculate normals for correct lighting
+        }
+
+
+        // --- Animation Loop & Resize ---
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update(); // Only required if controls.enableDamping or .autoRotate are set
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = canvasContainer.clientWidth / canvasContainer.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+        }
+
+        // --- Start ---
+        init();
+
+    </script>
+
+</body>
+</html>

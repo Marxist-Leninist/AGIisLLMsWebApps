@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Field Superposition (Volumetric Point Cloud)</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            background-color: #1a1a1a; /* Darker background */
+            color: #eee; /* Light text */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow-x: hidden;
+        }
+        #container {
+            width: 100%;
+            max-width: 950px; /* Wider layout */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 15px;
+            box-sizing: border-box;
+        }
+        h1, h2 {
+            text-align: center;
+            color: #66aaff; /* Adjust color */
+            margin-top: 10px;
+            margin-bottom: 10px;
+        }
+        #canvas-container {
+            position: relative;
+            width: 100%;
+            max-width: 700px; /* Canvas size */
+            height: 550px; /* Canvas height */
+            margin-bottom: 15px;
+            border: 1px solid #555;
+            box-shadow: 3px 3px 8px rgba(0,0,0,0.4);
+            background-color: #080808; /* Very dark background */
+            cursor: grab;
+        }
+        #infoBox {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(50, 50, 50, 0.8);
+            padding: 5px 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9em;
+            color: #eee;
+            pointer-events: none;
+        }
+        .controls-section {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            flex-wrap: wrap;
+            background-color: #333; /* Darker controls background */
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
+            margin-bottom: 15px;
+        }
+        .wave-controls, .view-controls {
+            border: 1px solid #555;
+            padding: 10px 15px;
+            margin: 5px;
+            border-radius: 5px;
+            background-color: #444; /* Slightly lighter control group */
+            min-width: 380px; /* Adjust as needed */
+        }
+         .wave-controls h3, .view-controls h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            text-align: center;
+            font-size: 1.1em;
+            color: #aaa;
+         }
+        .control-item {
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.9em;
+        }
+        .control-item label {
+            margin-right: 8px;
+            min-width: 90px;
+            color: #ccc;
+        }
+        .control-item input[type="range"] {
+            flex-grow: 1;
+            margin: 0 5px;
+            cursor: pointer;
+        }
+        .control-item span {
+            min-width: 45px;
+            text-align: right;
+            font-family: monospace;
+            font-size: 0.95em;
+            background-color: #555;
+            color: #eee;
+            padding: 1px 3px;
+            border-radius: 3px;
+        }
+        p {
+            max-width: 800px;
+            text-align: justify;
+            background-color: #282828; /* Darker text background */
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 1px 1px 3px rgba(0,0,0,0.2);
+            font-size: 0.95em;
+            margin-bottom: 15px;
+            color: #ddd;
+        }
+        code { font-family: monospace; background-color: #555; padding: 1px 3px; border-radius: 2px; color: #eee;}
+        button {
+            padding: 5px 10px;
+            background-color: #5577aa;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            margin-top: 5px;
+        }
+        button:hover {
+            background-color: #6688bb;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="container">
+        <h1>3D Field Superposition (Volumetric Point Cloud)</h1>
+        <p>
+            This simulation visualizes the 3D field superposition using a cloud of points distributed throughout a volume. The <strong>color</strong> and <strong>opacity</strong> of each point represent the field's value at that <code>(x, y, z)</code> location. Brighter, more opaque points indicate higher field magnitude (positive or negative). Use your mouse to rotate, zoom, and pan. Adjust wave parameters and view controls to explore the 3D interference patterns.
+        </p>
+
+        <div id="canvas-container">
+            <!-- Three.js canvas will be inserted here -->
+             <div id="infoBox">Points: 0 | Max Amp: 0.00</div>
+        </div>
+
+        <div class="controls-section">
+             <div class="view-controls">
+                <h3>View Controls</h3>
+                 <div class="control-item">
+                    <label for="pointSize">Point Size:</label>
+                    <input type="range" id="pointSize" min="0.01" max="0.5" value="0.08" step="0.01">
+                    <span id="pointSize-val">0.08</span>
+                </div>
+                 <div class="control-item">
+                    <label for="opacityScale">Opacity Scale:</label>
+                    <input type="range" id="opacityScale" min="0.1" max="5.0" value="1.0" step="0.1">
+                    <span id="opacityScale-val">1.0</span>
+                </div>
+                 <div class="control-item">
+                    <label for="brightnessScale">Brightness Scale:</label>
+                    <input type="range" id="brightnessScale" min="0.1" max="3.0" value="1.0" step="0.1">
+                    <span id="brightnessScale-val">1.0</span>
+                </div>
+                 <div class="control-item">
+                    <label for="pointsDensity">Points (N³):</label>
+                    <input type="range" id="pointsDensity" min="10" max="60" value="40" step="1">
+                    <span id="pointsDensity-val">40³</span>
+                </div>
+                 <button id="resetView">Reset View</button>
+                 <button id="regeneratePoints">Regenerate Points</button>
+             </div>
+        </div>
+
+
+        <div class="controls-section">
+            <div class="wave-controls" id="wave1-controls">
+                <h3>Wave 1</h3>
+                <div class="control-item">
+                    <label for="amp1">Amplitude:</label>
+                    <input type="range" id="amp1" min="0" max="1" value="0.8" step="0.05">
+                    <span id="amp1-val">0.80</span>
+                </div>
+                <div class="control-item">
+                    <label for="freq1">Frequency (k):</label>
+                    <input type="range" id="freq1" min="0.5" max="10" value="3.5" step="0.1">
+                    <span id="freq1-val">3.5</span>
+                </div>
+                <div class="control-item">
+                    <label for="theta1">Angle θ (azi):</label>
+                    <input type="range" id="theta1" min="0" max="360" value="0" step="1">
+                    <span id="theta1-val">0°</span>
+                </div>
+                 <div class="control-item">
+                    <label for="phi1">Angle φ (pol):</label>
+                    <input type="range" id="phi1" min="0" max="180" value="90" step="1">
+                    <span id="phi1-val">90°</span>
+                </div>
+            </div>
+
+            <div class="wave-controls" id="wave2-controls">
+                <h3>Wave 2</h3>
+                 <div class="control-item">
+                    <label for="amp2">Amplitude:</label>
+                    <input type="range" id="amp2" min="0" max="1" value="0.8" step="0.05">
+                    <span id="amp2-val">0.80</span>
+                </div>
+                <div class="control-item">
+                    <label for="freq2">Frequency (k):</label>
+                    <input type="range" id="freq2" min="0.5" max="10" value="4.5" step="0.1">
+                    <span id="freq2-val">4.5</span>
+                </div>
+                <div class="control-item">
+                    <label for="theta2">Angle θ (azi):</label>
+                    <input type="range" id="theta2" min="0" max="360" value="75" step="1">
+                    <span id="theta2-val">75°</span>
+                </div>
+                 <div class="control-item">
+                    <label for="phi2">Angle φ (pol):</label>
+                    <input type="range" id="phi2" min="0" max="180" value="60" step="1">
+                    <span id="phi2-val">60°</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import Three.js and OrbitControls -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        let scene, camera, renderer, controls, pointsObject, material;
+        let geometry; // BufferGeometry for points
+        let positions, colors; // BufferAttributes
+        const canvasContainer = document.getElementById('canvas-container');
+        const infoBox = document.getElementById('infoBox');
+
+        // --- Control elements mapping ---
+        const uiControls = {
+            amp1: document.getElementById('amp1'), freq1: document.getElementById('freq1'),
+            theta1: document.getElementById('theta1'), phi1: document.getElementById('phi1'),
+            amp2: document.getElementById('amp2'), freq2: document.getElementById('freq2'),
+            theta2: document.getElementById('theta2'), phi2: document.getElementById('phi2'),
+            pointSize: document.getElementById('pointSize'),
+            opacityScale: document.getElementById('opacityScale'),
+            brightnessScale: document.getElementById('brightnessScale'),
+            pointsDensity: document.getElementById('pointsDensity'),
+            resetView: document.getElementById('resetView'),
+            regeneratePoints: document.getElementById('regeneratePoints')
+        };
+
+        const uiValues = {
+            amp1: document.getElementById('amp1-val'), freq1: document.getElementById('freq1-val'),
+            theta1: document.getElementById('theta1-val'), phi1: document.getElementById('phi1-val'),
+            amp2: document.getElementById('amp2-val'), freq2: document.getElementById('freq2-val'),
+            theta2: document.getElementById('theta2-val'), phi2: document.getElementById('phi2-val'),
+            pointSize: document.getElementById('pointSize-val'),
+            opacityScale: document.getElementById('opacityScale-val'),
+            brightnessScale: document.getElementById('brightnessScale-val'),
+            pointsDensity: document.getElementById('pointsDensity-val')
+        };
+
+        // --- Parameters State ---
+        let waveParams = [
+            { amp: 0, k: 0, thetaRad: 0, phiRad: 0, kx: 0, ky: 0, kz: 0 },
+            { amp: 0, k: 0, thetaRad: 0, phiRad: 0, kx: 0, ky: 0, kz: 0 }
+        ];
+        let pointSize = 0.08;
+        let opacityScale = 1.0;
+        let brightnessScale = 1.0;
+        let pointsPerSide = 40; // N for N*N*N points
+
+        // --- Constants ---
+        const spatialRange = Math.PI * 2; // Visual range for X, Y, Z
+        const volumeSize = 10; // Size of the cube volume in world units
+
+        // --- Initialization ---
+        function init() {
+            // Scene
+            scene = new THREE.Scene();
+            // Fog can help with depth perception in point clouds
+            scene.fog = new THREE.FogExp2(0x080808, 0.08); // Color matches background, density adjusts falloff
+
+            // Camera
+            const aspect = canvasContainer.clientWidth / canvasContainer.clientHeight;
+            camera = new THREE.PerspectiveCamera(70, aspect, 0.1, volumeSize * 3);
+            camera.position.set(volumeSize * 0.8, volumeSize * 0.6, volumeSize * 0.8);
+            camera.lookAt(0, 0, 0);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio); // Better resolution on high DPI displays
+            canvasContainer.appendChild(renderer.domElement);
+
+            // Point Material
+            material = new THREE.PointsMaterial({
+                size: pointSize,
+                vertexColors: true, // Use colors defined in geometry attribute
+                transparent: true, // Enable transparency
+                opacity: 1.0, // Base opacity (will be modulated by color alpha)
+                sizeAttenuation: true, // Points farther away appear smaller
+                blending: THREE.NormalBlending // Or THREE.AdditiveBlending for a glow effect
+                // depthWrite: false // Often needed with transparency, especially AdditiveBlending
+            });
+
+            // Orbit Controls
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.1;
+            controls.target.set(0, 0, 0);
+
+            // Generate initial points and update parameters
+            generatePointCloud(); // Creates geometry and pointsObject
+            updateParameters(); // Reads sliders and calculates initial field values
+
+            // Event Listeners
+            setupEventListeners();
+
+            // Start animation loop
+            animate();
+        }
+
+        // --- Point Cloud Generation ---
+        function generatePointCloud() {
+            pointsPerSide = parseInt(uiControls.pointsDensity.value);
+            const numPoints = pointsPerSide * pointsPerSide * pointsPerSide;
+            uiValues.pointsDensity.textContent = `${pointsPerSide}³ (${numPoints})`;
+
+            // Dispose old geometry if it exists
+            if (geometry) {
+                geometry.dispose();
+            }
+            if (pointsObject) {
+                scene.remove(pointsObject);
+            }
+
+            geometry = new THREE.BufferGeometry();
+            const posArray = new Float32Array(numPoints * 3); // x, y, z for each point
+            const colArray = new Float32Array(numPoints * 3); // r, g, b for each point
+
+            let index = 0;
+            const step = volumeSize / (pointsPerSide - 1);
+            const offset = -volumeSize / 2; // Center the volume
+
+            for (let i = 0; i < pointsPerSide; i++) {
+                for (let j = 0; j < pointsPerSide; j++) {
+                    for (let k = 0; k < pointsPerSide; k++) {
+                        const x = offset + i * step;
+                        const y = offset + j * step;
+                        const z = offset + k * step;
+
+                        posArray[index * 3 + 0] = x;
+                        posArray[index * 3 + 1] = y;
+                        posArray[index * 3 + 2] = z;
+
+                        // Initialize colors (will be updated later)
+                        colArray[index * 3 + 0] = 0.5;
+                        colArray[index * 3 + 1] = 0.5;
+                        colArray[index * 3 + 2] = 0.5;
+
+                        index++;
+                    }
+                }
+            }
+
+            positions = new THREE.BufferAttribute(posArray, 3);
+            colors = new THREE.BufferAttribute(colArray, 3);
+            geometry.setAttribute('position', positions);
+            geometry.setAttribute('color', colors);
+
+            pointsObject = new THREE.Points(geometry, material);
+            scene.add(pointsObject);
+
+            // Update the field values for the new points
+            updatePointCloudValues();
+        }
+
+
+        // --- Update & Calculation Functions ---
+
+        function calculateKVector(k, thetaRad, phiRad) {
+            const sinPhi = Math.sin(phiRad);
+            const kx = k * sinPhi * Math.cos(thetaRad);
+            const ky = k * sinPhi * Math.sin(thetaRad);
+            const kz = k * Math.cos(phiRad);
+            return { kx, ky, kz };
+        }
+
+        function calculateFieldValue(x, y, z) { // x, y, z are spatial coordinates
+            let totalValue = 0;
+            totalValue += waveParams[0].amp * Math.sin(waveParams[0].kx * x + waveParams[0].ky * y + waveParams[0].kz * z);
+            totalValue += waveParams[1].amp * Math.sin(waveParams[1].kx * x + waveParams[1].ky * y + waveParams[1].kz * z);
+            return totalValue;
+        }
+
+        // Function to map field value to color and alpha (encoded in color brightness)
+        function valueToColor(value, maxAmp, brightness, opacityScale) {
+            const normalizedValue = value / maxAmp; // Range [-1, 1] approx
+            const absValue = Math.abs(normalizedValue);
+
+            // Map signed normalized value [-1, 1] to Hue [0.66 (Blue) -> 0 (Red)]
+            const hue = (1.0 - (normalizedValue + 1) / 2) * 0.66;
+
+            // Map absolute value [0, 1] to Lightness and Saturation
+            // Make points near zero field dark and desaturated
+            const saturation = Math.min(1.0, absValue * 1.5); // Saturate quickly
+            const lightness = Math.min(0.6, absValue * brightness * 0.8); // Modulate max lightness
+
+            // Map absolute value [0, 1] to Opacity
+            // Use Math.pow to make low values more transparent quickly
+            const alpha = Math.min(1.0, Math.pow(absValue, 0.7) * opacityScale);
+
+            const color = new THREE.Color();
+            color.setHSL(hue, saturation, lightness);
+
+            // We store alpha in the color attribute's components for the material
+            // (Note: Standard PointsMaterial doesn't directly use per-vertex alpha,
+            // but we can modulate the color brightness by alpha)
+            color.multiplyScalar(alpha); // Modulate brightness by calculated alpha
+
+            return color;
+        }
+
+
+        function updateParameters() {
+            // Read UI values for waves
+            waveParams[0].amp = parseFloat(uiControls.amp1.value);
+            waveParams[0].k = parseFloat(uiControls.freq1.value);
+            const theta1Deg = parseFloat(uiControls.theta1.value);
+            const phi1Deg = parseFloat(uiControls.phi1.value);
+            waveParams[0].thetaRad = theta1Deg * Math.PI / 180.0;
+            waveParams[0].phiRad = phi1Deg * Math.PI / 180.0;
+            const kVec1 = calculateKVector(waveParams[0].k, waveParams[0].thetaRad, waveParams[0].phiRad);
+            waveParams[0].kx = kVec1.kx; waveParams[0].ky = kVec1.ky; waveParams[0].kz = kVec1.kz;
+
+            waveParams[1].amp = parseFloat(uiControls.amp2.value);
+            waveParams[1].k = parseFloat(uiControls.freq2.value);
+            const theta2Deg = parseFloat(uiControls.theta2.value);
+            const phi2Deg = parseFloat(uiControls.phi2.value);
+            waveParams[1].thetaRad = theta2Deg * Math.PI / 180.0;
+            waveParams[1].phiRad = phi2Deg * Math.PI / 180.0;
+            const kVec2 = calculateKVector(waveParams[1].k, waveParams[1].thetaRad, waveParams[1].phiRad);
+            waveParams[1].kx = kVec2.kx; waveParams[1].ky = kVec2.ky; waveParams[1].kz = kVec2.kz;
+
+            // Read UI values for view
+            pointSize = parseFloat(uiControls.pointSize.value);
+            opacityScale = parseFloat(uiControls.opacityScale.value);
+            brightnessScale = parseFloat(uiControls.brightnessScale.value);
+
+            // Update material properties
+            if (material) {
+                material.size = pointSize;
+            }
+
+            // Update displayed values in UI
+            uiValues.amp1.textContent = waveParams[0].amp.toFixed(2);
+            uiValues.freq1.textContent = waveParams[0].k.toFixed(1);
+            uiValues.theta1.textContent = `${theta1Deg}°`;
+            uiValues.phi1.textContent = `${phi1Deg}°`;
+            uiValues.amp2.textContent = waveParams[1].amp.toFixed(2);
+            uiValues.freq2.textContent = waveParams[1].k.toFixed(1);
+            uiValues.theta2.textContent = `${theta2Deg}°`;
+            uiValues.phi2.textContent = `${phi2Deg}°`;
+            uiValues.pointSize.textContent = pointSize.toFixed(2);
+            uiValues.opacityScale.textContent = opacityScale.toFixed(1);
+            uiValues.brightnessScale.textContent = brightnessScale.toFixed(1);
+            // Density value is updated in generatePointCloud
+
+            // Update the point cloud colors/alphas based on new parameters
+            updatePointCloudValues();
+        }
+
+        function updatePointCloudValues() {
+            if (!positions || !colors) return; // Exit if geometry not ready
+
+            const maxPossibleAmp = waveParams[0].amp + waveParams[1].amp + 1e-6; // Avoid zero division
+            infoBox.textContent = `Points: ${positions.count} | Max Amp: ${maxPossibleAmp.toFixed(2)}`;
+
+            const posArray = positions.array;
+            const colArray = colors.array;
+
+            for (let i = 0; i < positions.count; i++) {
+                // Get point's world position
+                const worldX = posArray[i * 3 + 0];
+                const worldY = posArray[i * 3 + 1];
+                const worldZ = posArray[i * 3 + 2];
+
+                // Map world coordinates to spatial coordinates for field calculation
+                // Map [-volumeSize/2, +volumeSize/2] to [-spatialRange/2, +spatialRange/2]
+                const spatialX = (worldX / (volumeSize / 2)) * (spatialRange / 2);
+                const spatialY = (worldY / (volumeSize / 2)) * (spatialRange / 2);
+                const spatialZ = (worldZ / (volumeSize / 2)) * (spatialRange / 2);
+
+                // Calculate field value
+                const fieldValue = calculateFieldValue(spatialX, spatialY, spatialZ);
+
+                // Calculate color (includes alpha modulation)
+                const color = valueToColor(fieldValue, maxPossibleAmp, brightnessScale, opacityScale);
+
+                // Update color buffer attribute
+                colArray[i * 3 + 0] = color.r;
+                colArray[i * 3 + 1] = color.g;
+                colArray[i * 3 + 2] = color.b;
+            }
+
+            // Tell Three.js that the color attribute has changed
+            colors.needsUpdate = true;
+        }
+
+
+        // --- Event Listeners Setup ---
+        function setupEventListeners() {
+             // Wave & View Parameter Sliders
+            const paramSliders = ['amp1', 'freq1', 'theta1', 'phi1', 'amp2', 'freq2', 'theta2', 'phi2', 'pointSize', 'opacityScale', 'brightnessScale'];
+            paramSliders.forEach(key => {
+                 uiControls[key].addEventListener('input', updateParameters);
+            });
+
+            // Point Density Slider (requires regeneration)
+            uiControls.pointsDensity.addEventListener('input', () => {
+                 // Update text immediately for feedback
+                 const density = parseInt(uiControls.pointsDensity.value);
+                 uiValues.pointsDensity.textContent = `${density}³ (${density*density*density})`;
+                 // Note: Regeneration happens on button click or potentially mouseup
+            });
+             // Optional: Regenerate on slider release (can be slow)
+             // uiControls.pointsDensity.addEventListener('change', generatePointCloud);
+
+            // Buttons
+            uiControls.resetView.addEventListener('click', () => {
+                controls.reset();
+                camera.position.set(volumeSize * 0.8, volumeSize * 0.6, volumeSize * 0.8);
+                controls.target.set(0, 0, 0);
+            });
+            uiControls.regeneratePoints.addEventListener('click', generatePointCloud);
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        // --- Animation Loop & Resize ---
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = canvasContainer.clientWidth / canvasContainer.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+        }
+
+        // --- Start ---
+        init();
+
+    </script>
+
+</body>
+</html>

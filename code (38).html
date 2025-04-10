@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Field as Superposition of Waves</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            line-height: 1.6;
+            padding: 15px;
+            background-color: #f0f0f0;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1, h2 {
+            text-align: center;
+            color: #0056b3;
+        }
+        canvas {
+            border: 1px solid #777;
+            background-color: #ccc; /* Placeholder background */
+            margin-top: 10px;
+            margin-bottom: 15px;
+            box-shadow: 3px 3px 8px rgba(0,0,0,0.2);
+            cursor: crosshair; /* Indicate it's interactive */
+        }
+        .controls-container {
+            display: flex;
+            justify-content: space-around; /* Space out wave controls */
+            width: 100%;
+            max-width: 700px; /* Limit width */
+            flex-wrap: wrap; /* Allow wrapping on smaller screens */
+            background-color: #e9e9e9;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 15px;
+        }
+        .wave-controls {
+            border: 1px solid #ccc;
+            padding: 15px;
+            margin: 5px;
+            border-radius: 5px;
+            background-color: #f8f8f8;
+            min-width: 300px; /* Ensure controls don't get too squished */
+        }
+         .wave-controls h3 {
+            margin-top: 0;
+            text-align: center;
+         }
+        .control-item {
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.9em;
+        }
+        .control-item label {
+            margin-right: 8px;
+            min-width: 80px; /* Align labels */
+        }
+        .control-item input[type="range"] {
+            flex-grow: 1;
+            margin: 0 5px;
+            cursor: pointer;
+        }
+        .control-item span {
+            min-width: 45px; /* Align value displays */
+            text-align: right;
+            font-family: monospace;
+            font-size: 0.95em;
+            background-color: #eee;
+            padding: 1px 3px;
+            border-radius: 3px;
+        }
+        p {
+            max-width: 700px;
+            text-align: justify;
+            background-color: #fff;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 1px 1px 3px rgba(0,0,0,0.1);
+            font-size: 0.95em;
+        }
+        #infoBox {
+            font-family: monospace;
+            font-size: 0.9em;
+            margin-top: 5px;
+            padding: 5px;
+            background-color: #e0e0ff;
+            border: 1px solid #aab;
+            border-radius: 4px;
+            min-height: 1.2em;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>2D Field as Superposition of Waves</h1>
+    <p>
+        This simulation shows a 2D "field" created by adding (superimposing) two 2D plane waves. Each pixel's brightness represents the field's value at that point (white = high, black = low, gray = zero). Adjust the parameters of each wave (Amplitude, Frequency/Wavenumber, Angle) to see how the resulting interference pattern changes. This demonstrates how complex 2D patterns can arise from simple wave components, analogous to how physical fields behave.
+    </p>
+    <p>
+        A 2D plane wave is described by <code>A * sin(k_x * x + k_y * y + phase)</code>, where <code>(k_x, k_y)</code> is the wavevector. Its magnitude <code>k = sqrt(k_x² + k_y²)</code> relates to frequency/wavelength, and its direction determines the wave propagation angle. We control Amplitude (A), Frequency (k), and Angle (θ) where <code>k_x = k * cos(θ)</code> and <code>k_y = k * sin(θ)</code>.
+    </p>
+
+    <canvas id="fieldCanvas" width="400" height="400"></canvas>
+    <div id="infoBox">Hover over canvas for field value...</div>
+
+    <div class="controls-container">
+        <div class="wave-controls" id="wave1-controls">
+            <h3>Wave 1 (Blue Influence)</h3>
+            <div class="control-item">
+                <label for="amp1">Amplitude:</label>
+                <input type="range" id="amp1" min="0" max="1" value="0.7" step="0.05">
+                <span id="amp1-val">0.70</span>
+            </div>
+            <div class="control-item">
+                <label for="freq1">Frequency (k):</label>
+                <input type="range" id="freq1" min="0.5" max="10" value="3" step="0.1">
+                <span id="freq1-val">3.0</span>
+            </div>
+            <div class="control-item">
+                <label for="angle1">Angle (θ):</label>
+                <input type="range" id="angle1" min="0" max="360" value="0" step="1">
+                <span id="angle1-val">0°</span>
+            </div>
+        </div>
+
+        <div class="wave-controls" id="wave2-controls">
+            <h3>Wave 2 (Red Influence)</h3>
+             <div class="control-item">
+                <label for="amp2">Amplitude:</label>
+                <input type="range" id="amp2" min="0" max="1" value="0.7" step="0.05">
+                <span id="amp2-val">0.70</span>
+            </div>
+            <div class="control-item">
+                <label for="freq2">Frequency (k):</label>
+                <input type="range" id="freq2" min="0.5" max="10" value="4" step="0.1">
+                <span id="freq2-val">4.0</span>
+            </div>
+            <div class="control-item">
+                <label for="angle2">Angle (θ):</label>
+                <input type="range" id="angle2" min="0" max="360" value="45" step="1">
+                <span id="angle2-val">45°</span>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        const canvas = document.getElementById('fieldCanvas');
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        const infoBox = document.getElementById('infoBox');
+
+        // Use ImageData for performance
+        const imageData = ctx.createImageData(width, height);
+        const data = imageData.data; // Array [R, G, B, A, R, G, B, A, ...]
+
+        // Control elements mapping
+        const controls = {
+            amp1: document.getElementById('amp1'),
+            freq1: document.getElementById('freq1'),
+            angle1: document.getElementById('angle1'),
+            amp2: document.getElementById('amp2'),
+            freq2: document.getElementById('freq2'),
+            angle2: document.getElementById('angle2'),
+        };
+
+        const values = {
+            amp1: document.getElementById('amp1-val'),
+            freq1: document.getElementById('freq1-val'),
+            angle1: document.getElementById('angle1-val'),
+            amp2: document.getElementById('amp2-val'),
+            freq2: document.getElementById('freq2-val'),
+            angle2: document.getElementById('angle2-val'),
+        };
+
+        // Wave parameters state
+        let waveParams = [
+            { amp: 0, k: 0, angleRad: 0, kx: 0, ky: 0 }, // Wave 1
+            { amp: 0, k: 0, angleRad: 0, kx: 0, ky: 0 }  // Wave 2
+        ];
+
+        // Spatial coordinate range (e.g., map canvas to -PI to +PI)
+        const spatialRange = Math.PI;
+
+        // --- Calculation Functions ---
+
+        function updateWaveParams() {
+            // Wave 1
+            waveParams[0].amp = parseFloat(controls.amp1.value);
+            waveParams[0].k = parseFloat(controls.freq1.value);
+            const angle1Deg = parseFloat(controls.angle1.value);
+            waveParams[0].angleRad = angle1Deg * Math.PI / 180.0;
+            waveParams[0].kx = waveParams[0].k * Math.cos(waveParams[0].angleRad);
+            waveParams[0].ky = waveParams[0].k * Math.sin(waveParams[0].angleRad);
+
+            // Wave 2
+            waveParams[1].amp = parseFloat(controls.amp2.value);
+            waveParams[1].k = parseFloat(controls.freq2.value);
+            const angle2Deg = parseFloat(controls.angle2.value);
+            waveParams[1].angleRad = angle2Deg * Math.PI / 180.0;
+            waveParams[1].kx = waveParams[1].k * Math.cos(waveParams[1].angleRad);
+            waveParams[1].ky = waveParams[1].k * Math.sin(waveParams[1].angleRad);
+
+            // Update displayed values
+            values.amp1.textContent = waveParams[0].amp.toFixed(2);
+            values.freq1.textContent = waveParams[0].k.toFixed(1);
+            values.angle1.textContent = `${angle1Deg}°`;
+            values.amp2.textContent = waveParams[1].amp.toFixed(2);
+            values.freq2.textContent = waveParams[1].k.toFixed(1);
+            values.angle2.textContent = `${angle2Deg}°`;
+
+            drawScene(); // Redraw after params change
+        }
+
+        // Calculate the field value at a given spatial coordinate (x, y)
+        function calculateFieldValue(x, y) {
+            let totalValue = 0;
+            totalValue += waveParams[0].amp * Math.sin(waveParams[0].kx * x + waveParams[0].ky * y);
+            totalValue += waveParams[1].amp * Math.sin(waveParams[1].kx * x + waveParams[1].ky * y);
+            return totalValue;
+        }
+
+         // --- Drawing Function ---
+
+        function drawScene() {
+            const maxPossibleAmp = waveParams[0].amp + waveParams[1].amp;
+            // Avoid division by zero if both amps are zero
+            const normalizationFactor = maxPossibleAmp > 1e-6 ? 1.0 / maxPossibleAmp : 1.0;
+
+            for (let py = 0; py < height; py++) {
+                for (let px = 0; px < width; px++) {
+                    // Map pixel coordinates (px, py) to spatial coordinates (x, y)
+                    // Center origin (0,0) at the canvas center
+                    const x = ((px / (width - 1)) * 2 - 1) * spatialRange;
+                    const y = ((py / (height - 1)) * 2 - 1) * spatialRange; // Y increases downwards in pixels, but often upwards in math
+
+                    // Calculate the superimposed field value
+                    const fieldValue = calculateFieldValue(x, y);
+
+                    // Normalize the value to the range [-1, 1] (approximately)
+                    const normalizedValue = fieldValue * normalizationFactor;
+
+                    // Map normalized value [-1, 1] to grayscale [0, 255]
+                    // value = (normalized + 1) / 2 maps [-1, 1] -> [0, 1]
+                    const grayValue = Math.floor(((normalizedValue + 1) / 2) * 255);
+
+                    // Clamp value just in case
+                    const clampedGray = Math.max(0, Math.min(255, grayValue));
+
+                    // Get the index in the ImageData array (4 bytes per pixel: R, G, B, A)
+                    const index = (py * width + px) * 4;
+
+                    // Set pixel data (grayscale)
+                    data[index]     = clampedGray; // Red
+                    data[index + 1] = clampedGray; // Green
+                    data[index + 2] = clampedGray; // Blue
+                    data[index + 3] = 255;         // Alpha (fully opaque)
+                }
+            }
+
+            // Put the modified image data back onto the canvas
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        // --- Event Listeners ---
+
+        // Update visualization when sliders change
+        for (const key in controls) {
+            controls[key].addEventListener('input', updateWaveParams);
+        }
+
+        // Show field value on hover
+        canvas.addEventListener('mousemove', (event) => {
+            const rect = canvas.getBoundingClientRect();
+            const px = event.clientX - rect.left;
+            const py = event.clientY - rect.top;
+
+            if (px >= 0 && px < width && py >= 0 && py < height) {
+                 // Map pixel coordinates back to spatial coordinates
+                 const x = ((px / (width - 1)) * 2 - 1) * spatialRange;
+                 const y = ((py / (height - 1)) * 2 - 1) * spatialRange;
+                 const value = calculateFieldValue(x, y);
+                 infoBox.textContent = `Pos: (${x.toFixed(2)}, ${y.toFixed(2)})  Value: ${value.toFixed(3)}`;
+            } else {
+                 infoBox.textContent = 'Hover over canvas for field value...';
+            }
+        });
+
+         canvas.addEventListener('mouseleave', () => {
+             infoBox.textContent = 'Hover over canvas for field value...';
+         });
+
+
+        // --- Initial Setup ---
+        updateWaveParams(); // Initialize parameters and draw the first frame
+
+    </script>
+
+</body>
+</html>
