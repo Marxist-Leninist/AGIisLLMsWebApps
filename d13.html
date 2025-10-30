@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>2D Dogfight: 7 Bots (Overdense added)</title>
+<style>
+:root { color-scheme: dark; }
+html,body{margin:0;padding:0;overflow:hidden;background:#000;}
+#info{position:absolute;top:10px;left:10px;color:#fff;font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;z-index:100;
+background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.12);padding:8px 10px;border-radius:8px;backdrop-filter:blur(4px);}
+#legend{margin-top:6px;display:flex;flex-wrap:wrap;gap:10px;font-size:12px;opacity:.9}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;}
+.b{background:#3aa0ff}.r{background:#ff5a5a}.g{background:#14d07a}.p{background:#bf5af2}.o{background:#ffb14e}.t{background:#2bd9d9}.pk{background:#ff66cc}
+#winner{position:absolute;top:10px;right:10px;color:#fff;background:rgba(0,0,0,0.35);
+border:1px solid rgba(255,255,255,0.12);padding:8px 10px;border-radius:8px;min-width:280px;text-align:right;z-index:101;}
+canvas{display:block}
+.small{font-size:12px;opacity:.8}
+</style>
+</head>
+<body>
+<div id="info">
+  <div>Generation <span id="gen">1</span></div>
+  <div>Blue <span class="small">(Transformer Base)</span> Wins <span id="wB">0</span></div>
+  <div>Red <span class="small">(Transformer SparseLite)</span> Wins <span id="wR">0</span></div>
+  <div>Green <span class="small">(Transformer ResidualLite)</span> Wins <span id="wG">0</span></div>
+  <div>Purple <span class="small">(Transformer MoELite)</span> Wins <span id="wP">0</span></div>
+  <div>Orange <span class="small">(Transformer DirAttnLite)</span> Wins <span id="wO">0</span></div>
+  <div>Teal <span class="small">(Transformer NoisyHead)</span> Wins <span id="wT">0</span></div>
+  <div>Pink <span class="small">(Overdense)</span> Wins <span id="wX">0</span></div>
+  <div id="legend">
+    <div><span class="dot b"></span>Blue: Base</div>
+    <div><span class="dot r"></span>Red: SparseLite</div>
+    <div><span class="dot g"></span>Green: ResidualLite</div>
+    <div><span class="dot p"></span>Purple: MoELite</div>
+    <div><span class="dot o"></span>Orange: DirAttnLite</div>
+    <div><span class="dot t"></span>Teal: NoisyHead</div>
+    <div><span class="dot pk"></span>Pink: Overdense</div>
+  </div>
+</div>
+<div id="winner">Round winner: —</div>
+<canvas id="game"></canvas>
+
+<script>
+// ================= Canvas / World =================
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d", { alpha: false });
+function resize(){ canvas.width = innerWidth; canvas.height = innerHeight; }
+resize(); addEventListener("resize", resize);
+
+let W = canvas.width, H = canvas.height;
+const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+const wrapA = a => (a + Math.PI*3) % (2*Math.PI) - Math.PI;
+const dlt = (a,b,r)=>{ let d=b-a, half=r/2; if(d>half)d-=r; if(d<-half)d+=r; return d; };
+function rand(min,max){ return Math.random()*(max-min)+min; }
+function sign(x){ return x>=0 ? 1 : -1; }
+function hypotWH(){ return Math.hypot(W,H); }
+
+// Weapon/game balance
+const FIRE_COOLDOWN = 0.25;    // seconds between shots
+const BEAM_RANGE_FRAC = 0.75;  // fraction of max(W,H)
+const HIT_RADIUS = 14;         // px perpendicular tolerance
+const JITTER = 0.035;          // radians aim jitter
+const TIME_LIMIT = 60_000;     // ms per round hard limit
+
+// ================= Entities =================
+let nextId = 1;
+class Plane {
+  constructor(color){
+    this.id = nextId++;
+    this.color = color;
+    this.reset();
+  }
+  reset(){
+    this.x = rand(0, W);
+    this.y = rand(0, H);
+    this.angle = rand(-Math.PI, Math.PI);
+    this.speed = rand(1.5, 3.5);
+    this.health = 100;
+    this.alive = true;
+    this.lastHitBy = null;
+    this.fireCooldown = 0;
+  }
+  move(t, a, dt){
+    if (!this.alive) return;
+    this.angle += t * 0.05;
+    this.speed = clamp(this.speed + a * 0.08, 0.5, 5);
+    this.speed *= 1 - 0.005; // mild drag
+    this.x = (this.x + Math.cos(this.angle)*this.speed + W) % W;
+    this.y = (this.y + Math.sin(this.angle)*this.speed + H) % H;
+    if (this.fireCooldown > 0) this.fireCooldown -= dt;
+  }
+  draw(){
+    if (!this.alive) return;
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.moveTo(15,0);
+    ctx.lineTo(-10,-7);
+    ctx.lineTo(-10, 7);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+// ================= Brains (Transformers) =================
+function mv(W, x){
+  const rows = W.length, cols = W[0].length;
+  const y = new Array(rows).fill(0);
+  for(let i=0;i<rows;i++){
+    let s = 0;
+    for(let j=0;j<cols;j++) s += W[i][j] * x[j];
+    y[i] = s;
+  }
+  return y;
+}
+
+class TransformerBase {
+  constructor(){
+    this.inSize = 6;  // [cos, sin, dist] * 2 targets
+    this.h = 16;
+    this.W1 = Array.from({length:this.h},()=>Array.from({length:this.inSize},()=>Math.random()<.5?1:-1));
+    this.B1 = Array.from({length:this.h},()=>Math.random()<.5?1:-1);
+    this.W2 = Array.from({length:this.h},()=>Array.from({length:this.h},()=>Math.random()<.5?1:-1));
+    this.B2 = Array.from({length:this.h},()=>Math.random()<.5?1:-1);
+    this.Wo = Array.from({length:2},()=>Array.from({length:this.h},()=>Math.random()*0.4-0.2));
+    this.Bo = [0,0];
+    this.fit = 0;
+  }
+  forward(inp){
+    const x = inp.slice(0,this.inSize).map(v=>clamp(v,-1,1)).map(v=>v>=0?1:-1);
+    let h1 = mv(this.W1, x).map((v,i)=>sign(v + this.B1[i]));
+    let h2 = mv(this.W2, h1).map((v,i)=>sign(v + this.B2[i]));
+    return mv(this.Wo, h2).map((v,i)=>Math.tanh(v + this.Bo[i])); // [turn, accel] in [-1,1]
+  }
+  decide(i){
+    const [t,a] = this.forward(i);
+    let f = false;
+    if ((i[0] > 0.98 && i[2] < 0.25) || (i[3] > 0.98 && i[5] < 0.25)) f = true;
+    if (!f && Math.random() < 0.03) f = true;
+    return { t, a, f };
+  }
+  mutate(){
+    if (Math.random() < 0.5){ const i=Math.floor(Math.random()*this.h), j=Math.floor(Math.random()*this.inSize); this.W1[i][j]*=-1; }
+    else { const i=Math.floor(Math.random()*this.h), j=Math.floor(Math.random()*this.h); this.W2[i][j]*=-1; }
+    const oi=Math.floor(Math.random()*2), oj=Math.floor(Math.random()*this.h); this.Wo[oi][oj]+= (Math.random()*2-1)*0.05;
+  }
+}
+
+// Minor variants, all close to Base
+
+class TransformerSparseLite extends TransformerBase {
+  constructor(){
+    super();
+    this.M1 = Array.from({length:this.h},()=>Array.from({length:this.inSize},()=>Math.random()<0.3?0:1));
+    this.M2 = Array.from({length:this.h},()=>Array.from({length:this.h},()=>Math.random()<0.3?0:1));
+  }
+  forward(inp){
+    const x = inp.slice(0,this.inSize).map(v=>clamp(v,-1,1)).map(v=>v>=0?1:-1);
+    const h1 = new Array(this.h).fill(0).map((_,i)=>{
+      let s=0; for(let j=0;j<this.inSize;j++) s += (this.W1[i][j]*this.M1[i][j]) * x[j];
+      return sign(s + this.B1[i]);
+    });
+    const h2 = new Array(this.h).fill(0).map((_,i)=>{
+      let s=0; for(let j=0;j<this.h;j++) s += (this.W2[i][j]*this.M2[i][j]) * h1[j];
+      return sign(s + this.B2[i]);
+    });
+    return mv(this.Wo, h2).map((v,i)=>Math.tanh(v + this.Bo[i]));
+  }
+}
+
+class TransformerResidualLite extends TransformerBase {
+  constructor(){
+    super();
+    this.mem = Array(this.h).fill(0);
+    this.alpha = 0.9;  // decay
+    this.beta = 0.3;   // blend
+  }
+  resetState(){ this.mem.fill(0); }
+  forward(inp){
+    const x = inp.slice(0,this.inSize).map(v=>clamp(v,-1,1)).map(v=>v>=0?1:-1);
+    let h1 = mv(this.W1, x).map((v,i)=>sign(v + this.B1[i]));
+    let h2 = mv(this.W2, h1).map((v,i)=>sign(v + this.B2[i]));
+    for(let i=0;i<this.h;i++) this.mem[i] = this.alpha*this.mem[i] + (1-this.alpha)*h2[i];
+    const mix = h2.map((v,i)=>clamp(v + this.beta*this.mem[i], -1, 1));
+    return mv(this.Wo, mix).map((v,i)=>Math.tanh(v + this.Bo[i]));
+  }
+}
+
+class TransformerMoELite extends TransformerBase {
+  constructor(){
+    super();
+    this.W1b = Array.from({length:this.h},()=>Array.from({length:this.inSize},()=>Math.random()<.5?1:-1));
+    this.B1b = Array.from({length:this.h},()=>Math.random()<.5?1:-1);
+    this.W2b = Array.from({length:this.h},()=>Array.from({length:this.h},()=>Math.random()<.5?1:-1));
+    this.B2b = Array.from({length:this.h},()=>Math.random()<.5?1:-1);
+    this.Gw = Array.from({length:this.inSize},()=>Math.random()*0.3-0.15);
+    this.Gb = 0;
+  }
+  sigmoid(x){ return 1/(1+Math.exp(-x)); }
+  forward(inp){
+    const x = inp.slice(0,this.inSize).map(v=>clamp(v,-1,1)).map(v=>v>=0?1:-1);
+    let h1a = mv(this.W1,  x).map((v,i)=>sign(v + this.B1[i]));
+    let h2a = mv(this.W2,  h1a).map((v,i)=>sign(v + this.B2[i]));
+    let h1b = mv(this.W1b, x).map((v,i)=>sign(v + this.B1b[i]));
+    let h2b = mv(this.W2b, h1b).map((v,i)=>sign(v + this.B2b[i]));
+    const gate = this.sigmoid(this.Gb + this.Gw.reduce((s,v,j)=>s+v*x[j],0));
+    const h2 = h2a.map((va,i)=> gate*va + (1-gate)*h2b[i]);
+    return mv(this.Wo, h2).map((v,i)=>Math.tanh(v + this.Bo[i]));
+  }
+}
+
+class TransformerDirAttnLite extends TransformerBase {
+  constructor(){
+    super();
+    this.attW = [Math.random()*0.4-0.2, Math.random()*0.4-0.2, Math.random()*0.4-0.2];
+    this.attB = 0;
+  }
+  softmax2(a,b){ const m=Math.max(a,b); const ea=Math.exp(a-m), eb=Math.exp(b-m); const s=ea+eb; return [ea/s, eb/s]; }
+  forward(raw){
+    const c1=raw[0], s1=raw[1], d1=raw[2], c2=raw[3], s2=raw[4], d2=raw[5];
+    const sc1 = this.attW[0]*c1 + this.attW[1]*(1-Math.abs(s1)) + this.attW[2]*(1-d1) + this.attB;
+    const sc2 = this.attW[0]*c2 + this.attW[1]*(1-Math.abs(s2)) + this.attW[2]*(1-d2) + this.attB;
+    const [w1,w2] = this.softmax2(sc1, sc2);
+    const inp = [w1*c1, w1*s1, w1*d1, w2*c2, w2*s2, w2*d2].map(v=>clamp(v,-1,1)).map(v=>v>=0?1:-1);
+    let h1 = mv(this.W1, inp).map((v,i)=>sign(v + this.B1[i]));
+    let h2 = mv(this.W2, h1).map((v,i)=>sign(v + this.B2[i]));
+    return mv(this.Wo, h2).map((v,i)=>Math.tanh(v + this.Bo[i]));
+  }
+}
+
+class TransformerNoisyHead extends TransformerBase {
+  forward(inp){
+    const [t,a] = super.forward(inp);
+    const noise = 0.08;
+    return [clamp(t + (Math.random()*2-1)*noise, -1, 1), clamp(a + (Math.random()*2-1)*noise, -1, 1)];
+  }
+}
+
+// ================= NEW: Overdense =================
+// Big over-connected model: expand 6 inputs to 192 micro-synapses, then heavy binary hidden.
+class OverdenseNN {
+  constructor(){
+    this.inSize = 6;
+    this.expand = 192; // micro-synapses
+    this.h = 96;       // large hidden
+
+    // Input expansion (real weights)
+    this.Wexp = Array.from({length:this.expand}, ()=>Array.from({length:this.inSize}, ()=>Math.random()*0.6 - 0.3));
+    this.Bexp = Array.from({length:this.expand}, ()=>Math.random()*0.2 - 0.1);
+
+    // Binary hidden layers
+    this.W1 = Array.from({length:this.h}, ()=>Array.from({length:this.expand}, ()=>Math.random()<.5?1:-1));
+    this.B1 = Array.from({length:this.h}, ()=>Math.random()<.5?1:-1);
+
+    this.W2 = Array.from({length:this.h}, ()=>Array.from({length:this.h}, ()=>Math.random()<.5?1:-1));
+    this.B2 = Array.from({length:this.h}, ()=>Math.random()<.5?1:-1);
+
+    // Real output head
+    this.Wo = Array.from({length:2}, ()=>Array.from({length:this.h}, ()=>Math.random()*0.25 - 0.125));
+    this.Bo = [0,0];
+
+    this.fit = 0;
+  }
+  _mv(W, x){ return mv(W,x); }
+  forward(inp){
+    const x = inp.slice(0,this.inSize).map(v=>clamp(v,-1,1));
+    // expand to micro-synapses, then binarize
+    const zlin = this._mv(this.Wexp, x).map((v,i)=>v + this.Bexp[i]);
+    const z = zlin.map(v=>v>=0 ? 1 : -1);
+
+    let h1 = this._mv(this.W1, z).map((v,i)=>sign(v + this.B1[i]));
+    let h2 = this._mv(this.W2, h1).map((v,i)=>sign(v + this.B2[i]));
+
+    const out = this._mv(this.Wo, h2).map((v,i)=>Math.tanh(v + this.Bo[i]));
+    return out; // [turn, accel]
+  }
+  decide(i){
+    const [t,a] = this.forward(i);
+    let f = false;
+    if ((i[0] > 0.98 && i[2] < 0.25) || (i[3] > 0.98 && i[5] < 0.25)) f = true;
+    if (!f && Math.random() < 0.03) f = true;
+    return { t, a, f };
+  }
+  mutate(){
+    // Flip a bunch of binary synapses
+    for (let k=0;k<4;k++){
+      if (Math.random() < 0.5){
+        const i = Math.floor(Math.random()*this.h), j = Math.floor(Math.random()*this.expand);
+        this.W1[i][j] *= -1;
+      } else {
+        const i = Math.floor(Math.random()*this.h), j = Math.floor(Math.random()*this.h);
+        this.W2[i][j] *= -1;
+      }
+    }
+    // Slightly jiggle expansion and head
+    for (let n=0;n<4;n++){
+      const i = Math.floor(Math.random()*this.expand), j = Math.floor(Math.random()*this.inSize);
+      this.Wexp[i][j] += (Math.random()*2-1) * 0.03;
+    }
+    const oi = Math.floor(Math.random()*2), oj = Math.floor(Math.random()*this.h);
+    this.Wo[oi][oj] += (Math.random()*2-1) * 0.04;
+  }
+}
+
+// ================= Sensors / Weapons =================
+function nearestTwoFor(p, others){
+  return others
+    .filter(o=>o.alive)
+    .map(o=>{
+      const dx = dlt(p.x,o.x,W), dy = dlt(p.y,o.y,H);
+      return {o, d: Math.hypot(dx,dy), dx, dy};
+    })
+    .sort((a,b)=>a.d - b.d)
+    .slice(0,2);
+}
+function sense(p, others){
+  const near = nearestTwoFor(p, others);
+  const diag = hypotWH();
+  const out = [];
+  for (let k=0;k<2;k++){
+    const dx=near[k]?.dx ?? 0, dy=near[k]?.dy ?? 0, dist=near[k]?.d ?? diag;
+    const ang = wrapA(Math.atan2(dy, dx) - p.angle);
+    out.push(Math.cos(ang), Math.sin(ang), dist/diag);
+  }
+  return out; // [c1,s1,d1,c2,s2,d2]
+}
+
+function fireLaser(shooterIdx, players){
+  const shooter = players[shooterIdx].plane;
+  if (!shooter.alive) return 0;
+
+  const angle = shooter.angle + (Math.random()*2-1)*JITTER;
+  const range = Math.max(W,H)*BEAM_RANGE_FRAC;
+  const dirX = Math.cos(angle), dirY = Math.sin(angle);
+
+  // Draw beam
+  ctx.beginPath();
+  ctx.moveTo(shooter.x, shooter.y);
+  ctx.lineTo(shooter.x + dirX*range, shooter.y + dirY*range);
+  const c = shooter.color;
+  const stroke = ({
+    '#3aa0ff':'cyan',
+    '#ff5a5a':'yellow',
+    '#14d07a':'lime',
+    '#bf5af2':'violet',
+    '#ffb14e':'orange',
+    '#2bd9d9':'aqua',
+    '#ff66cc':'hotpink'
+  })[c] || 'white';
+  ctx.strokeStyle = stroke; ctx.lineWidth = 2; ctx.stroke();
+
+  let hits = 0;
+  for (let ti=0;ti<players.length;ti++){
+    if (ti === shooterIdx) continue;
+    const target = players[ti].plane;
+    if (!target.alive) continue;
+
+    const tx = dlt(shooter.x, target.x, W);
+    const ty = dlt(shooter.y, target.y, H);
+    const proj = tx*dirX + ty*dirY;
+    if (proj < 0 || proj > range) continue;
+
+    const px = tx - proj*dirX;
+    const py = ty - proj*dirY;
+    const dist = Math.hypot(px, py);
+    if (dist < HIT_RADIUS){
+      const dmg = 6 + 12 * (1 - dist / HIT_RADIUS); // falloff
+      target.health -= dmg;
+      target.lastHitBy = shooterIdx;
+      hits++;
+
+      ctx.beginPath();
+      ctx.arc(target.x, target.y, 16, 0, 2*Math.PI);
+      ctx.fillStyle = "rgba(255,255,255,0.45)";
+      ctx.fill();
+    }
+  }
+  return hits;
+}
+
+// ================= Game State & UI =================
+const winnerEl = document.getElementById("winner");
+function setWinner(text){ winnerEl.textContent = "Round winner: " + text; }
+
+let gen=1, wB=0, wR=0, wG=0, wP=0, wO=0, wT=0, wX=0;
+
+let players;
+
+function makePlayers(){
+  return [
+    { name:'Blue (Transformer Base)',        key:'B', color:'#3aa0ff', plane:new Plane('#3aa0ff'), brain:new TransformerBase(),         wins:0 },
+    { name:'Red (Transformer SparseLite)',   key:'R', color:'#ff5a5a', plane:new Plane('#ff5a5a'), brain:new TransformerSparseLite(),   wins:0 },
+    { name:'Green (Transformer ResidualLite)',key:'G', color:'#14d07a', plane:new Plane('#14d07a'), brain:new TransformerResidualLite(),wins:0 },
+    { name:'Purple (Transformer MoELite)',   key:'P', color:'#bf5af2', plane:new Plane('#bf5af2'), brain:new TransformerMoELite(),      wins:0 },
+    { name:'Orange (Transformer DirAttnLite)',key:'O', color:'#ffb14e', plane:new Plane('#ffb14e'), brain:new TransformerDirAttnLite(), wins:0 },
+    { name:'Teal (Transformer NoisyHead)',   key:'T', color:'#2bd9d9', plane:new Plane('#2bd9d9'), brain:new TransformerNoisyHead(),    wins:0 },
+    { name:'Pink (Overdense)',               key:'X', color:'#ff66cc', plane:new Plane('#ff66cc'), brain:new OverdenseNN(),             wins:0 },
+  ];
+}
+
+function spawnAll(){
+  for(const p of players) p.plane.reset();
+  for(const p of players) if (p.brain.resetState) p.brain.resetState();
+}
+
+function uiUpdate(){
+  document.getElementById("gen").textContent = gen;
+  document.getElementById("wB").textContent = wB;
+  document.getElementById("wR").textContent = wR;
+  document.getElementById("wG").textContent = wG;
+  document.getElementById("wP").textContent = wP;
+  document.getElementById("wO").textContent = wO;
+  document.getElementById("wT").textContent = wT;
+  document.getElementById("wX").textContent = wX;
+}
+
+function drawHealthBars(){
+  const entries = [
+    {p:players[0].plane, c:'#3aa0ff', x:10, y:10},
+    {p:players[1].plane, c:'#ff5a5a', x:10, y:26},
+    {p:players[2].plane, c:'#14d07a', x:10, y:42},
+    {p:players[3].plane, c:'#bf5af2', x:10, y:58},
+    {p:players[4].plane, c:'#ffb14e', x:10, y:74},
+    {p:players[5].plane, c:'#2bd9d9', x:10, y:90},
+    {p:players[6].plane, c:'#ff66cc', x:10, y:106},
+  ];
+  const w=180, h=10;
+  for(const b of entries){
+    ctx.fillStyle='rgba(255,255,255,0.15)'; ctx.fillRect(b.x,b.y,w,h);
+    ctx.fillStyle=b.c; ctx.fillRect(b.x,b.y, clamp(b.p.health,0,100)*(w/100), h);
+  }
+}
+
+function aliveList(){ return players.filter(p=>p.plane.alive); }
+
+function determineWinnerByHealth(){
+  const ranking = [...players].sort((a,b)=> (b.plane.health - a.plane.health) || (a.key.localeCompare(b.key)));
+  return ranking[0];
+}
+
+let active=true;
+let roundStartTime=performance.now();
+
+function endRound(winner){
+  if (!active) return;
+  active = false;
+
+  switch(winner.key){
+    case 'B': wB++; players[0].brain.fit += 100; break;
+    case 'R': wR++; players[1].brain.fit += 100; break;
+    case 'G': wG++; players[2].brain.fit += 100; break;
+    case 'P': wP++; players[3].brain.fit += 100; break;
+    case 'O': wO++; players[4].brain.fit += 100; break;
+    case 'T': wT++; players[5].brain.fit += 100; break;
+    case 'X': wX++; players[6].brain.fit += 100; break;
+  }
+  setWinner(winner.name);
+  uiUpdate();
+  setTimeout(resetRound, 200);
+}
+
+function resetRound(){
+  // Replace weakest brains with fresh same-type brains
+  const fits = players.map(p=>p.brain.fit);
+  const minF = Math.min(...fits);
+  players.forEach(p=>{
+    if (p.brain.fit === minF){
+      if (p.key==='B') p.brain = new TransformerBase();
+      if (p.key==='R') p.brain = new TransformerSparseLite();
+      if (p.key==='G') p.brain = new TransformerResidualLite();
+      if (p.key==='P') p.brain = new TransformerMoELite();
+      if (p.key==='O') p.brain = new TransformerDirAttnLite();
+      if (p.key==='T') p.brain = new TransformerNoisyHead();
+      if (p.key==='X') p.brain = new OverdenseNN();
+    }
+  });
+
+  // Mutate all and reset fitness
+  players.forEach(p=>p.brain.mutate());
+  players.forEach(p=>p.brain.fit = 0);
+
+  spawnAll();
+  gen++; uiUpdate();
+  roundStartTime = performance.now();
+  active = true;
+}
+
+// Initialize
+players = makePlayers();
+spawnAll();
+uiUpdate();
+setWinner('—');
+
+// ================= Main Loop =================
+let last = performance.now();
+
+function loop(){
+  const now = performance.now();
+  const dt = Math.min((now - last)/1000, 0.05);
+  last = now;
+
+  W = canvas.width; H = canvas.height;
+
+  ctx.fillStyle = "rgba(0,0,0,0.18)";
+  ctx.fillRect(0,0,W,H);
+
+  // Decisions
+  const decisions = [];
+  for (let i=0;i<players.length;i++){
+    const me = players[i]; if (!me.plane.alive){ decisions[i] = {t:0,a:0,f:false}; continue; }
+    const others = players.filter((_,j)=>j!==i).map(x=>x.plane);
+    const inp = sense(me.plane, others);
+    decisions[i] = me.brain.decide(inp);
+  }
+
+  // Move
+  for (let i=0;i<players.length;i++){
+    players[i].plane.move(decisions[i].t, decisions[i].a, dt);
+  }
+
+  // Fire
+  for (let i=0;i<players.length;i++){
+    const pl = players[i].plane;
+    if (!pl.alive) continue;
+    if (decisions[i].f && pl.fireCooldown <= 0){
+      const hits = fireLaser(i, players);
+      if (hits > 0) players[i].brain.fit += 8 * hits; // per-hit reward
+      pl.fireCooldown = FIRE_COOLDOWN;
+    }
+  }
+
+  // Death resolution and kill credit
+  for (let i=0;i<players.length;i++){
+    const p = players[i].plane;
+    if (p.alive && p.health <= 0){
+      p.alive = false;
+      if (p.lastHitBy != null){
+        const killer = players[p.lastHitBy];
+        if (killer) killer.brain.fit += 40; // kill bonus
+      }
+    }
+  }
+
+  // Draw
+  for (const p of players) p.plane.draw();
+  drawHealthBars();
+
+  const alive = aliveList();
+  const elapsed = now - roundStartTime;
+  if (active){
+    if (alive.length === 1){
+      endRound(alive[0]);
+    } else if (elapsed > TIME_LIMIT){
+      const w = determineWinnerByHealth();
+      endRound(w);
+    }
+  }
+
+  requestAnimationFrame(loop);
+}
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
