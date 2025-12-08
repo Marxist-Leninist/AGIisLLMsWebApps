@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ant Farm Simulator</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Segoe UI', sans-serif;
+            color: #eee;
+            padding: 20px;
+        }
+        h1 {
+            margin-bottom: 10px;
+            font-weight: 300;
+            letter-spacing: 2px;
+        }
+        .controls {
+            margin-bottom: 15px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        button {
+            background: #4a5568;
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover { background: #718096; }
+        .stats {
+            font-size: 14px;
+            color: #a0aec0;
+        }
+        #container {
+            border: 8px solid #5d4e37;
+            border-radius: 4px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5), inset 0 0 20px rgba(0,0,0,0.3);
+            background: #87CEEB;
+        }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <h1>🐜 ANT FARM</h1>
+    <div class="controls">
+        <button onclick="addAnts(5)">+ 5 Ants</button>
+        <button onclick="togglePause()">Pause/Play</button>
+        <button onclick="resetSim()">Reset</button>
+        <span class="stats">Ants: <span id="antCount">0</span> | Tunnels: <span id="tunnelPercent">0</span>%</span>
+    </div>
+    <div id="container">
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Config
+        const WIDTH = 800;
+        const HEIGHT = 600;
+        const CELL_SIZE = 4;
+        const COLS = WIDTH / CELL_SIZE;
+        const ROWS = HEIGHT / CELL_SIZE;
+        const SURFACE_ROWS = 15; // Air above ground
+        
+        canvas.width = WIDTH;
+        canvas.height = HEIGHT;
+        
+        // Grid: 0 = air, 1 = dirt, 2 = deep dirt
+        let grid = [];
+        let ants = [];
+        let paused = false;
+        let foodPiles = [];
+        
+        // Dirt colors for depth variation
+        const DIRT_COLORS = [
+            '#8B6914', '#7A5C12', '#694F10', '#58420E', '#47350C',
+            '#3D2E0A', '#332708', '#2A2006', '#211904'
+        ];
+        
+        function initGrid() {
+            grid = [];
+            for (let y = 0; y < ROWS; y++) {
+                grid[y] = [];
+                for (let x = 0; x < COLS; x++) {
+                    if (y < SURFACE_ROWS) {
+                        grid[y][x] = 0; // Air
+                    } else {
+                        // Vary dirt density with depth
+                        const depth = y - SURFACE_ROWS;
+                        grid[y][x] = 1 + Math.min(Math.floor(depth / 15), 8);
+                    }
+                }
+            }
+            
+            // Create entrance holes
+            for (let i = 0; i < 3; i++) {
+                const holeX = Math.floor(COLS * (0.25 + i * 0.25));
+                for (let y = SURFACE_ROWS; y < SURFACE_ROWS + 5; y++) {
+                    grid[y][holeX] = 0;
+                    if (Math.random() < 0.5) grid[y][holeX - 1] = 0;
+                    if (Math.random() < 0.5) grid[y][holeX + 1] = 0;
+                }
+            }
+        }
+        
+        class Ant {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.vx = (Math.random() - 0.5) * 2;
+                this.vy = Math.random() * 0.5 + 0.2;
+                this.carrying = false;
+                this.energy = 100 + Math.random() * 50;
+                this.digCooldown = 0;
+                this.wanderAngle = Math.random() * Math.PI * 2;
+                this.targetDepth = SURFACE_ROWS + 10 + Math.random() * 60;
+                this.state = 'descending'; // descending, digging, ascending, surface
+            }
+            
+            update() {
+                this.digCooldown = Math.max(0, this.digCooldown - 1);
+                
+                // State machine
+                switch (this.state) {
+                    case 'surface':
+                        this.wanderSurface();
+                        if (Math.random() < 0.01) {
+                            this.state = 'descending';
+                            this.targetDepth = SURFACE_ROWS + 10 + Math.random() * 80;
+                        }
+                        break;
+                    case 'descending':
+                        this.moveTowardsDepth();
+                        break;
+                    case 'digging':
+                        this.digTunnel();
+                        break;
+                    case 'ascending':
+                        this.moveToSurface();
+                        break;
+                }
+                
+                // Apply movement
+                this.applyMovement();
+            }
+            
+            wanderSurface() {
+                this.wanderAngle += (Math.random() - 0.5) * 0.3;
+                this.vx = Math.cos(this.wanderAngle) * 0.8;
+                this.vy = 0;
+                
+                // Stay on surface
+                const gridY = Math.floor(this.y / CELL_SIZE);
+                if (gridY < SURFACE_ROWS - 1) {
+                    this.vy = 0.5;
+                } else if (gridY >= SURFACE_ROWS) {
+                    this.vy = -0.5;
+                }
+                
+                // Find entrance
+                if (Math.random() < 0.02) {
+                    const gridX = Math.floor(this.x / CELL_SIZE);
+                    if (grid[SURFACE_ROWS] && grid[SURFACE_ROWS][gridX] === 0) {
+                        this.state = 'descending';
+                    }
+                }
+            }
+            
+            moveTowardsDepth() {
+                const gridX = Math.floor(this.x / CELL_SIZE);
+                const gridY = Math.floor(this.y / CELL_SIZE);
+                
+                // Reached target depth, start digging horizontally
+                if (gridY >= this.targetDepth) {
+                    this.state = 'digging';
+                    return;
+                }
+                
+                // Try to move down
+                this.vy = 0.6;
+                this.vx *= 0.95;
+                
+                // If blocked, dig or go around
+                const belowY = Math.min(gridY + 1, ROWS - 1);
+                if (grid[belowY] && grid[belowY][gridX] > 0) {
+                    if (this.digCooldown === 0) {
+                        this.dig(gridX, belowY);
+                    } else {
+                        // Wiggle sideways
+                        this.vx += (Math.random() - 0.5) * 0.5;
+                    }
+                }
+            }
+            
+            digTunnel() {
+                const gridX = Math.floor(this.x / CELL_SIZE);
+                const gridY = Math.floor(this.y / CELL_SIZE);
+                
+                // Random direction changes
+                this.wanderAngle += (Math.random() - 0.5) * 0.2;
+                
+                // Bias slightly downward and horizontal
+                this.vx = Math.cos(this.wanderAngle) * 0.5;
+                this.vy = Math.sin(this.wanderAngle) * 0.3 + 0.1;
+                
+                // Dig in movement direction
+                const targetX = gridX + Math.sign(this.vx);
+                const targetY = gridY + Math.sign(this.vy);
+                
+                if (this.digCooldown === 0) {
+                    if (grid[gridY] && grid[gridY][targetX] > 0) {
+                        this.dig(targetX, gridY);
+                    }
+                    if (grid[targetY] && grid[targetY][gridX] > 0) {
+                        this.dig(gridX, targetY);
+                    }
+                }
+                
+                // Occasionally return to surface
+                if (Math.random() < 0.002 || gridY >= ROWS - 5) {
+                    this.state = 'ascending';
+                }
+                
+                // Change depth target sometimes
+                if (Math.random() < 0.005) {
+                    this.targetDepth = SURFACE_ROWS + 10 + Math.random() * 80;
+                    this.state = Math.random() < 0.5 ? 'descending' : 'digging';
+                }
+            }
+            
+            moveToSurface() {
+                const gridX = Math.floor(this.x / CELL_SIZE);
+                const gridY = Math.floor(this.y / CELL_SIZE);
+                
+                // Reached surface
+                if (gridY <= SURFACE_ROWS) {
+                    this.state = 'surface';
+                    this.carrying = false;
+                    return;
+                }
+                
+                // Move up
+                this.vy = -0.6;
+                this.vx *= 0.9;
+                
+                // If blocked above, dig or go around
+                const aboveY = Math.max(gridY - 1, 0);
+                if (grid[aboveY] && grid[aboveY][gridX] > 0) {
+                    if (this.digCooldown === 0) {
+                        this.dig(gridX, aboveY);
+                    }
+                    this.vx += (Math.random() - 0.5) * 0.8;
+                }
+            }
+            
+            dig(x, y) {
+                if (x < 0 || x >= COLS || y < 0 || y >= ROWS) return;
+                if (grid[y][x] > 0) {
+                    grid[y][x] = 0;
+                    this.digCooldown = 8;
+                    this.carrying = true;
+                    
+                    // Occasionally widen tunnel
+                    if (Math.random() < 0.3) {
+                        const nx = x + (Math.random() < 0.5 ? -1 : 1);
+                        if (grid[y] && grid[y][nx] > 0) {
+                            grid[y][nx] = 0;
+                        }
+                    }
+                }
+            }
+            
+            applyMovement() {
+                const newX = this.x + this.vx;
+                const newY = this.y + this.vy;
+                
+                const gridX = Math.floor(newX / CELL_SIZE);
+                const gridY = Math.floor(newY / CELL_SIZE);
+                
+                // Boundary check
+                if (gridX >= 0 && gridX < COLS && gridY >= 0 && gridY < ROWS) {
+                    // Can move if air or surface
+                    if (grid[gridY][gridX] === 0 || gridY < SURFACE_ROWS) {
+                        this.x = newX;
+                        this.y = newY;
+                    } else {
+                        // Blocked - slide along
+                        this.vx *= -0.5;
+                        this.vy *= 0.5;
+                    }
+                }
+                
+                // Keep in bounds
+                this.x = Math.max(CELL_SIZE, Math.min(WIDTH - CELL_SIZE, this.x));
+                this.y = Math.max(CELL_SIZE, Math.min(HEIGHT - CELL_SIZE, this.y));
+            }
+            
+            draw() {
+                // Body
+                ctx.fillStyle = this.carrying ? '#4a3728' : '#1a1a1a';
+                ctx.beginPath();
+                ctx.ellipse(this.x, this.y, 4, 3, 0, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Head
+                const headX = this.x + this.vx * 2;
+                const headY = this.y + this.vy * 2;
+                ctx.beginPath();
+                ctx.arc(headX, headY, 2, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Legs (simplified)
+                ctx.strokeStyle = '#1a1a1a';
+                ctx.lineWidth = 0.5;
+                for (let i = -1; i <= 1; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(this.x + i * 2, this.y);
+                    ctx.lineTo(this.x + i * 2 - 3, this.y + 4);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(this.x + i * 2, this.y);
+                    ctx.lineTo(this.x + i * 2 + 3, this.y + 4);
+                    ctx.stroke();
+                }
+            }
+        }
+        
+        function drawGrid() {
+            // Sky gradient
+            const skyGrad = ctx.createLinearGradient(0, 0, 0, SURFACE_ROWS * CELL_SIZE);
+            skyGrad.addColorStop(0, '#87CEEB');
+            skyGrad.addColorStop(1, '#B0E0E6');
+            ctx.fillStyle = skyGrad;
+            ctx.fillRect(0, 0, WIDTH, SURFACE_ROWS * CELL_SIZE);
+            
+            // Draw dirt
+            for (let y = SURFACE_ROWS; y < ROWS; y++) {
+                for (let x = 0; x < COLS; x++) {
+                    const cell = grid[y][x];
+                    if (cell === 0) {
+                        // Tunnel - dark background
+                        ctx.fillStyle = '#2d1810';
+                        ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                    } else {
+                        // Dirt with depth-based color
+                        const colorIndex = Math.min(cell - 1, DIRT_COLORS.length - 1);
+                        ctx.fillStyle = DIRT_COLORS[colorIndex];
+                        ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                        
+                        // Add some texture
+                        if (Math.random() < 0.05) {
+                            ctx.fillStyle = 'rgba(0,0,0,0.1)';
+                            ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                        }
+                    }
+                }
+            }
+            
+            // Surface grass line
+            ctx.fillStyle = '#228B22';
+            ctx.fillRect(0, (SURFACE_ROWS - 1) * CELL_SIZE, WIDTH, CELL_SIZE * 2);
+        }
+        
+        function addAnts(count) {
+            for (let i = 0; i < count; i++) {
+                const x = WIDTH * (0.2 + Math.random() * 0.6);
+                const y = (SURFACE_ROWS - 2) * CELL_SIZE;
+                ants.push(new Ant(x, y));
+            }
+            updateStats();
+        }
+        
+        function updateStats() {
+            document.getElementById('antCount').textContent = ants.length;
+            
+            // Calculate tunnel percentage
+            let tunnelCells = 0;
+            let totalDirtCells = (ROWS - SURFACE_ROWS) * COLS;
+            for (let y = SURFACE_ROWS; y < ROWS; y++) {
+                for (let x = 0; x < COLS; x++) {
+                    if (grid[y][x] === 0) tunnelCells++;
+                }
+            }
+            const percent = ((tunnelCells / totalDirtCells) * 100).toFixed(1);
+            document.getElementById('tunnelPercent').textContent = percent;
+        }
+        
+        function togglePause() {
+            paused = !paused;
+        }
+        
+        function resetSim() {
+            initGrid();
+            ants = [];
+            addAnts(10);
+        }
+        
+        function gameLoop() {
+            if (!paused) {
+                // Update ants
+                ants.forEach(ant => ant.update());
+            }
+            
+            // Draw
+            drawGrid();
+            ants.forEach(ant => ant.draw());
+            
+            // Update stats periodically
+            if (Math.random() < 0.05) updateStats();
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Initialize
+        initGrid();
+        addAnts(10);
+        gameLoop();
+    </script>
+</body>
+</html>

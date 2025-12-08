@@ -1,0 +1,1824 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RWKV Variants Battle Arena</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0a0f;
+            color: #e0e0e0;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+        }
+        #container {
+            display: flex;
+            height: 100vh;
+        }
+        #arena {
+            flex: 1;
+            position: relative;
+            background: linear-gradient(135deg, #0d0d15 0%, #1a1a2e 100%);
+            border-right: 2px solid #333;
+        }
+        canvas {
+            display: block;
+        }
+        #sidebar {
+            width: 380px;
+            padding: 10px;
+            background: #111118;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        h1 {
+            font-size: 1.1em;
+            color: #22c55e;
+            text-align: center;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px #22c55e55;
+        }
+        .subtitle {
+            font-size: 0.7em;
+            color: #666;
+            text-align: center;
+            margin-top: -8px;
+            margin-bottom: 8px;
+        }
+        .nn-card {
+            background: #1a1a25;
+            border-radius: 6px;
+            padding: 8px;
+            border: 1px solid #333;
+        }
+        .nn-card h3 {
+            font-size: 0.75em;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .nn-icon {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        .rwkv-original .nn-icon { background: #22c55e; box-shadow: 0 0 8px #22c55e; }
+        .rwkv-turbo .nn-icon { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
+        .rwkv-tank .nn-icon { background: #3b82f6; box-shadow: 0 0 8px #3b82f6; }
+        .rwkv-sniper .nn-icon { background: #a855f7; box-shadow: 0 0 8px #a855f7; }
+        .rwkv-swarm .nn-icon { background: #f59e0b; box-shadow: 0 0 8px #f59e0b; }
+        .rwkv-ghost .nn-icon { background: #06b6d4; box-shadow: 0 0 8px #06b6d4; }
+        .rwkv-apex .nn-icon { background: #ec4899; box-shadow: 0 0 8px #ec4899; }
+        
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.65em;
+            margin: 2px 0;
+            color: #888;
+        }
+        .stat-value { color: #fff; }
+        .health-bar {
+            height: 5px;
+            background: #333;
+            border-radius: 3px;
+            margin: 4px 0;
+            overflow: hidden;
+        }
+        .health-fill {
+            height: 100%;
+            transition: width 0.3s;
+            border-radius: 3px;
+        }
+        .rwkv-original .health-fill { background: linear-gradient(90deg, #22c55e, #4ade80); }
+        .rwkv-turbo .health-fill { background: linear-gradient(90deg, #ef4444, #f87171); }
+        .rwkv-tank .health-fill { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+        .rwkv-sniper .health-fill { background: linear-gradient(90deg, #a855f7, #c084fc); }
+        .rwkv-swarm .health-fill { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+        .rwkv-ghost .health-fill { background: linear-gradient(90deg, #06b6d4, #22d3ee); }
+        .rwkv-apex .health-fill { background: linear-gradient(90deg, #ec4899, #f472b6); }
+        
+        .learning-indicator {
+            font-size: 0.6em;
+            color: #22c55e;
+            margin-top: 2px;
+        }
+        .variant-desc {
+            font-size: 0.55em;
+            color: #555;
+            font-style: italic;
+            margin-top: 2px;
+        }
+        .brain-vis {
+            display: flex;
+            gap: 2px;
+            margin-top: 4px;
+            flex-wrap: wrap;
+        }
+        .neuron {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: #333;
+            transition: background 0.2s;
+        }
+        .neuron.active { background: #22c55e; }
+        #controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        button {
+            flex: 1;
+            padding: 10px;
+            background: #22c55e22;
+            border: 1px solid #22c55e;
+            color: #22c55e;
+            cursor: pointer;
+            border-radius: 5px;
+            font-family: inherit;
+            transition: all 0.2s;
+        }
+        button:hover {
+            background: #22c55e44;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        #log {
+            flex: 1;
+            background: #0a0a10;
+            border-radius: 5px;
+            padding: 8px;
+            font-size: 0.6em;
+            overflow-y: auto;
+            max-height: 100px;
+            border: 1px solid #222;
+        }
+        .log-entry {
+            margin: 3px 0;
+            padding: 2px 0;
+            border-bottom: 1px solid #1a1a1a;
+        }
+        .log-entry.kill { color: #ef4444; }
+        .log-entry.learn { color: #22c55e; }
+        .log-entry.respawn { color: #888; }
+        #generation {
+            text-align: center;
+            font-size: 0.85em;
+            color: #666;
+            padding: 8px;
+            background: #0a0a10;
+            border-radius: 5px;
+        }
+        #generation span { color: #22c55e; font-weight: bold; }
+        .weights-display {
+            font-size: 0.55em;
+            color: #555;
+            margin-top: 2px;
+            word-break: break-all;
+        }
+        #speed-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px;
+            background: #0a0a10;
+            border-radius: 5px;
+        }
+        #speed-control label { font-size: 0.8em; color: #666; }
+        #speed-slider { flex: 1; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="arena">
+            <canvas id="canvas"></canvas>
+        </div>
+        <div id="sidebar">
+            <h1>⚔️ RWKV Variants Battle Arena</h1>
+            <div class="subtitle">7 RWKV architectures compete - Linear RNN supremacy</div>
+            
+            <div id="generation">Gen: <span id="gen-num">1</span> | Round: <span id="round-num">1</span> | Hits: <span id="fight-num">0</span></div>
+            
+            <div id="controls">
+                <button id="pauseBtn">⏸️ Pause</button>
+                <button id="resetBtn">🔄 Reset</button>
+            </div>
+            
+            <div id="speed-control">
+                <label>Speed:</label>
+                <input type="range" id="speed-slider" min="0.5" max="3" step="0.25" value="1">
+                <span id="speed-value">1x</span>
+            </div>
+            
+            <div class="nn-card rwkv-original">
+                <h3><span class="nn-icon"></span>RWKV-ORIGINAL</h3>
+                <div class="variant-desc">Balanced baseline - the classic Linear RNN</div>
+                <div class="stat-row">Channels: <span class="stat-value">16</span> | Decay: <span class="stat-value" id="r0-decay">0.95</span></div>
+                <div class="health-bar"><div class="health-fill" id="r0-health" style="width:100%"></div></div>
+                <div class="stat-row">Kills: <span class="stat-value" id="r0-kills">0</span> | Deaths: <span class="stat-value" id="r0-deaths">0</span> | Wins: <span class="stat-value" id="r0-wins">0</span></div>
+                <div class="stat-row">Accuracy: <span class="stat-value" id="r0-accuracy">0%</span></div>
+                <div class="learning-indicator" id="r0-learning"></div>
+                <div class="brain-vis" id="r0-brain"></div>
+            </div>
+            
+            <div class="nn-card rwkv-turbo">
+                <h3><span class="nn-icon"></span>RWKV-TURBO</h3>
+                <div class="variant-desc">Fast decay, aggressive - rapid response, short memory</div>
+                <div class="stat-row">Channels: <span class="stat-value">20</span> | Decay: <span class="stat-value" id="r1-decay">0.80</span></div>
+                <div class="health-bar"><div class="health-fill" id="r1-health" style="width:100%"></div></div>
+                <div class="stat-row">Kills: <span class="stat-value" id="r1-kills">0</span> | Deaths: <span class="stat-value" id="r1-deaths">0</span> | Wins: <span class="stat-value" id="r1-wins">0</span></div>
+                <div class="stat-row">Accuracy: <span class="stat-value" id="r1-accuracy">0%</span></div>
+                <div class="learning-indicator" id="r1-learning"></div>
+                <div class="brain-vis" id="r1-brain"></div>
+            </div>
+            
+            <div class="nn-card rwkv-tank">
+                <h3><span class="nn-icon"></span>RWKV-TANK</h3>
+                <div class="variant-desc">Slow decay, defensive - long memory, high evasion</div>
+                <div class="stat-row">Channels: <span class="stat-value">24</span> | Decay: <span class="stat-value" id="r2-decay">0.98</span></div>
+                <div class="health-bar"><div class="health-fill" id="r2-health" style="width:100%"></div></div>
+                <div class="stat-row">Kills: <span class="stat-value" id="r2-kills">0</span> | Deaths: <span class="stat-value" id="r2-deaths">0</span> | Wins: <span class="stat-value" id="r2-wins">0</span></div>
+                <div class="stat-row">Accuracy: <span class="stat-value" id="r2-accuracy">0%</span></div>
+                <div class="learning-indicator" id="r2-learning"></div>
+                <div class="brain-vis" id="r2-brain"></div>
+            </div>
+            
+            <div class="nn-card rwkv-sniper">
+                <h3><span class="nn-icon"></span>RWKV-SNIPER</h3>
+                <div class="variant-desc">Railgun specialist - high prediction, keeps distance</div>
+                <div class="stat-row">Channels: <span class="stat-value">16</span> | Decay: <span class="stat-value" id="r3-decay">0.92</span></div>
+                <div class="health-bar"><div class="health-fill" id="r3-health" style="width:100%"></div></div>
+                <div class="stat-row">Kills: <span class="stat-value" id="r3-kills">0</span> | Deaths: <span class="stat-value" id="r3-deaths">0</span> | Wins: <span class="stat-value" id="r3-wins">0</span></div>
+                <div class="stat-row">Accuracy: <span class="stat-value" id="r3-accuracy">0%</span></div>
+                <div class="learning-indicator" id="r3-learning"></div>
+                <div class="brain-vis" id="r3-brain"></div>
+            </div>
+            
+            <div class="nn-card rwkv-swarm">
+                <h3><span class="nn-icon"></span>RWKV-SWARM</h3>
+                <div class="variant-desc">Rapid fire chaos - fast cooldowns, spray and pray</div>
+                <div class="stat-row">Channels: <span class="stat-value">12</span> | Decay: <span class="stat-value" id="r4-decay">0.85</span></div>
+                <div class="health-bar"><div class="health-fill" id="r4-health" style="width:100%"></div></div>
+                <div class="stat-row">Kills: <span class="stat-value" id="r4-kills">0</span> | Deaths: <span class="stat-value" id="r4-deaths">0</span> | Wins: <span class="stat-value" id="r4-wins">0</span></div>
+                <div class="stat-row">Accuracy: <span class="stat-value" id="r4-accuracy">0%</span></div>
+                <div class="learning-indicator" id="r4-learning"></div>
+                <div class="brain-vis" id="r4-brain"></div>
+            </div>
+            
+            <div class="nn-card rwkv-ghost">
+                <h3><span class="nn-icon"></span>RWKV-GHOST</h3>
+                <div class="variant-desc">Evasion master - laser specialist, hit and run</div>
+                <div class="stat-row">Channels: <span class="stat-value">18</span> | Decay: <span class="stat-value" id="r5-decay">0.88</span></div>
+                <div class="health-bar"><div class="health-fill" id="r5-health" style="width:100%"></div></div>
+                <div class="stat-row">Kills: <span class="stat-value" id="r5-kills">0</span> | Deaths: <span class="stat-value" id="r5-deaths">0</span> | Wins: <span class="stat-value" id="r5-wins">0</span></div>
+                <div class="stat-row">Accuracy: <span class="stat-value" id="r5-accuracy">0%</span></div>
+                <div class="learning-indicator" id="r5-learning"></div>
+                <div class="brain-vis" id="r5-brain"></div>
+            </div>
+            
+            <div class="nn-card rwkv-apex">
+                <h3><span class="nn-icon"></span>RWKV-APEX</h3>
+                <div class="variant-desc">Adaptive elite - dynamic decay, learns fastest</div>
+                <div class="stat-row">Channels: <span class="stat-value">32</span> | Decay: <span class="stat-value" id="r6-decay">dynamic</span></div>
+                <div class="health-bar"><div class="health-fill" id="r6-health" style="width:100%"></div></div>
+                <div class="stat-row">Kills: <span class="stat-value" id="r6-kills">0</span> | Deaths: <span class="stat-value" id="r6-deaths">0</span> | Wins: <span class="stat-value" id="r6-wins">0</span></div>
+                <div class="stat-row">Accuracy: <span class="stat-value" id="r6-accuracy">0%</span></div>
+                <div class="learning-indicator" id="r6-learning"></div>
+                <div class="brain-vis" id="r6-brain"></div>
+            </div>
+            
+            <div id="log"></div>
+        </div>
+    </div>
+
+<script>
+// Canvas setup
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+function resizeCanvas() {
+    canvas.width = canvas.parentElement.clientWidth;
+    canvas.height = canvas.parentElement.clientHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// Game state
+let paused = false;
+let gameSpeed = 1;
+let generation = 1;
+let totalFights = 0;
+let roundNumber = 1;
+let roundWins = [0, 0, 0, 0, 0, 0, 0];
+let roundInProgress = true;
+let roundEndTimer = 0;
+
+// Base RWKV Agent class
+class RWKVAgent {
+    constructor(type, color, x, y, config = {}) {
+        this.type = type;
+        this.color = color;
+        this.x = x;
+        this.y = y;
+        this.vx = 0;
+        this.vy = 0;
+        this.health = config.maxHealth || 100;
+        this.maxHealth = config.maxHealth || 100;
+        this.radius = 20;
+        this.angle = Math.random() * Math.PI * 2;
+        this.kills = 0;
+        this.deaths = 0;
+        this.shotsFired = 0;
+        this.shotsHit = 0;
+        this.respawnTimer = 0;
+        this.alive = true;
+        
+        // Variant configuration
+        this.config = config;
+        
+        // Core RWKV weights
+        this.weights = {
+            aggression: config.aggression || (0.5 + Math.random() * 0.3),
+            evasion: config.evasion || (0.5 + Math.random() * 0.3),
+            accuracy: config.accuracy || (0.3 + Math.random() * 0.2),
+            prediction: config.prediction || (0.2 + Math.random() * 0.2),
+            learningRate: config.learningRate || (0.05 + Math.random() * 0.05),
+            railgunPreference: config.railgunPreference || (0.3 + Math.random() * 0.4),
+            laserPreference: config.laserPreference || (0.3 + Math.random() * 0.3)
+        };
+        
+        // Weapons
+        this.weapons = {
+            bullet: {
+                cooldown: config.bulletCooldown || 500,
+                lastShot: 0,
+                damage: config.bulletDamage || (12 + Math.random() * 8),
+                speed: 400,
+                color: this.color,
+                ready: true
+            },
+            railgun: {
+                cooldown: config.railgunCooldown || 2000,
+                lastShot: 0,
+                damage: config.railgunDamage || (35 + Math.random() * 15),
+                speed: 800,
+                color: '#ffffff',
+                ready: true
+            },
+            laser: {
+                cooldown: config.laserCooldown || 800,
+                lastShot: 0,
+                damage: config.laserDamage || (8 + Math.random() * 4),
+                range: config.laserRange || 250,
+                color: '#ff00ff',
+                ready: true,
+                duration: 150
+            }
+        };
+        this.activeLaser = null;
+        this.recentDamageFrom = {};
+        
+        // Initialize RWKV architecture
+        this.initRWKV();
+    }
+    
+    initRWKV() {
+        const channels = this.config.channels || 16;
+        this.channels = channels;
+        
+        // Time-mixing state
+        this.timeMixState = new Array(channels).fill(0);
+        
+        // Base decay - varies by variant
+        const baseDecay = this.config.baseDecay || 0.95;
+        this.timeDecay = new Array(channels).fill(0).map(() => 
+            baseDecay + (Math.random() - 0.5) * 0.1
+        );
+        this.timeFirst = new Array(channels).fill(0).map(() => Math.random() * 0.5);
+        
+        // Channel-mixing state
+        this.channelMixState = new Array(channels).fill(0);
+        this.channelWeights = new Array(channels).fill(0).map(() => Math.random() - 0.5);
+        
+        // RKV weights
+        this.Wr = new Array(channels).fill(0).map(() => Math.random());
+        this.Wk = new Array(channels).fill(0).map(() => Math.random());
+        this.Wv = new Array(channels).fill(0).map(() => Math.random());
+        
+        // Output projection
+        this.Wo = [
+            Math.random() + 0.5, 
+            Math.random() + 0.5, 
+            Math.random() + 0.5, 
+            Math.random() + 0.5,
+            Math.random() + 0.5
+        ];
+        
+        // Token shift mixing
+        this.mixR = this.config.mixR || 0.5;
+        this.mixK = this.config.mixK || 0.5;
+        this.mixV = this.config.mixV || 0.5;
+        
+        // Behavior biases
+        this.shootBias = this.config.shootBias || 0.3;
+        this.moveBias = this.config.moveBias || 0.4;
+    }
+    
+    safeDist(dx, dy) {
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        return dist < 0.001 ? 0.001 : dist;
+    }
+    
+    sigmoid(x) {
+        return 1 / (1 + Math.exp(-Math.max(-20, Math.min(20, x))));
+    }
+    
+    think(enemies, bullets, dt) {
+        const aliveEnemies = enemies.filter(e => e.alive && e !== this);
+        
+        // Encode input into channels
+        let currentInput = new Array(this.channels).fill(0);
+        
+        // Encode enemies
+        aliveEnemies.forEach((enemy, i) => {
+            if (i < 3 && i * 4 + 3 < this.channels) {
+                const dx = (enemy.x - this.x) / canvas.width;
+                const dy = (enemy.y - this.y) / canvas.height;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const angle = Math.atan2(dy, dx) / Math.PI;
+                currentInput[i * 4] = dx;
+                currentInput[i * 4 + 1] = dy;
+                currentInput[i * 4 + 2] = dist;
+                currentInput[i * 4 + 3] = enemy.health / 100;
+            }
+        });
+        
+        // Encode bullet threats
+        let bulletThreat = 0;
+        let bulletEvadeX = 0, bulletEvadeY = 0;
+        bullets.forEach(b => {
+            if (b.owner === this) return;
+            const dx = b.x - this.x;
+            const dy = b.y - this.y;
+            const dist = this.safeDist(dx, dy);
+            if (dist < 120) {
+                bulletThreat += (120 - dist) / 120;
+                bulletEvadeX -= dx / dist;
+                bulletEvadeY -= dy / dist;
+            }
+        });
+        
+        if (this.channels >= 16) {
+            currentInput[12] = Math.min(1, bulletThreat);
+            currentInput[13] = bulletEvadeX / (Math.abs(bulletEvadeX) + 1);
+            currentInput[14] = bulletEvadeY / (Math.abs(bulletEvadeY) + 1);
+            currentInput[15] = this.health / this.maxHealth;
+        }
+        
+        // === RWKV TIME-MIXING ===
+        let r = new Array(this.channels).fill(0);
+        let k = new Array(this.channels).fill(0);
+        let v = new Array(this.channels).fill(0);
+        
+        for (let i = 0; i < this.channels; i++) {
+            const shifted = this.mixR * currentInput[i] + (1 - this.mixR) * this.timeMixState[i];
+            r[i] = this.sigmoid(shifted * this.Wr[i]);
+            k[i] = shifted * this.Wk[i];
+            v[i] = shifted * this.Wv[i];
+        }
+        
+        // WKV computation with decay
+        let wkv = new Array(this.channels).fill(0);
+        for (let i = 0; i < this.channels; i++) {
+            const decay = this.timeDecay[i];
+            const bonus = this.timeFirst[i] * k[i];
+            wkv[i] = (this.timeMixState[i] * decay + Math.exp(Math.min(10, bonus)) * v[i]) / 
+                     (decay + Math.exp(Math.min(10, bonus)) + 0.001);
+            this.timeMixState[i] = this.timeMixState[i] * decay + k[i] * v[i];
+        }
+        
+        // Apply receptance gate
+        let timeOut = new Array(this.channels).fill(0);
+        for (let i = 0; i < this.channels; i++) {
+            timeOut[i] = r[i] * wkv[i];
+        }
+        
+        // === CHANNEL-MIXING ===
+        let channelOut = new Array(this.channels).fill(0);
+        for (let i = 0; i < this.channels; i++) {
+            const mixed = this.mixK * timeOut[i] + (1 - this.mixK) * this.channelMixState[i];
+            channelOut[i] = Math.tanh(mixed * this.channelWeights[i] * 2);
+            this.channelMixState[i] = timeOut[i];
+        }
+        
+        // Output projection
+        let output = [0, 0, 0, 0, 0];
+        for (let i = 0; i < this.channels; i++) {
+            output[i % 5] += channelOut[i] * this.Wo[i % 5] * 0.5;
+        }
+        output = output.map(o => Math.tanh(o));
+        
+        // Find target
+        let targetAngle = this.angle;
+        let targetDist = 999;
+        let targetDx = 0, targetDy = 0;
+        
+        if (aliveEnemies.length > 0) {
+            const target = aliveEnemies.sort((a, b) => {
+                const da = this.safeDist(a.x - this.x, a.y - this.y);
+                const db = this.safeDist(b.x - this.x, b.y - this.y);
+                return (da + a.health * 0.5) - (db + b.health * 0.5);
+            })[0];
+            
+            targetDx = target.x - this.x;
+            targetDy = target.y - this.y;
+            const predX = target.x + (target.vx || 0) * this.weights.prediction * 0.3;
+            const predY = target.y + (target.vy || 0) * this.weights.prediction * 0.3;
+            targetAngle = Math.atan2(predY - this.y, predX - this.x);
+            targetDist = this.safeDist(targetDx, targetDy);
+        }
+        
+        // Apply variant-specific behavior modifiers
+        return this.applyVariantBehavior(output, aliveEnemies, targetAngle, targetDist, targetDx, targetDy, bulletEvadeX, bulletEvadeY);
+    }
+    
+    applyVariantBehavior(output, aliveEnemies, targetAngle, targetDist, targetDx, targetDy, bulletEvadeX, bulletEvadeY) {
+        // Base movement from network
+        let moveX = output[0] * this.weights.aggression;
+        let moveY = output[1] * this.weights.aggression;
+        
+        // Add direct movement behavior
+        if (aliveEnemies.length > 0) {
+            const dirX = targetDx / targetDist;
+            const dirY = targetDy / targetDist;
+            
+            const optimalRange = this.config.optimalRange || 180;
+            
+            if (targetDist > optimalRange + 50) {
+                moveX += dirX * this.moveBias * this.weights.aggression;
+                moveY += dirY * this.moveBias * this.weights.aggression;
+            } else if (targetDist < optimalRange - 50) {
+                moveX -= dirX * this.moveBias * this.weights.evasion;
+                moveY -= dirY * this.moveBias * this.weights.evasion;
+            } else {
+                // Strafe
+                moveX += -dirY * this.moveBias * 0.5;
+                moveY += dirX * this.moveBias * 0.5;
+            }
+        }
+        
+        // Evasion
+        moveX += bulletEvadeX * this.weights.evasion * 0.4;
+        moveY += bulletEvadeY * this.weights.evasion * 0.4;
+        
+        const mag = Math.sqrt(moveX * moveX + moveY * moveY);
+        if (mag > 1) { moveX /= mag; moveY /= mag; }
+        
+        moveX = Math.max(-1, Math.min(1, moveX || 0));
+        moveY = Math.max(-1, Math.min(1, moveY || 0));
+        
+        // Weapon selection
+        const hasTarget = aliveEnemies.length > 0;
+        const shootDecision = (output[2] + this.shootBias) > 0.2 || 
+                              (hasTarget && Math.random() < this.weights.aggression * 0.5);
+        
+        let useRailgun = targetDist > 250 && this.weapons.railgun.ready && 
+                         Math.random() < this.weights.railgunPreference;
+        let useLaser = targetDist < 200 && targetDist > 50 && 
+                       this.weapons.laser.ready && !useRailgun &&
+                       Math.random() < this.weights.laserPreference;
+        
+        return {
+            moveX,
+            moveY,
+            shoot: shootDecision && hasTarget && !useRailgun && !useLaser,
+            shootAlt: useRailgun && hasTarget && shootDecision,
+            shootLaser: useLaser && hasTarget && shootDecision,
+            targetAngle
+        };
+    }
+    
+    learn(event, data) {
+        const lr = this.weights.learningRate * (this.config.learnMultiplier || 1);
+        
+        if (event === 'hit_enemy') {
+            this.weights.accuracy = Math.min(0.95, this.weights.accuracy + lr * 0.8);
+            this.weights.aggression = Math.min(0.95, this.weights.aggression + lr * 0.3);
+            this.weights.prediction = Math.min(0.9, this.weights.prediction + lr * 0.4);
+            
+            this.mixR = Math.min(0.9, this.mixR + lr * 0.1);
+            this.mixK = Math.min(0.9, this.mixK + lr * 0.1);
+            this.shootBias = Math.min(0.6, this.shootBias + lr * 0.1);
+            this.Wo = this.Wo.map(w => w * (1 + lr * 0.2));
+            this.timeDecay = this.timeDecay.map(d => Math.max(0.8, d - lr * 0.05));
+            
+            if (data.weaponType === 'railgun') {
+                this.weights.railgunPreference = Math.min(0.9, this.weights.railgunPreference + lr * 0.2);
+            } else if (data.weaponType === 'laser') {
+                this.weights.laserPreference = Math.min(0.9, this.weights.laserPreference + lr * 0.2);
+            }
+        } else if (event === 'killed') {
+            this.weights.aggression = Math.min(0.98, this.weights.aggression + lr * 1.5);
+            this.weights.prediction = Math.min(0.9, this.weights.prediction + lr * 0.8);
+            this.Wr = this.Wr.map(w => w * (1 + lr * 0.3));
+            this.Wv = this.Wv.map(w => w * (1 + lr * 0.3));
+            this.timeFirst = this.timeFirst.map(t => Math.min(1, t + lr * 0.2));
+            this.shootBias = Math.min(0.7, this.shootBias + lr * 0.15);
+        } else if (event === 'took_damage') {
+            this.weights.evasion = Math.min(0.95, this.weights.evasion + lr * 0.5);
+            this.timeDecay = this.timeDecay.map(d => Math.min(0.99, d + lr * 0.02));
+            this.channelWeights = this.channelWeights.map(w => w * (1 + lr * 0.1));
+            if (data.from) {
+                this.recentDamageFrom[data.from] = (this.recentDamageFrom[data.from] || 0) + 1;
+            }
+        } else if (event === 'died') {
+            this.weights.evasion = Math.min(0.95, this.weights.evasion + lr * 0.8);
+            this.weights.aggression = Math.max(0.15, this.weights.aggression - lr * 0.4);
+            this.mixV = Math.max(0.2, this.mixV - lr * 0.1);
+            this.channelWeights = this.channelWeights.map(w => w * (1 - lr * 0.1));
+            this.shootBias = Math.max(0.1, this.shootBias - lr * 0.05);
+        } else if (event === 'missed') {
+            this.weights.accuracy = Math.max(0.1, this.weights.accuracy - lr * 0.15);
+        }
+    }
+    
+    update(enemies, bullets, dt) {
+        if (!this.alive) {
+            this.respawnTimer -= dt;
+            if (this.respawnTimer <= 0) {
+                this.respawn();
+            }
+            return null;
+        }
+        
+        const now = Date.now();
+        this.weapons.bullet.ready = (now - this.weapons.bullet.lastShot) > this.weapons.bullet.cooldown / gameSpeed;
+        this.weapons.railgun.ready = (now - this.weapons.railgun.lastShot) > this.weapons.railgun.cooldown / gameSpeed;
+        this.weapons.laser.ready = (now - this.weapons.laser.lastShot) > this.weapons.laser.cooldown / gameSpeed;
+        
+        if (this.activeLaser && now - this.activeLaser.startTime > this.weapons.laser.duration) {
+            this.activeLaser = null;
+        }
+        
+        const decision = this.think(enemies, bullets, dt);
+        
+        const speed = (this.config.moveSpeed || 150) * gameSpeed;
+        this.vx = decision.moveX * speed;
+        this.vy = decision.moveY * speed;
+        
+        if (isNaN(this.vx) || !isFinite(this.vx)) this.vx = 0;
+        if (isNaN(this.vy) || !isFinite(this.vy)) this.vy = 0;
+        if (isNaN(this.x) || !isFinite(this.x)) this.x = canvas.width / 2;
+        if (isNaN(this.y) || !isFinite(this.y)) this.y = canvas.height / 2;
+        
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        
+        const margin = this.radius;
+        if (this.x < -margin) this.x = canvas.width + margin;
+        if (this.x > canvas.width + margin) this.x = -margin;
+        if (this.y < -margin) this.y = canvas.height + margin;
+        if (this.y > canvas.height + margin) this.y = -margin;
+        
+        if (decision.targetAngle !== undefined) {
+            let diff = decision.targetAngle - this.angle;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            this.angle += diff * 0.15;
+        }
+        
+        if (decision.shootLaser && this.weapons.laser.ready) {
+            this.weapons.laser.lastShot = now;
+            this.shotsFired++;
+            this.fireLaser(enemies);
+            return null;
+        }
+        
+        if (decision.shootAlt && this.weapons.railgun.ready) {
+            this.weapons.railgun.lastShot = now;
+            this.shotsFired++;
+            return this.createBullet('railgun');
+        }
+        
+        if (decision.shoot && this.weapons.bullet.ready) {
+            this.weapons.bullet.lastShot = now;
+            this.shotsFired++;
+            return this.createBullet('bullet');
+        }
+        
+        return null;
+    }
+    
+    fireLaser(enemies) {
+        const range = this.weapons.laser.range;
+        const endX = this.x + Math.cos(this.angle) * range;
+        const endY = this.y + Math.sin(this.angle) * range;
+        
+        this.activeLaser = {
+            startX: this.x + Math.cos(this.angle) * this.radius,
+            startY: this.y + Math.sin(this.angle) * this.radius,
+            endX: endX,
+            endY: endY,
+            startTime: Date.now(),
+            hit: false
+        };
+        
+        let closestHit = null;
+        let closestDist = range;
+        
+        enemies.forEach(enemy => {
+            if (enemy === this || !enemy.alive) return;
+            
+            const dx = endX - this.x;
+            const dy = endY - this.y;
+            const fx = this.x - enemy.x;
+            const fy = this.y - enemy.y;
+            
+            const a = dx * dx + dy * dy;
+            const b = 2 * (fx * dx + fy * dy);
+            const c = fx * fx + fy * fy - enemy.radius * enemy.radius;
+            
+            let discriminant = b * b - 4 * a * c;
+            
+            if (discriminant >= 0) {
+                discriminant = Math.sqrt(discriminant);
+                const t1 = (-b - discriminant) / (2 * a);
+                const t2 = (-b + discriminant) / (2 * a);
+                
+                if (t1 >= 0 && t1 <= 1) {
+                    const hitDist = t1 * Math.sqrt(a);
+                    if (hitDist < closestDist) {
+                        closestDist = hitDist;
+                        closestHit = enemy;
+                    }
+                } else if (t2 >= 0 && t2 <= 1) {
+                    const hitDist = t2 * Math.sqrt(a);
+                    if (hitDist < closestDist) {
+                        closestDist = hitDist;
+                        closestHit = enemy;
+                    }
+                }
+            }
+        });
+        
+        if (closestHit) {
+            this.activeLaser.endX = this.x + Math.cos(this.angle) * closestDist;
+            this.activeLaser.endY = this.y + Math.sin(this.angle) * closestDist;
+            this.activeLaser.hit = true;
+            
+            closestHit.takeDamage(this.weapons.laser.damage, this);
+            this.shotsHit++;
+            this.learn('hit_enemy', { target: closestHit.type, damage: this.weapons.laser.damage, weaponType: 'laser' });
+        } else {
+            this.learn('missed', {});
+        }
+    }
+    
+    createBullet(weaponType = 'bullet') {
+        const weapon = this.weapons[weaponType];
+        const spread = weaponType === 'railgun' ? 
+            (1 - this.weights.accuracy) * 0.1 :
+            (1 - this.weights.accuracy) * 0.3;
+        const angle = this.angle + (Math.random() - 0.5) * spread;
+        
+        return {
+            x: this.x + Math.cos(this.angle) * this.radius,
+            y: this.y + Math.sin(this.angle) * this.radius,
+            vx: Math.cos(angle) * weapon.speed * gameSpeed,
+            vy: Math.sin(angle) * weapon.speed * gameSpeed,
+            owner: this,
+            damage: weapon.damage,
+            color: weaponType === 'railgun' ? '#fff' : this.color,
+            type: weaponType,
+            size: weaponType === 'railgun' ? 6 : 4,
+            trail: weaponType === 'railgun' ? 0.08 : 0.03
+        };
+    }
+    
+    takeDamage(amount, from) {
+        this.health -= amount;
+        this.learn('took_damage', { amount, from: from?.type });
+        
+        if (this.health <= 0) {
+            this.die(from);
+        }
+    }
+    
+    die(killer) {
+        this.alive = false;
+        this.deaths++;
+        this.respawnTimer = 3000 / gameSpeed;
+        this.learn('died', { killer: killer?.type });
+        
+        if (killer) {
+            killer.kills++;
+            killer.learn('killed', { victim: this.type });
+        }
+        
+        addLog(`${killer?.type || 'Unknown'} killed ${this.type}!`, 'kill');
+    }
+    
+    respawn() {
+        this.alive = true;
+        this.health = this.maxHealth;
+        this.x = Math.random() * (canvas.width - 100) + 50;
+        this.y = Math.random() * (canvas.height - 100) + 50;
+        this.recentDamageFrom = {};
+        addLog(`${this.type} respawned`, 'respawn');
+    }
+    
+    draw() {
+        if (!this.alive) return;
+        
+        // Draw laser beam
+        if (this.activeLaser) {
+            const laserAge = Date.now() - this.activeLaser.startTime;
+            const alpha = 1 - (laserAge / this.weapons.laser.duration);
+            
+            ctx.strokeStyle = `rgba(255, 0, 255, ${alpha * 0.3})`;
+            ctx.lineWidth = 12;
+            ctx.beginPath();
+            ctx.moveTo(this.activeLaser.startX, this.activeLaser.startY);
+            ctx.lineTo(this.activeLaser.endX, this.activeLaser.endY);
+            ctx.stroke();
+            
+            ctx.strokeStyle = `rgba(255, 100, 255, ${alpha * 0.8})`;
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(this.activeLaser.startX, this.activeLaser.startY);
+            ctx.lineTo(this.activeLaser.endX, this.activeLaser.endY);
+            ctx.stroke();
+            
+            ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(this.activeLaser.startX, this.activeLaser.startY);
+            ctx.lineTo(this.activeLaser.endX, this.activeLaser.endY);
+            ctx.stroke();
+            
+            if (this.activeLaser.hit) {
+                const flashRadius = Math.max(1, 15 * alpha);
+                ctx.fillStyle = `rgba(255, 200, 255, ${alpha})`;
+                ctx.beginPath();
+                ctx.arc(this.activeLaser.endX, this.activeLaser.endY, flashRadius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        
+        // Glow effect
+        const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, Math.max(1, this.radius * 2));
+        gradient.addColorStop(0, this.color + '40');
+        gradient.addColorStop(1, 'transparent');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(0, 0, Math.max(1, this.radius * 2), 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Body
+        ctx.rotate(this.angle);
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.moveTo(this.radius, 0);
+        ctx.lineTo(-this.radius * 0.7, -this.radius * 0.6);
+        ctx.lineTo(-this.radius * 0.4, 0);
+        ctx.lineTo(-this.radius * 0.7, this.radius * 0.6);
+        ctx.closePath();
+        ctx.fill();
+        
+        // Core
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(-this.radius * 0.2, 0, Math.max(1, this.radius * 0.25), 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.restore();
+        
+        // Health bar
+        const barWidth = 40;
+        const barHeight = 4;
+        ctx.fillStyle = '#333';
+        ctx.fillRect(this.x - barWidth/2, this.y - this.radius - 12, barWidth, barHeight);
+        ctx.fillStyle = this.color;
+        const healthWidth = Math.max(0, barWidth * (this.health / this.maxHealth));
+        ctx.fillRect(this.x - barWidth/2, this.y - this.radius - 12, healthWidth, barHeight);
+        
+        // Weapon indicators
+        if (this.weapons.railgun.ready) {
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(this.x + barWidth/2 + 6, this.y - this.radius - 10, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        if (this.weapons.laser.ready) {
+            ctx.fillStyle = '#ff00ff';
+            ctx.beginPath();
+            ctx.arc(this.x + barWidth/2 + 14, this.y - this.radius - 10, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        // Type label
+        ctx.fillStyle = '#fff';
+        ctx.font = '9px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(this.type.replace('RWKV-', ''), this.x, this.y - this.radius - 16);
+    }
+    
+    getAccuracy() {
+        return this.shotsFired > 0 ? Math.round((this.shotsHit / this.shotsFired) * 100) : 0;
+    }
+    
+    getAvgDecay() {
+        return this.timeDecay.reduce((a, b) => a + b, 0) / this.timeDecay.length;
+    }
+}
+
+// === RWKV VARIANTS ===
+
+// RWKV-TURBO: Fast decay, aggressive, rapid response
+class RWKVTurbo extends RWKVAgent {
+    constructor(x, y) {
+        super('RWKV-TURBO', '#ef4444', x, y, {
+            channels: 20,
+            baseDecay: 0.80,
+            aggression: 0.75,
+            evasion: 0.4,
+            shootBias: 0.5,
+            moveBias: 0.6,
+            bulletCooldown: 350,
+            laserCooldown: 600,
+            moveSpeed: 180,
+            optimalRange: 120,
+            learnMultiplier: 1.2,
+            mixR: 0.6,
+            mixK: 0.6
+        });
+    }
+    
+    applyVariantBehavior(output, aliveEnemies, targetAngle, targetDist, targetDx, targetDy, bulletEvadeX, bulletEvadeY) {
+        // Turbo is always aggressive - rushes in
+        let moveX = output[0] * this.weights.aggression * 1.3;
+        let moveY = output[1] * this.weights.aggression * 1.3;
+        
+        if (aliveEnemies.length > 0) {
+            const dirX = targetDx / targetDist;
+            const dirY = targetDy / targetDist;
+            
+            // Always approach unless very close
+            if (targetDist > 80) {
+                moveX += dirX * this.moveBias * 1.2;
+                moveY += dirY * this.moveBias * 1.2;
+            } else {
+                // Circle at close range
+                moveX += -dirY * 0.8;
+                moveY += dirX * 0.8;
+            }
+        }
+        
+        moveX += bulletEvadeX * this.weights.evasion * 0.3;
+        moveY += bulletEvadeY * this.weights.evasion * 0.3;
+        
+        const mag = Math.sqrt(moveX * moveX + moveY * moveY);
+        if (mag > 1) { moveX /= mag; moveY /= mag; }
+        
+        const hasTarget = aliveEnemies.length > 0;
+        // Turbo shoots constantly
+        const shootDecision = hasTarget && ((output[2] + this.shootBias) > 0 || Math.random() < 0.6);
+        
+        // Prefers close range weapons
+        let useLaser = targetDist < 180 && this.weapons.laser.ready;
+        let useRailgun = false;
+        
+        return {
+            moveX: Math.max(-1, Math.min(1, moveX || 0)),
+            moveY: Math.max(-1, Math.min(1, moveY || 0)),
+            shoot: shootDecision && !useLaser,
+            shootAlt: useRailgun,
+            shootLaser: useLaser && shootDecision,
+            targetAngle
+        };
+    }
+}
+
+// RWKV-TANK: Slow decay, defensive, long memory
+class RWKVTank extends RWKVAgent {
+    constructor(x, y) {
+        super('RWKV-TANK', '#3b82f6', x, y, {
+            channels: 24,
+            baseDecay: 0.98,
+            maxHealth: 130,
+            aggression: 0.4,
+            evasion: 0.8,
+            shootBias: 0.25,
+            moveBias: 0.3,
+            bulletDamage: 18,
+            railgunDamage: 50,
+            moveSpeed: 120,
+            optimalRange: 220,
+            learnMultiplier: 0.8,
+            mixR: 0.4,
+            mixK: 0.4,
+            mixV: 0.6
+        });
+    }
+    
+    applyVariantBehavior(output, aliveEnemies, targetAngle, targetDist, targetDx, targetDy, bulletEvadeX, bulletEvadeY) {
+        // Tank prioritizes evasion and distance
+        let moveX = output[0] * this.weights.aggression * 0.7;
+        let moveY = output[1] * this.weights.aggression * 0.7;
+        
+        if (aliveEnemies.length > 0) {
+            const dirX = targetDx / targetDist;
+            const dirY = targetDy / targetDist;
+            
+            // Maintain distance
+            if (targetDist < 200) {
+                moveX -= dirX * this.moveBias * 1.5;
+                moveY -= dirY * this.moveBias * 1.5;
+            } else if (targetDist > 300) {
+                moveX += dirX * this.moveBias * 0.5;
+                moveY += dirY * this.moveBias * 0.5;
+            }
+        }
+        
+        // Heavy evasion
+        moveX += bulletEvadeX * this.weights.evasion * 0.8;
+        moveY += bulletEvadeY * this.weights.evasion * 0.8;
+        
+        const mag = Math.sqrt(moveX * moveX + moveY * moveY);
+        if (mag > 1) { moveX /= mag; moveY /= mag; }
+        
+        const hasTarget = aliveEnemies.length > 0;
+        const shootDecision = hasTarget && (output[2] + this.shootBias) > 0.3;
+        
+        // Tank loves railgun
+        let useRailgun = targetDist > 150 && this.weapons.railgun.ready && Math.random() < 0.7;
+        let useLaser = false;
+        
+        return {
+            moveX: Math.max(-1, Math.min(1, moveX || 0)),
+            moveY: Math.max(-1, Math.min(1, moveY || 0)),
+            shoot: shootDecision && !useRailgun,
+            shootAlt: useRailgun && shootDecision,
+            shootLaser: useLaser,
+            targetAngle
+        };
+    }
+}
+
+// RWKV-SNIPER: Railgun specialist, high prediction
+class RWKVSniper extends RWKVAgent {
+    constructor(x, y) {
+        super('RWKV-SNIPER', '#a855f7', x, y, {
+            channels: 16,
+            baseDecay: 0.92,
+            aggression: 0.35,
+            evasion: 0.6,
+            accuracy: 0.6,
+            prediction: 0.5,
+            railgunPreference: 0.85,
+            shootBias: 0.2,
+            moveBias: 0.35,
+            railgunCooldown: 1500,
+            railgunDamage: 55,
+            moveSpeed: 140,
+            optimalRange: 320,
+            learnMultiplier: 1.0
+        });
+    }
+    
+    applyVariantBehavior(output, aliveEnemies, targetAngle, targetDist, targetDx, targetDy, bulletEvadeX, bulletEvadeY) {
+        let moveX = output[0] * this.weights.aggression;
+        let moveY = output[1] * this.weights.aggression;
+        
+        if (aliveEnemies.length > 0) {
+            const dirX = targetDx / targetDist;
+            const dirY = targetDy / targetDist;
+            
+            // Stay at maximum range
+            if (targetDist < 280) {
+                moveX -= dirX * this.moveBias * 1.2;
+                moveY -= dirY * this.moveBias * 1.2;
+            } else if (targetDist > 400) {
+                moveX += dirX * this.moveBias * 0.6;
+                moveY += dirY * this.moveBias * 0.6;
+            } else {
+                // Slow strafe at optimal range
+                moveX += -dirY * 0.3;
+                moveY += dirX * 0.3;
+            }
+        }
+        
+        moveX += bulletEvadeX * this.weights.evasion * 0.5;
+        moveY += bulletEvadeY * this.weights.evasion * 0.5;
+        
+        const mag = Math.sqrt(moveX * moveX + moveY * moveY);
+        if (mag > 1) { moveX /= mag; moveY /= mag; }
+        
+        const hasTarget = aliveEnemies.length > 0;
+        
+        // Sniper waits for good shots
+        const angleDiff = Math.abs(Math.atan2(targetDy, targetDx) - this.angle);
+        const goodShot = angleDiff < 0.2;
+        
+        // Almost always railgun
+        let useRailgun = this.weapons.railgun.ready && goodShot;
+        let useLaser = false;
+        let shoot = !useRailgun && goodShot && hasTarget;
+        
+        return {
+            moveX: Math.max(-1, Math.min(1, moveX || 0)),
+            moveY: Math.max(-1, Math.min(1, moveY || 0)),
+            shoot,
+            shootAlt: useRailgun && hasTarget,
+            shootLaser: useLaser,
+            targetAngle
+        };
+    }
+}
+
+// RWKV-SWARM: Rapid fire, spray and pray
+class RWKVSwarm extends RWKVAgent {
+    constructor(x, y) {
+        super('RWKV-SWARM', '#f59e0b', x, y, {
+            channels: 12,
+            baseDecay: 0.85,
+            aggression: 0.65,
+            evasion: 0.5,
+            accuracy: 0.2,
+            shootBias: 0.7,
+            moveBias: 0.5,
+            bulletCooldown: 200,
+            bulletDamage: 6,
+            laserCooldown: 400,
+            laserDamage: 5,
+            moveSpeed: 165,
+            optimalRange: 150,
+            learnMultiplier: 1.5,
+            mixR: 0.7,
+            mixK: 0.7
+        });
+    }
+    
+    applyVariantBehavior(output, aliveEnemies, targetAngle, targetDist, targetDx, targetDy, bulletEvadeX, bulletEvadeY) {
+        // Swarm moves erratically
+        const jitterX = (Math.random() - 0.5) * 0.4;
+        const jitterY = (Math.random() - 0.5) * 0.4;
+        
+        let moveX = output[0] * this.weights.aggression + jitterX;
+        let moveY = output[1] * this.weights.aggression + jitterY;
+        
+        if (aliveEnemies.length > 0) {
+            const dirX = targetDx / targetDist;
+            const dirY = targetDy / targetDist;
+            
+            // Approach but erratically
+            if (targetDist > 100) {
+                moveX += dirX * this.moveBias;
+                moveY += dirY * this.moveBias;
+            }
+            
+            // Random strafing
+            if (Math.random() < 0.3) {
+                moveX += -dirY * 0.6;
+                moveY += dirX * 0.6;
+            }
+        }
+        
+        moveX += bulletEvadeX * this.weights.evasion * 0.4;
+        moveY += bulletEvadeY * this.weights.evasion * 0.4;
+        
+        const mag = Math.sqrt(moveX * moveX + moveY * moveY);
+        if (mag > 1) { moveX /= mag; moveY /= mag; }
+        
+        const hasTarget = aliveEnemies.length > 0;
+        
+        // Swarm shoots constantly with low accuracy
+        const shootDecision = hasTarget;
+        
+        // Alternates between bullet spam and laser
+        let useLaser = targetDist < 200 && this.weapons.laser.ready && Math.random() < 0.4;
+        let useRailgun = false;
+        
+        return {
+            moveX: Math.max(-1, Math.min(1, moveX || 0)),
+            moveY: Math.max(-1, Math.min(1, moveY || 0)),
+            shoot: shootDecision && !useLaser,
+            shootAlt: useRailgun,
+            shootLaser: useLaser,
+            targetAngle: targetAngle + (Math.random() - 0.5) * 0.3 // Intentionally inaccurate
+        };
+    }
+}
+
+// RWKV-GHOST: Evasion master, hit and run
+class RWKVGhost extends RWKVAgent {
+    constructor(x, y) {
+        super('RWKV-GHOST', '#06b6d4', x, y, {
+            channels: 18,
+            baseDecay: 0.88,
+            maxHealth: 80,
+            aggression: 0.5,
+            evasion: 0.9,
+            laserPreference: 0.8,
+            shootBias: 0.35,
+            moveBias: 0.7,
+            laserRange: 300,
+            laserDamage: 12,
+            laserCooldown: 500,
+            moveSpeed: 190,
+            optimalRange: 180,
+            learnMultiplier: 1.1
+        });
+        this.phaseTimer = 0;
+        this.phaseDirection = 1;
+    }
+    
+    applyVariantBehavior(output, aliveEnemies, targetAngle, targetDist, targetDx, targetDy, bulletEvadeX, bulletEvadeY) {
+        // Ghost phases in and out - changes direction periodically
+        this.phaseTimer += 0.016;
+        if (this.phaseTimer > 2) {
+            this.phaseTimer = 0;
+            this.phaseDirection *= -1;
+        }
+        
+        let moveX = output[0] * this.weights.aggression;
+        let moveY = output[1] * this.weights.aggression;
+        
+        if (aliveEnemies.length > 0) {
+            const dirX = targetDx / targetDist;
+            const dirY = targetDy / targetDist;
+            
+            // Circle around target
+            moveX += -dirY * this.phaseDirection * this.moveBias;
+            moveY += dirX * this.phaseDirection * this.moveBias;
+            
+            // Approach or retreat based on phase
+            if (this.phaseDirection > 0 && targetDist > 150) {
+                moveX += dirX * 0.4;
+                moveY += dirY * 0.4;
+            } else if (this.phaseDirection < 0 || targetDist < 100) {
+                moveX -= dirX * 0.5;
+                moveY -= dirY * 0.5;
+            }
+        }
+        
+        // Very strong evasion
+        moveX += bulletEvadeX * this.weights.evasion;
+        moveY += bulletEvadeY * this.weights.evasion;
+        
+        const mag = Math.sqrt(moveX * moveX + moveY * moveY);
+        if (mag > 1) { moveX /= mag; moveY /= mag; }
+        
+        const hasTarget = aliveEnemies.length > 0;
+        const shootDecision = hasTarget && (output[2] + this.shootBias) > 0.1;
+        
+        // Ghost loves laser - hitscan suits hit and run
+        let useLaser = targetDist < 280 && this.weapons.laser.ready;
+        let useRailgun = false;
+        
+        return {
+            moveX: Math.max(-1, Math.min(1, moveX || 0)),
+            moveY: Math.max(-1, Math.min(1, moveY || 0)),
+            shoot: shootDecision && !useLaser && this.phaseDirection > 0,
+            shootAlt: useRailgun,
+            shootLaser: useLaser && shootDecision,
+            targetAngle
+        };
+    }
+}
+
+// RWKV-APEX: Adaptive elite, dynamic behavior
+class RWKVApex extends RWKVAgent {
+    constructor(x, y) {
+        super('RWKV-APEX', '#ec4899', x, y, {
+            channels: 32,
+            baseDecay: 0.93,
+            maxHealth: 110,
+            aggression: 0.55,
+            evasion: 0.55,
+            accuracy: 0.45,
+            prediction: 0.4,
+            shootBias: 0.4,
+            moveBias: 0.5,
+            moveSpeed: 160,
+            optimalRange: 200,
+            learnMultiplier: 2.0
+        });
+        this.mode = 'balanced';
+        this.modeTimer = 0;
+    }
+    
+    applyVariantBehavior(output, aliveEnemies, targetAngle, targetDist, targetDx, targetDy, bulletEvadeX, bulletEvadeY) {
+        // Apex adapts its mode based on situation
+        this.modeTimer += 0.016;
+        
+        // Analyze situation
+        const lowHealth = this.health < this.maxHealth * 0.4;
+        const hasAdvantage = aliveEnemies.length > 0 && aliveEnemies.every(e => e.health < this.health);
+        const closeEnemy = targetDist < 150;
+        const farEnemy = targetDist > 300;
+        
+        // Adapt mode
+        if (lowHealth) {
+            this.mode = 'defensive';
+            // Increase decay for faster reactions
+            this.timeDecay = this.timeDecay.map(d => Math.min(0.99, d * 1.001));
+        } else if (hasAdvantage) {
+            this.mode = 'aggressive';
+            // Decrease decay for more memory
+            this.timeDecay = this.timeDecay.map(d => Math.max(0.85, d * 0.999));
+        } else if (farEnemy) {
+            this.mode = 'sniper';
+        } else if (closeEnemy) {
+            this.mode = 'brawler';
+        } else {
+            this.mode = 'balanced';
+        }
+        
+        let moveX = output[0] * this.weights.aggression;
+        let moveY = output[1] * this.weights.aggression;
+        
+        if (aliveEnemies.length > 0) {
+            const dirX = targetDx / targetDist;
+            const dirY = targetDy / targetDist;
+            
+            switch (this.mode) {
+                case 'aggressive':
+                    moveX += dirX * this.moveBias * 1.3;
+                    moveY += dirY * this.moveBias * 1.3;
+                    break;
+                case 'defensive':
+                    moveX -= dirX * this.moveBias * 1.2;
+                    moveY -= dirY * this.moveBias * 1.2;
+                    break;
+                case 'sniper':
+                    if (targetDist < 280) {
+                        moveX -= dirX * this.moveBias;
+                        moveY -= dirY * this.moveBias;
+                    }
+                    break;
+                case 'brawler':
+                    moveX += -dirY * this.moveBias;
+                    moveY += dirX * this.moveBias;
+                    break;
+                default:
+                    if (targetDist > 220) {
+                        moveX += dirX * this.moveBias * 0.7;
+                        moveY += dirY * this.moveBias * 0.7;
+                    } else if (targetDist < 140) {
+                        moveX -= dirX * this.moveBias * 0.5;
+                        moveY -= dirY * this.moveBias * 0.5;
+                    }
+            }
+        }
+        
+        const evasionMult = this.mode === 'defensive' ? 1.2 : 0.6;
+        moveX += bulletEvadeX * this.weights.evasion * evasionMult;
+        moveY += bulletEvadeY * this.weights.evasion * evasionMult;
+        
+        const mag = Math.sqrt(moveX * moveX + moveY * moveY);
+        if (mag > 1) { moveX /= mag; moveY /= mag; }
+        
+        const hasTarget = aliveEnemies.length > 0;
+        const shootDecision = hasTarget && (output[2] + this.shootBias) > 0.15;
+        
+        // Weapon selection based on mode
+        let useRailgun = false, useLaser = false;
+        
+        if (this.mode === 'sniper' && this.weapons.railgun.ready && targetDist > 200) {
+            useRailgun = true;
+        } else if (this.mode === 'brawler' && this.weapons.laser.ready && targetDist < 200) {
+            useLaser = true;
+        } else if (this.mode === 'aggressive' && this.weapons.laser.ready && targetDist < 180) {
+            useLaser = true;
+        } else if (targetDist > 280 && this.weapons.railgun.ready) {
+            useRailgun = Math.random() < 0.5;
+        }
+        
+        return {
+            moveX: Math.max(-1, Math.min(1, moveX || 0)),
+            moveY: Math.max(-1, Math.min(1, moveY || 0)),
+            shoot: shootDecision && !useRailgun && !useLaser,
+            shootAlt: useRailgun && hasTarget,
+            shootLaser: useLaser && shootDecision,
+            targetAngle
+        };
+    }
+}
+
+// Game objects
+let agents = [];
+let bullets = [];
+
+function getRandomSpawnPositions(count) {
+    const positions = [];
+    const margin = 80;
+    const minDist = 150;
+    
+    for (let i = 0; i < count; i++) {
+        let attempts = 0;
+        let pos;
+        
+        do {
+            pos = {
+                x: margin + Math.random() * (canvas.width - margin * 2),
+                y: margin + Math.random() * (canvas.height - margin * 2)
+            };
+            attempts++;
+            
+            let tooClose = false;
+            for (const other of positions) {
+                const dx = pos.x - other.x;
+                const dy = pos.y - other.y;
+                if (Math.sqrt(dx * dx + dy * dy) < minDist) {
+                    tooClose = true;
+                    break;
+                }
+            }
+            
+            if (!tooClose || attempts > 50) {
+                positions.push(pos);
+                break;
+            }
+        } while (true);
+    }
+    
+    return positions;
+}
+
+function initAgents() {
+    const positions = getRandomSpawnPositions(7);
+    
+    agents = [
+        new RWKVAgent('RWKV-ORIGINAL', '#22c55e', positions[0].x, positions[0].y, {
+            channels: 16,
+            baseDecay: 0.95
+        }),
+        new RWKVTurbo(positions[1].x, positions[1].y),
+        new RWKVTank(positions[2].x, positions[2].y),
+        new RWKVSniper(positions[3].x, positions[3].y),
+        new RWKVSwarm(positions[4].x, positions[4].y),
+        new RWKVGhost(positions[5].x, positions[5].y),
+        new RWKVApex(positions[6].x, positions[6].y)
+    ];
+}
+
+function updateUI() {
+    for (let i = 0; i < 7; i++) {
+        const a = agents[i];
+        document.getElementById(`r${i}-health`).style.width = `${(a.health / a.maxHealth) * 100}%`;
+        document.getElementById(`r${i}-kills`).textContent = a.kills;
+        document.getElementById(`r${i}-deaths`).textContent = a.deaths;
+        document.getElementById(`r${i}-wins`).textContent = roundWins[i];
+        document.getElementById(`r${i}-accuracy`).textContent = `${a.getAccuracy()}%`;
+        
+        if (i === 6) {
+            // Apex shows mode
+            document.getElementById(`r${i}-learning`).textContent = a.alive ? 
+                `MODE: ${a.mode.toUpperCase()} | MIX: R${a.mixR.toFixed(2)} K${a.mixK.toFixed(2)}` : 'ELIMINATED';
+        } else {
+            document.getElementById(`r${i}-learning`).textContent = a.alive ? 
+                `MIX: R${a.mixR.toFixed(2)} K${a.mixK.toFixed(2)} | SHOOT:${a.shootBias.toFixed(2)}` : 'ELIMINATED';
+        }
+        
+        if (i !== 6) {
+            document.getElementById(`r${i}-decay`).textContent = a.getAvgDecay().toFixed(2);
+        }
+        
+        updateBrainVis(`r${i}-brain`, a.timeMixState.slice(0, 12));
+    }
+    
+    document.getElementById('gen-num').textContent = generation;
+    document.getElementById('round-num').textContent = roundNumber;
+    document.getElementById('fight-num').textContent = totalFights;
+}
+
+function updateBrainVis(id, values) {
+    const container = document.getElementById(id);
+    container.innerHTML = '';
+    values.forEach(v => {
+        const neuron = document.createElement('div');
+        neuron.className = 'neuron' + (Math.abs(v) > 0.1 ? ' active' : '');
+        neuron.style.opacity = Math.min(1, Math.abs(v) * 2 + 0.3);
+        container.appendChild(neuron);
+    });
+}
+
+const logContainer = document.getElementById('log');
+function addLog(message, type = '') {
+    const entry = document.createElement('div');
+    entry.className = 'log-entry ' + type;
+    entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+    logContainer.insertBefore(entry, logContainer.firstChild);
+    
+    while (logContainer.children.length > 50) {
+        logContainer.removeChild(logContainer.lastChild);
+    }
+}
+
+function update(dt) {
+    if (paused) return;
+    
+    if (!roundInProgress) {
+        roundEndTimer -= dt * 1000;
+        if (roundEndTimer <= 0) {
+            startNewRound();
+        }
+        return;
+    }
+    
+    agents.forEach(agent => {
+        const bullet = agent.update(agents, bullets, dt);
+        if (bullet) bullets.push(bullet);
+    });
+    
+    bullets = bullets.filter(bullet => {
+        bullet.x += bullet.vx * dt;
+        bullet.y += bullet.vy * dt;
+        
+        if (isNaN(bullet.x) || isNaN(bullet.y)) return false;
+        
+        if (bullet.x < -20) bullet.x = canvas.width + 20;
+        if (bullet.x > canvas.width + 20) bullet.x = -20;
+        if (bullet.y < -20) bullet.y = canvas.height + 20;
+        if (bullet.y > canvas.height + 20) bullet.y = -20;
+        
+        bullet.life = (bullet.life || 0) + dt;
+        if (bullet.life > 5) {
+            bullet.owner.learn('missed', {});
+            return false;
+        }
+        
+        for (const agent of agents) {
+            if (agent === bullet.owner || !agent.alive) continue;
+            
+            const dx = bullet.x - agent.x;
+            const dy = bullet.y - agent.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            if (dist < agent.radius) {
+                agent.takeDamage(bullet.damage, bullet.owner);
+                bullet.owner.shotsHit++;
+                bullet.owner.learn('hit_enemy', { 
+                    target: agent.type, 
+                    damage: bullet.damage,
+                    weaponType: bullet.type || 'bullet'
+                });
+                totalFights++;
+                return false;
+            }
+        }
+        
+        return true;
+    });
+    
+    const aliveAgents = agents.filter(a => a.alive);
+    if (aliveAgents.length === 1 && roundInProgress) {
+        const winner = aliveAgents[0];
+        const winnerIndex = agents.indexOf(winner);
+        roundWins[winnerIndex]++;
+        
+        addLog(`🏆 ${winner.type} WINS ROUND ${roundNumber}!`, 'kill');
+        
+        roundInProgress = false;
+        roundEndTimer = 2000 / gameSpeed;
+        roundNumber++;
+        
+        if (roundNumber > generation * 5) {
+            advanceGeneration();
+        }
+    }
+    
+    if (aliveAgents.length === 0 && roundInProgress) {
+        addLog(`💀 MUTUAL DESTRUCTION! No winner.`, 'respawn');
+        roundInProgress = false;
+        roundEndTimer = 2000 / gameSpeed;
+        roundNumber++;
+        
+        if (roundNumber > generation * 5) {
+            advanceGeneration();
+        }
+    }
+}
+
+function startNewRound() {
+    addLog(`--- Round ${roundNumber} ---`, 'learn');
+    
+    const positions = getRandomSpawnPositions(7);
+    
+    agents.forEach((agent, i) => {
+        agent.x = positions[i].x;
+        agent.y = positions[i].y;
+        agent.health = agent.maxHealth;
+        agent.alive = true;
+        agent.respawnTimer = 0;
+        agent.vx = 0;
+        agent.vy = 0;
+        agent.angle = Math.random() * Math.PI * 2;
+        agent.activeLaser = null;
+    });
+    
+    bullets = [];
+    roundInProgress = true;
+}
+
+function advanceGeneration() {
+    generation++;
+    addLog(`🧬 === GENERATION ${generation} === 🧬`, 'learn');
+    
+    const rankings = agents.map((agent, i) => ({
+        agent,
+        index: i,
+        wins: roundWins[i],
+        kd: agent.kills / (agent.deaths || 1),
+        accuracy: agent.getAccuracy()
+    })).sort((a, b) => b.wins - a.wins || b.kd - a.kd);
+    
+    const best = rankings[0];
+    const worst = rankings[6];
+    const secondWorst = rankings[5];
+    
+    addLog(`🥇 Best: ${best.agent.type} (${best.wins} wins, ${best.accuracy}% acc)`, 'learn');
+    addLog(`📈 ${worst.agent.type} & ${secondWorst.agent.type} evolving...`, 'learn');
+    
+    const inheritRate = 0.4;
+    [worst, secondWorst].forEach(loser => {
+        loser.agent.weights.aggression = loser.agent.weights.aggression * (1 - inheritRate) + 
+                                          best.agent.weights.aggression * inheritRate;
+        loser.agent.weights.evasion = loser.agent.weights.evasion * (1 - inheritRate) + 
+                                       best.agent.weights.evasion * inheritRate;
+        loser.agent.weights.accuracy = loser.agent.weights.accuracy * (1 - inheritRate) + 
+                                        best.agent.weights.accuracy * inheritRate;
+        loser.agent.weights.prediction = loser.agent.weights.prediction * (1 - inheritRate) + 
+                                          best.agent.weights.prediction * inheritRate;
+        loser.agent.weights.railgunPreference = loser.agent.weights.railgunPreference * (1 - inheritRate) + 
+                                                 best.agent.weights.railgunPreference * inheritRate;
+        
+        // Cross-pollinate RWKV-specific parameters
+        loser.agent.mixR = loser.agent.mixR * (1 - inheritRate) + best.agent.mixR * inheritRate;
+        loser.agent.mixK = loser.agent.mixK * (1 - inheritRate) + best.agent.mixK * inheritRate;
+        loser.agent.shootBias = loser.agent.shootBias * (1 - inheritRate) + best.agent.shootBias * inheritRate;
+    });
+    
+    agents.forEach(agent => {
+        const mutationRate = 0.15;
+        agent.weights.aggression += (Math.random() - 0.5) * mutationRate;
+        agent.weights.evasion += (Math.random() - 0.5) * mutationRate;
+        agent.weights.accuracy += (Math.random() - 0.5) * mutationRate;
+        agent.weights.prediction += (Math.random() - 0.5) * mutationRate;
+        agent.weights.railgunPreference += (Math.random() - 0.5) * mutationRate;
+        
+        agent.weights.aggression = Math.max(0.15, Math.min(0.95, agent.weights.aggression));
+        agent.weights.evasion = Math.max(0.15, Math.min(0.95, agent.weights.evasion));
+        agent.weights.accuracy = Math.max(0.15, Math.min(0.95, agent.weights.accuracy));
+        agent.weights.prediction = Math.max(0.1, Math.min(0.9, agent.weights.prediction));
+        agent.weights.railgunPreference = Math.max(0.1, Math.min(0.9, agent.weights.railgunPreference));
+        
+        agent.weights.learningRate = Math.min(0.2, agent.weights.learningRate * 1.1);
+        
+        // Mutate RWKV parameters
+        agent.mixR += (Math.random() - 0.5) * mutationRate * 0.5;
+        agent.mixK += (Math.random() - 0.5) * mutationRate * 0.5;
+        agent.shootBias += (Math.random() - 0.5) * mutationRate * 0.5;
+        agent.mixR = Math.max(0.2, Math.min(0.9, agent.mixR));
+        agent.mixK = Math.max(0.2, Math.min(0.9, agent.mixK));
+        agent.shootBias = Math.max(0.1, Math.min(0.7, agent.shootBias));
+    });
+    
+    roundWins = [0, 0, 0, 0, 0, 0, 0];
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Grid
+    ctx.strokeStyle = '#1a1a2e';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < canvas.width; x += 50) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+    }
+    for (let y = 0; y < canvas.height; y += 50) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+    }
+    
+    // Bullets
+    bullets.forEach(bullet => {
+        const size = Math.max(1, bullet.size || 4);
+        const trail = bullet.trail || 0.03;
+        
+        if (bullet.type === 'railgun') {
+            ctx.fillStyle = bullet.color + '40';
+            ctx.beginPath();
+            ctx.arc(bullet.x, bullet.y, size * 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        ctx.fillStyle = bullet.color;
+        ctx.beginPath();
+        ctx.arc(bullet.x, bullet.y, size, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.strokeStyle = bullet.color + '40';
+        ctx.lineWidth = bullet.type === 'railgun' ? 4 : 2;
+        ctx.beginPath();
+        ctx.moveTo(bullet.x, bullet.y);
+        ctx.lineTo(bullet.x - bullet.vx * trail, bullet.y - bullet.vy * trail);
+        ctx.stroke();
+    });
+    
+    agents.forEach(agent => agent.draw());
+    
+    agents.filter(a => !a.alive).forEach(agent => {
+        ctx.fillStyle = agent.color + '40';
+        ctx.font = '12px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${agent.type} respawning...`, agent.x, agent.y);
+        ctx.fillText(`${(agent.respawnTimer / 1000).toFixed(1)}s`, agent.x, agent.y + 15);
+    });
+    
+    if (!roundInProgress) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        const winner = agents.find(a => a.alive);
+        
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 36px monospace';
+        
+        if (winner) {
+            ctx.fillStyle = winner.color;
+            ctx.fillText(`🏆 ${winner.type} WINS! 🏆`, canvas.width / 2, canvas.height / 2 - 20);
+        } else {
+            ctx.fillText('💀 MUTUAL DESTRUCTION 💀', canvas.width / 2, canvas.height / 2 - 20);
+        }
+        
+        ctx.fillStyle = '#888';
+        ctx.font = '18px monospace';
+        ctx.fillText(`Round ${roundNumber} starting in ${(roundEndTimer / 1000).toFixed(1)}s...`, canvas.width / 2, canvas.height / 2 + 30);
+        
+        if (roundNumber > generation * 5) {
+            ctx.fillStyle = '#22c55e';
+            ctx.fillText(`⬆️ EVOLVING TO GENERATION ${generation + 1}`, canvas.width / 2, canvas.height / 2 + 60);
+        }
+    }
+}
+
+let lastTime = 0;
+function gameLoop(timestamp) {
+    const dt = Math.min((timestamp - lastTime) / 1000, 0.1);
+    lastTime = timestamp;
+    
+    update(dt);
+    draw();
+    updateUI();
+    
+    requestAnimationFrame(gameLoop);
+}
+
+document.getElementById('pauseBtn').addEventListener('click', () => {
+    paused = !paused;
+    document.getElementById('pauseBtn').textContent = paused ? '▶️ Resume' : '⏸️ Pause';
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+    bullets = [];
+    generation = 1;
+    totalFights = 0;
+    roundNumber = 1;
+    roundWins = [0, 0, 0, 0, 0, 0, 0];
+    roundInProgress = true;
+    initAgents();
+    logContainer.innerHTML = '';
+    addLog('RWKV Variants Arena reset!', 'respawn');
+});
+
+document.getElementById('speed-slider').addEventListener('input', (e) => {
+    gameSpeed = parseFloat(e.target.value);
+    document.getElementById('speed-value').textContent = gameSpeed + 'x';
+});
+
+initAgents();
+addLog('RWKV Variants Battle Arena initialized!', 'learn');
+addLog('7 RWKV variants compete for Linear RNN supremacy!', 'learn');
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>

@@ -1,0 +1,1432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neural Network Battle Arena</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0a0f;
+            color: #e0e0e0;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+        }
+        #container {
+            display: flex;
+            height: 100vh;
+        }
+        #arena {
+            flex: 1;
+            position: relative;
+            background: linear-gradient(135deg, #0d0d15 0%, #1a1a2e 100%);
+            border-right: 2px solid #333;
+        }
+        canvas {
+            display: block;
+        }
+        #sidebar {
+            width: 320px;
+            padding: 15px;
+            background: #111118;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        h1 {
+            font-size: 1.2em;
+            color: #00ffaa;
+            text-align: center;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px #00ffaa55;
+        }
+        .nn-card {
+            background: #1a1a25;
+            border-radius: 8px;
+            padding: 12px;
+            border: 1px solid #333;
+        }
+        .nn-card h3 {
+            font-size: 0.9em;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .nn-icon {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        .transformer .nn-icon { background: #ff6b6b; box-shadow: 0 0 8px #ff6b6b; }
+        .mamba .nn-icon { background: #4ecdc4; box-shadow: 0 0 8px #4ecdc4; }
+        .moe .nn-icon { background: #ffe66d; box-shadow: 0 0 8px #ffe66d; }
+        .ntm .nn-icon { background: #a855f7; box-shadow: 0 0 8px #a855f7; }
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75em;
+            margin: 4px 0;
+            color: #888;
+        }
+        .stat-value { color: #fff; }
+        .health-bar {
+            height: 6px;
+            background: #333;
+            border-radius: 3px;
+            margin: 6px 0;
+            overflow: hidden;
+        }
+        .health-fill {
+            height: 100%;
+            transition: width 0.3s;
+            border-radius: 3px;
+        }
+        .transformer .health-fill { background: linear-gradient(90deg, #ff6b6b, #ff8e8e); }
+        .mamba .health-fill { background: linear-gradient(90deg, #4ecdc4, #7eddd6); }
+        .moe .health-fill { background: linear-gradient(90deg, #ffe66d, #fff09a); }
+        .ntm .health-fill { background: linear-gradient(90deg, #a855f7, #c084fc); }
+        .learning-indicator {
+            font-size: 0.7em;
+            color: #00ff88;
+            margin-top: 4px;
+        }
+        .brain-vis {
+            display: flex;
+            gap: 2px;
+            margin-top: 6px;
+            flex-wrap: wrap;
+        }
+        .neuron {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #333;
+            transition: background 0.2s;
+        }
+        .neuron.active { background: #00ffaa; }
+        #controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        button {
+            flex: 1;
+            padding: 10px;
+            background: #00ffaa22;
+            border: 1px solid #00ffaa;
+            color: #00ffaa;
+            cursor: pointer;
+            border-radius: 5px;
+            font-family: inherit;
+            transition: all 0.2s;
+        }
+        button:hover {
+            background: #00ffaa44;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        #log {
+            flex: 1;
+            background: #0a0a10;
+            border-radius: 5px;
+            padding: 10px;
+            font-size: 0.7em;
+            overflow-y: auto;
+            max-height: 150px;
+            border: 1px solid #222;
+        }
+        .log-entry {
+            margin: 3px 0;
+            padding: 2px 0;
+            border-bottom: 1px solid #1a1a1a;
+        }
+        .log-entry.kill { color: #ff6b6b; }
+        .log-entry.learn { color: #00ffaa; }
+        .log-entry.respawn { color: #888; }
+        #generation {
+            text-align: center;
+            font-size: 0.9em;
+            color: #666;
+            padding: 8px;
+            background: #0a0a10;
+            border-radius: 5px;
+        }
+        #generation span { color: #00ffaa; font-weight: bold; }
+        .weights-display {
+            font-size: 0.65em;
+            color: #555;
+            margin-top: 4px;
+            word-break: break-all;
+        }
+        #speed-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px;
+            background: #0a0a10;
+            border-radius: 5px;
+        }
+        #speed-control label { font-size: 0.8em; color: #666; }
+        #speed-slider { flex: 1; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="arena">
+            <canvas id="canvas"></canvas>
+        </div>
+        <div id="sidebar">
+            <h1>⚔️ Neural Network Battle Arena</h1>
+            
+            <div id="generation">Gen: <span id="gen-num">1</span> | Round: <span id="round-num">1</span> | Hits: <span id="fight-num">0</span></div>
+            
+            <div id="controls">
+                <button id="pauseBtn">⏸️ Pause</button>
+                <button id="resetBtn">🔄 Reset</button>
+            </div>
+            
+            <div id="speed-control">
+                <label>Speed:</label>
+                <input type="range" id="speed-slider" min="0.5" max="3" step="0.25" value="1">
+                <span id="speed-value">1x</span>
+            </div>
+            
+            <div class="nn-card transformer">
+                <h3><span class="nn-icon"></span>TRANSFORMER</h3>
+                <div class="stat-row">Attention Heads: <span class="stat-value" id="t-heads">8</span></div>
+                <div class="health-bar"><div class="health-fill" id="t-health" style="width:100%"></div></div>
+                <div class="stat-row">Kills: <span class="stat-value" id="t-kills">0</span> | Deaths: <span class="stat-value" id="t-deaths">0</span> | Wins: <span class="stat-value" id="t-wins">0</span></div>
+                <div class="stat-row">Accuracy: <span class="stat-value" id="t-accuracy">0%</span></div>
+                <div class="learning-indicator" id="t-learning"></div>
+                <div class="brain-vis" id="t-brain"></div>
+                <div class="weights-display" id="t-weights"></div>
+            </div>
+            
+            <div class="nn-card mamba">
+                <h3><span class="nn-icon"></span>MAMBA (SSM)</h3>
+                <div class="stat-row">State Dim: <span class="stat-value" id="m-state">16</span></div>
+                <div class="health-bar"><div class="health-fill" id="m-health" style="width:100%"></div></div>
+                <div class="stat-row">Kills: <span class="stat-value" id="m-kills">0</span> | Deaths: <span class="stat-value" id="m-deaths">0</span> | Wins: <span class="stat-value" id="m-wins">0</span></div>
+                <div class="stat-row">Accuracy: <span class="stat-value" id="m-accuracy">0%</span></div>
+                <div class="learning-indicator" id="m-learning"></div>
+                <div class="brain-vis" id="m-brain"></div>
+                <div class="weights-display" id="m-weights"></div>
+            </div>
+            
+            <div class="nn-card moe">
+                <h3><span class="nn-icon"></span>MIXTURE OF EXPERTS</h3>
+                <div class="stat-row">Active Experts: <span class="stat-value" id="e-experts">2/8</span></div>
+                <div class="health-bar"><div class="health-fill" id="e-health" style="width:100%"></div></div>
+                <div class="stat-row">Kills: <span class="stat-value" id="e-kills">0</span> | Deaths: <span class="stat-value" id="e-deaths">0</span> | Wins: <span class="stat-value" id="e-wins">0</span></div>
+                <div class="stat-row">Accuracy: <span class="stat-value" id="e-accuracy">0%</span></div>
+                <div class="learning-indicator" id="e-learning"></div>
+                <div class="brain-vis" id="e-brain"></div>
+                <div class="weights-display" id="e-weights"></div>
+            </div>
+            
+            <div class="nn-card ntm">
+                <h3><span class="nn-icon"></span>NEURAL TURING MACHINE</h3>
+                <div class="stat-row">Memory Slots: <span class="stat-value" id="n-memory">32</span></div>
+                <div class="health-bar"><div class="health-fill" id="n-health" style="width:100%"></div></div>
+                <div class="stat-row">Kills: <span class="stat-value" id="n-kills">0</span> | Deaths: <span class="stat-value" id="n-deaths">0</span> | Wins: <span class="stat-value" id="n-wins">0</span></div>
+                <div class="stat-row">Accuracy: <span class="stat-value" id="n-accuracy">0%</span></div>
+                <div class="learning-indicator" id="n-learning"></div>
+                <div class="brain-vis" id="n-brain"></div>
+                <div class="weights-display" id="n-weights"></div>
+            </div>
+            
+            <div id="log"></div>
+        </div>
+    </div>
+
+<script>
+// Canvas setup
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+function resizeCanvas() {
+    canvas.width = canvas.parentElement.clientWidth;
+    canvas.height = canvas.parentElement.clientHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// Game state
+let paused = false;
+let gameSpeed = 1;
+let generation = 1;
+let totalFights = 0;
+let roundNumber = 1;
+let roundWins = [0, 0, 0, 0]; // Track wins per agent
+let roundInProgress = true;
+let roundEndTimer = 0;
+
+// Neural Network base class with actual learning
+class NeuralAgent {
+    constructor(type, color, x, y) {
+        this.type = type;
+        this.color = color;
+        this.x = x;
+        this.y = y;
+        this.vx = 0;
+        this.vy = 0;
+        this.health = 100;
+        this.maxHealth = 100;
+        this.radius = 20;
+        this.angle = Math.random() * Math.PI * 2;
+        this.kills = 0;
+        this.deaths = 0;
+        this.shotsFired = 0;
+        this.shotsHit = 0;
+        this.lastShot = 0;
+        this.shootCooldown = 500;
+        this.respawnTimer = 0;
+        this.alive = true;
+        
+        // Neural network weights - these actually evolve!
+        this.weights = {
+            aggression: 0.5 + Math.random() * 0.3,
+            evasion: 0.5 + Math.random() * 0.3,
+            accuracy: 0.3 + Math.random() * 0.2,
+            prediction: 0.2 + Math.random() * 0.2,
+            teamwork: 0.1 + Math.random() * 0.1,
+            memory: [],
+            learningRate: 0.05 + Math.random() * 0.05
+        };
+        
+        // Architecture-specific properties
+        this.initArchitecture();
+        
+        // Experience buffer for learning
+        this.experienceBuffer = [];
+        this.recentDamageFrom = {};
+    }
+    
+    initArchitecture() {
+        // Override in subclasses
+    }
+    
+    think(enemies, bullets, dt) {
+        // Override in subclasses - returns {moveX, moveY, shoot, targetAngle}
+        return { moveX: 0, moveY: 0, shoot: false, targetAngle: this.angle };
+    }
+    
+    learn(event, data) {
+        // Base learning - override in subclasses for specialized learning
+        const lr = this.weights.learningRate;
+        
+        if (event === 'hit_enemy') {
+            this.weights.accuracy = Math.min(0.9, this.weights.accuracy + lr * 0.5);
+            this.weights.aggression = Math.min(0.95, this.weights.aggression + lr * 0.2);
+        } else if (event === 'missed') {
+            this.weights.accuracy = Math.max(0.1, this.weights.accuracy - lr * 0.1);
+        } else if (event === 'took_damage') {
+            this.weights.evasion = Math.min(0.95, this.weights.evasion + lr * 0.3);
+            if (data.from) {
+                this.recentDamageFrom[data.from] = (this.recentDamageFrom[data.from] || 0) + 1;
+            }
+        } else if (event === 'killed') {
+            this.weights.aggression = Math.min(0.98, this.weights.aggression + lr);
+            this.weights.prediction = Math.min(0.9, this.weights.prediction + lr * 0.5);
+        } else if (event === 'died') {
+            this.weights.evasion = Math.min(0.95, this.weights.evasion + lr * 0.5);
+            this.weights.aggression = Math.max(0.2, this.weights.aggression - lr * 0.3);
+        }
+    }
+    
+    update(enemies, bullets, dt) {
+        if (!this.alive) {
+            this.respawnTimer -= dt;
+            if (this.respawnTimer <= 0) {
+                this.respawn();
+            }
+            return null;
+        }
+        
+        const decision = this.think(enemies, bullets, dt);
+        
+        // Apply movement
+        const speed = 150 * gameSpeed;
+        this.vx = decision.moveX * speed;
+        this.vy = decision.moveY * speed;
+        
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        
+        // Keep in bounds
+        this.x = Math.max(this.radius, Math.min(canvas.width - this.radius, this.x));
+        this.y = Math.max(this.radius, Math.min(canvas.height - this.radius, this.y));
+        
+        // Smooth angle transition
+        if (decision.targetAngle !== undefined) {
+            let diff = decision.targetAngle - this.angle;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            this.angle += diff * 0.15;
+        }
+        
+        // Shooting
+        const now = Date.now();
+        if (decision.shoot && now - this.lastShot > this.shootCooldown / gameSpeed) {
+            this.lastShot = now;
+            this.shotsFired++;
+            return this.createBullet();
+        }
+        
+        return null;
+    }
+    
+    createBullet() {
+        const spread = (1 - this.weights.accuracy) * 0.3;
+        const angle = this.angle + (Math.random() - 0.5) * spread;
+        return {
+            x: this.x + Math.cos(this.angle) * this.radius,
+            y: this.y + Math.sin(this.angle) * this.radius,
+            vx: Math.cos(angle) * 400 * gameSpeed,
+            vy: Math.sin(angle) * 400 * gameSpeed,
+            owner: this,
+            damage: 15 + Math.random() * 10,
+            color: this.color
+        };
+    }
+    
+    takeDamage(amount, from) {
+        this.health -= amount;
+        this.learn('took_damage', { amount, from: from?.type });
+        
+        if (this.health <= 0) {
+            this.die(from);
+        }
+    }
+    
+    die(killer) {
+        this.alive = false;
+        this.deaths++;
+        this.respawnTimer = 3000 / gameSpeed;
+        this.learn('died', { killer: killer?.type });
+        
+        if (killer) {
+            killer.kills++;
+            killer.learn('killed', { victim: this.type });
+        }
+        
+        addLog(`${killer?.type || 'Unknown'} killed ${this.type}!`, 'kill');
+    }
+    
+    respawn() {
+        this.alive = true;
+        this.health = this.maxHealth;
+        this.x = Math.random() * (canvas.width - 100) + 50;
+        this.y = Math.random() * (canvas.height - 100) + 50;
+        this.recentDamageFrom = {};
+        addLog(`${this.type} respawned`, 'respawn');
+    }
+    
+    draw() {
+        if (!this.alive) return;
+        
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        
+        // Glow effect
+        const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, this.radius * 2);
+        gradient.addColorStop(0, this.color + '40');
+        gradient.addColorStop(1, 'transparent');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius * 2, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Body
+        ctx.rotate(this.angle);
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.moveTo(this.radius, 0);
+        ctx.lineTo(-this.radius * 0.7, -this.radius * 0.6);
+        ctx.lineTo(-this.radius * 0.4, 0);
+        ctx.lineTo(-this.radius * 0.7, this.radius * 0.6);
+        ctx.closePath();
+        ctx.fill();
+        
+        // Core
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(-this.radius * 0.2, 0, this.radius * 0.25, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.restore();
+        
+        // Health bar
+        const barWidth = 40;
+        const barHeight = 4;
+        ctx.fillStyle = '#333';
+        ctx.fillRect(this.x - barWidth/2, this.y - this.radius - 12, barWidth, barHeight);
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x - barWidth/2, this.y - this.radius - 12, barWidth * (this.health / this.maxHealth), barHeight);
+        
+        // Type label
+        ctx.fillStyle = '#fff';
+        ctx.font = '10px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(this.type.substring(0, 4), this.x, this.y - this.radius - 16);
+    }
+    
+    getAccuracy() {
+        return this.shotsFired > 0 ? Math.round((this.shotsHit / this.shotsFired) * 100) : 0;
+    }
+}
+
+// TRANSFORMER - Uses attention mechanism to focus on threats
+class TransformerAgent extends NeuralAgent {
+    constructor(x, y) {
+        super('TRANSFORMER', '#ff6b6b', x, y);
+    }
+    
+    initArchitecture() {
+        this.attentionHeads = 8;
+        this.attentionWeights = new Array(4).fill(0).map(() => Math.random());
+        this.positionEncoding = [];
+    }
+    
+    think(enemies, bullets, dt) {
+        // Multi-head attention: compute attention scores for each enemy
+        let attention = enemies.filter(e => e.alive && e !== this).map(enemy => {
+            const dx = enemy.x - this.x;
+            const dy = enemy.y - this.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const angle = Math.atan2(dy, dx);
+            
+            // Attention score based on: distance, health, threat level
+            const distScore = 1 / (dist + 50);
+            const healthScore = (100 - enemy.health) / 100;
+            const threatScore = this.recentDamageFrom[enemy.type] || 0;
+            
+            const score = distScore * this.attentionWeights[0] + 
+                         healthScore * this.attentionWeights[1] + 
+                         threatScore * this.attentionWeights[2] * 0.1;
+            
+            return { enemy, score, dist, angle, dx, dy };
+        });
+        
+        // Softmax attention
+        const totalScore = attention.reduce((s, a) => s + Math.exp(a.score * 5), 0);
+        attention = attention.map(a => ({ ...a, prob: Math.exp(a.score * 5) / totalScore }));
+        
+        // Focus on highest attention target
+        attention.sort((a, b) => b.prob - a.prob);
+        const target = attention[0];
+        
+        let moveX = 0, moveY = 0, shoot = false, targetAngle = this.angle;
+        
+        if (target) {
+            targetAngle = target.angle;
+            
+            // Predict target movement
+            const predX = target.enemy.x + target.enemy.vx * this.weights.prediction * 0.5;
+            const predY = target.enemy.y + target.enemy.vy * this.weights.prediction * 0.5;
+            targetAngle = Math.atan2(predY - this.y, predX - this.x);
+            
+            // Movement: approach or evade based on weights
+            if (target.dist > 200) {
+                moveX = Math.cos(target.angle) * this.weights.aggression;
+                moveY = Math.sin(target.angle) * this.weights.aggression;
+            } else if (target.dist < 100) {
+                moveX = -Math.cos(target.angle) * this.weights.evasion;
+                moveY = -Math.sin(target.angle) * this.weights.evasion;
+            }
+            
+            // Shoot if aligned
+            const angleDiff = Math.abs(targetAngle - this.angle);
+            if (angleDiff < 0.3 && target.dist < 400) {
+                shoot = Math.random() < this.weights.aggression;
+            }
+        }
+        
+        // Evade bullets
+        bullets.forEach(b => {
+            if (b.owner === this) return;
+            const dx = b.x - this.x;
+            const dy = b.y - this.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 80) {
+                moveX -= (dx / dist) * this.weights.evasion * 0.5;
+                moveY -= (dy / dist) * this.weights.evasion * 0.5;
+            }
+        });
+        
+        // Normalize movement
+        const mag = Math.sqrt(moveX * moveX + moveY * moveY);
+        if (mag > 1) { moveX /= mag; moveY /= mag; }
+        
+        return { moveX, moveY, shoot, targetAngle };
+    }
+    
+    learn(event, data) {
+        super.learn(event, data);
+        
+        // Transformer-specific: adjust attention weights
+        if (event === 'hit_enemy') {
+            this.attentionWeights[0] *= 1.05; // Distance attention worked
+        } else if (event === 'took_damage') {
+            this.attentionWeights[2] *= 1.1; // Increase threat attention
+        } else if (event === 'killed') {
+            this.attentionWeights[1] *= 1.05; // Health targeting worked
+        }
+        
+        // Normalize
+        const sum = this.attentionWeights.reduce((a, b) => a + b, 0);
+        this.attentionWeights = this.attentionWeights.map(w => w / sum);
+    }
+}
+
+// MAMBA - State Space Model with efficient sequential processing
+class MambaAgent extends NeuralAgent {
+    constructor(x, y) {
+        super('MAMBA', '#4ecdc4', x, y);
+    }
+    
+    initArchitecture() {
+        this.stateDim = 16;
+        this.hiddenState = new Array(this.stateDim).fill(0);
+        this.A = new Array(this.stateDim).fill(0).map(() => 0.9 + Math.random() * 0.1);
+        this.B = new Array(this.stateDim).fill(0).map(() => Math.random() * 0.5);
+        this.C = new Array(4).fill(0).map(() => Math.random()); // Output: moveX, moveY, shoot, targetAngle
+        this.selectivity = 0.5;
+    }
+    
+    think(enemies, bullets, dt) {
+        // Encode current observation
+        const aliveEnemies = enemies.filter(e => e.alive && e !== this);
+        
+        // Create input based on environment
+        let input = new Array(this.stateDim).fill(0);
+        
+        aliveEnemies.forEach((enemy, i) => {
+            if (i < 4) {
+                const dx = (enemy.x - this.x) / canvas.width;
+                const dy = (enemy.y - this.y) / canvas.height;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                input[i * 4] = dx;
+                input[i * 4 + 1] = dy;
+                input[i * 4 + 2] = enemy.health / 100;
+                input[i * 4 + 3] = dist;
+            }
+        });
+        
+        // SSM update: h_t = A * h_{t-1} + B * x_t (selective)
+        const selectivityGate = Math.tanh(this.selectivity * input.reduce((a, b) => a + b, 0));
+        
+        for (let i = 0; i < this.stateDim; i++) {
+            this.hiddenState[i] = this.A[i] * this.hiddenState[i] * selectivityGate + 
+                                  this.B[i] * input[i];
+            this.hiddenState[i] = Math.tanh(this.hiddenState[i]);
+        }
+        
+        // Output from hidden state
+        let output = [0, 0, 0, 0];
+        for (let i = 0; i < 4; i++) {
+            for (let j = 0; j < this.stateDim; j++) {
+                output[i] += this.hiddenState[j] * this.C[i] * (j === i % this.stateDim ? 1 : 0.1);
+            }
+            output[i] = Math.tanh(output[i]);
+        }
+        
+        // Find target
+        let targetAngle = this.angle;
+        const target = aliveEnemies.sort((a, b) => {
+            const da = Math.sqrt((a.x - this.x) ** 2 + (a.y - this.y) ** 2);
+            const db = Math.sqrt((b.x - this.x) ** 2 + (b.y - this.y) ** 2);
+            return da - db;
+        })[0];
+        
+        if (target) {
+            targetAngle = Math.atan2(target.y - this.y, target.x - this.x);
+        }
+        
+        // Bullet evasion with state memory
+        bullets.forEach(b => {
+            if (b.owner === this) return;
+            const dx = b.x - this.x;
+            const dy = b.y - this.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 100) {
+                output[0] -= (dx / dist) * this.weights.evasion;
+                output[1] -= (dy / dist) * this.weights.evasion;
+            }
+        });
+        
+        return {
+            moveX: output[0] * this.weights.aggression,
+            moveY: output[1] * this.weights.aggression,
+            shoot: output[2] > 0.3 && target,
+            targetAngle
+        };
+    }
+    
+    learn(event, data) {
+        super.learn(event, data);
+        
+        // Mamba-specific: adjust state matrices
+        if (event === 'hit_enemy') {
+            this.selectivity = Math.min(1, this.selectivity + 0.02);
+            // Reinforce output weights
+            this.C = this.C.map(c => c * 1.02);
+        } else if (event === 'died') {
+            // Make state more responsive
+            this.A = this.A.map(a => a * 0.98);
+            this.B = this.B.map(b => Math.min(1, b * 1.05));
+        }
+    }
+}
+
+// MIXTURE OF EXPERTS - Specialized sub-networks for different situations
+class MoEAgent extends NeuralAgent {
+    constructor(x, y) {
+        super('MOE', '#ffe66d', x, y);
+    }
+    
+    initArchitecture() {
+        this.numExperts = 8;
+        this.activeExperts = 2;
+        this.experts = [];
+        
+        // Each expert specializes in different behavior
+        const specializations = ['aggressive', 'defensive', 'sniper', 'flanker', 
+                                 'hunter', 'survivor', 'berserker', 'tactician'];
+        
+        for (let i = 0; i < this.numExperts; i++) {
+            this.experts.push({
+                name: specializations[i],
+                weights: {
+                    aggression: Math.random(),
+                    evasion: Math.random(),
+                    range: Math.random(),
+                    accuracy: Math.random()
+                },
+                score: 0,
+                uses: 0
+            });
+        }
+        
+        // Gating network weights
+        this.gatingWeights = new Array(this.numExperts).fill(0).map(() => Math.random());
+    }
+    
+    think(enemies, bullets, dt) {
+        const aliveEnemies = enemies.filter(e => e.alive && e !== this);
+        
+        // Compute situation features for gating
+        const avgDist = aliveEnemies.reduce((sum, e) => {
+            return sum + Math.sqrt((e.x - this.x) ** 2 + (e.y - this.y) ** 2);
+        }, 0) / (aliveEnemies.length || 1);
+        
+        const threatLevel = bullets.filter(b => {
+            if (b.owner === this) return false;
+            const dist = Math.sqrt((b.x - this.x) ** 2 + (b.y - this.y) ** 2);
+            return dist < 150;
+        }).length;
+        
+        const healthRatio = this.health / this.maxHealth;
+        
+        // Compute gating scores
+        const situationVector = [avgDist / 500, threatLevel / 5, healthRatio, this.kills / 10];
+        
+        let expertScores = this.experts.map((expert, i) => {
+            let score = this.gatingWeights[i];
+            
+            // Situation-based scoring
+            if (expert.name === 'aggressive' && healthRatio > 0.5) score *= 1.5;
+            if (expert.name === 'defensive' && healthRatio < 0.5) score *= 2;
+            if (expert.name === 'sniper' && avgDist > 300) score *= 1.5;
+            if (expert.name === 'flanker' && avgDist < 200) score *= 1.3;
+            if (expert.name === 'survivor' && threatLevel > 2) score *= 2;
+            if (expert.name === 'berserker' && this.kills > 3) score *= 1.5;
+            
+            return { expert, score, index: i };
+        });
+        
+        // Select top-k experts
+        expertScores.sort((a, b) => b.score - a.score);
+        const selectedExperts = expertScores.slice(0, this.activeExperts);
+        
+        // Combine expert outputs
+        let moveX = 0, moveY = 0, shootProb = 0;
+        let totalWeight = selectedExperts.reduce((s, e) => s + e.score, 0);
+        
+        selectedExperts.forEach(({ expert, score }) => {
+            const weight = score / totalWeight;
+            expert.uses++;
+            
+            // Expert-specific behavior
+            if (expert.name === 'aggressive') {
+                if (aliveEnemies[0]) {
+                    const dx = aliveEnemies[0].x - this.x;
+                    const dy = aliveEnemies[0].y - this.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    moveX += (dx / dist) * weight * expert.weights.aggression;
+                    moveY += (dy / dist) * weight * expert.weights.aggression;
+                    shootProb += weight * 0.8;
+                }
+            } else if (expert.name === 'defensive') {
+                bullets.forEach(b => {
+                    if (b.owner === this) return;
+                    const dx = b.x - this.x;
+                    const dy = b.y - this.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < 150) {
+                        moveX -= (dx / dist) * weight * expert.weights.evasion;
+                        moveY -= (dy / dist) * weight * expert.weights.evasion;
+                    }
+                });
+                shootProb += weight * 0.3;
+            } else if (expert.name === 'sniper') {
+                // Stay at range and shoot accurately
+                if (aliveEnemies[0]) {
+                    const dx = aliveEnemies[0].x - this.x;
+                    const dy = aliveEnemies[0].y - this.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < 300) {
+                        moveX -= (dx / dist) * weight * 0.5;
+                        moveY -= (dy / dist) * weight * 0.5;
+                    }
+                    shootProb += weight * 0.9;
+                }
+            } else if (expert.name === 'flanker') {
+                // Circle around target
+                if (aliveEnemies[0]) {
+                    const dx = aliveEnemies[0].x - this.x;
+                    const dy = aliveEnemies[0].y - this.y;
+                    moveX += -dy * weight * 0.5;
+                    moveY += dx * weight * 0.5;
+                    shootProb += weight * 0.5;
+                }
+            } else {
+                // Generic behavior for other experts
+                if (aliveEnemies[0]) {
+                    const dx = aliveEnemies[0].x - this.x;
+                    const dy = aliveEnemies[0].y - this.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    moveX += (dx / dist) * weight * expert.weights.aggression * 0.5;
+                    moveY += (dy / dist) * weight * expert.weights.aggression * 0.5;
+                    shootProb += weight * 0.5;
+                }
+            }
+        });
+        
+        // Store active experts for display
+        this.currentExperts = selectedExperts.map(e => e.expert.name).join(', ');
+        
+        let targetAngle = this.angle;
+        if (aliveEnemies[0]) {
+            targetAngle = Math.atan2(aliveEnemies[0].y - this.y, aliveEnemies[0].x - this.x);
+        }
+        
+        const mag = Math.sqrt(moveX * moveX + moveY * moveY);
+        if (mag > 1) { moveX /= mag; moveY /= mag; }
+        
+        return {
+            moveX,
+            moveY,
+            shoot: Math.random() < shootProb,
+            targetAngle
+        };
+    }
+    
+    learn(event, data) {
+        super.learn(event, data);
+        
+        // MoE-specific: adjust expert and gating weights
+        if (event === 'hit_enemy' || event === 'killed') {
+            // Reinforce recently used experts
+            this.experts.forEach((expert, i) => {
+                if (expert.uses > 0) {
+                    this.gatingWeights[i] *= 1.05;
+                    expert.score += 0.1;
+                }
+            });
+        } else if (event === 'died') {
+            // Reduce weight of recently used experts
+            this.experts.forEach((expert, i) => {
+                if (expert.uses > 0) {
+                    this.gatingWeights[i] *= 0.95;
+                }
+            });
+        }
+        
+        // Reset usage counts
+        this.experts.forEach(e => e.uses = 0);
+        
+        // Normalize gating weights
+        const sum = this.gatingWeights.reduce((a, b) => a + b, 0);
+        this.gatingWeights = this.gatingWeights.map(w => w / sum);
+    }
+}
+
+// NEURAL TURING MACHINE - External memory for strategic planning
+class NTMAgent extends NeuralAgent {
+    constructor(x, y) {
+        super('NTM', '#a855f7', x, y);
+    }
+    
+    initArchitecture() {
+        this.memorySlots = 32;
+        this.memoryDim = 8;
+        this.memory = [];
+        for (let i = 0; i < this.memorySlots; i++) {
+            this.memory.push(new Array(this.memoryDim).fill(0));
+        }
+        
+        this.readHead = 0;
+        this.writeHead = 0;
+        this.readWeights = new Array(this.memorySlots).fill(1 / this.memorySlots);
+        this.writeWeights = new Array(this.memorySlots).fill(1 / this.memorySlots);
+        
+        // Controller state
+        this.controller = {
+            hidden: new Array(16).fill(0),
+            Wk: new Array(this.memoryDim).fill(0).map(() => Math.random() - 0.5), // Key
+            Wv: new Array(this.memoryDim).fill(0).map(() => Math.random() - 0.5), // Value
+        };
+    }
+    
+    contentAddressing(key) {
+        // Compute attention over memory using key
+        let scores = this.memory.map(slot => {
+            let dot = 0;
+            for (let i = 0; i < this.memoryDim; i++) {
+                dot += key[i] * slot[i];
+            }
+            return Math.exp(dot);
+        });
+        
+        const sum = scores.reduce((a, b) => a + b, 0) || 1;
+        return scores.map(s => s / sum);
+    }
+    
+    think(enemies, bullets, dt) {
+        const aliveEnemies = enemies.filter(e => e.alive && e !== this);
+        
+        // Encode current state
+        let currentState = new Array(this.memoryDim).fill(0);
+        
+        aliveEnemies.forEach((enemy, i) => {
+            if (i < 2) {
+                const dx = (enemy.x - this.x) / canvas.width;
+                const dy = (enemy.y - this.y) / canvas.height;
+                currentState[i * 4] = dx;
+                currentState[i * 4 + 1] = dy;
+                currentState[i * 4 + 2] = enemy.health / 100;
+                currentState[i * 4 + 3] = enemy.vx / 200;
+            }
+        });
+        
+        // Read from memory (content-based addressing)
+        const readKey = currentState.map((s, i) => s * this.controller.Wk[i]);
+        this.readWeights = this.contentAddressing(readKey);
+        
+        let readVector = new Array(this.memoryDim).fill(0);
+        for (let i = 0; i < this.memorySlots; i++) {
+            for (let j = 0; j < this.memoryDim; j++) {
+                readVector[j] += this.readWeights[i] * this.memory[i][j];
+            }
+        }
+        
+        // Write to memory (store current state with learned value)
+        const writeValue = currentState.map((s, i) => 
+            s * 0.5 + readVector[i] * 0.3 + this.controller.Wv[i] * 0.2
+        );
+        
+        // Interpolate with existing memory at write head
+        const writeIndex = Math.floor(this.writeHead) % this.memorySlots;
+        for (let i = 0; i < this.memoryDim; i++) {
+            this.memory[writeIndex][i] = 
+                this.memory[writeIndex][i] * 0.7 + writeValue[i] * 0.3;
+        }
+        this.writeHead = (this.writeHead + 0.1) % this.memorySlots;
+        
+        // Decision making from controller + memory
+        let moveX = 0, moveY = 0, shoot = false;
+        let targetAngle = this.angle;
+        
+        // Use memory-augmented decision
+        const memoryBias = readVector.reduce((a, b) => a + b, 0) / this.memoryDim;
+        const aggressionMod = Math.tanh(memoryBias) * 0.5 + 0.5;
+        
+        // Find best target using memory of past encounters
+        let bestTarget = null;
+        let bestScore = -Infinity;
+        
+        aliveEnemies.forEach(enemy => {
+            const dx = enemy.x - this.x;
+            const dy = enemy.y - this.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            // Score based on distance, health, and memory
+            let score = (1000 - dist) / 1000;
+            score += (100 - enemy.health) / 200;
+            
+            // Check if we remember this type being dangerous
+            const dangerMemory = this.recentDamageFrom[enemy.type] || 0;
+            score += dangerMemory * 0.1;
+            
+            if (score > bestScore) {
+                bestScore = score;
+                bestTarget = { enemy, dx, dy, dist };
+            }
+        });
+        
+        if (bestTarget) {
+            targetAngle = Math.atan2(bestTarget.dy, bestTarget.dx);
+            
+            // Movement strategy based on memory-modulated aggression
+            const effectiveAggression = this.weights.aggression * aggressionMod;
+            
+            if (bestTarget.dist > 250) {
+                moveX = Math.cos(targetAngle) * effectiveAggression;
+                moveY = Math.sin(targetAngle) * effectiveAggression;
+            } else if (bestTarget.dist < 120) {
+                moveX = -Math.cos(targetAngle) * this.weights.evasion;
+                moveY = -Math.sin(targetAngle) * this.weights.evasion;
+            } else {
+                // Strafe
+                moveX = -Math.sin(targetAngle) * 0.5;
+                moveY = Math.cos(targetAngle) * 0.5;
+            }
+            
+            // Predict and shoot
+            const predX = bestTarget.enemy.x + bestTarget.enemy.vx * this.weights.prediction;
+            const predY = bestTarget.enemy.y + bestTarget.enemy.vy * this.weights.prediction;
+            targetAngle = Math.atan2(predY - this.y, predX - this.x);
+            
+            const angleDiff = Math.abs(targetAngle - this.angle);
+            if (angleDiff < 0.4 && bestTarget.dist < 350) {
+                shoot = Math.random() < effectiveAggression * 0.8;
+            }
+        }
+        
+        // Bullet evasion
+        bullets.forEach(b => {
+            if (b.owner === this) return;
+            const dx = b.x - this.x;
+            const dy = b.y - this.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 100) {
+                moveX -= (dx / dist) * this.weights.evasion * 0.7;
+                moveY -= (dy / dist) * this.weights.evasion * 0.7;
+            }
+        });
+        
+        const mag = Math.sqrt(moveX * moveX + moveY * moveY);
+        if (mag > 1) { moveX /= mag; moveY /= mag; }
+        
+        return { moveX, moveY, shoot, targetAngle };
+    }
+    
+    learn(event, data) {
+        super.learn(event, data);
+        
+        // NTM-specific: adjust controller weights and memory
+        if (event === 'hit_enemy' || event === 'killed') {
+            // Strengthen current memory pattern
+            const idx = Math.floor(this.writeHead) % this.memorySlots;
+            for (let i = 0; i < this.memoryDim; i++) {
+                this.memory[idx][i] *= 1.1;
+                this.controller.Wv[i] += 0.01;
+            }
+        } else if (event === 'died') {
+            // Weaken recent memory patterns (they led to death)
+            for (let i = 0; i < 3; i++) {
+                const idx = (Math.floor(this.writeHead) - i + this.memorySlots) % this.memorySlots;
+                for (let j = 0; j < this.memoryDim; j++) {
+                    this.memory[idx][j] *= 0.8;
+                }
+            }
+        }
+    }
+}
+
+// Game objects
+let agents = [];
+let bullets = [];
+
+function initAgents() {
+    const positions = [
+        { x: canvas.width * 0.2, y: canvas.height * 0.2 },
+        { x: canvas.width * 0.8, y: canvas.height * 0.2 },
+        { x: canvas.width * 0.2, y: canvas.height * 0.8 },
+        { x: canvas.width * 0.8, y: canvas.height * 0.8 }
+    ];
+    
+    agents = [
+        new TransformerAgent(positions[0].x, positions[0].y),
+        new MambaAgent(positions[1].x, positions[1].y),
+        new MoEAgent(positions[2].x, positions[2].y),
+        new NTMAgent(positions[3].x, positions[3].y)
+    ];
+}
+
+function updateUI() {
+    // Transformer
+    document.getElementById('t-health').style.width = `${agents[0].health}%`;
+    document.getElementById('t-kills').textContent = agents[0].kills;
+    document.getElementById('t-deaths').textContent = agents[0].deaths;
+    document.getElementById('t-wins').textContent = roundWins[0];
+    document.getElementById('t-accuracy').textContent = `${agents[0].getAccuracy()}%`;
+    document.getElementById('t-learning').textContent = agents[0].alive ? 
+        `ATT: ${agents[0].attentionWeights.map(w => w.toFixed(2)).join(', ')}` : 'RESPAWNING...';
+    document.getElementById('t-weights').textContent = 
+        `agg:${agents[0].weights.aggression.toFixed(2)} eva:${agents[0].weights.evasion.toFixed(2)} acc:${agents[0].weights.accuracy.toFixed(2)}`;
+    
+    // Mamba
+    document.getElementById('m-health').style.width = `${agents[1].health}%`;
+    document.getElementById('m-kills').textContent = agents[1].kills;
+    document.getElementById('m-deaths').textContent = agents[1].deaths;
+    document.getElementById('m-wins').textContent = roundWins[1];
+    document.getElementById('m-accuracy').textContent = `${agents[1].getAccuracy()}%`;
+    document.getElementById('m-learning').textContent = agents[1].alive ? 
+        `SEL: ${agents[1].selectivity.toFixed(3)}` : 'RESPAWNING...';
+    document.getElementById('m-weights').textContent = 
+        `agg:${agents[1].weights.aggression.toFixed(2)} eva:${agents[1].weights.evasion.toFixed(2)} acc:${agents[1].weights.accuracy.toFixed(2)}`;
+    
+    // MoE
+    document.getElementById('e-health').style.width = `${agents[2].health}%`;
+    document.getElementById('e-kills').textContent = agents[2].kills;
+    document.getElementById('e-deaths').textContent = agents[2].deaths;
+    document.getElementById('e-wins').textContent = roundWins[2];
+    document.getElementById('e-accuracy').textContent = `${agents[2].getAccuracy()}%`;
+    document.getElementById('e-experts').textContent = agents[2].currentExperts || '...';
+    document.getElementById('e-learning').textContent = agents[2].alive ? 
+        `GATE: ${agents[2].gatingWeights.slice(0, 4).map(w => w.toFixed(2)).join(', ')}...` : 'RESPAWNING...';
+    document.getElementById('e-weights').textContent = 
+        `agg:${agents[2].weights.aggression.toFixed(2)} eva:${agents[2].weights.evasion.toFixed(2)} acc:${agents[2].weights.accuracy.toFixed(2)}`;
+    
+    // NTM
+    document.getElementById('n-health').style.width = `${agents[3].health}%`;
+    document.getElementById('n-kills').textContent = agents[3].kills;
+    document.getElementById('n-deaths').textContent = agents[3].deaths;
+    document.getElementById('n-wins').textContent = roundWins[3];
+    document.getElementById('n-accuracy').textContent = `${agents[3].getAccuracy()}%`;
+    document.getElementById('n-learning').textContent = agents[3].alive ? 
+        `MEM HEAD: ${agents[3].writeHead.toFixed(1)}` : 'RESPAWNING...';
+    document.getElementById('n-weights').textContent = 
+        `agg:${agents[3].weights.aggression.toFixed(2)} eva:${agents[3].weights.evasion.toFixed(2)} acc:${agents[3].weights.accuracy.toFixed(2)}`;
+    
+    // Update brain visualizations
+    updateBrainVis('t-brain', agents[0].attentionWeights);
+    updateBrainVis('m-brain', agents[1].hiddenState.slice(0, 12));
+    updateBrainVis('e-brain', agents[2].gatingWeights);
+    updateBrainVis('n-brain', agents[3].readWeights.slice(0, 12));
+    
+    // Generation and round info
+    document.getElementById('gen-num').textContent = generation;
+    document.getElementById('round-num').textContent = roundNumber;
+    document.getElementById('fight-num').textContent = totalFights;
+}
+
+function updateBrainVis(id, values) {
+    const container = document.getElementById(id);
+    container.innerHTML = '';
+    values.forEach(v => {
+        const neuron = document.createElement('div');
+        neuron.className = 'neuron' + (Math.abs(v) > 0.1 ? ' active' : '');
+        neuron.style.opacity = Math.min(1, Math.abs(v) * 2 + 0.3);
+        container.appendChild(neuron);
+    });
+}
+
+const logContainer = document.getElementById('log');
+function addLog(message, type = '') {
+    const entry = document.createElement('div');
+    entry.className = 'log-entry ' + type;
+    entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+    logContainer.insertBefore(entry, logContainer.firstChild);
+    
+    // Keep only last 50 entries
+    while (logContainer.children.length > 50) {
+        logContainer.removeChild(logContainer.lastChild);
+    }
+}
+
+function update(dt) {
+    if (paused) return;
+    
+    // Handle round end timer
+    if (!roundInProgress) {
+        roundEndTimer -= dt * 1000;
+        if (roundEndTimer <= 0) {
+            startNewRound();
+        }
+        return;
+    }
+    
+    // Update agents
+    agents.forEach(agent => {
+        const bullet = agent.update(agents, bullets, dt);
+        if (bullet) bullets.push(bullet);
+    });
+    
+    // Update bullets
+    bullets = bullets.filter(bullet => {
+        bullet.x += bullet.vx * dt;
+        bullet.y += bullet.vy * dt;
+        
+        // Check bounds
+        if (bullet.x < 0 || bullet.x > canvas.width || 
+            bullet.y < 0 || bullet.y > canvas.height) {
+            bullet.owner.learn('missed', {});
+            return false;
+        }
+        
+        // Check collisions
+        for (const agent of agents) {
+            if (agent === bullet.owner || !agent.alive) continue;
+            
+            const dx = bullet.x - agent.x;
+            const dy = bullet.y - agent.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            if (dist < agent.radius) {
+                agent.takeDamage(bullet.damage, bullet.owner);
+                bullet.owner.shotsHit++;
+                bullet.owner.learn('hit_enemy', { target: agent.type, damage: bullet.damage });
+                totalFights++;
+                return false;
+            }
+        }
+        
+        return true;
+    });
+    
+    // Check for round winner (last one standing)
+    const aliveAgents = agents.filter(a => a.alive);
+    if (aliveAgents.length === 1 && roundInProgress) {
+        const winner = aliveAgents[0];
+        const winnerIndex = agents.indexOf(winner);
+        roundWins[winnerIndex]++;
+        
+        addLog(`🏆 ${winner.type} WINS ROUND ${roundNumber}!`, 'kill');
+        
+        roundInProgress = false;
+        roundEndTimer = 2000 / gameSpeed; // 2 second pause before next round
+        roundNumber++;
+        
+        // Check for generation advancement (every 5 rounds)
+        if (roundNumber > generation * 5) {
+            advanceGeneration();
+        }
+    }
+    
+    // Edge case: everyone dead at same time
+    if (aliveAgents.length === 0 && roundInProgress) {
+        addLog(`💀 MUTUAL DESTRUCTION! No winner.`, 'respawn');
+        roundInProgress = false;
+        roundEndTimer = 2000 / gameSpeed;
+        roundNumber++;
+        
+        if (roundNumber > generation * 5) {
+            advanceGeneration();
+        }
+    }
+}
+
+function startNewRound() {
+    addLog(`--- Round ${roundNumber} ---`, 'learn');
+    
+    // Reset positions and health
+    const positions = [
+        { x: canvas.width * 0.2, y: canvas.height * 0.2 },
+        { x: canvas.width * 0.8, y: canvas.height * 0.2 },
+        { x: canvas.width * 0.2, y: canvas.height * 0.8 },
+        { x: canvas.width * 0.8, y: canvas.height * 0.8 }
+    ];
+    
+    agents.forEach((agent, i) => {
+        agent.x = positions[i].x;
+        agent.y = positions[i].y;
+        agent.health = agent.maxHealth;
+        agent.alive = true;
+        agent.respawnTimer = 0;
+        agent.vx = 0;
+        agent.vy = 0;
+        agent.angle = Math.random() * Math.PI * 2;
+    });
+    
+    bullets = [];
+    roundInProgress = true;
+}
+
+function advanceGeneration() {
+    generation++;
+    addLog(`🧬 === GENERATION ${generation} === 🧬`, 'learn');
+    
+    // Find the best and worst performers
+    const rankings = agents.map((agent, i) => ({
+        agent,
+        index: i,
+        wins: roundWins[i],
+        kd: agent.kills / (agent.deaths || 1)
+    })).sort((a, b) => b.wins - a.wins || b.kd - a.kd);
+    
+    const best = rankings[0];
+    const worst = rankings[3];
+    
+    addLog(`Best: ${best.agent.type} (${best.wins} wins)`, 'learn');
+    addLog(`Evolving: ${worst.agent.type} learns from ${best.agent.type}`, 'learn');
+    
+    // Evolution: worst performer inherits some traits from best
+    const inheritRate = 0.3;
+    worst.agent.weights.aggression = worst.agent.weights.aggression * (1 - inheritRate) + 
+                                      best.agent.weights.aggression * inheritRate;
+    worst.agent.weights.evasion = worst.agent.weights.evasion * (1 - inheritRate) + 
+                                   best.agent.weights.evasion * inheritRate;
+    worst.agent.weights.accuracy = worst.agent.weights.accuracy * (1 - inheritRate) + 
+                                    best.agent.weights.accuracy * inheritRate;
+    worst.agent.weights.prediction = worst.agent.weights.prediction * (1 - inheritRate) + 
+                                      best.agent.weights.prediction * inheritRate;
+    
+    // Mutation for all agents
+    agents.forEach(agent => {
+        const mutationRate = 0.1;
+        agent.weights.aggression += (Math.random() - 0.5) * mutationRate;
+        agent.weights.evasion += (Math.random() - 0.5) * mutationRate;
+        agent.weights.accuracy += (Math.random() - 0.5) * mutationRate;
+        agent.weights.prediction += (Math.random() - 0.5) * mutationRate;
+        
+        // Clamp weights
+        agent.weights.aggression = Math.max(0.1, Math.min(0.95, agent.weights.aggression));
+        agent.weights.evasion = Math.max(0.1, Math.min(0.95, agent.weights.evasion));
+        agent.weights.accuracy = Math.max(0.1, Math.min(0.95, agent.weights.accuracy));
+        agent.weights.prediction = Math.max(0.1, Math.min(0.9, agent.weights.prediction));
+        
+        // Boost learning rate each generation
+        agent.weights.learningRate = Math.min(0.15, agent.weights.learningRate * 1.05);
+    });
+    
+    // Reset round wins for new generation
+    roundWins = [0, 0, 0, 0];
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Draw grid
+    ctx.strokeStyle = '#1a1a2e';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < canvas.width; x += 50) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+    }
+    for (let y = 0; y < canvas.height; y += 50) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+    }
+    
+    // Draw bullets
+    bullets.forEach(bullet => {
+        ctx.fillStyle = bullet.color;
+        ctx.beginPath();
+        ctx.arc(bullet.x, bullet.y, 4, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Trail
+        ctx.strokeStyle = bullet.color + '40';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(bullet.x, bullet.y);
+        ctx.lineTo(bullet.x - bullet.vx * 0.03, bullet.y - bullet.vy * 0.03);
+        ctx.stroke();
+    });
+    
+    // Draw agents
+    agents.forEach(agent => agent.draw());
+    
+    // Draw respawn indicators for dead agents
+    agents.filter(a => !a.alive).forEach(agent => {
+        ctx.fillStyle = agent.color + '40';
+        ctx.font = '12px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${agent.type} respawning...`, agent.x, agent.y);
+        ctx.fillText(`${(agent.respawnTimer / 1000).toFixed(1)}s`, agent.x, agent.y + 15);
+    });
+    
+    // Draw round end overlay
+    if (!roundInProgress) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        const winner = agents.find(a => a.alive);
+        
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 36px monospace';
+        
+        if (winner) {
+            ctx.fillStyle = winner.color;
+            ctx.fillText(`🏆 ${winner.type} WINS! 🏆`, canvas.width / 2, canvas.height / 2 - 20);
+        } else {
+            ctx.fillText('💀 MUTUAL DESTRUCTION 💀', canvas.width / 2, canvas.height / 2 - 20);
+        }
+        
+        ctx.fillStyle = '#888';
+        ctx.font = '18px monospace';
+        ctx.fillText(`Round ${roundNumber} starting in ${(roundEndTimer / 1000).toFixed(1)}s...`, canvas.width / 2, canvas.height / 2 + 30);
+        
+        // Show generation advancement if applicable
+        if (roundNumber > generation * 5) {
+            ctx.fillStyle = '#00ffaa';
+            ctx.fillText(`⬆️ EVOLVING TO GENERATION ${generation + 1}`, canvas.width / 2, canvas.height / 2 + 60);
+        }
+    }
+}
+
+let lastTime = 0;
+function gameLoop(timestamp) {
+    const dt = Math.min((timestamp - lastTime) / 1000, 0.1);
+    lastTime = timestamp;
+    
+    update(dt);
+    draw();
+    updateUI();
+    
+    requestAnimationFrame(gameLoop);
+}
+
+// Controls
+document.getElementById('pauseBtn').addEventListener('click', () => {
+    paused = !paused;
+    document.getElementById('pauseBtn').textContent = paused ? '▶️ Resume' : '⏸️ Pause';
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+    bullets = [];
+    generation = 1;
+    totalFights = 0;
+    roundNumber = 1;
+    roundWins = [0, 0, 0, 0];
+    roundInProgress = true;
+    initAgents();
+    logContainer.innerHTML = '';
+    addLog('Game reset!', 'respawn');
+});
+
+document.getElementById('speed-slider').addEventListener('input', (e) => {
+    gameSpeed = parseFloat(e.target.value);
+    document.getElementById('speed-value').textContent = gameSpeed + 'x';
+});
+
+// Initialize
+initAgents();
+addLog('Neural Network Battle Arena initialized!', 'learn');
+addLog('4 AGI architectures competing...', 'learn');
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>

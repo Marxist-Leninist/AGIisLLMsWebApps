@@ -1,0 +1,1101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Neural Ant Farm</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0a12;
+            overflow: hidden;
+            font-family: 'Segoe UI', sans-serif;
+            color: #eee;
+        }
+        #ui {
+            position: fixed;
+            top: 15px;
+            left: 15px;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        h1 {
+            font-size: 20px;
+            font-weight: 300;
+            letter-spacing: 2px;
+            background: linear-gradient(90deg, #00ff88, #00aaff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 5px;
+        }
+        .subtitle {
+            font-size: 11px;
+            color: #556;
+        }
+        .controls {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        button {
+            background: rgba(30, 50, 70, 0.8);
+            border: 1px solid #3a5a7a;
+            color: #8cf;
+            padding: 6px 12px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+        button:hover {
+            background: rgba(50, 80, 110, 0.9);
+            border-color: #5a8aba;
+        }
+        .stats {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            font-size: 11px;
+        }
+        .stat-item {
+            background: rgba(0, 80, 120, 0.3);
+            padding: 4px 8px;
+            border-radius: 3px;
+            border: 1px solid rgba(0, 150, 200, 0.3);
+            color: #7ac;
+        }
+        #info {
+            position: fixed;
+            bottom: 15px;
+            left: 15px;
+            font-size: 11px;
+            color: #445;
+            max-width: 300px;
+        }
+        #selectedInfo {
+            position: fixed;
+            top: 15px;
+            right: 15px;
+            background: rgba(0, 40, 60, 0.85);
+            border: 1px solid #2a4a6a;
+            border-radius: 4px;
+            padding: 12px;
+            font-size: 11px;
+            color: #8ab;
+            display: none;
+            min-width: 180px;
+        }
+        #selectedInfo.visible { display: block; }
+        #selectedInfo h3 {
+            color: #6cf;
+            font-weight: 400;
+            margin-bottom: 8px;
+        }
+        .action-bar {
+            display: flex;
+            gap: 3px;
+            margin-top: 8px;
+        }
+        .action-prob {
+            flex: 1;
+            height: 20px;
+            background: #1a2a3a;
+            position: relative;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        .action-prob .fill {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(to top, #0a8, #0cf);
+            transition: height 0.1s;
+        }
+        .action-prob .label {
+            position: absolute;
+            width: 100%;
+            text-align: center;
+            font-size: 9px;
+            color: #fff;
+            top: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <div>
+            <h1>🧠 3D NEURAL ANT FARM</h1>
+            <div class="subtitle">Transformer-controlled ants in voxel terrain</div>
+        </div>
+        <div class="controls">
+            <button onclick="addAnts(5)">+ 5 Ants</button>
+            <button onclick="togglePause()">Pause/Play</button>
+            <button onclick="mutateAll()">Mutate All</button>
+            <button onclick="cloneBest()">Clone Best</button>
+            <button onclick="resetSim()">Reset</button>
+            <button onclick="toggleCutaway()">Toggle Cutaway</button>
+        </div>
+        <div class="stats">
+            <span class="stat-item">Ants: <span id="antCount">0</span></span>
+            <span class="stat-item">Tunnels: <span id="tunnelPercent">0</span>%</span>
+            <span class="stat-item">Best: <span id="bestFitness">0</span></span>
+            <span class="stat-item">Gen: <span id="generation">1</span></span>
+        </div>
+    </div>
+    
+    <div id="selectedInfo">
+        <h3>Ant #<span id="selId">-</span></h3>
+        <div>Fitness: <span id="selFitness">-</span></div>
+        <div>Cells Dug: <span id="selDug">-</span></div>
+        <div>Cells Built: <span id="selBuilt">-</span></div>
+        <div>Grass Eaten: <span id="selGrass">-</span></div>
+        <div>Depth: <span id="selDepth">-</span></div>
+        <div>Energy: <span id="selEnergy">-</span></div>
+        <div>Carrying: <span id="selCarrying">-</span></div>
+        <div style="margin-top:8px;">Action Probabilities:</div>
+        <div class="action-bar">
+            <div class="action-prob"><div class="fill" id="prob0"></div><div class="label">+X</div></div>
+            <div class="action-prob"><div class="fill" id="prob1"></div><div class="label">-X</div></div>
+            <div class="action-prob"><div class="fill" id="prob2"></div><div class="label">+Z</div></div>
+            <div class="action-prob"><div class="fill" id="prob3"></div><div class="label">-Z</div></div>
+            <div class="action-prob"><div class="fill" id="prob4"></div><div class="label">↓</div></div>
+            <div class="action-prob"><div class="fill" id="prob5"></div><div class="label">↑</div></div>
+            <div class="action-prob"><div class="fill" id="prob6"></div><div class="label">⛏</div></div>
+            <div class="action-prob"><div class="fill" id="prob7"></div><div class="label">🧱</div></div>
+        </div>
+    </div>
+    
+    <div id="info">
+        Drag to rotate • Scroll to zoom • Click ant to select
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // ============================================
+        // CONFIG
+        // ============================================
+        const WORLD_SIZE = 40;
+        const WORLD_HEIGHT = 32;
+        const SURFACE_Y = 24;  // Much more dirt below surface
+        const CELL_SIZE = 1;
+        
+        let grid = [];
+        let ants = [];
+        let paused = false;
+        let generation = 1;
+        let selectedAnt = null;
+        let cutawayMode = true;
+        
+        // Three.js
+        let scene, camera, renderer, controls;
+        let dirtMeshes = [];
+        let antMeshes = new Map();
+        let groundMesh;
+        
+        // ============================================
+        // TRANSFORMER NEURAL NETWORK (same as before, adapted for 3D)
+        // ============================================
+        
+        class TransformerBrain {
+            constructor(config = {}) {
+                this.seqLen = config.seqLen || 27;      // 3x3x3 observation cube
+                this.embedDim = config.embedDim || 16;
+                this.numHeads = config.numHeads || 2;
+                this.ffnDim = config.ffnDim || 32;
+                this.outputDim = config.outputDim || 8; // 8 actions: ±X, ±Z, ±Y, DIG, BUILD
+                
+                this.initWeights();
+                this.lastAttention = null;
+            }
+            
+            initWeights() {
+                this.embedWeights = this.randomMatrix(5, this.embedDim, 0.5);
+                this.posEncoding = this.createPositionalEncoding();
+                this.Wq = this.randomMatrix(this.embedDim, this.embedDim, 0.3);
+                this.Wk = this.randomMatrix(this.embedDim, this.embedDim, 0.3);
+                this.Wv = this.randomMatrix(this.embedDim, this.embedDim, 0.3);
+                this.Wo = this.randomMatrix(this.embedDim, this.embedDim, 0.3);
+                this.ffn1 = this.randomMatrix(this.embedDim, this.ffnDim, 0.3);
+                this.ffn1Bias = this.randomArray(this.ffnDim, 0.1);
+                this.ffn2 = this.randomMatrix(this.ffnDim, this.embedDim, 0.3);
+                this.ffn2Bias = this.randomArray(this.embedDim, 0.1);
+                this.outputWeights = this.randomMatrix(this.embedDim, this.outputDim, 0.5);
+                this.outputBias = this.randomArray(this.outputDim, 0.1);
+                // Bias toward DOWN (4) and DIG (6), away from UP (5)
+                this.outputBias[4] += 1.5;  // DOWN
+                this.outputBias[5] -= 2.0;  // UP (penalize)
+                this.outputBias[6] += 1.0;  // DIG
+                this.outputBias[7] += 0.3;  // BUILD (slight bias)
+            }
+            
+            randomMatrix(rows, cols, scale = 1.0) {
+                return Array.from({length: rows}, () => 
+                    Array.from({length: cols}, () => (Math.random() - 0.5) * 2 * scale));
+            }
+            
+            randomArray(len, scale = 1.0) {
+                return Array.from({length: len}, () => (Math.random() - 0.5) * 2 * scale);
+            }
+            
+            createPositionalEncoding() {
+                const pe = [];
+                for (let pos = 0; pos < this.seqLen; pos++) {
+                    pe[pos] = [];
+                    for (let i = 0; i < this.embedDim; i++) {
+                        pe[pos][i] = i % 2 === 0 
+                            ? Math.sin(pos / Math.pow(10000, i / this.embedDim))
+                            : Math.cos(pos / Math.pow(10000, (i - 1) / this.embedDim));
+                    }
+                }
+                return pe;
+            }
+            
+            matmul(A, B) {
+                const result = [];
+                for (let i = 0; i < A.length; i++) {
+                    result[i] = [];
+                    for (let j = 0; j < B[0].length; j++) {
+                        let sum = 0;
+                        for (let k = 0; k < A[0].length; k++) sum += A[i][k] * B[k][j];
+                        result[i][j] = sum;
+                    }
+                }
+                return result;
+            }
+            
+            transpose(M) {
+                return M[0].map((_, j) => M.map(row => row[j]));
+            }
+            
+            softmax(arr) {
+                const max = Math.max(...arr);
+                const exps = arr.map(x => Math.exp(x - max));
+                const sum = exps.reduce((a, b) => a + b, 0);
+                return exps.map(x => x / (sum || 1));
+            }
+            
+            layerNorm(vec) {
+                const mean = vec.reduce((a, b) => a + b, 0) / vec.length;
+                const variance = vec.reduce((a, b) => a + (b - mean) ** 2, 0) / vec.length;
+                const std = Math.sqrt(variance + 1e-6);
+                return vec.map(x => (x - mean) / std);
+            }
+            
+            forward(observation) {
+                // Embedding + positional
+                let embedded = observation.map((token, i) => {
+                    const tokenIdx = Math.min(Math.max(0, token || 0), 4);
+                    const emb = [...this.embedWeights[tokenIdx]];
+                    for (let j = 0; j < this.embedDim; j++) emb[j] += this.posEncoding[i][j];
+                    return emb;
+                });
+                
+                // Self-attention
+                const Q = this.matmul(embedded, this.transpose(this.Wq));
+                const K = this.matmul(embedded, this.transpose(this.Wk));
+                const V = this.matmul(embedded, this.transpose(this.Wv));
+                
+                const scale = Math.sqrt(this.embedDim);
+                let scores = this.matmul(Q, this.transpose(K));
+                let attention = scores.map(row => this.softmax(row.map(x => x / scale)));
+                this.lastAttention = attention;
+                
+                let attended = this.matmul(attention, V);
+                attended = this.matmul(attended, this.transpose(this.Wo));
+                
+                // Residual + norm
+                attended = attended.map((row, i) => 
+                    this.layerNorm(row.map((v, j) => v + embedded[i][j])));
+                
+                // FFN
+                let ffnOut = attended.map((row, i) => {
+                    let hidden = this.ffn1Bias.map((b, j) => {
+                        let sum = b;
+                        for (let k = 0; k < this.embedDim; k++) sum += row[k] * this.ffn1[k][j];
+                        return Math.max(0, sum);
+                    });
+                    let out = this.ffn2Bias.map((b, j) => {
+                        let sum = b;
+                        for (let k = 0; k < this.ffnDim; k++) sum += hidden[k] * this.ffn2[k][j];
+                        return sum;
+                    });
+                    return this.layerNorm(out.map((v, j) => v + row[j]));
+                });
+                
+                // Pool and output
+                let pooled = new Array(this.embedDim).fill(0);
+                ffnOut.forEach(row => row.forEach((v, j) => pooled[j] += v));
+                pooled = pooled.map(x => x / this.seqLen);
+                
+                let logits = this.outputBias.map((b, i) => {
+                    let sum = b;
+                    for (let j = 0; j < this.embedDim; j++) sum += pooled[j] * this.outputWeights[j][i];
+                    return sum;
+                });
+                
+                return this.softmax(logits);
+            }
+            
+            getWeights() {
+                const weights = [];
+                const add = arr => arr.flat ? arr.flat().forEach(w => weights.push(w)) : arr.forEach(w => weights.push(w));
+                [this.embedWeights, this.Wq, this.Wk, this.Wv, this.Wo, this.ffn1, this.ffn2, this.outputWeights]
+                    .forEach(add);
+                [this.ffn1Bias, this.ffn2Bias, this.outputBias].forEach(add);
+                return weights;
+            }
+            
+            setWeights(weights) {
+                let idx = 0;
+                const fill = arr => {
+                    if (arr[0]?.length) arr.forEach(row => row.forEach((_, j) => row[j] = weights[idx++]));
+                    else arr.forEach((_, i) => arr[i] = weights[idx++]);
+                };
+                [this.embedWeights, this.Wq, this.Wk, this.Wv, this.Wo, this.ffn1, this.ffn2, this.outputWeights,
+                 this.ffn1Bias, this.ffn2Bias, this.outputBias].forEach(fill);
+            }
+            
+            mutate(rate = 0.1, strength = 0.3) {
+                const mutArr = arr => {
+                    if (arr[0]?.length) arr.forEach(row => row.forEach((v, j) => {
+                        if (Math.random() < rate) row[j] += (Math.random() - 0.5) * 2 * strength;
+                    }));
+                    else arr.forEach((v, i) => {
+                        if (Math.random() < rate) arr[i] += (Math.random() - 0.5) * 2 * strength;
+                    });
+                };
+                [this.embedWeights, this.Wq, this.Wk, this.Wv, this.Wo, this.ffn1, this.ffn2, this.outputWeights,
+                 this.ffn1Bias, this.ffn2Bias, this.outputBias].forEach(mutArr);
+            }
+            
+            clone() {
+                const newBrain = new TransformerBrain({
+                    seqLen: this.seqLen, embedDim: this.embedDim,
+                    numHeads: this.numHeads, ffnDim: this.ffnDim, outputDim: this.outputDim
+                });
+                newBrain.setWeights(this.getWeights());
+                return newBrain;
+            }
+        }
+
+        // ============================================
+        // ANT CLASS
+        // ============================================
+        
+        class Ant {
+            constructor(x, y, z, brain = null) {
+                this.id = Math.floor(Math.random() * 10000);
+                this.x = x;
+                this.y = y;
+                this.z = z;
+                this.brain = brain || new TransformerBrain();
+                
+                this.energy = 300;
+                this.cellsDug = 0;
+                this.cellsBuilt = 0;
+                this.grassEaten = 0;
+                this.maxDepth = 0;
+                this.fitness = 0;
+                this.carrying = 0; // 0 = nothing, 1-5 = dirt type, 10 = grass
+                
+                this.lastAction = 0;
+                this.lastProbs = new Array(8).fill(1/8);
+            }
+            
+            getObservation() {
+                // 3x3x3 cube around ant
+                const obs = [];
+                for (let dy = -1; dy <= 1; dy++) {
+                    for (let dz = -1; dz <= 1; dz++) {
+                        for (let dx = -1; dx <= 1; dx++) {
+                            const nx = this.x + dx;
+                            const ny = this.y + dy;
+                            const nz = this.z + dz;
+                            
+                            if (nx < 0 || nx >= WORLD_SIZE || nz < 0 || nz >= WORLD_SIZE || ny < 0 || ny >= WORLD_HEIGHT) {
+                                obs.push(4); // Boundary
+                            } else if (ny > SURFACE_Y) {
+                                obs.push(0); // Air above surface
+                            } else if (grid[ny][nz][nx] === 0) {
+                                obs.push(1); // Tunnel/air
+                            } else if (grid[ny][nz][nx] === 10) {
+                                obs.push(3); // Grass
+                            } else {
+                                obs.push(2); // Dirt
+                            }
+                        }
+                    }
+                }
+                return obs;
+            }
+            
+            update() {
+                // Energy management - regen on surface, drain underground
+                if (this.y > SURFACE_Y) {
+                    this.energy = Math.min(400, this.energy + 3);
+                } else {
+                    this.energy -= 0.2;
+                }
+                
+                // Clamp to surface - no flying
+                if (this.y > SURFACE_Y + 1) {
+                    this.y = SURFACE_Y + 1;
+                }
+                
+                // Neural network decision
+                const obs = this.getObservation();
+                const probs = this.brain.forward(obs);
+                this.lastProbs = probs;
+                
+                // Sample action
+                const r = Math.random();
+                let cumulative = 0;
+                let action = probs.length - 1;
+                for (let i = 0; i < probs.length; i++) {
+                    cumulative += probs[i];
+                    if (r < cumulative) { action = i; break; }
+                }
+                this.lastAction = action;
+                
+                // Block UP action if above surface
+                if (action === 5 && this.y >= SURFACE_Y) {
+                    action = 4; // Force DOWN instead
+                }
+                
+                // Execute
+                this.executeAction(action);
+                this.updateFitness();
+            }
+            
+            executeAction(action) {
+                const moves = [
+                    [1, 0, 0],   // 0: +X
+                    [-1, 0, 0],  // 1: -X
+                    [0, 0, 1],   // 2: +Z
+                    [0, 0, -1],  // 3: -Z
+                    [0, -1, 0],  // 4: Down (-Y)
+                    [0, 1, 0],   // 5: Up (+Y)
+                ];
+                
+                if (action === 6) {
+                    // DIG - dig below or in facing direction
+                    this.dig(this.x, this.y - 1, this.z);
+                    const hDirs = [[1,0], [-1,0], [0,1], [0,-1]];
+                    const [dx, dz] = hDirs[Math.floor(Math.random() * 4)];
+                    this.dig(this.x + dx, this.y, this.z + dz);
+                    return;
+                }
+                
+                if (action === 7) {
+                    // BUILD - place carried material
+                    if (this.carrying > 0) {
+                        this.build();
+                    }
+                    return;
+                }
+                
+                const [dx, dy, dz] = moves[action];
+                const nx = this.x + dx;
+                const ny = this.y + dy;
+                const nz = this.z + dz;
+                
+                // Block flying above surface
+                if (ny > SURFACE_Y + 1) return;
+                
+                if (nx >= 0 && nx < WORLD_SIZE && nz >= 0 && nz < WORLD_SIZE && ny >= 0 && ny < WORLD_HEIGHT) {
+                    if (ny > SURFACE_Y || grid[ny][nz][nx] === 0) {
+                        this.x = nx;
+                        this.y = ny;
+                        this.z = nz;
+                    } else {
+                        // Blocked - try to dig/eat
+                        this.dig(nx, ny, nz);
+                    }
+                }
+                
+                const depth = SURFACE_Y - this.y;
+                if (depth > this.maxDepth) this.maxDepth = depth;
+            }
+            
+            dig(x, y, z) {
+                if (x < 0 || x >= WORLD_SIZE || z < 0 || z >= WORLD_SIZE || y < 0 || y > SURFACE_Y) return;
+                
+                const cell = grid[y][z][x];
+                if (cell > 0) {
+                    if (cell === 10) {
+                        // Eating grass - gives energy!
+                        grid[y][z][x] = 0;
+                        this.grassEaten++;
+                        this.energy = Math.min(500, this.energy + 50);
+                        if (this.carrying === 0) this.carrying = 10;
+                    } else {
+                        // Digging dirt
+                        grid[y][z][x] = 0;
+                        this.cellsDug++;
+                        if (this.carrying === 0) this.carrying = cell;
+                    }
+                    updateDirtMesh(x, y, z);
+                }
+            }
+            
+            build() {
+                if (this.carrying === 0) return;
+                
+                // Try to place block nearby (prefer below or adjacent)
+                const spots = [
+                    [0, -1, 0],
+                    [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1],
+                    [1, -1, 0], [-1, -1, 0], [0, -1, 1], [0, -1, -1]
+                ];
+                
+                for (const [dx, dy, dz] of spots) {
+                    const bx = this.x + dx;
+                    const by = this.y + dy;
+                    const bz = this.z + dz;
+                    
+                    if (bx >= 0 && bx < WORLD_SIZE && bz >= 0 && bz < WORLD_SIZE && by >= 0 && by <= SURFACE_Y) {
+                        if (grid[by][bz][bx] === 0) {
+                            grid[by][bz][bx] = this.carrying === 10 ? 1 : this.carrying;
+                            this.carrying = 0;
+                            this.cellsBuilt++;
+                            updateDirtMesh(bx, by, bz);
+                            return;
+                        }
+                    }
+                }
+            }
+            
+            updateFitness() {
+                const depth = SURFACE_Y - this.y;
+                this.fitness = this.cellsDug * 10 + this.maxDepth * 3 + 
+                               this.cellsBuilt * 5 + this.grassEaten * 8 +
+                               (depth > 0 ? depth : 0);
+            }
+        }
+
+        // ============================================
+        // THREE.JS SETUP
+        // ============================================
+        
+        function initThree() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0a15);
+            scene.fog = new THREE.Fog(0x0a0a15, 50, 120);
+            
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 300);
+            camera.position.set(60, 40, 60);
+            camera.lookAt(WORLD_SIZE/2, SURFACE_Y/2, WORLD_SIZE/2);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            document.body.appendChild(renderer.domElement);
+            
+            // Lights
+            const ambient = new THREE.AmbientLight(0x404060, 0.5);
+            scene.add(ambient);
+            
+            const sun = new THREE.DirectionalLight(0xffffee, 1);
+            sun.position.set(30, 50, 20);
+            scene.add(sun);
+            
+            const fill = new THREE.DirectionalLight(0x8888ff, 0.3);
+            fill.position.set(-20, 20, -20);
+            scene.add(fill);
+            
+            // Ground plane (surface) - just a backdrop now
+            const groundGeo = new THREE.PlaneGeometry(WORLD_SIZE * 2, WORLD_SIZE * 2);
+            const groundMat = new THREE.MeshStandardMaterial({ 
+                color: 0x1a3a1a, 
+                roughness: 0.9 
+            });
+            groundMesh = new THREE.Mesh(groundGeo, groundMat);
+            groundMesh.rotation.x = -Math.PI / 2;
+            groundMesh.position.set(WORLD_SIZE/2, SURFACE_Y + 0.01, WORLD_SIZE/2);
+            scene.add(groundMesh);
+            
+            // Sky dome
+            const skyGeo = new THREE.SphereGeometry(120, 32, 32);
+            const skyMat = new THREE.MeshBasicMaterial({
+                color: 0x1a2a4a,
+                side: THREE.BackSide
+            });
+            const sky = new THREE.Mesh(skyGeo, skyMat);
+            sky.position.set(WORLD_SIZE/2, SURFACE_Y, WORLD_SIZE/2);
+            scene.add(sky);
+            
+            // Simple orbit controls
+            setupControls();
+            
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+            
+            // Click to select
+            renderer.domElement.addEventListener('click', onCanvasClick);
+        }
+        
+        function setupControls() {
+            let isDown = false;
+            let prevX = 0, prevY = 0;
+            let theta = Math.PI / 4;
+            let phi = Math.PI / 4;
+            let radius = 50;
+            
+            const target = new THREE.Vector3(WORLD_SIZE/2, SURFACE_Y/2, WORLD_SIZE/2);
+            
+            function updateCamera() {
+                camera.position.x = target.x + radius * Math.sin(phi) * Math.cos(theta);
+                camera.position.y = target.y + radius * Math.cos(phi);
+                camera.position.z = target.z + radius * Math.sin(phi) * Math.sin(theta);
+                camera.lookAt(target);
+            }
+            
+            renderer.domElement.addEventListener('mousedown', e => {
+                isDown = true;
+                prevX = e.clientX;
+                prevY = e.clientY;
+            });
+            
+            window.addEventListener('mouseup', () => isDown = false);
+            
+            window.addEventListener('mousemove', e => {
+                if (!isDown) return;
+                const dx = e.clientX - prevX;
+                const dy = e.clientY - prevY;
+                theta += dx * 0.01;
+                phi = Math.max(0.1, Math.min(Math.PI - 0.1, phi + dy * 0.01));
+                prevX = e.clientX;
+                prevY = e.clientY;
+                updateCamera();
+            });
+            
+            renderer.domElement.addEventListener('wheel', e => {
+                radius = Math.max(15, Math.min(100, radius + e.deltaY * 0.05));
+                updateCamera();
+            });
+            
+            updateCamera();
+        }
+        
+        function onCanvasClick(event) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            const mouse = new THREE.Vector2(
+                ((event.clientX - rect.left) / rect.width) * 2 - 1,
+                -((event.clientY - rect.top) / rect.height) * 2 + 1
+            );
+            
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(mouse, camera);
+            
+            const antObjects = Array.from(antMeshes.values());
+            const intersects = raycaster.intersectObjects(antObjects);
+            
+            if (intersects.length > 0) {
+                const mesh = intersects[0].object;
+                selectedAnt = ants.find(a => antMeshes.get(a.id) === mesh);
+                document.getElementById('selectedInfo').classList.add('visible');
+            } else {
+                selectedAnt = null;
+                document.getElementById('selectedInfo').classList.remove('visible');
+            }
+        }
+
+        // ============================================
+        // WORLD MANAGEMENT
+        // ============================================
+        
+        function initGrid() {
+            grid = [];
+            for (let y = 0; y < WORLD_HEIGHT; y++) {
+                grid[y] = [];
+                for (let z = 0; z < WORLD_SIZE; z++) {
+                    grid[y][z] = [];
+                    for (let x = 0; x < WORLD_SIZE; x++) {
+                        if (y > SURFACE_Y) {
+                            grid[y][z][x] = 0; // Air above surface
+                        } else if (y === SURFACE_Y) {
+                            grid[y][z][x] = 10; // Grass layer (special value)
+                        } else {
+                            // Dirt gets denser with depth
+                            const depth = SURFACE_Y - y;
+                            grid[y][z][x] = 1 + Math.min(Math.floor(depth / 4), 4);
+                        }
+                    }
+                }
+            }
+            
+            // Create entrance holes through grass
+            for (let i = 0; i < 5; i++) {
+                const hx = Math.floor(WORLD_SIZE * (0.15 + i * 0.18));
+                const hz = Math.floor(WORLD_SIZE * (0.25 + (i % 2) * 0.5));
+                // Clear grass and top dirt
+                grid[SURFACE_Y][hz][hx] = 0;
+                for (let y = SURFACE_Y - 4; y < SURFACE_Y; y++) {
+                    grid[y][hz][hx] = 0;
+                }
+            }
+        }
+        
+        function buildDirtMeshes() {
+            // Clear existing
+            dirtMeshes.forEach(m => scene.remove(m));
+            dirtMeshes = [];
+            
+            const dirtColors = [0x8B6914, 0x7A5C12, 0x694F10, 0x58420E, 0x47350C];
+            const grassColor = 0x3a8a3a;
+            
+            const geo = new THREE.BoxGeometry(CELL_SIZE * 0.98, CELL_SIZE * 0.98, CELL_SIZE * 0.98);
+            
+            // Build dirt layers
+            for (let colorIdx = 0; colorIdx < dirtColors.length; colorIdx++) {
+                const mat = new THREE.MeshStandardMaterial({
+                    color: dirtColors[colorIdx],
+                    roughness: 0.9,
+                    metalness: 0.1
+                });
+                
+                let count = 0;
+                for (let y = 0; y < SURFACE_Y; y++) {
+                    for (let z = 0; z < WORLD_SIZE; z++) {
+                        for (let x = 0; x < WORLD_SIZE; x++) {
+                            const cell = grid[y][z][x];
+                            if (cell > 0 && cell < 10) {
+                                const ci = Math.min(cell - 1, dirtColors.length - 1);
+                                if (ci === colorIdx && shouldRenderBlock(x, y, z)) count++;
+                            }
+                        }
+                    }
+                }
+                
+                if (count === 0) continue;
+                
+                const mesh = new THREE.InstancedMesh(geo, mat, count);
+                const dummy = new THREE.Object3D();
+                let idx = 0;
+                
+                for (let y = 0; y < SURFACE_Y; y++) {
+                    for (let z = 0; z < WORLD_SIZE; z++) {
+                        for (let x = 0; x < WORLD_SIZE; x++) {
+                            const cell = grid[y][z][x];
+                            if (cell > 0 && cell < 10) {
+                                const ci = Math.min(cell - 1, dirtColors.length - 1);
+                                if (ci === colorIdx && shouldRenderBlock(x, y, z)) {
+                                    dummy.position.set(x + 0.5, y + 0.5, z + 0.5);
+                                    dummy.updateMatrix();
+                                    mesh.setMatrixAt(idx++, dummy.matrix);
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                mesh.instanceMatrix.needsUpdate = true;
+                scene.add(mesh);
+                dirtMeshes.push(mesh);
+            }
+            
+            // Build grass layer
+            let grassCount = 0;
+            for (let z = 0; z < WORLD_SIZE; z++) {
+                for (let x = 0; x < WORLD_SIZE; x++) {
+                    if (grid[SURFACE_Y] && grid[SURFACE_Y][z][x] === 10 && shouldRenderBlock(x, SURFACE_Y, z)) {
+                        grassCount++;
+                    }
+                }
+            }
+            
+            if (grassCount > 0) {
+                const grassMat = new THREE.MeshStandardMaterial({
+                    color: grassColor,
+                    roughness: 0.8,
+                    metalness: 0.0
+                });
+                const grassMesh = new THREE.InstancedMesh(geo, grassMat, grassCount);
+                const dummy = new THREE.Object3D();
+                let idx = 0;
+                
+                for (let z = 0; z < WORLD_SIZE; z++) {
+                    for (let x = 0; x < WORLD_SIZE; x++) {
+                        if (grid[SURFACE_Y] && grid[SURFACE_Y][z][x] === 10 && shouldRenderBlock(x, SURFACE_Y, z)) {
+                            dummy.position.set(x + 0.5, SURFACE_Y + 0.5, z + 0.5);
+                            dummy.updateMatrix();
+                            grassMesh.setMatrixAt(idx++, dummy.matrix);
+                        }
+                    }
+                }
+                
+                grassMesh.instanceMatrix.needsUpdate = true;
+                scene.add(grassMesh);
+                dirtMeshes.push(grassMesh);
+            }
+        }
+        
+        function shouldRenderBlock(x, y, z) {
+            // Only render if exposed (next to air/tunnel) or in cutaway view
+            if (cutawayMode && (x > WORLD_SIZE/2 || z > WORLD_SIZE/2)) return false;
+            
+            // Check if any neighbor is air
+            const neighbors = [
+                [1,0,0], [-1,0,0], [0,1,0], [0,-1,0], [0,0,1], [0,0,-1]
+            ];
+            
+            for (const [dx, dy, dz] of neighbors) {
+                const nx = x + dx, ny = y + dy, nz = z + dz;
+                if (nx < 0 || nx >= WORLD_SIZE || nz < 0 || nz >= WORLD_SIZE || ny < 0 || ny >= WORLD_HEIGHT) {
+                    return true;
+                }
+                if (ny > SURFACE_Y || grid[ny][nz][nx] === 0) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        
+        let rebuildQueued = false;
+        function updateDirtMesh(x, y, z) {
+            if (!rebuildQueued) {
+                rebuildQueued = true;
+                setTimeout(() => {
+                    buildDirtMeshes();
+                    rebuildQueued = false;
+                }, 100);
+            }
+        }
+        
+        function toggleCutaway() {
+            cutawayMode = !cutawayMode;
+            buildDirtMeshes();
+        }
+
+        // ============================================
+        // ANT RENDERING
+        // ============================================
+        
+        function createAntMesh(ant) {
+            const group = new THREE.Group();
+            
+            // Body
+            const bodyGeo = new THREE.SphereGeometry(0.4, 8, 6);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.7 });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.scale.set(1, 0.7, 1.3);
+            group.add(body);
+            
+            // Head
+            const headGeo = new THREE.SphereGeometry(0.25, 8, 6);
+            const head = new THREE.Mesh(headGeo, bodyMat);
+            head.position.z = 0.5;
+            group.add(head);
+            
+            // Abdomen
+            const abdGeo = new THREE.SphereGeometry(0.35, 8, 6);
+            const abd = new THREE.Mesh(abdGeo, bodyMat);
+            abd.position.z = -0.6;
+            abd.scale.set(0.9, 0.8, 1.2);
+            group.add(abd);
+            
+            // Cargo indicator (shows when carrying)
+            const cargoGeo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+            const cargoMat = new THREE.MeshStandardMaterial({ color: 0x8B6914 });
+            const cargo = new THREE.Mesh(cargoGeo, cargoMat);
+            cargo.position.set(0, 0.5, 0);
+            cargo.name = 'cargo';
+            cargo.visible = false;
+            group.add(cargo);
+            
+            // Glow indicator
+            const glowGeo = new THREE.SphereGeometry(0.6, 8, 6);
+            const glowMat = new THREE.MeshBasicMaterial({ 
+                color: 0x00ff88, 
+                transparent: true, 
+                opacity: 0 
+            });
+            const glow = new THREE.Mesh(glowGeo, glowMat);
+            glow.name = 'glow';
+            group.add(glow);
+            
+            scene.add(group);
+            antMeshes.set(ant.id, group);
+            return group;
+        }
+        
+        function updateAntMeshes() {
+            ants.forEach(ant => {
+                let mesh = antMeshes.get(ant.id);
+                if (!mesh) mesh = createAntMesh(ant);
+                
+                mesh.position.set(ant.x + 0.5, ant.y + 0.5, ant.z + 0.5);
+                
+                // Rotate based on last action
+                const rotations = [0, Math.PI, Math.PI/2, -Math.PI/2, 0, 0, 0, 0];
+                mesh.rotation.y = rotations[ant.lastAction] || 0;
+                
+                // Update cargo visibility
+                const cargo = mesh.getObjectByName('cargo');
+                if (cargo) {
+                    cargo.visible = ant.carrying > 0;
+                    if (ant.carrying === 10) {
+                        cargo.material.color.setHex(0x3a8a3a); // Green for grass
+                    } else {
+                        cargo.material.color.setHex(0x8B6914); // Brown for dirt
+                    }
+                }
+                
+                // Update glow based on confidence
+                const glow = mesh.getObjectByName('glow');
+                if (glow) {
+                    const maxProb = Math.max(...ant.lastProbs);
+                    glow.material.opacity = Math.max(0, (maxProb - 0.3) * 0.8);
+                    
+                    // Color based on selected
+                    if (selectedAnt === ant) {
+                        glow.material.color.setHex(0x00ffff);
+                        glow.material.opacity = 0.5;
+                    } else {
+                        glow.material.color.setHex(0x00ff88);
+                    }
+                }
+            });
+            
+            // Remove meshes for dead ants
+            antMeshes.forEach((mesh, id) => {
+                if (!ants.find(a => a.id === id)) {
+                    scene.remove(mesh);
+                    antMeshes.delete(id);
+                }
+            });
+        }
+
+        // ============================================
+        // SIMULATION CONTROLS
+        // ============================================
+        
+        function addAnts(count) {
+            for (let i = 0; i < count; i++) {
+                const x = Math.floor(WORLD_SIZE * (0.2 + Math.random() * 0.6));
+                const z = Math.floor(WORLD_SIZE * (0.2 + Math.random() * 0.6));
+                ants.push(new Ant(x, SURFACE_Y + 1, z));
+            }
+        }
+        
+        function mutateAll() {
+            ants.forEach(ant => ant.brain.mutate(0.15, 0.4));
+        }
+        
+        function cloneBest() {
+            if (ants.length === 0) return;
+            ants.sort((a, b) => b.fitness - a.fitness);
+            const best = ants[0];
+            const clone = new Ant(
+                Math.floor(WORLD_SIZE * (0.2 + Math.random() * 0.6)),
+                SURFACE_Y + 1,
+                Math.floor(WORLD_SIZE * (0.2 + Math.random() * 0.6)),
+                best.brain.clone()
+            );
+            clone.brain.mutate(0.1, 0.2);
+            ants.push(clone);
+            if (ants.length > 25) ants.pop();
+            generation++;
+        }
+        
+        function togglePause() {
+            paused = !paused;
+        }
+        
+        function resetSim() {
+            ants = [];
+            antMeshes.forEach(m => scene.remove(m));
+            antMeshes.clear();
+            selectedAnt = null;
+            generation = 1;
+            document.getElementById('selectedInfo').classList.remove('visible');
+            initGrid();
+            buildDirtMeshes();
+            addAnts(12);
+        }
+        
+        function updateStats() {
+            document.getElementById('antCount').textContent = ants.length;
+            document.getElementById('generation').textContent = generation;
+            
+            let tunnels = 0, total = (SURFACE_Y + 1) * WORLD_SIZE * WORLD_SIZE;
+            for (let y = 0; y <= SURFACE_Y; y++)
+                for (let z = 0; z < WORLD_SIZE; z++)
+                    for (let x = 0; x < WORLD_SIZE; x++)
+                        if (grid[y][z][x] === 0) tunnels++;
+            
+            document.getElementById('tunnelPercent').textContent = ((tunnels / total) * 100).toFixed(1);
+            
+            if (ants.length > 0) {
+                const best = Math.max(...ants.map(a => a.fitness));
+                document.getElementById('bestFitness').textContent = best.toFixed(0);
+            }
+            
+            if (selectedAnt) {
+                document.getElementById('selId').textContent = selectedAnt.id;
+                document.getElementById('selFitness').textContent = selectedAnt.fitness.toFixed(0);
+                document.getElementById('selDug').textContent = selectedAnt.cellsDug;
+                document.getElementById('selBuilt').textContent = selectedAnt.cellsBuilt;
+                document.getElementById('selGrass').textContent = selectedAnt.grassEaten;
+                document.getElementById('selDepth').textContent = selectedAnt.maxDepth;
+                document.getElementById('selEnergy').textContent = selectedAnt.energy.toFixed(0);
+                document.getElementById('selCarrying').textContent = selectedAnt.carrying === 0 ? 'Nothing' : 
+                    selectedAnt.carrying === 10 ? '🌿 Grass' : '🟫 Dirt';
+                
+                selectedAnt.lastProbs.forEach((p, i) => {
+                    const el = document.getElementById('prob' + i);
+                    if (el) el.style.height = (p * 100) + '%';
+                });
+            }
+        }
+
+        // ============================================
+        // MAIN LOOP
+        // ============================================
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            if (!paused) {
+                // Respawn dying ants
+                ants.forEach(ant => {
+                    if (ant.energy < 10) {
+                        ant.x = Math.floor(WORLD_SIZE * (0.2 + Math.random() * 0.6));
+                        ant.y = SURFACE_Y + 1;
+                        ant.z = Math.floor(WORLD_SIZE * (0.2 + Math.random() * 0.6));
+                        ant.energy = 350;
+                        ant.carrying = 0;
+                        
+                        if (ants.length > 1 && Math.random() < 0.3) {
+                            const sorted = [...ants].sort((a, b) => b.fitness - a.fitness);
+                            if (sorted[0] !== ant) {
+                                ant.brain = sorted[0].brain.clone();
+                                ant.brain.mutate(0.1, 0.25);
+                            }
+                        }
+                    }
+                });
+                
+                ants.forEach(ant => ant.update());
+            }
+            
+            updateAntMeshes();
+            updateStats();
+            renderer.render(scene, camera);
+        }
+        
+        // Init
+        initThree();
+        initGrid();
+        buildDirtMeshes();
+        addAnts(12);
+        animate();
+    </script>
+</body>
+</html>

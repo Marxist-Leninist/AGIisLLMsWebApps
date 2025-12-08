@@ -1,0 +1,1769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FORTRESS Variants Battle Arena</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0a0f;
+            color: #e0e0e0;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+        }
+        #container {
+            display: flex;
+            height: 100vh;
+        }
+        #arena {
+            flex: 1;
+            position: relative;
+            background: linear-gradient(135deg, #0d0d15 0%, #1a1a2e 100%);
+            border-right: 2px solid #333;
+        }
+        canvas {
+            display: block;
+        }
+        #sidebar {
+            width: 380px;
+            padding: 10px;
+            background: #111118;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        h1 {
+            font-size: 1.1em;
+            color: #6366f1;
+            text-align: center;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px #6366f155;
+        }
+        .subtitle {
+            font-size: 0.7em;
+            color: #666;
+            text-align: center;
+            margin-top: -8px;
+            margin-bottom: 8px;
+        }
+        .nn-card {
+            background: #1a1a25;
+            border-radius: 6px;
+            padding: 8px;
+            border: 1px solid #333;
+        }
+        .nn-card h3 {
+            font-size: 0.75em;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .nn-icon {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        .fort-original .nn-icon { background: #6366f1; box-shadow: 0 0 8px #6366f1; }
+        .fort-citadel .nn-icon { background: #8b5cf6; box-shadow: 0 0 8px #8b5cf6; }
+        .fort-bastion .nn-icon { background: #06b6d4; box-shadow: 0 0 8px #06b6d4; }
+        .fort-rampart .nn-icon { background: #f59e0b; box-shadow: 0 0 8px #f59e0b; }
+        .fort-bulwark .nn-icon { background: #10b981; box-shadow: 0 0 8px #10b981; }
+        .fort-redoubt .nn-icon { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
+        .fort-aegis .nn-icon { background: #ec4899; box-shadow: 0 0 8px #ec4899; }
+        
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.65em;
+            margin: 2px 0;
+            color: #888;
+        }
+        .stat-value { color: #fff; }
+        .health-bar {
+            height: 5px;
+            background: #333;
+            border-radius: 3px;
+            margin: 4px 0;
+            overflow: hidden;
+        }
+        .health-fill {
+            height: 100%;
+            transition: width 0.3s;
+            border-radius: 3px;
+        }
+        .fort-original .health-fill { background: linear-gradient(90deg, #6366f1, #818cf8); }
+        .fort-citadel .health-fill { background: linear-gradient(90deg, #8b5cf6, #a78bfa); }
+        .fort-bastion .health-fill { background: linear-gradient(90deg, #06b6d4, #22d3ee); }
+        .fort-rampart .health-fill { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+        .fort-bulwark .health-fill { background: linear-gradient(90deg, #10b981, #34d399); }
+        .fort-redoubt .health-fill { background: linear-gradient(90deg, #ef4444, #f87171); }
+        .fort-aegis .health-fill { background: linear-gradient(90deg, #ec4899, #f472b6); }
+        
+        .learning-indicator {
+            font-size: 0.6em;
+            color: #6366f1;
+            margin-top: 2px;
+        }
+        .variant-desc {
+            font-size: 0.55em;
+            color: #555;
+            font-style: italic;
+            margin-top: 2px;
+        }
+        .brain-vis {
+            display: flex;
+            gap: 2px;
+            margin-top: 4px;
+            flex-wrap: wrap;
+        }
+        .neuron {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: #333;
+            transition: background 0.2s;
+        }
+        .neuron.active { background: #6366f1; }
+        #controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        button {
+            flex: 1;
+            padding: 10px;
+            background: #6366f122;
+            border: 1px solid #6366f1;
+            color: #6366f1;
+            cursor: pointer;
+            border-radius: 5px;
+            font-family: inherit;
+            transition: all 0.2s;
+        }
+        button:hover {
+            background: #6366f144;
+        }
+        #log {
+            flex: 1;
+            background: #0a0a10;
+            border-radius: 5px;
+            padding: 8px;
+            font-size: 0.6em;
+            overflow-y: auto;
+            max-height: 100px;
+            border: 1px solid #222;
+        }
+        .log-entry {
+            margin: 3px 0;
+            padding: 2px 0;
+            border-bottom: 1px solid #1a1a1a;
+        }
+        .log-entry.kill { color: #ef4444; }
+        .log-entry.learn { color: #6366f1; }
+        .log-entry.respawn { color: #888; }
+        #generation {
+            text-align: center;
+            font-size: 0.85em;
+            color: #666;
+            padding: 8px;
+            background: #0a0a10;
+            border-radius: 5px;
+        }
+        #generation span { color: #6366f1; font-weight: bold; }
+        #speed-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px;
+            background: #0a0a10;
+            border-radius: 5px;
+        }
+        #speed-control label { font-size: 0.8em; color: #666; }
+        #speed-slider { flex: 1; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="arena">
+            <canvas id="canvas"></canvas>
+        </div>
+        <div id="sidebar">
+            <h1>🏰 FORTRESS Variants Arena</h1>
+            <div class="subtitle">Ultra-defensive configs - 0.99 decay, max HP, counter-attack</div>
+            
+            <div id="generation">Gen: <span id="gen-num">1</span> | Round: <span id="round-num">1</span> | Hits: <span id="fight-num">0</span></div>
+            
+            <div id="controls">
+                <button id="pauseBtn">⏸️ Pause</button>
+                <button id="resetBtn">🔄 Reset</button>
+            </div>
+            
+            <div id="speed-control">
+                <label>Speed:</label>
+                <input type="range" id="speed-slider" min="0.5" max="3" step="0.25" value="1">
+                <span id="speed-value">1x</span>
+            </div>
+            
+            <div class="nn-card fort-original">
+                <h3><span class="nn-icon"></span>FORTRESS-ORIGINAL</h3>
+                <div class="variant-desc">The baseline - max HP, barely moves, counter-attacks</div>
+                <div class="stat-row">Ch: <span class="stat-value">28</span> | HP: <span class="stat-value">160</span> | Decay: <span class="stat-value" id="r0-decay">0.99</span></div>
+                <div class="health-bar"><div class="health-fill" id="r0-health" style="width:100%"></div></div>
+                <div class="stat-row">Kills: <span class="stat-value" id="r0-kills">0</span> | Deaths: <span class="stat-value" id="r0-deaths">0</span> | Wins: <span class="stat-value" id="r0-wins">0</span></div>
+                <div class="stat-row">Accuracy: <span class="stat-value" id="r0-accuracy">0%</span></div>
+                <div class="learning-indicator" id="r0-learning"></div>
+                <div class="brain-vis" id="r0-brain"></div>
+            </div>
+            
+            <div class="nn-card fort-citadel">
+                <h3><span class="nn-icon"></span>FORTRESS-CITADEL</h3>
+                <div class="variant-desc">Maximum memory - 0.995 decay, 32 channels, remembers everything</div>
+                <div class="stat-row">Ch: <span class="stat-value">32</span> | HP: <span class="stat-value">155</span> | Decay: <span class="stat-value" id="r1-decay">0.995</span></div>
+                <div class="health-bar"><div class="health-fill" id="r1-health" style="width:100%"></div></div>
+                <div class="stat-row">Kills: <span class="stat-value" id="r1-kills">0</span> | Deaths: <span class="stat-value" id="r1-deaths">0</span> | Wins: <span class="stat-value" id="r1-wins">0</span></div>
+                <div class="stat-row">Accuracy: <span class="stat-value" id="r1-accuracy">0%</span></div>
+                <div class="learning-indicator" id="r1-learning"></div>
+                <div class="brain-vis" id="r1-brain"></div>
+            </div>
+            
+            <div class="nn-card fort-bastion">
+                <h3><span class="nn-icon"></span>FORTRESS-BASTION</h3>
+                <div class="variant-desc">Laser fortress - high damage laser, area denial specialist</div>
+                <div class="stat-row">Ch: <span class="stat-value">28</span> | HP: <span class="stat-value">150</span> | Decay: <span class="stat-value" id="r2-decay">0.98</span></div>
+                <div class="health-bar"><div class="health-fill" id="r2-health" style="width:100%"></div></div>
+                <div class="stat-row">Kills: <span class="stat-value" id="r2-kills">0</span> | Deaths: <span class="stat-value" id="r2-deaths">0</span> | Wins: <span class="stat-value" id="r2-wins">0</span></div>
+                <div class="stat-row">Accuracy: <span class="stat-value" id="r2-accuracy">0%</span></div>
+                <div class="learning-indicator" id="r2-learning"></div>
+                <div class="brain-vis" id="r2-brain"></div>
+            </div>
+            
+            <div class="nn-card fort-rampart">
+                <h3><span class="nn-icon"></span>FORTRESS-RAMPART</h3>
+                <div class="variant-desc">Artillery fortress - extreme railgun, siege warfare</div>
+                <div class="stat-row">Ch: <span class="stat-value">28</span> | HP: <span class="stat-value">145</span> | Decay: <span class="stat-value" id="r3-decay">0.985</span></div>
+                <div class="health-bar"><div class="health-fill" id="r3-health" style="width:100%"></div></div>
+                <div class="stat-row">Kills: <span class="stat-value" id="r3-kills">0</span> | Deaths: <span class="stat-value" id="r3-deaths">0</span> | Wins: <span class="stat-value" id="r3-wins">0</span></div>
+                <div class="stat-row">Accuracy: <span class="stat-value" id="r3-accuracy">0%</span></div>
+                <div class="learning-indicator" id="r3-learning"></div>
+                <div class="brain-vis" id="r3-brain"></div>
+            </div>
+            
+            <div class="nn-card fort-bulwark">
+                <h3><span class="nn-icon"></span>FORTRESS-BULWARK</h3>
+                <div class="variant-desc">Regen fortress - lower HP but heals over time</div>
+                <div class="stat-row">Ch: <span class="stat-value">28</span> | HP: <span class="stat-value">130</span> | Decay: <span class="stat-value" id="r4-decay">0.99</span></div>
+                <div class="health-bar"><div class="health-fill" id="r4-health" style="width:100%"></div></div>
+                <div class="stat-row">Kills: <span class="stat-value" id="r4-kills">0</span> | Deaths: <span class="stat-value" id="r4-deaths">0</span> | Wins: <span class="stat-value" id="r4-wins">0</span></div>
+                <div class="stat-row">Accuracy: <span class="stat-value" id="r4-accuracy">0%</span></div>
+                <div class="learning-indicator" id="r4-learning"></div>
+                <div class="brain-vis" id="r4-brain"></div>
+            </div>
+            
+            <div class="nn-card fort-redoubt">
+                <h3><span class="nn-icon"></span>FORTRESS-REDOUBT</h3>
+                <div class="variant-desc">Revenge fortress - damage boost when hurt, berserker mode</div>
+                <div class="stat-row">Ch: <span class="stat-value">26</span> | HP: <span class="stat-value">155</span> | Decay: <span class="stat-value" id="r5-decay">0.97</span></div>
+                <div class="health-bar"><div class="health-fill" id="r5-health" style="width:100%"></div></div>
+                <div class="stat-row">Kills: <span class="stat-value" id="r5-kills">0</span> | Deaths: <span class="stat-value" id="r5-deaths">0</span> | Wins: <span class="stat-value" id="r5-wins">0</span></div>
+                <div class="stat-row">Accuracy: <span class="stat-value" id="r5-accuracy">0%</span></div>
+                <div class="learning-indicator" id="r5-learning"></div>
+                <div class="brain-vis" id="r5-brain"></div>
+            </div>
+            
+            <div class="nn-card fort-aegis">
+                <h3><span class="nn-icon"></span>FORTRESS-AEGIS</h3>
+                <div class="variant-desc">Adaptive fortress - mode switching, 2x learning rate</div>
+                <div class="stat-row">Ch: <span class="stat-value">32</span> | HP: <span class="stat-value">165</span> | Decay: <span class="stat-value" id="r6-decay">dynamic</span></div>
+                <div class="health-bar"><div class="health-fill" id="r6-health" style="width:100%"></div></div>
+                <div class="stat-row">Kills: <span class="stat-value" id="r6-kills">0</span> | Deaths: <span class="stat-value" id="r6-deaths">0</span> | Wins: <span class="stat-value" id="r6-wins">0</span></div>
+                <div class="stat-row">Accuracy: <span class="stat-value" id="r6-accuracy">0%</span></div>
+                <div class="learning-indicator" id="r6-learning"></div>
+                <div class="brain-vis" id="r6-brain"></div>
+            </div>
+            
+            <div id="log"></div>
+        </div>
+    </div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+function resizeCanvas() {
+    canvas.width = canvas.parentElement.clientWidth;
+    canvas.height = canvas.parentElement.clientHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+let paused = false;
+let gameSpeed = 1;
+let generation = 1;
+let totalFights = 0;
+let roundNumber = 1;
+let roundWins = [0, 0, 0, 0, 0, 0, 0];
+let roundInProgress = true;
+let roundEndTimer = 0;
+
+// Base FORTRESS Agent - ultra-defensive, high decay, counter-attack
+class FortressAgent {
+    constructor(type, color, x, y, config = {}) {
+        this.type = type;
+        this.color = color;
+        this.x = x;
+        this.y = y;
+        this.vx = 0;
+        this.vy = 0;
+        
+        // Fortress baseline: very high HP
+        this.maxHealth = config.maxHealth || 160;
+        this.health = this.maxHealth;
+        this.radius = 24;
+        this.angle = Math.random() * Math.PI * 2;
+        this.kills = 0;
+        this.deaths = 0;
+        this.shotsFired = 0;
+        this.shotsHit = 0;
+        this.respawnTimer = 0;
+        this.alive = true;
+        
+        this.config = config;
+        
+        // Fortress baseline: very defensive, counter-attack focused
+        this.weights = {
+            aggression: config.aggression || 0.3,
+            evasion: config.evasion || 0.9,
+            accuracy: config.accuracy || 0.55,
+            prediction: config.prediction || 0.45,
+            learningRate: config.learningRate || 0.05,
+            railgunPreference: config.railgunPreference || 0.6,
+            laserPreference: config.laserPreference || 0.5
+        };
+        
+        // Fortress weapons - heavy damage
+        this.weapons = {
+            bullet: {
+                cooldown: config.bulletCooldown || 500,
+                lastShot: 0,
+                damage: config.bulletDamage || 20,
+                speed: 400,
+                color: this.color,
+                ready: true
+            },
+            railgun: {
+                cooldown: config.railgunCooldown || 1600,
+                lastShot: 0,
+                damage: config.railgunDamage || 55,
+                speed: 900,
+                color: '#ffffff',
+                ready: true
+            },
+            laser: {
+                cooldown: config.laserCooldown || 700,
+                lastShot: 0,
+                damage: config.laserDamage || 12,
+                range: config.laserRange || 300,
+                color: '#00ffff',
+                ready: true,
+                duration: 200
+            }
+        };
+        this.activeLaser = null;
+        this.recentDamageFrom = {};
+        
+        // Counter-attack system
+        this.lastDamageTime = 0;
+        this.counterAttackWindow = config.counterAttackWindow || 2500;
+        
+        this.initRWKV();
+    }
+    
+    initRWKV() {
+        // Fortress: 28 channels, 0.99 decay (maximum memory)
+        const channels = this.config.channels || 28;
+        this.channels = channels;
+        
+        // Very high decay = very long memory
+        const baseDecay = this.config.baseDecay || 0.99;
+        this.timeMixState = new Array(channels).fill(0);
+        this.timeDecay = new Array(channels).fill(0).map(() => 
+            baseDecay + (Math.random() - 0.5) * 0.005
+        );
+        this.timeFirst = new Array(channels).fill(0).map(() => Math.random() * 0.35);
+        
+        this.channelMixState = new Array(channels).fill(0);
+        this.channelWeights = new Array(channels).fill(0).map(() => Math.random() - 0.5);
+        
+        this.Wr = new Array(channels).fill(0).map(() => Math.random());
+        this.Wk = new Array(channels).fill(0).map(() => Math.random());
+        this.Wv = new Array(channels).fill(0).map(() => Math.random());
+        
+        this.Wo = new Array(5).fill(0).map(() => Math.random() + 0.5);
+        
+        // Very low mix = relies heavily on history
+        this.mixR = this.config.mixR || 0.3;
+        this.mixK = this.config.mixK || 0.3;
+        this.mixV = this.config.mixV || 0.5;
+        
+        // Conservative shooting
+        this.shootBias = this.config.shootBias || 0.35;
+        this.moveBias = this.config.moveBias || 0.2;
+    }
+    
+    safeDist(dx, dy) {
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        return dist < 0.001 ? 0.001 : dist;
+    }
+    
+    sigmoid(x) {
+        return 1 / (1 + Math.exp(-Math.max(-20, Math.min(20, x))));
+    }
+    
+    think(enemies, bullets, dt) {
+        const aliveEnemies = enemies.filter(e => e.alive && e !== this);
+        
+        let currentInput = new Array(this.channels).fill(0);
+        
+        aliveEnemies.forEach((enemy, i) => {
+            if (i < 4 && i * 6 + 5 < this.channels) {
+                const dx = (enemy.x - this.x) / canvas.width;
+                const dy = (enemy.y - this.y) / canvas.height;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                currentInput[i * 6] = dx;
+                currentInput[i * 6 + 1] = dy;
+                currentInput[i * 6 + 2] = dist;
+                currentInput[i * 6 + 3] = enemy.health / enemy.maxHealth;
+                currentInput[i * 6 + 4] = (enemy.vx || 0) / 200;
+                currentInput[i * 6 + 5] = (enemy.vy || 0) / 200;
+            }
+        });
+        
+        let bulletThreat = 0;
+        let bulletEvadeX = 0, bulletEvadeY = 0;
+        bullets.forEach(b => {
+            if (b.owner === this) return;
+            const dx = b.x - this.x;
+            const dy = b.y - this.y;
+            const dist = this.safeDist(dx, dy);
+            if (dist < 160) {
+                bulletThreat += (160 - dist) / 160;
+                bulletEvadeX -= dx / dist;
+                bulletEvadeY -= dy / dist;
+            }
+        });
+        
+        const extraIdx = Math.min(24, this.channels - 4);
+        if (extraIdx >= 0) {
+            currentInput[extraIdx] = Math.min(1, bulletThreat);
+            currentInput[extraIdx + 1] = bulletEvadeX / (Math.abs(bulletEvadeX) + 1);
+            currentInput[extraIdx + 2] = bulletEvadeY / (Math.abs(bulletEvadeY) + 1);
+            currentInput[extraIdx + 3] = this.health / this.maxHealth;
+        }
+        
+        // RWKV TIME-MIXING
+        let r = new Array(this.channels).fill(0);
+        let k = new Array(this.channels).fill(0);
+        let v = new Array(this.channels).fill(0);
+        
+        for (let i = 0; i < this.channels; i++) {
+            const shifted = this.mixR * currentInput[i] + (1 - this.mixR) * this.timeMixState[i];
+            r[i] = this.sigmoid(shifted * this.Wr[i]);
+            k[i] = shifted * this.Wk[i];
+            v[i] = shifted * this.Wv[i];
+        }
+        
+        let wkv = new Array(this.channels).fill(0);
+        for (let i = 0; i < this.channels; i++) {
+            const decay = this.timeDecay[i];
+            const bonus = this.timeFirst[i] * k[i];
+            wkv[i] = (this.timeMixState[i] * decay + Math.exp(Math.min(10, bonus)) * v[i]) / 
+                     (decay + Math.exp(Math.min(10, bonus)) + 0.001);
+            this.timeMixState[i] = this.timeMixState[i] * decay + k[i] * v[i];
+        }
+        
+        let timeOut = new Array(this.channels).fill(0);
+        for (let i = 0; i < this.channels; i++) {
+            timeOut[i] = r[i] * wkv[i];
+        }
+        
+        // CHANNEL-MIXING
+        let channelOut = new Array(this.channels).fill(0);
+        for (let i = 0; i < this.channels; i++) {
+            const mixed = this.mixK * timeOut[i] + (1 - this.mixK) * this.channelMixState[i];
+            channelOut[i] = Math.tanh(mixed * this.channelWeights[i] * 2);
+            this.channelMixState[i] = timeOut[i];
+        }
+        
+        let output = [0, 0, 0, 0, 0];
+        for (let i = 0; i < this.channels; i++) {
+            output[i % 5] += channelOut[i] * this.Wo[i % 5] * 0.5;
+        }
+        output = output.map(o => Math.tanh(o));
+        
+        // Find target
+        let targetAngle = this.angle;
+        let targetDist = 999;
+        let targetDx = 0, targetDy = 0;
+        let targetHealth = 100;
+        let target = null;
+        
+        if (aliveEnemies.length > 0) {
+            target = this.selectTarget(aliveEnemies);
+            targetDx = target.x - this.x;
+            targetDy = target.y - this.y;
+            const predX = target.x + (target.vx || 0) * this.weights.prediction * 0.5;
+            const predY = target.y + (target.vy || 0) * this.weights.prediction * 0.5;
+            targetAngle = Math.atan2(predY - this.y, predX - this.x);
+            targetDist = this.safeDist(targetDx, targetDy);
+            targetHealth = target.health;
+        }
+        
+        return this.applyVariantBehavior(output, aliveEnemies, targetAngle, targetDist, targetDx, targetDy, bulletEvadeX, bulletEvadeY, targetHealth, target);
+    }
+    
+    selectTarget(aliveEnemies) {
+        return aliveEnemies.sort((a, b) => {
+            const da = this.safeDist(a.x - this.x, a.y - this.y);
+            const db = this.safeDist(b.x - this.x, b.y - this.y);
+            const threatA = this.recentDamageFrom[a.type] || 0;
+            const threatB = this.recentDamageFrom[b.type] || 0;
+            return (da - threatA * 100) - (db - threatB * 100);
+        })[0];
+    }
+    
+    applyVariantBehavior(output, aliveEnemies, targetAngle, targetDist, targetDx, targetDy, bulletEvadeX, bulletEvadeY, targetHealth, target) {
+        // Fortress: barely moves, heavy evasion, counter-attacks
+        let moveX = output[0] * this.weights.aggression * 0.4;
+        let moveY = output[1] * this.weights.aggression * 0.4;
+        
+        if (aliveEnemies.length > 0) {
+            const dirX = targetDx / targetDist;
+            const dirY = targetDy / targetDist;
+            
+            // Only retreat when very close
+            if (targetDist < 150) {
+                moveX -= dirX * this.moveBias * 2.0;
+                moveY -= dirY * this.moveBias * 2.0;
+            }
+        }
+        
+        // Maximum bullet evasion
+        moveX += bulletEvadeX * this.weights.evasion * 1.0;
+        moveY += bulletEvadeY * this.weights.evasion * 1.0;
+        
+        const mag = Math.sqrt(moveX * moveX + moveY * moveY);
+        if (mag > 1) { moveX /= mag; moveY /= mag; }
+        
+        const hasTarget = aliveEnemies.length > 0;
+        
+        // Counter-attack: more aggressive shooting when recently damaged
+        const now = Date.now();
+        const recentlyDamaged = (now - this.lastDamageTime) < this.counterAttackWindow;
+        const counterBonus = recentlyDamaged ? 0.4 : 0;
+        
+        // Fixed shooting logic - always shoot when conditions met
+        const shootThreshold = recentlyDamaged ? 0.1 : 0.25;
+        const shootDecision = hasTarget && ((output[2] + this.shootBias + counterBonus) > shootThreshold || Math.random() < 0.3);
+        
+        // Weapon selection
+        let useRailgun = targetDist > 180 && this.weapons.railgun.ready && Math.random() < this.weights.railgunPreference;
+        let useLaser = targetDist < 280 && this.weapons.laser.ready && !useRailgun && Math.random() < this.weights.laserPreference;
+        
+        return {
+            moveX: Math.max(-1, Math.min(1, moveX || 0)),
+            moveY: Math.max(-1, Math.min(1, moveY || 0)),
+            shoot: shootDecision && !useRailgun && !useLaser,
+            shootAlt: useRailgun && hasTarget && shootDecision,
+            shootLaser: useLaser && hasTarget && shootDecision,
+            targetAngle
+        };
+    }
+    
+    learn(event, data) {
+        const lr = this.weights.learningRate * (this.config.learnMultiplier || 1);
+        
+        if (event === 'hit_enemy') {
+            this.weights.accuracy = Math.min(0.95, this.weights.accuracy + lr * 0.7);
+            this.weights.prediction = Math.min(0.9, this.weights.prediction + lr * 0.4);
+            this.shootBias = Math.min(0.55, this.shootBias + lr * 0.1);
+            this.Wo = this.Wo.map(w => w * (1 + lr * 0.15));
+            
+            if (data.weaponType === 'railgun') {
+                this.weights.railgunPreference = Math.min(0.95, this.weights.railgunPreference + lr * 0.12);
+            } else if (data.weaponType === 'laser') {
+                this.weights.laserPreference = Math.min(0.9, this.weights.laserPreference + lr * 0.12);
+            }
+        } else if (event === 'killed') {
+            this.weights.prediction = Math.min(0.9, this.weights.prediction + lr * 0.5);
+            this.Wr = this.Wr.map(w => w * (1 + lr * 0.2));
+            this.shootBias = Math.min(0.6, this.shootBias + lr * 0.12);
+        } else if (event === 'took_damage') {
+            this.lastDamageTime = Date.now();
+            this.weights.evasion = Math.min(0.98, this.weights.evasion + lr * 0.5);
+            this.channelWeights = this.channelWeights.map(w => w * (1 + lr * 0.1));
+            if (data.from) {
+                this.recentDamageFrom[data.from] = (this.recentDamageFrom[data.from] || 0) + 1;
+            }
+        } else if (event === 'died') {
+            this.weights.evasion = Math.min(0.98, this.weights.evasion + lr * 0.8);
+        } else if (event === 'missed') {
+            this.weights.accuracy = Math.max(0.2, this.weights.accuracy - lr * 0.1);
+        }
+    }
+    
+    update(enemies, bullets, dt) {
+        if (!this.alive) {
+            this.respawnTimer -= dt;
+            if (this.respawnTimer <= 0) {
+                this.respawn();
+            }
+            return null;
+        }
+        
+        const now = Date.now();
+        this.weapons.bullet.ready = (now - this.weapons.bullet.lastShot) > this.weapons.bullet.cooldown / gameSpeed;
+        this.weapons.railgun.ready = (now - this.weapons.railgun.lastShot) > this.weapons.railgun.cooldown / gameSpeed;
+        this.weapons.laser.ready = (now - this.weapons.laser.lastShot) > this.weapons.laser.cooldown / gameSpeed;
+        
+        if (this.activeLaser && now - this.activeLaser.startTime > this.weapons.laser.duration) {
+            this.activeLaser = null;
+        }
+        
+        const decision = this.think(enemies, bullets, dt);
+        
+        // Fortress is slow
+        const speed = (this.config.moveSpeed || 90) * gameSpeed;
+        this.vx = decision.moveX * speed;
+        this.vy = decision.moveY * speed;
+        
+        if (isNaN(this.vx) || !isFinite(this.vx)) this.vx = 0;
+        if (isNaN(this.vy) || !isFinite(this.vy)) this.vy = 0;
+        if (isNaN(this.x) || !isFinite(this.x)) this.x = canvas.width / 2;
+        if (isNaN(this.y) || !isFinite(this.y)) this.y = canvas.height / 2;
+        
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        
+        const margin = this.radius;
+        if (this.x < -margin) this.x = canvas.width + margin;
+        if (this.x > canvas.width + margin) this.x = -margin;
+        if (this.y < -margin) this.y = canvas.height + margin;
+        if (this.y > canvas.height + margin) this.y = -margin;
+        
+        if (decision.targetAngle !== undefined) {
+            let diff = decision.targetAngle - this.angle;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            this.angle += diff * 0.1; // Slow turning
+        }
+        
+        if (decision.shootLaser && this.weapons.laser.ready) {
+            this.weapons.laser.lastShot = now;
+            this.shotsFired++;
+            this.fireLaser(enemies);
+            return null;
+        }
+        
+        if (decision.shootAlt && this.weapons.railgun.ready) {
+            this.weapons.railgun.lastShot = now;
+            this.shotsFired++;
+            return this.createBullet('railgun');
+        }
+        
+        if (decision.shoot && this.weapons.bullet.ready) {
+            this.weapons.bullet.lastShot = now;
+            this.shotsFired++;
+            return this.createBullet('bullet');
+        }
+        
+        return null;
+    }
+    
+    fireLaser(enemies) {
+        const range = this.weapons.laser.range;
+        const endX = this.x + Math.cos(this.angle) * range;
+        const endY = this.y + Math.sin(this.angle) * range;
+        
+        this.activeLaser = {
+            startX: this.x + Math.cos(this.angle) * this.radius,
+            startY: this.y + Math.sin(this.angle) * this.radius,
+            endX, endY,
+            startTime: Date.now(),
+            hit: false
+        };
+        
+        let closestHit = null;
+        let closestDist = range;
+        
+        enemies.forEach(enemy => {
+            if (enemy === this || !enemy.alive) return;
+            
+            const dx = endX - this.x;
+            const dy = endY - this.y;
+            const fx = this.x - enemy.x;
+            const fy = this.y - enemy.y;
+            
+            const a = dx * dx + dy * dy;
+            const b = 2 * (fx * dx + fy * dy);
+            const c = fx * fx + fy * fy - enemy.radius * enemy.radius;
+            
+            let discriminant = b * b - 4 * a * c;
+            
+            if (discriminant >= 0) {
+                discriminant = Math.sqrt(discriminant);
+                const t1 = (-b - discriminant) / (2 * a);
+                
+                if (t1 >= 0 && t1 <= 1) {
+                    const hitDist = t1 * Math.sqrt(a);
+                    if (hitDist < closestDist) {
+                        closestDist = hitDist;
+                        closestHit = enemy;
+                    }
+                }
+            }
+        });
+        
+        if (closestHit) {
+            this.activeLaser.endX = this.x + Math.cos(this.angle) * closestDist;
+            this.activeLaser.endY = this.y + Math.sin(this.angle) * closestDist;
+            this.activeLaser.hit = true;
+            
+            closestHit.takeDamage(this.weapons.laser.damage, this);
+            this.shotsHit++;
+            this.learn('hit_enemy', { target: closestHit.type, damage: this.weapons.laser.damage, weaponType: 'laser' });
+        } else {
+            this.learn('missed', {});
+        }
+    }
+    
+    createBullet(weaponType = 'bullet') {
+        const weapon = this.weapons[weaponType];
+        const spread = weaponType === 'railgun' ? 
+            (1 - this.weights.accuracy) * 0.06 :
+            (1 - this.weights.accuracy) * 0.2;
+        const angle = this.angle + (Math.random() - 0.5) * spread;
+        
+        return {
+            x: this.x + Math.cos(this.angle) * this.radius,
+            y: this.y + Math.sin(this.angle) * this.radius,
+            vx: Math.cos(angle) * weapon.speed * gameSpeed,
+            vy: Math.sin(angle) * weapon.speed * gameSpeed,
+            owner: this,
+            damage: weapon.damage,
+            color: weaponType === 'railgun' ? '#fff' : this.color,
+            type: weaponType,
+            size: weaponType === 'railgun' ? 8 : 5,
+            trail: weaponType === 'railgun' ? 0.12 : 0.05
+        };
+    }
+    
+    takeDamage(amount, from) {
+        this.health -= amount;
+        this.learn('took_damage', { amount, from: from?.type });
+        
+        if (this.health <= 0) {
+            this.die(from);
+        }
+    }
+    
+    die(killer) {
+        this.alive = false;
+        this.deaths++;
+        this.respawnTimer = 3000 / gameSpeed;
+        this.learn('died', { killer: killer?.type });
+        
+        if (killer) {
+            killer.kills++;
+            killer.learn('killed', { victim: this.type });
+        }
+        
+        addLog(`${killer?.type || 'Unknown'} destroyed ${this.type}!`, 'kill');
+    }
+    
+    respawn() {
+        this.alive = true;
+        this.health = this.maxHealth;
+        this.x = Math.random() * (canvas.width - 100) + 50;
+        this.y = Math.random() * (canvas.height - 100) + 50;
+        this.recentDamageFrom = {};
+        addLog(`${this.type} respawned`, 'respawn');
+    }
+    
+    draw() {
+        if (!this.alive) return;
+        
+        // Draw laser
+        if (this.activeLaser) {
+            const laserAge = Date.now() - this.activeLaser.startTime;
+            const alpha = Math.max(0, 1 - (laserAge / this.weapons.laser.duration));
+            
+            if (alpha > 0) {
+                ctx.strokeStyle = `rgba(0, 255, 255, ${alpha * 0.4})`;
+                ctx.lineWidth = 16;
+                ctx.beginPath();
+                ctx.moveTo(this.activeLaser.startX, this.activeLaser.startY);
+                ctx.lineTo(this.activeLaser.endX, this.activeLaser.endY);
+                ctx.stroke();
+                
+                ctx.strokeStyle = `rgba(100, 255, 255, ${alpha * 0.8})`;
+                ctx.lineWidth = 6;
+                ctx.beginPath();
+                ctx.moveTo(this.activeLaser.startX, this.activeLaser.startY);
+                ctx.lineTo(this.activeLaser.endX, this.activeLaser.endY);
+                ctx.stroke();
+                
+                ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(this.activeLaser.startX, this.activeLaser.startY);
+                ctx.lineTo(this.activeLaser.endX, this.activeLaser.endY);
+                ctx.stroke();
+                
+                if (this.activeLaser.hit && alpha > 0) {
+                    ctx.fillStyle = `rgba(200, 255, 255, ${alpha})`;
+                    ctx.beginPath();
+                    ctx.arc(this.activeLaser.endX, this.activeLaser.endY, Math.max(1, 20 * alpha), 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+        }
+        
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        
+        // Strong glow
+        const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, Math.max(1, this.radius * 2.5));
+        gradient.addColorStop(0, this.color + '60');
+        gradient.addColorStop(1, 'transparent');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(0, 0, Math.max(1, this.radius * 2.5), 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Fortress shape - hexagonal tank
+        ctx.rotate(this.angle);
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.moveTo(this.radius, 0);
+        ctx.lineTo(this.radius * 0.5, -this.radius * 0.8);
+        ctx.lineTo(-this.radius * 0.6, -this.radius * 0.7);
+        ctx.lineTo(-this.radius * 0.8, 0);
+        ctx.lineTo(-this.radius * 0.6, this.radius * 0.7);
+        ctx.lineTo(this.radius * 0.5, this.radius * 0.8);
+        ctx.closePath();
+        ctx.fill();
+        
+        // Armor rings
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(0, 0, Math.max(1, this.radius * 0.65), -Math.PI * 0.6, Math.PI * 0.6);
+        ctx.stroke();
+        
+        // Inner core
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(-this.radius * 0.1, 0, Math.max(1, this.radius * 0.18), 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.restore();
+        
+        // Health bar
+        const barWidth = 55;
+        const barHeight = 6;
+        ctx.fillStyle = '#333';
+        ctx.fillRect(this.x - barWidth/2, this.y - this.radius - 16, barWidth, barHeight);
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x - barWidth/2, this.y - this.radius - 16, Math.max(0, barWidth * (this.health / this.maxHealth)), barHeight);
+        
+        // Weapon indicators
+        if (this.weapons.railgun.ready) {
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(this.x + barWidth/2 + 7, this.y - this.radius - 13, 4, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        if (this.weapons.laser.ready) {
+            ctx.fillStyle = '#00ffff';
+            ctx.beginPath();
+            ctx.arc(this.x + barWidth/2 + 17, this.y - this.radius - 13, 4, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        // Counter-attack indicator
+        const now = Date.now();
+        if ((now - this.lastDamageTime) < this.counterAttackWindow) {
+            ctx.fillStyle = '#ff000088';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y - this.radius - 24, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        ctx.fillStyle = '#fff';
+        ctx.font = '9px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(this.type.replace('FORTRESS-', ''), this.x, this.y - this.radius - 28);
+    }
+    
+    getAccuracy() {
+        return this.shotsFired > 0 ? Math.round((this.shotsHit / this.shotsFired) * 100) : 0;
+    }
+    
+    getAvgDecay() {
+        return this.timeDecay.reduce((a, b) => a + b, 0) / this.timeDecay.length;
+    }
+}
+
+// === FORTRESS VARIANTS ===
+
+// CITADEL: Maximum memory, highest channel count
+class FortressCitadel extends FortressAgent {
+    constructor(x, y) {
+        super('FORTRESS-CITADEL', '#8b5cf6', x, y, {
+            channels: 32,
+            baseDecay: 0.995,
+            maxHealth: 155,
+            aggression: 0.25,
+            evasion: 0.92,
+            accuracy: 0.6,
+            prediction: 0.55,
+            shootBias: 0.3,
+            moveBias: 0.15,
+            moveSpeed: 85,
+            mixR: 0.25,
+            mixK: 0.25
+        });
+    }
+    
+    applyVariantBehavior(output, aliveEnemies, targetAngle, targetDist, targetDx, targetDy, bulletEvadeX, bulletEvadeY, targetHealth, target) {
+        // Citadel: maximum memory means it learns patterns over time
+        let moveX = output[0] * this.weights.aggression * 0.3;
+        let moveY = output[1] * this.weights.aggression * 0.3;
+        
+        // Almost stationary
+        if (aliveEnemies.length > 0) {
+            const dirX = targetDx / targetDist;
+            const dirY = targetDy / targetDist;
+            
+            if (targetDist < 130) {
+                moveX -= dirX * this.moveBias * 2.5;
+                moveY -= dirY * this.moveBias * 2.5;
+            }
+        }
+        
+        moveX += bulletEvadeX * this.weights.evasion * 1.1;
+        moveY += bulletEvadeY * this.weights.evasion * 1.1;
+        
+        const mag = Math.sqrt(moveX * moveX + moveY * moveY);
+        if (mag > 1) { moveX /= mag; moveY /= mag; }
+        
+        const hasTarget = aliveEnemies.length > 0;
+        const now = Date.now();
+        const recentlyDamaged = (now - this.lastDamageTime) < this.counterAttackWindow;
+        
+        // Citadel has the best prediction due to long memory
+        const shootDecision = hasTarget && (recentlyDamaged || (output[2] + this.shootBias) > 0.2 || Math.random() < 0.25);
+        
+        let useRailgun = targetDist > 200 && this.weapons.railgun.ready && Math.random() < 0.65;
+        let useLaser = targetDist < 280 && this.weapons.laser.ready && !useRailgun && Math.random() < 0.5;
+        
+        return {
+            moveX: Math.max(-1, Math.min(1, moveX || 0)),
+            moveY: Math.max(-1, Math.min(1, moveY || 0)),
+            shoot: shootDecision && !useRailgun && !useLaser,
+            shootAlt: useRailgun && hasTarget && shootDecision,
+            shootLaser: useLaser && hasTarget && shootDecision,
+            targetAngle
+        };
+    }
+}
+
+// BASTION: Laser fortress, area denial
+class FortressBastion extends FortressAgent {
+    constructor(x, y) {
+        super('FORTRESS-BASTION', '#06b6d4', x, y, {
+            channels: 28,
+            baseDecay: 0.98,
+            maxHealth: 150,
+            aggression: 0.3,
+            evasion: 0.88,
+            laserPreference: 0.9,
+            railgunPreference: 0.3,
+            shootBias: 0.4,
+            moveBias: 0.2,
+            laserCooldown: 450,
+            laserDamage: 18,
+            laserRange: 350,
+            moveSpeed: 95
+        });
+    }
+    
+    applyVariantBehavior(output, aliveEnemies, targetAngle, targetDist, targetDx, targetDy, bulletEvadeX, bulletEvadeY, targetHealth, target) {
+        let moveX = output[0] * this.weights.aggression * 0.4;
+        let moveY = output[1] * this.weights.aggression * 0.4;
+        
+        if (aliveEnemies.length > 0) {
+            const dirX = targetDx / targetDist;
+            const dirY = targetDy / targetDist;
+            
+            // Keep enemies in laser range
+            if (targetDist < 120) {
+                moveX -= dirX * this.moveBias * 2.0;
+                moveY -= dirY * this.moveBias * 2.0;
+            } else if (targetDist > 320) {
+                moveX += dirX * this.moveBias * 0.5;
+                moveY += dirY * this.moveBias * 0.5;
+            }
+        }
+        
+        moveX += bulletEvadeX * this.weights.evasion * 0.9;
+        moveY += bulletEvadeY * this.weights.evasion * 0.9;
+        
+        const mag = Math.sqrt(moveX * moveX + moveY * moveY);
+        if (mag > 1) { moveX /= mag; moveY /= mag; }
+        
+        const hasTarget = aliveEnemies.length > 0;
+        const inLaserRange = targetDist < 340;
+        const now = Date.now();
+        const recentlyDamaged = (now - this.lastDamageTime) < this.counterAttackWindow;
+        
+        const shootDecision = hasTarget && (recentlyDamaged || (output[2] + this.shootBias) > 0.15 || Math.random() < 0.35);
+        
+        // Bastion heavily prefers laser
+        let useLaser = inLaserRange && this.weapons.laser.ready;
+        let useRailgun = !useLaser && targetDist > 250 && this.weapons.railgun.ready && Math.random() < 0.4;
+        
+        return {
+            moveX: Math.max(-1, Math.min(1, moveX || 0)),
+            moveY: Math.max(-1, Math.min(1, moveY || 0)),
+            shoot: shootDecision && !useRailgun && !useLaser,
+            shootAlt: useRailgun && shootDecision,
+            shootLaser: useLaser && shootDecision,
+            targetAngle
+        };
+    }
+}
+
+// RAMPART: Artillery fortress, extreme railgun
+class FortressRampart extends FortressAgent {
+    constructor(x, y) {
+        super('FORTRESS-RAMPART', '#f59e0b', x, y, {
+            channels: 28,
+            baseDecay: 0.985,
+            maxHealth: 145,
+            aggression: 0.28,
+            evasion: 0.85,
+            accuracy: 0.7,
+            prediction: 0.6,
+            railgunPreference: 0.95,
+            laserPreference: 0.2,
+            shootBias: 0.3,
+            moveBias: 0.18,
+            railgunCooldown: 1200,
+            railgunDamage: 80,
+            moveSpeed: 88
+        });
+    }
+    
+    applyVariantBehavior(output, aliveEnemies, targetAngle, targetDist, targetDx, targetDy, bulletEvadeX, bulletEvadeY, targetHealth, target) {
+        let moveX = output[0] * this.weights.aggression * 0.35;
+        let moveY = output[1] * this.weights.aggression * 0.35;
+        
+        if (aliveEnemies.length > 0) {
+            const dirX = targetDx / targetDist;
+            const dirY = targetDy / targetDist;
+            
+            // Artillery wants maximum range
+            if (targetDist < 300) {
+                moveX -= dirX * this.moveBias * 2.2;
+                moveY -= dirY * this.moveBias * 2.2;
+            }
+        }
+        
+        moveX += bulletEvadeX * this.weights.evasion * 0.85;
+        moveY += bulletEvadeY * this.weights.evasion * 0.85;
+        
+        const mag = Math.sqrt(moveX * moveX + moveY * moveY);
+        if (mag > 1) { moveX /= mag; moveY /= mag; }
+        
+        const hasTarget = aliveEnemies.length > 0;
+        const now = Date.now();
+        const recentlyDamaged = (now - this.lastDamageTime) < this.counterAttackWindow;
+        
+        // Wait for good railgun shots
+        const angleDiff = Math.abs(Math.atan2(targetDy, targetDx) - this.angle);
+        const goodShot = angleDiff < 0.12;
+        
+        const shootDecision = hasTarget && (recentlyDamaged || goodShot || Math.random() < 0.2);
+        
+        // Almost exclusively railgun
+        let useRailgun = this.weapons.railgun.ready && (goodShot || recentlyDamaged);
+        let useLaser = false;
+        
+        return {
+            moveX: Math.max(-1, Math.min(1, moveX || 0)),
+            moveY: Math.max(-1, Math.min(1, moveY || 0)),
+            shoot: shootDecision && !useRailgun,
+            shootAlt: useRailgun && hasTarget,
+            shootLaser: useLaser,
+            targetAngle
+        };
+    }
+}
+
+// BULWARK: Regen fortress, heals over time
+class FortressBulwark extends FortressAgent {
+    constructor(x, y) {
+        super('FORTRESS-BULWARK', '#10b981', x, y, {
+            channels: 28,
+            baseDecay: 0.99,
+            maxHealth: 130,
+            aggression: 0.28,
+            evasion: 0.88,
+            shootBias: 0.32,
+            moveBias: 0.18,
+            moveSpeed: 92
+        });
+        this.regenRate = 3; // HP per second
+        this.regenTimer = 0;
+    }
+    
+    update(enemies, bullets, dt) {
+        // Regenerate health over time
+        if (this.alive) {
+            this.regenTimer += dt;
+            if (this.regenTimer >= 1) {
+                this.regenTimer = 0;
+                this.health = Math.min(this.maxHealth, this.health + this.regenRate);
+            }
+        }
+        return super.update(enemies, bullets, dt);
+    }
+    
+    applyVariantBehavior(output, aliveEnemies, targetAngle, targetDist, targetDx, targetDy, bulletEvadeX, bulletEvadeY, targetHealth, target) {
+        // Bulwark plays extra defensively to maximize regen value
+        let moveX = output[0] * this.weights.aggression * 0.35;
+        let moveY = output[1] * this.weights.aggression * 0.35;
+        
+        if (aliveEnemies.length > 0) {
+            const dirX = targetDx / targetDist;
+            const dirY = targetDy / targetDist;
+            
+            // Keep distance to regen safely
+            if (targetDist < 200) {
+                moveX -= dirX * this.moveBias * 2.0;
+                moveY -= dirY * this.moveBias * 2.0;
+            }
+        }
+        
+        moveX += bulletEvadeX * this.weights.evasion * 1.0;
+        moveY += bulletEvadeY * this.weights.evasion * 1.0;
+        
+        const mag = Math.sqrt(moveX * moveX + moveY * moveY);
+        if (mag > 1) { moveX /= mag; moveY /= mag; }
+        
+        const hasTarget = aliveEnemies.length > 0;
+        const now = Date.now();
+        const recentlyDamaged = (now - this.lastDamageTime) < this.counterAttackWindow;
+        
+        const shootDecision = hasTarget && (recentlyDamaged || (output[2] + this.shootBias) > 0.2 || Math.random() < 0.28);
+        
+        let useRailgun = targetDist > 200 && this.weapons.railgun.ready && Math.random() < 0.55;
+        let useLaser = targetDist < 280 && this.weapons.laser.ready && !useRailgun && Math.random() < 0.45;
+        
+        return {
+            moveX: Math.max(-1, Math.min(1, moveX || 0)),
+            moveY: Math.max(-1, Math.min(1, moveY || 0)),
+            shoot: shootDecision && !useRailgun && !useLaser,
+            shootAlt: useRailgun && hasTarget && shootDecision,
+            shootLaser: useLaser && hasTarget && shootDecision,
+            targetAngle
+        };
+    }
+    
+    draw() {
+        super.draw();
+        // Draw regen indicator
+        if (this.alive && this.health < this.maxHealth) {
+            ctx.strokeStyle = '#10b98188';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, Math.max(1, this.radius + 5 + Math.sin(Date.now() / 200) * 3), 0, Math.PI * 2);
+            ctx.stroke();
+        }
+    }
+}
+
+// REDOUBT: Revenge fortress, damage boost when hurt
+class FortressRedoubt extends FortressAgent {
+    constructor(x, y) {
+        super('FORTRESS-REDOUBT', '#ef4444', x, y, {
+            channels: 26,
+            baseDecay: 0.97,
+            maxHealth: 155,
+            aggression: 0.35,
+            evasion: 0.8,
+            shootBias: 0.38,
+            moveBias: 0.25,
+            bulletDamage: 18,
+            railgunDamage: 50,
+            laserDamage: 10,
+            moveSpeed: 100,
+            counterAttackWindow: 4000
+        });
+        this.rageMode = false;
+        this.rageDamageBonus = 1.8;
+    }
+    
+    applyVariantBehavior(output, aliveEnemies, targetAngle, targetDist, targetDx, targetDy, bulletEvadeX, bulletEvadeY, targetHealth, target) {
+        const now = Date.now();
+        const recentlyDamaged = (now - this.lastDamageTime) < this.counterAttackWindow;
+        const lowHealth = this.health < this.maxHealth * 0.5;
+        
+        // Enter rage mode when hurt
+        this.rageMode = recentlyDamaged || lowHealth;
+        
+        let moveX = output[0] * this.weights.aggression * (this.rageMode ? 0.8 : 0.4);
+        let moveY = output[1] * this.weights.aggression * (this.rageMode ? 0.8 : 0.4);
+        
+        if (aliveEnemies.length > 0) {
+            const dirX = targetDx / targetDist;
+            const dirY = targetDy / targetDist;
+            
+            if (this.rageMode) {
+                // Rage: advance on enemies
+                if (targetDist > 150) {
+                    moveX += dirX * this.moveBias * 1.5;
+                    moveY += dirY * this.moveBias * 1.5;
+                }
+            } else {
+                // Normal: defensive
+                if (targetDist < 180) {
+                    moveX -= dirX * this.moveBias * 1.8;
+                    moveY -= dirY * this.moveBias * 1.8;
+                }
+            }
+        }
+        
+        moveX += bulletEvadeX * this.weights.evasion * (this.rageMode ? 0.5 : 0.9);
+        moveY += bulletEvadeY * this.weights.evasion * (this.rageMode ? 0.5 : 0.9);
+        
+        const mag = Math.sqrt(moveX * moveX + moveY * moveY);
+        if (mag > 1) { moveX /= mag; moveY /= mag; }
+        
+        const hasTarget = aliveEnemies.length > 0;
+        
+        // Rage mode = constant shooting
+        const shootDecision = hasTarget && (this.rageMode || (output[2] + this.shootBias) > 0.2 || Math.random() < 0.3);
+        
+        let useLaser = targetDist < 250 && this.weapons.laser.ready && (this.rageMode || Math.random() < 0.5);
+        let useRailgun = !useLaser && targetDist > 180 && this.weapons.railgun.ready && Math.random() < 0.5;
+        
+        return {
+            moveX: Math.max(-1, Math.min(1, moveX || 0)),
+            moveY: Math.max(-1, Math.min(1, moveY || 0)),
+            shoot: shootDecision && !useRailgun && !useLaser,
+            shootAlt: useRailgun && shootDecision,
+            shootLaser: useLaser && shootDecision,
+            targetAngle
+        };
+    }
+    
+    createBullet(weaponType) {
+        const bullet = super.createBullet(weaponType);
+        // Rage damage bonus
+        if (this.rageMode) {
+            bullet.damage *= this.rageDamageBonus;
+        }
+        return bullet;
+    }
+    
+    fireLaser(enemies) {
+        // Store original damage
+        const originalDamage = this.weapons.laser.damage;
+        if (this.rageMode) {
+            this.weapons.laser.damage *= this.rageDamageBonus;
+        }
+        super.fireLaser(enemies);
+        this.weapons.laser.damage = originalDamage;
+    }
+    
+    draw() {
+        super.draw();
+        // Rage indicator
+        if (this.alive && this.rageMode) {
+            ctx.strokeStyle = '#ef444488';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 8, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+    }
+}
+
+// AEGIS: Adaptive fortress, mode switching
+class FortressAegis extends FortressAgent {
+    constructor(x, y) {
+        super('FORTRESS-AEGIS', '#ec4899', x, y, {
+            channels: 32,
+            baseDecay: 0.98,
+            maxHealth: 165,
+            aggression: 0.32,
+            evasion: 0.88,
+            accuracy: 0.55,
+            prediction: 0.5,
+            shootBias: 0.35,
+            moveBias: 0.22,
+            moveSpeed: 95,
+            learnMultiplier: 2.0
+        });
+        this.mode = 'fortress';
+    }
+    
+    applyVariantBehavior(output, aliveEnemies, targetAngle, targetDist, targetDx, targetDy, bulletEvadeX, bulletEvadeY, targetHealth, target) {
+        const now = Date.now();
+        const recentlyDamaged = (now - this.lastDamageTime) < this.counterAttackWindow;
+        const lowHealth = this.health < this.maxHealth * 0.3;
+        const highHealth = this.health > this.maxHealth * 0.8;
+        const hasAdvantage = aliveEnemies.length > 0 && aliveEnemies.every(e => e.health < this.health);
+        
+        // Mode selection
+        if (lowHealth) {
+            this.mode = 'turtle';
+            this.timeDecay = this.timeDecay.map(d => Math.min(0.998, d * 1.001));
+        } else if (recentlyDamaged) {
+            this.mode = 'counter';
+        } else if (hasAdvantage && highHealth) {
+            this.mode = 'siege';
+            this.timeDecay = this.timeDecay.map(d => Math.max(0.96, d * 0.999));
+        } else if (targetDist > 350) {
+            this.mode = 'artillery';
+        } else if (targetDist < 180) {
+            this.mode = 'bastion';
+        } else {
+            this.mode = 'fortress';
+        }
+        
+        let moveX = output[0] * this.weights.aggression;
+        let moveY = output[1] * this.weights.aggression;
+        
+        if (aliveEnemies.length > 0) {
+            const dirX = targetDx / targetDist;
+            const dirY = targetDy / targetDist;
+            
+            switch (this.mode) {
+                case 'turtle':
+                    moveX -= dirX * this.moveBias * 2.5;
+                    moveY -= dirY * this.moveBias * 2.5;
+                    break;
+                case 'counter':
+                    if (targetDist > 200) {
+                        moveX += dirX * this.moveBias * 0.8;
+                        moveY += dirY * this.moveBias * 0.8;
+                    }
+                    break;
+                case 'siege':
+                    if (targetDist > 180) {
+                        moveX += dirX * this.moveBias * 0.6;
+                        moveY += dirY * this.moveBias * 0.6;
+                    }
+                    break;
+                case 'artillery':
+                    // Stay put
+                    break;
+                case 'bastion':
+                    if (targetDist < 150) {
+                        moveX -= dirX * this.moveBias * 1.5;
+                        moveY -= dirY * this.moveBias * 1.5;
+                    }
+                    break;
+                default:
+                    if (targetDist < 160) {
+                        moveX -= dirX * this.moveBias * 1.8;
+                        moveY -= dirY * this.moveBias * 1.8;
+                    }
+            }
+        }
+        
+        const evasionMult = this.mode === 'turtle' ? 1.3 : (this.mode === 'siege' ? 0.6 : 1.0);
+        moveX += bulletEvadeX * this.weights.evasion * evasionMult;
+        moveY += bulletEvadeY * this.weights.evasion * evasionMult;
+        
+        const mag = Math.sqrt(moveX * moveX + moveY * moveY);
+        if (mag > 1) { moveX /= mag; moveY /= mag; }
+        
+        const hasTarget = aliveEnemies.length > 0;
+        const shootMult = this.mode === 'counter' ? 0.6 : (this.mode === 'siege' ? 0.5 : 0);
+        const shootDecision = hasTarget && ((output[2] + this.shootBias + shootMult) > 0.15 || Math.random() < 0.3);
+        
+        // Weapon selection by mode
+        let useRailgun = false, useLaser = false;
+        
+        if (this.mode === 'artillery' && this.weapons.railgun.ready) {
+            useRailgun = true;
+        } else if (this.mode === 'bastion' && this.weapons.laser.ready) {
+            useLaser = true;
+        } else if (this.mode === 'counter') {
+            useLaser = targetDist < 280 && this.weapons.laser.ready;
+            useRailgun = !useLaser && this.weapons.railgun.ready;
+        } else {
+            useRailgun = targetDist > 220 && this.weapons.railgun.ready && Math.random() < 0.5;
+            useLaser = !useRailgun && targetDist < 280 && this.weapons.laser.ready && Math.random() < 0.5;
+        }
+        
+        return {
+            moveX: Math.max(-1, Math.min(1, moveX || 0)),
+            moveY: Math.max(-1, Math.min(1, moveY || 0)),
+            shoot: shootDecision && !useRailgun && !useLaser,
+            shootAlt: useRailgun && hasTarget,
+            shootLaser: useLaser && shootDecision,
+            targetAngle
+        };
+    }
+}
+
+// Game objects
+let agents = [];
+let bullets = [];
+
+function getRandomSpawnPositions(count) {
+    const positions = [];
+    const margin = 90;
+    const minDist = 180;
+    
+    for (let i = 0; i < count; i++) {
+        let attempts = 0;
+        let pos;
+        
+        do {
+            pos = {
+                x: margin + Math.random() * (canvas.width - margin * 2),
+                y: margin + Math.random() * (canvas.height - margin * 2)
+            };
+            attempts++;
+            
+            let tooClose = false;
+            for (const other of positions) {
+                if (Math.sqrt((pos.x - other.x) ** 2 + (pos.y - other.y) ** 2) < minDist) {
+                    tooClose = true;
+                    break;
+                }
+            }
+            
+            if (!tooClose || attempts > 50) {
+                positions.push(pos);
+                break;
+            }
+        } while (true);
+    }
+    
+    return positions;
+}
+
+function initAgents() {
+    const positions = getRandomSpawnPositions(7);
+    
+    agents = [
+        new FortressAgent('FORTRESS-ORIGINAL', '#6366f1', positions[0].x, positions[0].y),
+        new FortressCitadel(positions[1].x, positions[1].y),
+        new FortressBastion(positions[2].x, positions[2].y),
+        new FortressRampart(positions[3].x, positions[3].y),
+        new FortressBulwark(positions[4].x, positions[4].y),
+        new FortressRedoubt(positions[5].x, positions[5].y),
+        new FortressAegis(positions[6].x, positions[6].y)
+    ];
+}
+
+function updateUI() {
+    for (let i = 0; i < 7; i++) {
+        const a = agents[i];
+        document.getElementById(`r${i}-health`).style.width = `${(a.health / a.maxHealth) * 100}%`;
+        document.getElementById(`r${i}-kills`).textContent = a.kills;
+        document.getElementById(`r${i}-deaths`).textContent = a.deaths;
+        document.getElementById(`r${i}-wins`).textContent = roundWins[i];
+        document.getElementById(`r${i}-accuracy`).textContent = `${a.getAccuracy()}%`;
+        
+        if (i === 6) {
+            document.getElementById(`r${i}-learning`).textContent = a.alive ? 
+                `MODE: ${a.mode.toUpperCase()}` : 'DESTROYED';
+        } else if (i === 5) {
+            document.getElementById(`r${i}-learning`).textContent = a.alive ? 
+                `RAGE: ${a.rageMode ? 'ACTIVE' : 'OFF'} | SHT:${a.shootBias.toFixed(2)}` : 'DESTROYED';
+        } else {
+            document.getElementById(`r${i}-learning`).textContent = a.alive ? 
+                `MIX: R${a.mixR.toFixed(2)} K${a.mixK.toFixed(2)}` : 'DESTROYED';
+        }
+        
+        if (i !== 6) {
+            document.getElementById(`r${i}-decay`).textContent = a.getAvgDecay().toFixed(3);
+        }
+        
+        updateBrainVis(`r${i}-brain`, a.timeMixState.slice(0, 12));
+    }
+    
+    document.getElementById('gen-num').textContent = generation;
+    document.getElementById('round-num').textContent = roundNumber;
+    document.getElementById('fight-num').textContent = totalFights;
+}
+
+function updateBrainVis(id, values) {
+    const container = document.getElementById(id);
+    container.innerHTML = '';
+    values.forEach(v => {
+        const neuron = document.createElement('div');
+        neuron.className = 'neuron' + (Math.abs(v) > 0.1 ? ' active' : '');
+        neuron.style.opacity = Math.min(1, Math.abs(v) * 2 + 0.3);
+        container.appendChild(neuron);
+    });
+}
+
+const logContainer = document.getElementById('log');
+function addLog(message, type = '') {
+    const entry = document.createElement('div');
+    entry.className = 'log-entry ' + type;
+    entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+    logContainer.insertBefore(entry, logContainer.firstChild);
+    while (logContainer.children.length > 50) logContainer.removeChild(logContainer.lastChild);
+}
+
+function update(dt) {
+    if (paused) return;
+    
+    if (!roundInProgress) {
+        roundEndTimer -= dt * 1000;
+        if (roundEndTimer <= 0) startNewRound();
+        return;
+    }
+    
+    agents.forEach(agent => {
+        const bullet = agent.update(agents, bullets, dt);
+        if (bullet) bullets.push(bullet);
+    });
+    
+    bullets = bullets.filter(bullet => {
+        bullet.x += bullet.vx * dt;
+        bullet.y += bullet.vy * dt;
+        
+        if (isNaN(bullet.x) || isNaN(bullet.y)) return false;
+        
+        if (bullet.x < -20) bullet.x = canvas.width + 20;
+        if (bullet.x > canvas.width + 20) bullet.x = -20;
+        if (bullet.y < -20) bullet.y = canvas.height + 20;
+        if (bullet.y > canvas.height + 20) bullet.y = -20;
+        
+        bullet.life = (bullet.life || 0) + dt;
+        if (bullet.life > 5) {
+            bullet.owner.learn('missed', {});
+            return false;
+        }
+        
+        for (const agent of agents) {
+            if (agent === bullet.owner || !agent.alive) continue;
+            
+            const dx = bullet.x - agent.x;
+            const dy = bullet.y - agent.y;
+            
+            if (Math.sqrt(dx * dx + dy * dy) < agent.radius) {
+                agent.takeDamage(bullet.damage, bullet.owner);
+                bullet.owner.shotsHit++;
+                bullet.owner.learn('hit_enemy', { target: agent.type, damage: bullet.damage, weaponType: bullet.type });
+                totalFights++;
+                return false;
+            }
+        }
+        
+        return true;
+    });
+    
+    const aliveAgents = agents.filter(a => a.alive);
+    if (aliveAgents.length === 1 && roundInProgress) {
+        const winner = aliveAgents[0];
+        roundWins[agents.indexOf(winner)]++;
+        addLog(`🏆 ${winner.type} WINS ROUND ${roundNumber}!`, 'kill');
+        roundInProgress = false;
+        roundEndTimer = 2000 / gameSpeed;
+        roundNumber++;
+        if (roundNumber > generation * 5) advanceGeneration();
+    }
+    
+    if (aliveAgents.length === 0 && roundInProgress) {
+        addLog(`💀 MUTUAL DESTRUCTION!`, 'respawn');
+        roundInProgress = false;
+        roundEndTimer = 2000 / gameSpeed;
+        roundNumber++;
+        if (roundNumber > generation * 5) advanceGeneration();
+    }
+}
+
+function startNewRound() {
+    addLog(`--- Round ${roundNumber} ---`, 'learn');
+    const positions = getRandomSpawnPositions(7);
+    
+    agents.forEach((agent, i) => {
+        agent.x = positions[i].x;
+        agent.y = positions[i].y;
+        agent.health = agent.maxHealth;
+        agent.alive = true;
+        agent.respawnTimer = 0;
+        agent.vx = 0;
+        agent.vy = 0;
+        agent.angle = Math.random() * Math.PI * 2;
+        agent.activeLaser = null;
+        agent.lastDamageTime = 0;
+        if (agent.rageMode !== undefined) agent.rageMode = false;
+    });
+    
+    bullets = [];
+    roundInProgress = true;
+}
+
+function advanceGeneration() {
+    generation++;
+    addLog(`🧬 === GENERATION ${generation} === 🧬`, 'learn');
+    
+    const rankings = agents.map((agent, i) => ({
+        agent, index: i, wins: roundWins[i],
+        kd: agent.kills / (agent.deaths || 1),
+        accuracy: agent.getAccuracy()
+    })).sort((a, b) => b.wins - a.wins || b.kd - a.kd);
+    
+    const best = rankings[0];
+    addLog(`🥇 Best: ${best.agent.type} (${best.wins} wins)`, 'learn');
+    
+    const inheritRate = 0.35;
+    [rankings[6], rankings[5]].forEach(loser => {
+        loser.agent.weights.aggression = loser.agent.weights.aggression * (1 - inheritRate) + best.agent.weights.aggression * inheritRate;
+        loser.agent.weights.evasion = loser.agent.weights.evasion * (1 - inheritRate) + best.agent.weights.evasion * inheritRate;
+        loser.agent.weights.accuracy = loser.agent.weights.accuracy * (1 - inheritRate) + best.agent.weights.accuracy * inheritRate;
+        loser.agent.mixR = loser.agent.mixR * (1 - inheritRate) + best.agent.mixR * inheritRate;
+        loser.agent.mixK = loser.agent.mixK * (1 - inheritRate) + best.agent.mixK * inheritRate;
+        loser.agent.shootBias = loser.agent.shootBias * (1 - inheritRate) + best.agent.shootBias * inheritRate;
+    });
+    
+    agents.forEach(agent => {
+        const m = 0.1;
+        agent.weights.aggression = Math.max(0.15, Math.min(0.85, agent.weights.aggression + (Math.random() - 0.5) * m));
+        agent.weights.evasion = Math.max(0.5, Math.min(0.98, agent.weights.evasion + (Math.random() - 0.5) * m));
+        agent.weights.accuracy = Math.max(0.25, Math.min(0.9, agent.weights.accuracy + (Math.random() - 0.5) * m));
+        agent.mixR = Math.max(0.2, Math.min(0.7, agent.mixR + (Math.random() - 0.5) * m * 0.5));
+        agent.mixK = Math.max(0.2, Math.min(0.7, agent.mixK + (Math.random() - 0.5) * m * 0.5));
+        agent.shootBias = Math.max(0.2, Math.min(0.55, agent.shootBias + (Math.random() - 0.5) * m * 0.5));
+        agent.weights.learningRate = Math.min(0.12, agent.weights.learningRate * 1.06);
+    });
+    
+    roundWins = [0, 0, 0, 0, 0, 0, 0];
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.strokeStyle = '#1a1a2e';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < canvas.width; x += 50) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+    }
+    for (let y = 0; y < canvas.height; y += 50) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+    }
+    
+    bullets.forEach(bullet => {
+        const size = bullet.size || 5;
+        if (bullet.type === 'railgun') {
+            ctx.fillStyle = bullet.color + '60';
+            ctx.beginPath();
+            ctx.arc(bullet.x, bullet.y, size * 2.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.fillStyle = bullet.color;
+        ctx.beginPath();
+        ctx.arc(bullet.x, bullet.y, size, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.strokeStyle = bullet.color + '60';
+        ctx.lineWidth = bullet.type === 'railgun' ? 6 : 3;
+        ctx.beginPath();
+        ctx.moveTo(bullet.x, bullet.y);
+        ctx.lineTo(bullet.x - bullet.vx * (bullet.trail || 0.05), bullet.y - bullet.vy * (bullet.trail || 0.05));
+        ctx.stroke();
+    });
+    
+    agents.forEach(agent => agent.draw());
+    
+    agents.filter(a => !a.alive).forEach(agent => {
+        ctx.fillStyle = agent.color + '40';
+        ctx.font = '12px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${agent.type} respawning...`, agent.x, agent.y);
+        ctx.fillText(`${(agent.respawnTimer / 1000).toFixed(1)}s`, agent.x, agent.y + 15);
+    });
+    
+    if (!roundInProgress) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        const winner = agents.find(a => a.alive);
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 36px monospace';
+        
+        if (winner) {
+            ctx.fillStyle = winner.color;
+            ctx.fillText(`🏰 ${winner.type} WINS! 🏰`, canvas.width / 2, canvas.height / 2 - 20);
+        } else {
+            ctx.fillStyle = '#fff';
+            ctx.fillText('💀 MUTUAL DESTRUCTION 💀', canvas.width / 2, canvas.height / 2 - 20);
+        }
+        
+        ctx.fillStyle = '#888';
+        ctx.font = '18px monospace';
+        ctx.fillText(`Round ${roundNumber} in ${(roundEndTimer / 1000).toFixed(1)}s...`, canvas.width / 2, canvas.height / 2 + 30);
+        
+        if (roundNumber > generation * 5) {
+            ctx.fillStyle = '#6366f1';
+            ctx.fillText(`⬆️ GENERATION ${generation + 1}`, canvas.width / 2, canvas.height / 2 + 60);
+        }
+    }
+}
+
+let lastTime = 0;
+function gameLoop(timestamp) {
+    const dt = Math.min((timestamp - lastTime) / 1000, 0.1);
+    lastTime = timestamp;
+    update(dt);
+    draw();
+    updateUI();
+    requestAnimationFrame(gameLoop);
+}
+
+document.getElementById('pauseBtn').addEventListener('click', () => {
+    paused = !paused;
+    document.getElementById('pauseBtn').textContent = paused ? '▶️ Resume' : '⏸️ Pause';
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+    bullets = [];
+    generation = 1;
+    totalFights = 0;
+    roundNumber = 1;
+    roundWins = [0, 0, 0, 0, 0, 0, 0];
+    roundInProgress = true;
+    initAgents();
+    logContainer.innerHTML = '';
+    addLog('FORTRESS Arena reset!', 'respawn');
+});
+
+document.getElementById('speed-slider').addEventListener('input', (e) => {
+    gameSpeed = parseFloat(e.target.value);
+    document.getElementById('speed-value').textContent = gameSpeed + 'x';
+});
+
+initAgents();
+addLog('FORTRESS Variants Arena initialized!', 'learn');
+addLog('7 ultra-defensive configs compete!', 'learn');
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>

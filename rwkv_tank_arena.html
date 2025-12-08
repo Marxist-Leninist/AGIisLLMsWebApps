@@ -1,0 +1,1874 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RWKV-TANK Variants Battle Arena</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0a0f;
+            color: #e0e0e0;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+        }
+        #container {
+            display: flex;
+            height: 100vh;
+        }
+        #arena {
+            flex: 1;
+            position: relative;
+            background: linear-gradient(135deg, #0d0d15 0%, #1a1a2e 100%);
+            border-right: 2px solid #333;
+        }
+        canvas {
+            display: block;
+        }
+        #sidebar {
+            width: 380px;
+            padding: 10px;
+            background: #111118;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        h1 {
+            font-size: 1.1em;
+            color: #3b82f6;
+            text-align: center;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px #3b82f655;
+        }
+        .subtitle {
+            font-size: 0.7em;
+            color: #666;
+            text-align: center;
+            margin-top: -8px;
+            margin-bottom: 8px;
+        }
+        .nn-card {
+            background: #1a1a25;
+            border-radius: 6px;
+            padding: 8px;
+            border: 1px solid #333;
+        }
+        .nn-card h3 {
+            font-size: 0.75em;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .nn-icon {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        .tank-original .nn-icon { background: #3b82f6; box-shadow: 0 0 8px #3b82f6; }
+        .tank-fortress .nn-icon { background: #6366f1; box-shadow: 0 0 8px #6366f1; }
+        .tank-artillery .nn-icon { background: #f59e0b; box-shadow: 0 0 8px #f59e0b; }
+        .tank-juggernaut .nn-icon { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
+        .tank-sentinel .nn-icon { background: #10b981; box-shadow: 0 0 8px #10b981; }
+        .tank-predator .nn-icon { background: #8b5cf6; box-shadow: 0 0 8px #8b5cf6; }
+        .tank-colossus .nn-icon { background: #ec4899; box-shadow: 0 0 8px #ec4899; }
+        
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.65em;
+            margin: 2px 0;
+            color: #888;
+        }
+        .stat-value { color: #fff; }
+        .health-bar {
+            height: 5px;
+            background: #333;
+            border-radius: 3px;
+            margin: 4px 0;
+            overflow: hidden;
+        }
+        .health-fill {
+            height: 100%;
+            transition: width 0.3s;
+            border-radius: 3px;
+        }
+        .tank-original .health-fill { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+        .tank-fortress .health-fill { background: linear-gradient(90deg, #6366f1, #818cf8); }
+        .tank-artillery .health-fill { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+        .tank-juggernaut .health-fill { background: linear-gradient(90deg, #ef4444, #f87171); }
+        .tank-sentinel .health-fill { background: linear-gradient(90deg, #10b981, #34d399); }
+        .tank-predator .health-fill { background: linear-gradient(90deg, #8b5cf6, #a78bfa); }
+        .tank-colossus .health-fill { background: linear-gradient(90deg, #ec4899, #f472b6); }
+        
+        .learning-indicator {
+            font-size: 0.6em;
+            color: #3b82f6;
+            margin-top: 2px;
+        }
+        .variant-desc {
+            font-size: 0.55em;
+            color: #555;
+            font-style: italic;
+            margin-top: 2px;
+        }
+        .brain-vis {
+            display: flex;
+            gap: 2px;
+            margin-top: 4px;
+            flex-wrap: wrap;
+        }
+        .neuron {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: #333;
+            transition: background 0.2s;
+        }
+        .neuron.active { background: #3b82f6; }
+        #controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        button {
+            flex: 1;
+            padding: 10px;
+            background: #3b82f622;
+            border: 1px solid #3b82f6;
+            color: #3b82f6;
+            cursor: pointer;
+            border-radius: 5px;
+            font-family: inherit;
+            transition: all 0.2s;
+        }
+        button:hover {
+            background: #3b82f644;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        #log {
+            flex: 1;
+            background: #0a0a10;
+            border-radius: 5px;
+            padding: 8px;
+            font-size: 0.6em;
+            overflow-y: auto;
+            max-height: 100px;
+            border: 1px solid #222;
+        }
+        .log-entry {
+            margin: 3px 0;
+            padding: 2px 0;
+            border-bottom: 1px solid #1a1a1a;
+        }
+        .log-entry.kill { color: #ef4444; }
+        .log-entry.learn { color: #3b82f6; }
+        .log-entry.respawn { color: #888; }
+        #generation {
+            text-align: center;
+            font-size: 0.85em;
+            color: #666;
+            padding: 8px;
+            background: #0a0a10;
+            border-radius: 5px;
+        }
+        #generation span { color: #3b82f6; font-weight: bold; }
+        .weights-display {
+            font-size: 0.55em;
+            color: #555;
+            margin-top: 2px;
+            word-break: break-all;
+        }
+        #speed-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px;
+            background: #0a0a10;
+            border-radius: 5px;
+        }
+        #speed-control label { font-size: 0.8em; color: #666; }
+        #speed-slider { flex: 1; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="arena">
+            <canvas id="canvas"></canvas>
+        </div>
+        <div id="sidebar">
+            <h1>🛡️ RWKV-TANK Variants Arena</h1>
+            <div class="subtitle">High decay, defensive supremacy - 7 Tank configurations</div>
+            
+            <div id="generation">Gen: <span id="gen-num">1</span> | Round: <span id="round-num">1</span> | Hits: <span id="fight-num">0</span></div>
+            
+            <div id="controls">
+                <button id="pauseBtn">⏸️ Pause</button>
+                <button id="resetBtn">🔄 Reset</button>
+            </div>
+            
+            <div id="speed-control">
+                <label>Speed:</label>
+                <input type="range" id="speed-slider" min="0.5" max="3" step="0.25" value="1">
+                <span id="speed-value">1x</span>
+            </div>
+            
+            <div class="nn-card tank-original">
+                <h3><span class="nn-icon"></span>TANK-ORIGINAL</h3>
+                <div class="variant-desc">The baseline Tank - slow decay, defensive, long memory</div>
+                <div class="stat-row">Channels: <span class="stat-value">24</span> | HP: <span class="stat-value">130</span> | Decay: <span class="stat-value" id="r0-decay">0.98</span></div>
+                <div class="health-bar"><div class="health-fill" id="r0-health" style="width:100%"></div></div>
+                <div class="stat-row">Kills: <span class="stat-value" id="r0-kills">0</span> | Deaths: <span class="stat-value" id="r0-deaths">0</span> | Wins: <span class="stat-value" id="r0-wins">0</span></div>
+                <div class="stat-row">Accuracy: <span class="stat-value" id="r0-accuracy">0%</span></div>
+                <div class="learning-indicator" id="r0-learning"></div>
+                <div class="brain-vis" id="r0-brain"></div>
+            </div>
+            
+            <div class="nn-card tank-fortress">
+                <h3><span class="nn-icon"></span>TANK-FORTRESS</h3>
+                <div class="variant-desc">Maximum defense - highest HP, slowest, counter-puncher</div>
+                <div class="stat-row">Channels: <span class="stat-value">28</span> | HP: <span class="stat-value">160</span> | Decay: <span class="stat-value" id="r1-decay">0.99</span></div>
+                <div class="health-bar"><div class="health-fill" id="r1-health" style="width:100%"></div></div>
+                <div class="stat-row">Kills: <span class="stat-value" id="r1-kills">0</span> | Deaths: <span class="stat-value" id="r1-deaths">0</span> | Wins: <span class="stat-value" id="r1-wins">0</span></div>
+                <div class="stat-row">Accuracy: <span class="stat-value" id="r1-accuracy">0%</span></div>
+                <div class="learning-indicator" id="r1-learning"></div>
+                <div class="brain-vis" id="r1-brain"></div>
+            </div>
+            
+            <div class="nn-card tank-artillery">
+                <h3><span class="nn-icon"></span>TANK-ARTILLERY</h3>
+                <div class="variant-desc">Siege mode - extreme railgun damage, prefers max range</div>
+                <div class="stat-row">Channels: <span class="stat-value">24</span> | HP: <span class="stat-value">110</span> | Decay: <span class="stat-value" id="r2-decay">0.97</span></div>
+                <div class="health-bar"><div class="health-fill" id="r2-health" style="width:100%"></div></div>
+                <div class="stat-row">Kills: <span class="stat-value" id="r2-kills">0</span> | Deaths: <span class="stat-value" id="r2-deaths">0</span> | Wins: <span class="stat-value" id="r2-wins">0</span></div>
+                <div class="stat-row">Accuracy: <span class="stat-value" id="r2-accuracy">0%</span></div>
+                <div class="learning-indicator" id="r2-learning"></div>
+                <div class="brain-vis" id="r2-brain"></div>
+            </div>
+            
+            <div class="nn-card tank-juggernaut">
+                <h3><span class="nn-icon"></span>TANK-JUGGERNAUT</h3>
+                <div class="variant-desc">Aggressive tank - trades defense for offense, pushes forward</div>
+                <div class="stat-row">Channels: <span class="stat-value">26</span> | HP: <span class="stat-value">140</span> | Decay: <span class="stat-value" id="r3-decay">0.96</span></div>
+                <div class="health-bar"><div class="health-fill" id="r3-health" style="width:100%"></div></div>
+                <div class="stat-row">Kills: <span class="stat-value" id="r3-kills">0</span> | Deaths: <span class="stat-value" id="r3-deaths">0</span> | Wins: <span class="stat-value" id="r3-wins">0</span></div>
+                <div class="stat-row">Accuracy: <span class="stat-value" id="r3-accuracy">0%</span></div>
+                <div class="learning-indicator" id="r3-learning"></div>
+                <div class="brain-vis" id="r3-brain"></div>
+            </div>
+            
+            <div class="nn-card tank-sentinel">
+                <h3><span class="nn-icon"></span>TANK-SENTINEL</h3>
+                <div class="variant-desc">Area denial - laser specialist, punishes close approaches</div>
+                <div class="stat-row">Channels: <span class="stat-value">24</span> | HP: <span class="stat-value">120</span> | Decay: <span class="stat-value" id="r4-decay">0.97</span></div>
+                <div class="health-bar"><div class="health-fill" id="r4-health" style="width:100%"></div></div>
+                <div class="stat-row">Kills: <span class="stat-value" id="r4-kills">0</span> | Deaths: <span class="stat-value" id="r4-deaths">0</span> | Wins: <span class="stat-value" id="r4-wins">0</span></div>
+                <div class="stat-row">Accuracy: <span class="stat-value" id="r4-accuracy">0%</span></div>
+                <div class="learning-indicator" id="r4-learning"></div>
+                <div class="brain-vis" id="r4-brain"></div>
+            </div>
+            
+            <div class="nn-card tank-predator">
+                <h3><span class="nn-icon"></span>TANK-PREDATOR</h3>
+                <div class="variant-desc">Hunter tank - targets weakest enemy, finisher playstyle</div>
+                <div class="stat-row">Channels: <span class="stat-value">24</span> | HP: <span class="stat-value">125</span> | Decay: <span class="stat-value" id="r5-decay">0.96</span></div>
+                <div class="health-bar"><div class="health-fill" id="r5-health" style="width:100%"></div></div>
+                <div class="stat-row">Kills: <span class="stat-value" id="r5-kills">0</span> | Deaths: <span class="stat-value" id="r5-deaths">0</span> | Wins: <span class="stat-value" id="r5-wins">0</span></div>
+                <div class="stat-row">Accuracy: <span class="stat-value" id="r5-accuracy">0%</span></div>
+                <div class="learning-indicator" id="r5-learning"></div>
+                <div class="brain-vis" id="r5-brain"></div>
+            </div>
+            
+            <div class="nn-card tank-colossus">
+                <h3><span class="nn-icon"></span>TANK-COLOSSUS</h3>
+                <div class="variant-desc">Adaptive heavyweight - mode switching, learns 2x faster</div>
+                <div class="stat-row">Channels: <span class="stat-value">32</span> | HP: <span class="stat-value">150</span> | Decay: <span class="stat-value" id="r6-decay">dynamic</span></div>
+                <div class="health-bar"><div class="health-fill" id="r6-health" style="width:100%"></div></div>
+                <div class="stat-row">Kills: <span class="stat-value" id="r6-kills">0</span> | Deaths: <span class="stat-value" id="r6-deaths">0</span> | Wins: <span class="stat-value" id="r6-wins">0</span></div>
+                <div class="stat-row">Accuracy: <span class="stat-value" id="r6-accuracy">0%</span></div>
+                <div class="learning-indicator" id="r6-learning"></div>
+                <div class="brain-vis" id="r6-brain"></div>
+            </div>
+            
+            <div id="log"></div>
+        </div>
+    </div>
+
+<script>
+// Canvas setup
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+function resizeCanvas() {
+    canvas.width = canvas.parentElement.clientWidth;
+    canvas.height = canvas.parentElement.clientHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// Game state
+let paused = false;
+let gameSpeed = 1;
+let generation = 1;
+let totalFights = 0;
+let roundNumber = 1;
+let roundWins = [0, 0, 0, 0, 0, 0, 0];
+let roundInProgress = true;
+let roundEndTimer = 0;
+
+// Base TANK Agent - derived from the winning RWKV-TANK configuration
+class TankAgent {
+    constructor(type, color, x, y, config = {}) {
+        this.type = type;
+        this.color = color;
+        this.x = x;
+        this.y = y;
+        this.vx = 0;
+        this.vy = 0;
+        
+        // Tank baseline: high HP
+        this.maxHealth = config.maxHealth || 130;
+        this.health = this.maxHealth;
+        this.radius = 22; // Slightly larger
+        this.angle = Math.random() * Math.PI * 2;
+        this.kills = 0;
+        this.deaths = 0;
+        this.shotsFired = 0;
+        this.shotsHit = 0;
+        this.respawnTimer = 0;
+        this.alive = true;
+        
+        this.config = config;
+        
+        // Tank baseline weights - defensive
+        this.weights = {
+            aggression: config.aggression || 0.4,
+            evasion: config.evasion || 0.8,
+            accuracy: config.accuracy || 0.5,
+            prediction: config.prediction || 0.4,
+            learningRate: config.learningRate || 0.05,
+            railgunPreference: config.railgunPreference || 0.7,
+            laserPreference: config.laserPreference || 0.3
+        };
+        
+        // Tank weapons - higher damage
+        this.weapons = {
+            bullet: {
+                cooldown: config.bulletCooldown || 550,
+                lastShot: 0,
+                damage: config.bulletDamage || (18 + Math.random() * 8),
+                speed: 380,
+                color: this.color,
+                ready: true
+            },
+            railgun: {
+                cooldown: config.railgunCooldown || 1800,
+                lastShot: 0,
+                damage: config.railgunDamage || (50 + Math.random() * 15),
+                speed: 850,
+                color: '#ffffff',
+                ready: true
+            },
+            laser: {
+                cooldown: config.laserCooldown || 900,
+                lastShot: 0,
+                damage: config.laserDamage || (10 + Math.random() * 5),
+                range: config.laserRange || 280,
+                color: '#00ffff',
+                ready: true,
+                duration: 180
+            }
+        };
+        this.activeLaser = null;
+        this.recentDamageFrom = {};
+        
+        this.initRWKV();
+    }
+    
+    initRWKV() {
+        // Tank baseline: 24 channels, 0.98 decay (long memory)
+        const channels = this.config.channels || 24;
+        this.channels = channels;
+        
+        // High decay = long memory (Tank's key advantage)
+        const baseDecay = this.config.baseDecay || 0.98;
+        this.timeMixState = new Array(channels).fill(0);
+        this.timeDecay = new Array(channels).fill(0).map(() => 
+            baseDecay + (Math.random() - 0.5) * 0.02
+        );
+        this.timeFirst = new Array(channels).fill(0).map(() => Math.random() * 0.4);
+        
+        // Channel-mixing
+        this.channelMixState = new Array(channels).fill(0);
+        this.channelWeights = new Array(channels).fill(0).map(() => Math.random() - 0.5);
+        
+        // RKV weights
+        this.Wr = new Array(channels).fill(0).map(() => Math.random());
+        this.Wk = new Array(channels).fill(0).map(() => Math.random());
+        this.Wv = new Array(channels).fill(0).map(() => Math.random());
+        
+        // Output projection
+        this.Wo = [
+            Math.random() + 0.5, 
+            Math.random() + 0.5, 
+            Math.random() + 0.5, 
+            Math.random() + 0.5,
+            Math.random() + 0.5
+        ];
+        
+        // Token shift mixing - Tank uses lower values (more historical)
+        this.mixR = this.config.mixR || 0.4;
+        this.mixK = this.config.mixK || 0.4;
+        this.mixV = this.config.mixV || 0.6;
+        
+        // Behavior biases - Tank is more defensive
+        this.shootBias = this.config.shootBias || 0.25;
+        this.moveBias = this.config.moveBias || 0.3;
+    }
+    
+    safeDist(dx, dy) {
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        return dist < 0.001 ? 0.001 : dist;
+    }
+    
+    sigmoid(x) {
+        return 1 / (1 + Math.exp(-Math.max(-20, Math.min(20, x))));
+    }
+    
+    think(enemies, bullets, dt) {
+        const aliveEnemies = enemies.filter(e => e.alive && e !== this);
+        
+        // Encode input
+        let currentInput = new Array(this.channels).fill(0);
+        
+        aliveEnemies.forEach((enemy, i) => {
+            if (i < 4 && i * 5 + 4 < this.channels) {
+                const dx = (enemy.x - this.x) / canvas.width;
+                const dy = (enemy.y - this.y) / canvas.height;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                currentInput[i * 5] = dx;
+                currentInput[i * 5 + 1] = dy;
+                currentInput[i * 5 + 2] = dist;
+                currentInput[i * 5 + 3] = enemy.health / enemy.maxHealth;
+                currentInput[i * 5 + 4] = (this.recentDamageFrom[enemy.type] || 0) / 5;
+            }
+        });
+        
+        // Bullet threats
+        let bulletThreat = 0;
+        let bulletEvadeX = 0, bulletEvadeY = 0;
+        bullets.forEach(b => {
+            if (b.owner === this) return;
+            const dx = b.x - this.x;
+            const dy = b.y - this.y;
+            const dist = this.safeDist(dx, dy);
+            if (dist < 140) {
+                bulletThreat += (140 - dist) / 140;
+                bulletEvadeX -= dx / dist;
+                bulletEvadeY -= dy / dist;
+            }
+        });
+        
+        if (this.channels >= 24) {
+            currentInput[20] = Math.min(1, bulletThreat);
+            currentInput[21] = bulletEvadeX / (Math.abs(bulletEvadeX) + 1);
+            currentInput[22] = bulletEvadeY / (Math.abs(bulletEvadeY) + 1);
+            currentInput[23] = this.health / this.maxHealth;
+        }
+        
+        // === RWKV TIME-MIXING ===
+        let r = new Array(this.channels).fill(0);
+        let k = new Array(this.channels).fill(0);
+        let v = new Array(this.channels).fill(0);
+        
+        for (let i = 0; i < this.channels; i++) {
+            const shifted = this.mixR * currentInput[i] + (1 - this.mixR) * this.timeMixState[i];
+            r[i] = this.sigmoid(shifted * this.Wr[i]);
+            k[i] = shifted * this.Wk[i];
+            v[i] = shifted * this.Wv[i];
+        }
+        
+        // WKV with high decay (long memory)
+        let wkv = new Array(this.channels).fill(0);
+        for (let i = 0; i < this.channels; i++) {
+            const decay = this.timeDecay[i];
+            const bonus = this.timeFirst[i] * k[i];
+            wkv[i] = (this.timeMixState[i] * decay + Math.exp(Math.min(10, bonus)) * v[i]) / 
+                     (decay + Math.exp(Math.min(10, bonus)) + 0.001);
+            this.timeMixState[i] = this.timeMixState[i] * decay + k[i] * v[i];
+        }
+        
+        // Apply receptance
+        let timeOut = new Array(this.channels).fill(0);
+        for (let i = 0; i < this.channels; i++) {
+            timeOut[i] = r[i] * wkv[i];
+        }
+        
+        // === CHANNEL-MIXING ===
+        let channelOut = new Array(this.channels).fill(0);
+        for (let i = 0; i < this.channels; i++) {
+            const mixed = this.mixK * timeOut[i] + (1 - this.mixK) * this.channelMixState[i];
+            channelOut[i] = Math.tanh(mixed * this.channelWeights[i] * 2);
+            this.channelMixState[i] = timeOut[i];
+        }
+        
+        // Output projection
+        let output = [0, 0, 0, 0, 0];
+        for (let i = 0; i < this.channels; i++) {
+            output[i % 5] += channelOut[i] * this.Wo[i % 5] * 0.5;
+        }
+        output = output.map(o => Math.tanh(o));
+        
+        // Find target
+        let targetAngle = this.angle;
+        let targetDist = 999;
+        let targetDx = 0, targetDy = 0;
+        let targetHealth = 100;
+        
+        if (aliveEnemies.length > 0) {
+            const target = this.selectTarget(aliveEnemies);
+            targetDx = target.x - this.x;
+            targetDy = target.y - this.y;
+            const predX = target.x + (target.vx || 0) * this.weights.prediction * 0.4;
+            const predY = target.y + (target.vy || 0) * this.weights.prediction * 0.4;
+            targetAngle = Math.atan2(predY - this.y, predX - this.x);
+            targetDist = this.safeDist(targetDx, targetDy);
+            targetHealth = target.health;
+        }
+        
+        return this.applyVariantBehavior(output, aliveEnemies, targetAngle, targetDist, targetDx, targetDy, bulletEvadeX, bulletEvadeY, targetHealth);
+    }
+    
+    selectTarget(aliveEnemies) {
+        // Default: closest + lowest health
+        return aliveEnemies.sort((a, b) => {
+            const da = this.safeDist(a.x - this.x, a.y - this.y);
+            const db = this.safeDist(b.x - this.x, b.y - this.y);
+            return (da + a.health * 0.5) - (db + b.health * 0.5);
+        })[0];
+    }
+    
+    applyVariantBehavior(output, aliveEnemies, targetAngle, targetDist, targetDx, targetDy, bulletEvadeX, bulletEvadeY, targetHealth) {
+        // Tank baseline: defensive, maintain distance
+        let moveX = output[0] * this.weights.aggression * 0.7;
+        let moveY = output[1] * this.weights.aggression * 0.7;
+        
+        if (aliveEnemies.length > 0) {
+            const dirX = targetDx / targetDist;
+            const dirY = targetDy / targetDist;
+            
+            const optimalRange = this.config.optimalRange || 220;
+            
+            // Tank likes to maintain distance
+            if (targetDist < optimalRange - 40) {
+                moveX -= dirX * this.moveBias * 1.5;
+                moveY -= dirY * this.moveBias * 1.5;
+            } else if (targetDist > optimalRange + 80) {
+                moveX += dirX * this.moveBias * 0.5;
+                moveY += dirY * this.moveBias * 0.5;
+            } else {
+                // Slow strafe at optimal range
+                moveX += -dirY * this.moveBias * 0.3;
+                moveY += dirX * this.moveBias * 0.3;
+            }
+        }
+        
+        // Heavy evasion (Tank's strength)
+        moveX += bulletEvadeX * this.weights.evasion * 0.8;
+        moveY += bulletEvadeY * this.weights.evasion * 0.8;
+        
+        const mag = Math.sqrt(moveX * moveX + moveY * moveY);
+        if (mag > 1) { moveX /= mag; moveY /= mag; }
+        
+        const hasTarget = aliveEnemies.length > 0;
+        const shootDecision = hasTarget && (output[2] + this.shootBias) > 0.3;
+        
+        // Tank prefers railgun at range
+        let useRailgun = targetDist > 150 && this.weapons.railgun.ready && Math.random() < this.weights.railgunPreference;
+        let useLaser = targetDist < 200 && this.weapons.laser.ready && !useRailgun && Math.random() < this.weights.laserPreference;
+        
+        return {
+            moveX: Math.max(-1, Math.min(1, moveX || 0)),
+            moveY: Math.max(-1, Math.min(1, moveY || 0)),
+            shoot: shootDecision && !useRailgun && !useLaser,
+            shootAlt: useRailgun && hasTarget && shootDecision,
+            shootLaser: useLaser && hasTarget && shootDecision,
+            targetAngle
+        };
+    }
+    
+    learn(event, data) {
+        const lr = this.weights.learningRate * (this.config.learnMultiplier || 1);
+        
+        if (event === 'hit_enemy') {
+            this.weights.accuracy = Math.min(0.95, this.weights.accuracy + lr * 0.8);
+            this.weights.prediction = Math.min(0.9, this.weights.prediction + lr * 0.4);
+            this.mixR = Math.min(0.9, this.mixR + lr * 0.08);
+            this.shootBias = Math.min(0.5, this.shootBias + lr * 0.08);
+            this.Wo = this.Wo.map(w => w * (1 + lr * 0.15));
+            
+            if (data.weaponType === 'railgun') {
+                this.weights.railgunPreference = Math.min(0.95, this.weights.railgunPreference + lr * 0.15);
+            } else if (data.weaponType === 'laser') {
+                this.weights.laserPreference = Math.min(0.9, this.weights.laserPreference + lr * 0.15);
+            }
+        } else if (event === 'killed') {
+            this.weights.aggression = Math.min(0.8, this.weights.aggression + lr * 1.0);
+            this.weights.prediction = Math.min(0.9, this.weights.prediction + lr * 0.6);
+            this.Wr = this.Wr.map(w => w * (1 + lr * 0.25));
+            this.Wv = this.Wv.map(w => w * (1 + lr * 0.25));
+            this.shootBias = Math.min(0.6, this.shootBias + lr * 0.12);
+        } else if (event === 'took_damage') {
+            this.weights.evasion = Math.min(0.98, this.weights.evasion + lr * 0.6);
+            this.channelWeights = this.channelWeights.map(w => w * (1 + lr * 0.12));
+            if (data.from) {
+                this.recentDamageFrom[data.from] = (this.recentDamageFrom[data.from] || 0) + 1;
+            }
+        } else if (event === 'died') {
+            this.weights.evasion = Math.min(0.98, this.weights.evasion + lr * 0.9);
+            this.weights.aggression = Math.max(0.2, this.weights.aggression - lr * 0.3);
+            this.mixV = Math.max(0.3, this.mixV - lr * 0.08);
+        } else if (event === 'missed') {
+            this.weights.accuracy = Math.max(0.15, this.weights.accuracy - lr * 0.12);
+        }
+    }
+    
+    update(enemies, bullets, dt) {
+        if (!this.alive) {
+            this.respawnTimer -= dt;
+            if (this.respawnTimer <= 0) {
+                this.respawn();
+            }
+            return null;
+        }
+        
+        const now = Date.now();
+        this.weapons.bullet.ready = (now - this.weapons.bullet.lastShot) > this.weapons.bullet.cooldown / gameSpeed;
+        this.weapons.railgun.ready = (now - this.weapons.railgun.lastShot) > this.weapons.railgun.cooldown / gameSpeed;
+        this.weapons.laser.ready = (now - this.weapons.laser.lastShot) > this.weapons.laser.cooldown / gameSpeed;
+        
+        if (this.activeLaser && now - this.activeLaser.startTime > this.weapons.laser.duration) {
+            this.activeLaser = null;
+        }
+        
+        const decision = this.think(enemies, bullets, dt);
+        
+        // Tank is slower
+        const speed = (this.config.moveSpeed || 120) * gameSpeed;
+        this.vx = decision.moveX * speed;
+        this.vy = decision.moveY * speed;
+        
+        if (isNaN(this.vx) || !isFinite(this.vx)) this.vx = 0;
+        if (isNaN(this.vy) || !isFinite(this.vy)) this.vy = 0;
+        if (isNaN(this.x) || !isFinite(this.x)) this.x = canvas.width / 2;
+        if (isNaN(this.y) || !isFinite(this.y)) this.y = canvas.height / 2;
+        
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        
+        const margin = this.radius;
+        if (this.x < -margin) this.x = canvas.width + margin;
+        if (this.x > canvas.width + margin) this.x = -margin;
+        if (this.y < -margin) this.y = canvas.height + margin;
+        if (this.y > canvas.height + margin) this.y = -margin;
+        
+        if (decision.targetAngle !== undefined) {
+            let diff = decision.targetAngle - this.angle;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            this.angle += diff * 0.12; // Tank turns slower
+        }
+        
+        if (decision.shootLaser && this.weapons.laser.ready) {
+            this.weapons.laser.lastShot = now;
+            this.shotsFired++;
+            this.fireLaser(enemies);
+            return null;
+        }
+        
+        if (decision.shootAlt && this.weapons.railgun.ready) {
+            this.weapons.railgun.lastShot = now;
+            this.shotsFired++;
+            return this.createBullet('railgun');
+        }
+        
+        if (decision.shoot && this.weapons.bullet.ready) {
+            this.weapons.bullet.lastShot = now;
+            this.shotsFired++;
+            return this.createBullet('bullet');
+        }
+        
+        return null;
+    }
+    
+    fireLaser(enemies) {
+        const range = this.weapons.laser.range;
+        const endX = this.x + Math.cos(this.angle) * range;
+        const endY = this.y + Math.sin(this.angle) * range;
+        
+        this.activeLaser = {
+            startX: this.x + Math.cos(this.angle) * this.radius,
+            startY: this.y + Math.sin(this.angle) * this.radius,
+            endX: endX,
+            endY: endY,
+            startTime: Date.now(),
+            hit: false
+        };
+        
+        let closestHit = null;
+        let closestDist = range;
+        
+        enemies.forEach(enemy => {
+            if (enemy === this || !enemy.alive) return;
+            
+            const dx = endX - this.x;
+            const dy = endY - this.y;
+            const fx = this.x - enemy.x;
+            const fy = this.y - enemy.y;
+            
+            const a = dx * dx + dy * dy;
+            const b = 2 * (fx * dx + fy * dy);
+            const c = fx * fx + fy * fy - enemy.radius * enemy.radius;
+            
+            let discriminant = b * b - 4 * a * c;
+            
+            if (discriminant >= 0) {
+                discriminant = Math.sqrt(discriminant);
+                const t1 = (-b - discriminant) / (2 * a);
+                const t2 = (-b + discriminant) / (2 * a);
+                
+                if (t1 >= 0 && t1 <= 1) {
+                    const hitDist = t1 * Math.sqrt(a);
+                    if (hitDist < closestDist) {
+                        closestDist = hitDist;
+                        closestHit = enemy;
+                    }
+                } else if (t2 >= 0 && t2 <= 1) {
+                    const hitDist = t2 * Math.sqrt(a);
+                    if (hitDist < closestDist) {
+                        closestDist = hitDist;
+                        closestHit = enemy;
+                    }
+                }
+            }
+        });
+        
+        if (closestHit) {
+            this.activeLaser.endX = this.x + Math.cos(this.angle) * closestDist;
+            this.activeLaser.endY = this.y + Math.sin(this.angle) * closestDist;
+            this.activeLaser.hit = true;
+            
+            closestHit.takeDamage(this.weapons.laser.damage, this);
+            this.shotsHit++;
+            this.learn('hit_enemy', { target: closestHit.type, damage: this.weapons.laser.damage, weaponType: 'laser' });
+        } else {
+            this.learn('missed', {});
+        }
+    }
+    
+    createBullet(weaponType = 'bullet') {
+        const weapon = this.weapons[weaponType];
+        const spread = weaponType === 'railgun' ? 
+            (1 - this.weights.accuracy) * 0.08 :
+            (1 - this.weights.accuracy) * 0.25;
+        const angle = this.angle + (Math.random() - 0.5) * spread;
+        
+        return {
+            x: this.x + Math.cos(this.angle) * this.radius,
+            y: this.y + Math.sin(this.angle) * this.radius,
+            vx: Math.cos(angle) * weapon.speed * gameSpeed,
+            vy: Math.sin(angle) * weapon.speed * gameSpeed,
+            owner: this,
+            damage: weapon.damage,
+            color: weaponType === 'railgun' ? '#fff' : this.color,
+            type: weaponType,
+            size: weaponType === 'railgun' ? 7 : 5,
+            trail: weaponType === 'railgun' ? 0.1 : 0.04
+        };
+    }
+    
+    takeDamage(amount, from) {
+        this.health -= amount;
+        this.learn('took_damage', { amount, from: from?.type });
+        
+        if (this.health <= 0) {
+            this.die(from);
+        }
+    }
+    
+    die(killer) {
+        this.alive = false;
+        this.deaths++;
+        this.respawnTimer = 3000 / gameSpeed;
+        this.learn('died', { killer: killer?.type });
+        
+        if (killer) {
+            killer.kills++;
+            killer.learn('killed', { victim: this.type });
+        }
+        
+        addLog(`${killer?.type || 'Unknown'} destroyed ${this.type}!`, 'kill');
+    }
+    
+    respawn() {
+        this.alive = true;
+        this.health = this.maxHealth;
+        this.x = Math.random() * (canvas.width - 100) + 50;
+        this.y = Math.random() * (canvas.height - 100) + 50;
+        this.recentDamageFrom = {};
+        addLog(`${this.type} respawned`, 'respawn');
+    }
+    
+    draw() {
+        if (!this.alive) return;
+        
+        // Draw laser
+        if (this.activeLaser) {
+            const laserAge = Date.now() - this.activeLaser.startTime;
+            const alpha = 1 - (laserAge / this.weapons.laser.duration);
+            
+            ctx.strokeStyle = `rgba(0, 255, 255, ${alpha * 0.3})`;
+            ctx.lineWidth = 14;
+            ctx.beginPath();
+            ctx.moveTo(this.activeLaser.startX, this.activeLaser.startY);
+            ctx.lineTo(this.activeLaser.endX, this.activeLaser.endY);
+            ctx.stroke();
+            
+            ctx.strokeStyle = `rgba(100, 255, 255, ${alpha * 0.8})`;
+            ctx.lineWidth = 5;
+            ctx.beginPath();
+            ctx.moveTo(this.activeLaser.startX, this.activeLaser.startY);
+            ctx.lineTo(this.activeLaser.endX, this.activeLaser.endY);
+            ctx.stroke();
+            
+            ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(this.activeLaser.startX, this.activeLaser.startY);
+            ctx.lineTo(this.activeLaser.endX, this.activeLaser.endY);
+            ctx.stroke();
+            
+            if (this.activeLaser.hit) {
+                const flashRadius = Math.max(1, 18 * alpha);
+                ctx.fillStyle = `rgba(200, 255, 255, ${alpha})`;
+                ctx.beginPath();
+                ctx.arc(this.activeLaser.endX, this.activeLaser.endY, flashRadius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        
+        // Glow - tanks have stronger glow
+        const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, Math.max(1, this.radius * 2.2));
+        gradient.addColorStop(0, this.color + '50');
+        gradient.addColorStop(1, 'transparent');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(0, 0, Math.max(1, this.radius * 2.2), 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Body - tank shape (more angular)
+        ctx.rotate(this.angle);
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.moveTo(this.radius, 0);
+        ctx.lineTo(this.radius * 0.3, -this.radius * 0.7);
+        ctx.lineTo(-this.radius * 0.8, -this.radius * 0.6);
+        ctx.lineTo(-this.radius * 0.6, 0);
+        ctx.lineTo(-this.radius * 0.8, this.radius * 0.6);
+        ctx.lineTo(this.radius * 0.3, this.radius * 0.7);
+        ctx.closePath();
+        ctx.fill();
+        
+        // Armor plating
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius * 0.6, -Math.PI * 0.7, Math.PI * 0.7);
+        ctx.stroke();
+        
+        // Core
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(-this.radius * 0.15, 0, Math.max(1, this.radius * 0.2), 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.restore();
+        
+        // Health bar (wider for tanks)
+        const barWidth = 50;
+        const barHeight = 5;
+        ctx.fillStyle = '#333';
+        ctx.fillRect(this.x - barWidth/2, this.y - this.radius - 14, barWidth, barHeight);
+        ctx.fillStyle = this.color;
+        const healthWidth = Math.max(0, barWidth * (this.health / this.maxHealth));
+        ctx.fillRect(this.x - barWidth/2, this.y - this.radius - 14, healthWidth, barHeight);
+        
+        // Weapon indicators
+        if (this.weapons.railgun.ready) {
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(this.x + barWidth/2 + 6, this.y - this.radius - 11, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        if (this.weapons.laser.ready) {
+            ctx.fillStyle = '#00ffff';
+            ctx.beginPath();
+            ctx.arc(this.x + barWidth/2 + 14, this.y - this.radius - 11, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        // Type label
+        ctx.fillStyle = '#fff';
+        ctx.font = '9px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(this.type.replace('TANK-', ''), this.x, this.y - this.radius - 18);
+    }
+    
+    getAccuracy() {
+        return this.shotsFired > 0 ? Math.round((this.shotsHit / this.shotsFired) * 100) : 0;
+    }
+    
+    getAvgDecay() {
+        return this.timeDecay.reduce((a, b) => a + b, 0) / this.timeDecay.length;
+    }
+}
+
+// === TANK VARIANTS ===
+
+// TANK-FORTRESS: Maximum defense, highest HP, counter-puncher
+class TankFortress extends TankAgent {
+    constructor(x, y) {
+        super('TANK-FORTRESS', '#6366f1', x, y, {
+            channels: 28,
+            baseDecay: 0.99,
+            maxHealth: 160,
+            aggression: 0.25,
+            evasion: 0.9,
+            accuracy: 0.55,
+            railgunPreference: 0.6,
+            shootBias: 0.2,
+            moveBias: 0.2,
+            bulletDamage: 20,
+            railgunDamage: 55,
+            moveSpeed: 95,
+            optimalRange: 250,
+            learnMultiplier: 0.7,
+            mixR: 0.35,
+            mixK: 0.35
+        });
+        this.counterAttackReady = true;
+        this.lastDamageTime = 0;
+    }
+    
+    applyVariantBehavior(output, aliveEnemies, targetAngle, targetDist, targetDx, targetDy, bulletEvadeX, bulletEvadeY, targetHealth) {
+        // Fortress barely moves - holds position
+        let moveX = output[0] * this.weights.aggression * 0.4;
+        let moveY = output[1] * this.weights.aggression * 0.4;
+        
+        if (aliveEnemies.length > 0) {
+            const dirX = targetDx / targetDist;
+            const dirY = targetDy / targetDist;
+            
+            // Only retreat if very close
+            if (targetDist < 150) {
+                moveX -= dirX * this.moveBias * 2;
+                moveY -= dirY * this.moveBias * 2;
+            }
+        }
+        
+        // Maximum evasion
+        moveX += bulletEvadeX * this.weights.evasion * 1.0;
+        moveY += bulletEvadeY * this.weights.evasion * 1.0;
+        
+        const mag = Math.sqrt(moveX * moveX + moveY * moveY);
+        if (mag > 1) { moveX /= mag; moveY /= mag; }
+        
+        const hasTarget = aliveEnemies.length > 0;
+        
+        // Counter-attack: shoots more when recently damaged
+        const now = Date.now();
+        const recentlyDamaged = (now - this.lastDamageTime) < 2000;
+        const shootDecision = hasTarget && ((output[2] + this.shootBias) > 0.25 || recentlyDamaged);
+        
+        let useRailgun = targetDist > 180 && this.weapons.railgun.ready;
+        let useLaser = targetDist < 220 && this.weapons.laser.ready && !useRailgun;
+        
+        return {
+            moveX: Math.max(-1, Math.min(1, moveX || 0)),
+            moveY: Math.max(-1, Math.min(1, moveY || 0)),
+            shoot: shootDecision && !useRailgun && !useLaser,
+            shootAlt: useRailgun && hasTarget,
+            shootLaser: useLaser && shootDecision,
+            targetAngle
+        };
+    }
+    
+    learn(event, data) {
+        super.learn(event, data);
+        if (event === 'took_damage') {
+            this.lastDamageTime = Date.now();
+        }
+    }
+}
+
+// TANK-ARTILLERY: Siege mode, extreme railgun damage, max range
+class TankArtillery extends TankAgent {
+    constructor(x, y) {
+        super('TANK-ARTILLERY', '#f59e0b', x, y, {
+            channels: 24,
+            baseDecay: 0.97,
+            maxHealth: 110,
+            aggression: 0.3,
+            evasion: 0.7,
+            accuracy: 0.65,
+            prediction: 0.55,
+            railgunPreference: 0.95,
+            laserPreference: 0.1,
+            shootBias: 0.3,
+            moveBias: 0.35,
+            railgunCooldown: 1400,
+            railgunDamage: 75,
+            bulletDamage: 15,
+            moveSpeed: 110,
+            optimalRange: 380,
+            learnMultiplier: 1.0
+        });
+    }
+    
+    applyVariantBehavior(output, aliveEnemies, targetAngle, targetDist, targetDx, targetDy, bulletEvadeX, bulletEvadeY, targetHealth) {
+        let moveX = output[0] * this.weights.aggression;
+        let moveY = output[1] * this.weights.aggression;
+        
+        if (aliveEnemies.length > 0) {
+            const dirX = targetDx / targetDist;
+            const dirY = targetDy / targetDist;
+            
+            // Artillery keeps maximum distance
+            if (targetDist < 350) {
+                moveX -= dirX * this.moveBias * 1.8;
+                moveY -= dirY * this.moveBias * 1.8;
+            } else if (targetDist > 450) {
+                moveX += dirX * this.moveBias * 0.4;
+                moveY += dirY * this.moveBias * 0.4;
+            }
+        }
+        
+        moveX += bulletEvadeX * this.weights.evasion * 0.7;
+        moveY += bulletEvadeY * this.weights.evasion * 0.7;
+        
+        const mag = Math.sqrt(moveX * moveX + moveY * moveY);
+        if (mag > 1) { moveX /= mag; moveY /= mag; }
+        
+        const hasTarget = aliveEnemies.length > 0;
+        
+        // Artillery waits for good railgun shots
+        const angleDiff = Math.abs(Math.atan2(targetDy, targetDx) - this.angle);
+        const goodShot = angleDiff < 0.15;
+        
+        // Almost exclusively railgun
+        let useRailgun = this.weapons.railgun.ready && goodShot;
+        let useLaser = false;
+        let shoot = !useRailgun && hasTarget && (output[2] + this.shootBias) > 0.4;
+        
+        return {
+            moveX: Math.max(-1, Math.min(1, moveX || 0)),
+            moveY: Math.max(-1, Math.min(1, moveY || 0)),
+            shoot,
+            shootAlt: useRailgun && hasTarget,
+            shootLaser: useLaser,
+            targetAngle
+        };
+    }
+}
+
+// TANK-JUGGERNAUT: Aggressive tank, trades defense for offense
+class TankJuggernaut extends TankAgent {
+    constructor(x, y) {
+        super('TANK-JUGGERNAUT', '#ef4444', x, y, {
+            channels: 26,
+            baseDecay: 0.96,
+            maxHealth: 140,
+            aggression: 0.65,
+            evasion: 0.55,
+            accuracy: 0.5,
+            railgunPreference: 0.5,
+            laserPreference: 0.5,
+            shootBias: 0.45,
+            moveBias: 0.55,
+            bulletCooldown: 450,
+            bulletDamage: 22,
+            railgunDamage: 55,
+            laserDamage: 14,
+            moveSpeed: 140,
+            optimalRange: 160,
+            learnMultiplier: 1.2,
+            mixR: 0.5,
+            mixK: 0.5
+        });
+    }
+    
+    applyVariantBehavior(output, aliveEnemies, targetAngle, targetDist, targetDx, targetDy, bulletEvadeX, bulletEvadeY, targetHealth) {
+        // Juggernaut pushes forward
+        let moveX = output[0] * this.weights.aggression * 1.2;
+        let moveY = output[1] * this.weights.aggression * 1.2;
+        
+        if (aliveEnemies.length > 0) {
+            const dirX = targetDx / targetDist;
+            const dirY = targetDy / targetDist;
+            
+            // Advance unless very close
+            if (targetDist > 120) {
+                moveX += dirX * this.moveBias * 1.0;
+                moveY += dirY * this.moveBias * 1.0;
+            } else {
+                // Circle at close range
+                moveX += -dirY * this.moveBias * 0.8;
+                moveY += dirX * this.moveBias * 0.8;
+            }
+        }
+        
+        // Less evasion than other tanks
+        moveX += bulletEvadeX * this.weights.evasion * 0.5;
+        moveY += bulletEvadeY * this.weights.evasion * 0.5;
+        
+        const mag = Math.sqrt(moveX * moveX + moveY * moveY);
+        if (mag > 1) { moveX /= mag; moveY /= mag; }
+        
+        const hasTarget = aliveEnemies.length > 0;
+        // Juggernaut shoots constantly
+        const shootDecision = hasTarget && ((output[2] + this.shootBias) > 0.1 || Math.random() < 0.5);
+        
+        // Mix of weapons based on range
+        let useLaser = targetDist < 180 && this.weapons.laser.ready;
+        let useRailgun = targetDist > 200 && this.weapons.railgun.ready && !useLaser;
+        
+        return {
+            moveX: Math.max(-1, Math.min(1, moveX || 0)),
+            moveY: Math.max(-1, Math.min(1, moveY || 0)),
+            shoot: shootDecision && !useRailgun && !useLaser,
+            shootAlt: useRailgun && shootDecision,
+            shootLaser: useLaser && shootDecision,
+            targetAngle
+        };
+    }
+}
+
+// TANK-SENTINEL: Area denial, laser specialist
+class TankSentinel extends TankAgent {
+    constructor(x, y) {
+        super('TANK-SENTINEL', '#10b981', x, y, {
+            channels: 24,
+            baseDecay: 0.97,
+            maxHealth: 120,
+            aggression: 0.35,
+            evasion: 0.75,
+            accuracy: 0.6,
+            railgunPreference: 0.3,
+            laserPreference: 0.9,
+            shootBias: 0.35,
+            moveBias: 0.3,
+            laserCooldown: 550,
+            laserDamage: 16,
+            laserRange: 320,
+            moveSpeed: 115,
+            optimalRange: 200,
+            learnMultiplier: 1.0
+        });
+        this.zoneCenter = { x: 0, y: 0 };
+        this.zoneSet = false;
+    }
+    
+    applyVariantBehavior(output, aliveEnemies, targetAngle, targetDist, targetDx, targetDy, bulletEvadeX, bulletEvadeY, targetHealth) {
+        // Sentinel establishes a zone and defends it
+        if (!this.zoneSet) {
+            this.zoneCenter = { x: this.x, y: this.y };
+            this.zoneSet = true;
+        }
+        
+        let moveX = output[0] * this.weights.aggression * 0.6;
+        let moveY = output[1] * this.weights.aggression * 0.6;
+        
+        // Return to zone center
+        const toZoneX = this.zoneCenter.x - this.x;
+        const toZoneY = this.zoneCenter.y - this.y;
+        const zoneDist = this.safeDist(toZoneX, toZoneY);
+        
+        if (zoneDist > 150) {
+            moveX += (toZoneX / zoneDist) * 0.4;
+            moveY += (toZoneY / zoneDist) * 0.4;
+        }
+        
+        if (aliveEnemies.length > 0) {
+            const dirX = targetDx / targetDist;
+            const dirY = targetDy / targetDist;
+            
+            // Keep enemies at laser range
+            if (targetDist < 150) {
+                moveX -= dirX * this.moveBias * 1.2;
+                moveY -= dirY * this.moveBias * 1.2;
+            }
+        }
+        
+        moveX += bulletEvadeX * this.weights.evasion * 0.7;
+        moveY += bulletEvadeY * this.weights.evasion * 0.7;
+        
+        const mag = Math.sqrt(moveX * moveX + moveY * moveY);
+        if (mag > 1) { moveX /= mag; moveY /= mag; }
+        
+        const hasTarget = aliveEnemies.length > 0;
+        const inLaserRange = targetDist < 300;
+        const shootDecision = hasTarget && (output[2] + this.shootBias) > 0.2;
+        
+        // Sentinel loves laser
+        let useLaser = inLaserRange && this.weapons.laser.ready;
+        let useRailgun = !useLaser && targetDist > 250 && this.weapons.railgun.ready;
+        
+        return {
+            moveX: Math.max(-1, Math.min(1, moveX || 0)),
+            moveY: Math.max(-1, Math.min(1, moveY || 0)),
+            shoot: shootDecision && !useRailgun && !useLaser,
+            shootAlt: useRailgun && shootDecision,
+            shootLaser: useLaser && shootDecision,
+            targetAngle
+        };
+    }
+    
+    respawn() {
+        super.respawn();
+        this.zoneSet = false;
+    }
+}
+
+// TANK-PREDATOR: Hunter tank, targets weakest enemy
+class TankPredator extends TankAgent {
+    constructor(x, y) {
+        super('TANK-PREDATOR', '#8b5cf6', x, y, {
+            channels: 24,
+            baseDecay: 0.96,
+            maxHealth: 125,
+            aggression: 0.5,
+            evasion: 0.7,
+            accuracy: 0.55,
+            prediction: 0.5,
+            railgunPreference: 0.6,
+            laserPreference: 0.5,
+            shootBias: 0.4,
+            moveBias: 0.45,
+            bulletDamage: 20,
+            railgunDamage: 60,
+            moveSpeed: 135,
+            optimalRange: 180,
+            learnMultiplier: 1.1
+        });
+    }
+    
+    selectTarget(aliveEnemies) {
+        // Predator targets the weakest enemy (lowest health)
+        return aliveEnemies.sort((a, b) => {
+            // Prioritize low health, then distance
+            const healthA = a.health / a.maxHealth;
+            const healthB = b.health / b.maxHealth;
+            const distA = this.safeDist(a.x - this.x, a.y - this.y);
+            const distB = this.safeDist(b.x - this.x, b.y - this.y);
+            
+            // Heavily weight health
+            return (healthA * 500 + distA * 0.5) - (healthB * 500 + distB * 0.5);
+        })[0];
+    }
+    
+    applyVariantBehavior(output, aliveEnemies, targetAngle, targetDist, targetDx, targetDy, bulletEvadeX, bulletEvadeY, targetHealth) {
+        let moveX = output[0] * this.weights.aggression;
+        let moveY = output[1] * this.weights.aggression;
+        
+        if (aliveEnemies.length > 0) {
+            const dirX = targetDx / targetDist;
+            const dirY = targetDy / targetDist;
+            
+            // Predator pursues low-health targets more aggressively
+            const targetIsWeak = targetHealth < 50;
+            
+            if (targetIsWeak) {
+                // Go for the kill
+                if (targetDist > 100) {
+                    moveX += dirX * this.moveBias * 1.3;
+                    moveY += dirY * this.moveBias * 1.3;
+                }
+            } else {
+                // Standard tank behavior
+                if (targetDist < 160) {
+                    moveX -= dirX * this.moveBias * 0.8;
+                    moveY -= dirY * this.moveBias * 0.8;
+                } else if (targetDist > 250) {
+                    moveX += dirX * this.moveBias * 0.5;
+                    moveY += dirY * this.moveBias * 0.5;
+                }
+            }
+        }
+        
+        moveX += bulletEvadeX * this.weights.evasion * 0.6;
+        moveY += bulletEvadeY * this.weights.evasion * 0.6;
+        
+        const mag = Math.sqrt(moveX * moveX + moveY * moveY);
+        if (mag > 1) { moveX /= mag; moveY /= mag; }
+        
+        const hasTarget = aliveEnemies.length > 0;
+        const targetIsWeak = targetHealth < 50;
+        
+        // More aggressive shooting when target is weak
+        const shootDecision = hasTarget && ((output[2] + this.shootBias) > (targetIsWeak ? 0.1 : 0.3));
+        
+        // Railgun for finishers at range, laser for close finishers
+        let useRailgun = targetDist > 180 && this.weapons.railgun.ready && (targetIsWeak || Math.random() < 0.5);
+        let useLaser = targetDist < 200 && this.weapons.laser.ready && !useRailgun;
+        
+        return {
+            moveX: Math.max(-1, Math.min(1, moveX || 0)),
+            moveY: Math.max(-1, Math.min(1, moveY || 0)),
+            shoot: shootDecision && !useRailgun && !useLaser,
+            shootAlt: useRailgun && shootDecision,
+            shootLaser: useLaser && shootDecision,
+            targetAngle
+        };
+    }
+}
+
+// TANK-COLOSSUS: Adaptive heavyweight, mode switching
+class TankColossus extends TankAgent {
+    constructor(x, y) {
+        super('TANK-COLOSSUS', '#ec4899', x, y, {
+            channels: 32,
+            baseDecay: 0.97,
+            maxHealth: 150,
+            aggression: 0.45,
+            evasion: 0.7,
+            accuracy: 0.5,
+            prediction: 0.45,
+            railgunPreference: 0.6,
+            laserPreference: 0.5,
+            shootBias: 0.35,
+            moveBias: 0.4,
+            bulletDamage: 20,
+            railgunDamage: 58,
+            laserDamage: 13,
+            moveSpeed: 125,
+            optimalRange: 200,
+            learnMultiplier: 2.0
+        });
+        this.mode = 'balanced';
+        this.modeTimer = 0;
+    }
+    
+    applyVariantBehavior(output, aliveEnemies, targetAngle, targetDist, targetDx, targetDy, bulletEvadeX, bulletEvadeY, targetHealth) {
+        // Colossus adapts mode based on situation
+        const lowHealth = this.health < this.maxHealth * 0.35;
+        const highHealth = this.health > this.maxHealth * 0.75;
+        const hasAdvantage = aliveEnemies.length > 0 && aliveEnemies.every(e => e.health < this.health);
+        const closeEnemy = targetDist < 150;
+        const farEnemy = targetDist > 300;
+        
+        // Determine mode
+        if (lowHealth) {
+            this.mode = 'fortress';
+            this.timeDecay = this.timeDecay.map(d => Math.min(0.995, d * 1.001));
+        } else if (hasAdvantage && highHealth) {
+            this.mode = 'assault';
+            this.timeDecay = this.timeDecay.map(d => Math.max(0.94, d * 0.999));
+        } else if (farEnemy) {
+            this.mode = 'artillery';
+        } else if (closeEnemy) {
+            this.mode = 'sentinel';
+        } else {
+            this.mode = 'balanced';
+        }
+        
+        let moveX = output[0] * this.weights.aggression;
+        let moveY = output[1] * this.weights.aggression;
+        
+        if (aliveEnemies.length > 0) {
+            const dirX = targetDx / targetDist;
+            const dirY = targetDy / targetDist;
+            
+            switch (this.mode) {
+                case 'fortress':
+                    // Maximum retreat
+                    moveX -= dirX * this.moveBias * 1.5;
+                    moveY -= dirY * this.moveBias * 1.5;
+                    break;
+                case 'assault':
+                    // Push forward
+                    if (targetDist > 150) {
+                        moveX += dirX * this.moveBias * 1.2;
+                        moveY += dirY * this.moveBias * 1.2;
+                    }
+                    break;
+                case 'artillery':
+                    // Maintain max range
+                    if (targetDist < 320) {
+                        moveX -= dirX * this.moveBias * 1.3;
+                        moveY -= dirY * this.moveBias * 1.3;
+                    }
+                    break;
+                case 'sentinel':
+                    // Circle and use laser
+                    moveX += -dirY * this.moveBias * 0.8;
+                    moveY += dirX * this.moveBias * 0.8;
+                    break;
+                default:
+                    // Balanced
+                    if (targetDist < 180) {
+                        moveX -= dirX * this.moveBias * 0.8;
+                        moveY -= dirY * this.moveBias * 0.8;
+                    } else if (targetDist > 280) {
+                        moveX += dirX * this.moveBias * 0.4;
+                        moveY += dirY * this.moveBias * 0.4;
+                    }
+            }
+        }
+        
+        const evasionMult = this.mode === 'fortress' ? 1.2 : (this.mode === 'assault' ? 0.5 : 0.8);
+        moveX += bulletEvadeX * this.weights.evasion * evasionMult;
+        moveY += bulletEvadeY * this.weights.evasion * evasionMult;
+        
+        const mag = Math.sqrt(moveX * moveX + moveY * moveY);
+        if (mag > 1) { moveX /= mag; moveY /= mag; }
+        
+        const hasTarget = aliveEnemies.length > 0;
+        const shootDecision = hasTarget && (output[2] + this.shootBias) > (this.mode === 'assault' ? 0.1 : 0.25);
+        
+        // Weapon selection based on mode
+        let useRailgun = false, useLaser = false;
+        
+        if (this.mode === 'artillery' && this.weapons.railgun.ready) {
+            useRailgun = true;
+        } else if (this.mode === 'sentinel' && this.weapons.laser.ready && targetDist < 300) {
+            useLaser = true;
+        } else if (this.mode === 'assault' && this.weapons.laser.ready && targetDist < 200) {
+            useLaser = true;
+        } else if (targetDist > 250 && this.weapons.railgun.ready) {
+            useRailgun = Math.random() < 0.6;
+        } else if (targetDist < 220 && this.weapons.laser.ready) {
+            useLaser = Math.random() < 0.4;
+        }
+        
+        return {
+            moveX: Math.max(-1, Math.min(1, moveX || 0)),
+            moveY: Math.max(-1, Math.min(1, moveY || 0)),
+            shoot: shootDecision && !useRailgun && !useLaser,
+            shootAlt: useRailgun && hasTarget,
+            shootLaser: useLaser && shootDecision,
+            targetAngle
+        };
+    }
+}
+
+// Game objects
+let agents = [];
+let bullets = [];
+
+function getRandomSpawnPositions(count) {
+    const positions = [];
+    const margin = 80;
+    const minDist = 160;
+    
+    for (let i = 0; i < count; i++) {
+        let attempts = 0;
+        let pos;
+        
+        do {
+            pos = {
+                x: margin + Math.random() * (canvas.width - margin * 2),
+                y: margin + Math.random() * (canvas.height - margin * 2)
+            };
+            attempts++;
+            
+            let tooClose = false;
+            for (const other of positions) {
+                const dx = pos.x - other.x;
+                const dy = pos.y - other.y;
+                if (Math.sqrt(dx * dx + dy * dy) < minDist) {
+                    tooClose = true;
+                    break;
+                }
+            }
+            
+            if (!tooClose || attempts > 50) {
+                positions.push(pos);
+                break;
+            }
+        } while (true);
+    }
+    
+    return positions;
+}
+
+function initAgents() {
+    const positions = getRandomSpawnPositions(7);
+    
+    agents = [
+        new TankAgent('TANK-ORIGINAL', '#3b82f6', positions[0].x, positions[0].y, {
+            channels: 24,
+            baseDecay: 0.98,
+            maxHealth: 130
+        }),
+        new TankFortress(positions[1].x, positions[1].y),
+        new TankArtillery(positions[2].x, positions[2].y),
+        new TankJuggernaut(positions[3].x, positions[3].y),
+        new TankSentinel(positions[4].x, positions[4].y),
+        new TankPredator(positions[5].x, positions[5].y),
+        new TankColossus(positions[6].x, positions[6].y)
+    ];
+}
+
+function updateUI() {
+    for (let i = 0; i < 7; i++) {
+        const a = agents[i];
+        document.getElementById(`r${i}-health`).style.width = `${(a.health / a.maxHealth) * 100}%`;
+        document.getElementById(`r${i}-kills`).textContent = a.kills;
+        document.getElementById(`r${i}-deaths`).textContent = a.deaths;
+        document.getElementById(`r${i}-wins`).textContent = roundWins[i];
+        document.getElementById(`r${i}-accuracy`).textContent = `${a.getAccuracy()}%`;
+        
+        if (i === 6) {
+            document.getElementById(`r${i}-learning`).textContent = a.alive ? 
+                `MODE: ${a.mode.toUpperCase()} | R${a.mixR.toFixed(2)} K${a.mixK.toFixed(2)}` : 'DESTROYED';
+        } else {
+            document.getElementById(`r${i}-learning`).textContent = a.alive ? 
+                `MIX: R${a.mixR.toFixed(2)} K${a.mixK.toFixed(2)} | SHT:${a.shootBias.toFixed(2)}` : 'DESTROYED';
+        }
+        
+        if (i !== 6) {
+            document.getElementById(`r${i}-decay`).textContent = a.getAvgDecay().toFixed(2);
+        }
+        
+        updateBrainVis(`r${i}-brain`, a.timeMixState.slice(0, 12));
+    }
+    
+    document.getElementById('gen-num').textContent = generation;
+    document.getElementById('round-num').textContent = roundNumber;
+    document.getElementById('fight-num').textContent = totalFights;
+}
+
+function updateBrainVis(id, values) {
+    const container = document.getElementById(id);
+    container.innerHTML = '';
+    values.forEach(v => {
+        const neuron = document.createElement('div');
+        neuron.className = 'neuron' + (Math.abs(v) > 0.1 ? ' active' : '');
+        neuron.style.opacity = Math.min(1, Math.abs(v) * 2 + 0.3);
+        container.appendChild(neuron);
+    });
+}
+
+const logContainer = document.getElementById('log');
+function addLog(message, type = '') {
+    const entry = document.createElement('div');
+    entry.className = 'log-entry ' + type;
+    entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+    logContainer.insertBefore(entry, logContainer.firstChild);
+    
+    while (logContainer.children.length > 50) {
+        logContainer.removeChild(logContainer.lastChild);
+    }
+}
+
+function update(dt) {
+    if (paused) return;
+    
+    if (!roundInProgress) {
+        roundEndTimer -= dt * 1000;
+        if (roundEndTimer <= 0) {
+            startNewRound();
+        }
+        return;
+    }
+    
+    agents.forEach(agent => {
+        const bullet = agent.update(agents, bullets, dt);
+        if (bullet) bullets.push(bullet);
+    });
+    
+    bullets = bullets.filter(bullet => {
+        bullet.x += bullet.vx * dt;
+        bullet.y += bullet.vy * dt;
+        
+        if (isNaN(bullet.x) || isNaN(bullet.y)) return false;
+        
+        if (bullet.x < -20) bullet.x = canvas.width + 20;
+        if (bullet.x > canvas.width + 20) bullet.x = -20;
+        if (bullet.y < -20) bullet.y = canvas.height + 20;
+        if (bullet.y > canvas.height + 20) bullet.y = -20;
+        
+        bullet.life = (bullet.life || 0) + dt;
+        if (bullet.life > 5) {
+            bullet.owner.learn('missed', {});
+            return false;
+        }
+        
+        for (const agent of agents) {
+            if (agent === bullet.owner || !agent.alive) continue;
+            
+            const dx = bullet.x - agent.x;
+            const dy = bullet.y - agent.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            if (dist < agent.radius) {
+                agent.takeDamage(bullet.damage, bullet.owner);
+                bullet.owner.shotsHit++;
+                bullet.owner.learn('hit_enemy', { 
+                    target: agent.type, 
+                    damage: bullet.damage,
+                    weaponType: bullet.type || 'bullet'
+                });
+                totalFights++;
+                return false;
+            }
+        }
+        
+        return true;
+    });
+    
+    const aliveAgents = agents.filter(a => a.alive);
+    if (aliveAgents.length === 1 && roundInProgress) {
+        const winner = aliveAgents[0];
+        const winnerIndex = agents.indexOf(winner);
+        roundWins[winnerIndex]++;
+        
+        addLog(`🏆 ${winner.type} WINS ROUND ${roundNumber}!`, 'kill');
+        
+        roundInProgress = false;
+        roundEndTimer = 2000 / gameSpeed;
+        roundNumber++;
+        
+        if (roundNumber > generation * 5) {
+            advanceGeneration();
+        }
+    }
+    
+    if (aliveAgents.length === 0 && roundInProgress) {
+        addLog(`💀 MUTUAL DESTRUCTION!`, 'respawn');
+        roundInProgress = false;
+        roundEndTimer = 2000 / gameSpeed;
+        roundNumber++;
+        
+        if (roundNumber > generation * 5) {
+            advanceGeneration();
+        }
+    }
+}
+
+function startNewRound() {
+    addLog(`--- Round ${roundNumber} ---`, 'learn');
+    
+    const positions = getRandomSpawnPositions(7);
+    
+    agents.forEach((agent, i) => {
+        agent.x = positions[i].x;
+        agent.y = positions[i].y;
+        agent.health = agent.maxHealth;
+        agent.alive = true;
+        agent.respawnTimer = 0;
+        agent.vx = 0;
+        agent.vy = 0;
+        agent.angle = Math.random() * Math.PI * 2;
+        agent.activeLaser = null;
+        if (agent.zoneSet !== undefined) agent.zoneSet = false;
+    });
+    
+    bullets = [];
+    roundInProgress = true;
+}
+
+function advanceGeneration() {
+    generation++;
+    addLog(`🧬 === GENERATION ${generation} === 🧬`, 'learn');
+    
+    const rankings = agents.map((agent, i) => ({
+        agent,
+        index: i,
+        wins: roundWins[i],
+        kd: agent.kills / (agent.deaths || 1),
+        accuracy: agent.getAccuracy()
+    })).sort((a, b) => b.wins - a.wins || b.kd - a.kd);
+    
+    const best = rankings[0];
+    const worst = rankings[6];
+    const secondWorst = rankings[5];
+    
+    addLog(`🥇 Best: ${best.agent.type} (${best.wins} wins, ${best.accuracy}% acc)`, 'learn');
+    addLog(`📈 ${worst.agent.type} & ${secondWorst.agent.type} evolving...`, 'learn');
+    
+    const inheritRate = 0.4;
+    [worst, secondWorst].forEach(loser => {
+        loser.agent.weights.aggression = loser.agent.weights.aggression * (1 - inheritRate) + 
+                                          best.agent.weights.aggression * inheritRate;
+        loser.agent.weights.evasion = loser.agent.weights.evasion * (1 - inheritRate) + 
+                                       best.agent.weights.evasion * inheritRate;
+        loser.agent.weights.accuracy = loser.agent.weights.accuracy * (1 - inheritRate) + 
+                                        best.agent.weights.accuracy * inheritRate;
+        loser.agent.weights.prediction = loser.agent.weights.prediction * (1 - inheritRate) + 
+                                          best.agent.weights.prediction * inheritRate;
+        loser.agent.weights.railgunPreference = loser.agent.weights.railgunPreference * (1 - inheritRate) + 
+                                                 best.agent.weights.railgunPreference * inheritRate;
+        loser.agent.mixR = loser.agent.mixR * (1 - inheritRate) + best.agent.mixR * inheritRate;
+        loser.agent.mixK = loser.agent.mixK * (1 - inheritRate) + best.agent.mixK * inheritRate;
+        loser.agent.shootBias = loser.agent.shootBias * (1 - inheritRate) + best.agent.shootBias * inheritRate;
+    });
+    
+    agents.forEach(agent => {
+        const mutationRate = 0.12;
+        agent.weights.aggression += (Math.random() - 0.5) * mutationRate;
+        agent.weights.evasion += (Math.random() - 0.5) * mutationRate;
+        agent.weights.accuracy += (Math.random() - 0.5) * mutationRate;
+        agent.weights.prediction += (Math.random() - 0.5) * mutationRate;
+        agent.weights.railgunPreference += (Math.random() - 0.5) * mutationRate;
+        
+        agent.weights.aggression = Math.max(0.2, Math.min(0.9, agent.weights.aggression));
+        agent.weights.evasion = Math.max(0.3, Math.min(0.98, agent.weights.evasion));
+        agent.weights.accuracy = Math.max(0.2, Math.min(0.95, agent.weights.accuracy));
+        agent.weights.prediction = Math.max(0.15, Math.min(0.9, agent.weights.prediction));
+        agent.weights.railgunPreference = Math.max(0.15, Math.min(0.95, agent.weights.railgunPreference));
+        
+        agent.weights.learningRate = Math.min(0.15, agent.weights.learningRate * 1.08);
+        
+        agent.mixR += (Math.random() - 0.5) * mutationRate * 0.4;
+        agent.mixK += (Math.random() - 0.5) * mutationRate * 0.4;
+        agent.shootBias += (Math.random() - 0.5) * mutationRate * 0.4;
+        agent.mixR = Math.max(0.25, Math.min(0.85, agent.mixR));
+        agent.mixK = Math.max(0.25, Math.min(0.85, agent.mixK));
+        agent.shootBias = Math.max(0.15, Math.min(0.6, agent.shootBias));
+    });
+    
+    roundWins = [0, 0, 0, 0, 0, 0, 0];
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Grid
+    ctx.strokeStyle = '#1a1a2e';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < canvas.width; x += 50) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+    }
+    for (let y = 0; y < canvas.height; y += 50) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+    }
+    
+    // Bullets
+    bullets.forEach(bullet => {
+        const size = Math.max(1, bullet.size || 5);
+        const trail = bullet.trail || 0.04;
+        
+        if (bullet.type === 'railgun') {
+            ctx.fillStyle = bullet.color + '50';
+            ctx.beginPath();
+            ctx.arc(bullet.x, bullet.y, size * 2.2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        ctx.fillStyle = bullet.color;
+        ctx.beginPath();
+        ctx.arc(bullet.x, bullet.y, size, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.strokeStyle = bullet.color + '50';
+        ctx.lineWidth = bullet.type === 'railgun' ? 5 : 3;
+        ctx.beginPath();
+        ctx.moveTo(bullet.x, bullet.y);
+        ctx.lineTo(bullet.x - bullet.vx * trail, bullet.y - bullet.vy * trail);
+        ctx.stroke();
+    });
+    
+    agents.forEach(agent => agent.draw());
+    
+    agents.filter(a => !a.alive).forEach(agent => {
+        ctx.fillStyle = agent.color + '40';
+        ctx.font = '12px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${agent.type} respawning...`, agent.x, agent.y);
+        ctx.fillText(`${(agent.respawnTimer / 1000).toFixed(1)}s`, agent.x, agent.y + 15);
+    });
+    
+    if (!roundInProgress) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        const winner = agents.find(a => a.alive);
+        
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 36px monospace';
+        
+        if (winner) {
+            ctx.fillStyle = winner.color;
+            ctx.fillText(`🛡️ ${winner.type} WINS! 🛡️`, canvas.width / 2, canvas.height / 2 - 20);
+        } else {
+            ctx.fillStyle = '#fff';
+            ctx.fillText('💀 MUTUAL DESTRUCTION 💀', canvas.width / 2, canvas.height / 2 - 20);
+        }
+        
+        ctx.fillStyle = '#888';
+        ctx.font = '18px monospace';
+        ctx.fillText(`Round ${roundNumber} starting in ${(roundEndTimer / 1000).toFixed(1)}s...`, canvas.width / 2, canvas.height / 2 + 30);
+        
+        if (roundNumber > generation * 5) {
+            ctx.fillStyle = '#3b82f6';
+            ctx.fillText(`⬆️ EVOLVING TO GENERATION ${generation + 1}`, canvas.width / 2, canvas.height / 2 + 60);
+        }
+    }
+}
+
+let lastTime = 0;
+function gameLoop(timestamp) {
+    const dt = Math.min((timestamp - lastTime) / 1000, 0.1);
+    lastTime = timestamp;
+    
+    update(dt);
+    draw();
+    updateUI();
+    
+    requestAnimationFrame(gameLoop);
+}
+
+document.getElementById('pauseBtn').addEventListener('click', () => {
+    paused = !paused;
+    document.getElementById('pauseBtn').textContent = paused ? '▶️ Resume' : '⏸️ Pause';
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+    bullets = [];
+    generation = 1;
+    totalFights = 0;
+    roundNumber = 1;
+    roundWins = [0, 0, 0, 0, 0, 0, 0];
+    roundInProgress = true;
+    initAgents();
+    logContainer.innerHTML = '';
+    addLog('TANK Variants Arena reset!', 'respawn');
+});
+
+document.getElementById('speed-slider').addEventListener('input', (e) => {
+    gameSpeed = parseFloat(e.target.value);
+    document.getElementById('speed-value').textContent = gameSpeed + 'x';
+});
+
+initAgents();
+addLog('RWKV-TANK Variants Arena initialized!', 'learn');
+addLog('7 Tank configurations - defensive supremacy!', 'learn');
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
