@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neural FPS</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            overflow: hidden; 
+            background: #000;
+            font-family: 'Courier New', monospace;
+        }
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            pointer-events: none;
+        }
+        #crosshair::before, #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 255, 255, 0.8);
+        }
+        #crosshair::before {
+            width: 2px;
+            height: 20px;
+            left: 9px;
+            top: 0;
+        }
+        #crosshair::after {
+            width: 20px;
+            height: 2px;
+            top: 9px;
+            left: 0;
+        }
+        #hud {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            color: #0f0;
+            font-size: 18px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
+        #health { color: #f44; }
+        #ammo { color: #4af; }
+        #score { color: #ff0; }
+        #neuralInfo {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #0ff;
+            font-size: 12px;
+            max-width: 300px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border: 1px solid #0ff;
+        }
+        #message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            font-size: 32px;
+            text-align: center;
+            text-shadow: 2px 2px 8px rgba(0,0,0,0.9);
+            pointer-events: none;
+            display: none;
+        }
+        #startScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+        }
+        #startScreen h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+            color: #0ff;
+        }
+        #startScreen p {
+            font-size: 18px;
+            margin: 10px 0;
+            color: #aaa;
+        }
+        #startScreen .subtitle {
+            color: #0ff;
+            font-size: 14px;
+            margin-bottom: 30px;
+        }
+        #startScreen .controls {
+            margin-top: 30px;
+            text-align: left;
+        }
+        #startBtn {
+            margin-top: 40px;
+            padding: 15px 50px;
+            font-size: 24px;
+            background: #0aa;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        #startBtn:hover {
+            background: #0cc;
+        }
+        #minimap {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 150px;
+            height: 150px;
+            background: rgba(0,0,0,0.5);
+            border: 2px solid #0f0;
+        }
+        .damage-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            background: radial-gradient(ellipse at center, transparent 0%, rgba(255,0,0,0.3) 100%);
+            opacity: 0;
+            transition: opacity 0.1s;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        <div id="crosshair"></div>
+        <div id="hud">
+            <div id="health">HEALTH: 100</div>
+            <div id="ammo">AMMO: 30 / 90</div>
+            <div id="score">SCORE: 0</div>
+            <div id="wave">WAVE: 1</div>
+        </div>
+        <div id="neuralInfo">
+            <div><b>TRANSFORMER ENEMY AI</b></div>
+            <div id="nnStatus">Initializing neural networks...</div>
+        </div>
+        <canvas id="minimap"></canvas>
+        <div id="message"></div>
+        <div class="damage-overlay" id="damageOverlay"></div>
+        <div id="startScreen">
+            <h1>NEURAL CORRIDOR</h1>
+            <p class="subtitle">Enemies powered by Transformer attention mechanisms</p>
+            <div class="controls">
+                <p>WASD - Move</p>
+                <p>MOUSE - Look around</p>
+                <p>LEFT CLICK - Shoot</p>
+                <p>R - Reload</p>
+                <p>SHIFT - Sprint</p>
+            </div>
+            <p style="margin-top: 20px; color: #0ff; font-size: 12px;">
+                Enemies learn your movement patterns using self-attention.<br>
+                They share knowledge and adapt over time.
+            </p>
+            <button id="startBtn">CLICK TO START</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const minimapCanvas = document.getElementById('minimap');
+        const minimapCtx = minimapCanvas.getContext('2d');
+        
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            minimapCanvas.width = 150;
+            minimapCanvas.height = 150;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Game state
+        let gameStarted = false;
+        let gameOver = false;
+        let waveInProgress = false;
+        let waveTransition = false;
+        
+        // Player
+        const player = {
+            x: 2.5,
+            y: 2.5,
+            angle: 0,
+            health: 100,
+            maxHealth: 100,
+            ammo: 30,
+            maxAmmo: 30,
+            reserveAmmo: 90,
+            score: 0,
+            speed: 0.05,
+            sprintSpeed: 0.08,
+            isSprinting: false,
+            isReloading: false,
+            reloadTime: 1500,
+            shootCooldown: 0,
+            shootDelay: 100,
+            // Track player history for enemy learning
+            positionHistory: [],
+            velocityHistory: []
+        };
+
+        // Map
+        const mapWidth = 24;
+        const mapHeight = 24;
+        const map = [
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,0,0,1,1,1,0,0,0,1,1,1,1,1,0,0,0,1,1,1,0,0,0,1],
+            [1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
+            [1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,0,0,0,0,0,0,1,1,0,0,0,0,0,0,1,1,0,0,0,0,0,0,1],
+            [1,0,0,0,0,0,0,1,1,0,0,0,0,0,0,1,1,0,0,0,0,0,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,0,0,1,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,1,0,0,1],
+            [1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1],
+            [1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1],
+            [1,0,0,1,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,1,0,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,0,0,0,0,0,0,1,1,0,0,0,0,0,0,1,1,0,0,0,0,0,0,1],
+            [1,0,0,0,0,0,0,1,1,0,0,0,0,0,0,1,1,0,0,0,0,0,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
+            [1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
+            [1,0,0,1,1,1,0,0,0,1,1,1,1,1,0,0,0,1,1,1,0,0,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+        ];
+
+        // ============================================
+        // TRANSFORMER NEURAL NETWORK FOR ENEMIES
+        // ============================================
+        
+        class TransformerBrain {
+            constructor(config = {}) {
+                this.embeddingDim = config.embeddingDim || 16;
+                this.numHeads = config.numHeads || 4;
+                this.headDim = this.embeddingDim / this.numHeads;
+                this.sequenceLength = config.sequenceLength || 16;
+                this.learningRate = config.learningRate || 0.01;
+                
+                // Initialize weights with Xavier initialization
+                this.Wq = this.xavierInit(this.embeddingDim, this.embeddingDim);
+                this.Wk = this.xavierInit(this.embeddingDim, this.embeddingDim);
+                this.Wv = this.xavierInit(this.embeddingDim, this.embeddingDim);
+                this.Wo = this.xavierInit(this.embeddingDim, this.embeddingDim);
+                
+                // FFN weights
+                this.W1 = this.xavierInit(this.embeddingDim, this.embeddingDim * 4);
+                this.W2 = this.xavierInit(this.embeddingDim * 4, this.embeddingDim);
+                this.b1 = new Array(this.embeddingDim * 4).fill(0);
+                this.b2 = new Array(this.embeddingDim).fill(0);
+                
+                // Output projection to action space (dx, dy, aggression)
+                this.Wout = this.xavierInit(this.embeddingDim, 3);
+                
+                // Memory buffer for observations
+                this.memory = [];
+                this.maxMemory = this.sequenceLength;
+                
+                // For tracking attention patterns
+                this.lastAttentionWeights = null;
+                this.totalUpdates = 0;
+            }
+            
+            xavierInit(rows, cols) {
+                const scale = Math.sqrt(2.0 / (rows + cols));
+                const matrix = [];
+                for (let i = 0; i < rows; i++) {
+                    matrix[i] = [];
+                    for (let j = 0; j < cols; j++) {
+                        matrix[i][j] = (Math.random() * 2 - 1) * scale;
+                    }
+                }
+                return matrix;
+            }
+            
+            // Encode observation into embedding
+            encodeObservation(obs) {
+                // obs: { playerDx, playerDy, playerVelX, playerVelY, distToPlayer, myHealth, gotHit, dealtDamage }
+                const embedding = new Array(this.embeddingDim).fill(0);
+                
+                // Encode features with different frequencies (positional-style encoding)
+                const features = [
+                    obs.playerDx, obs.playerDy, 
+                    obs.playerVelX, obs.playerVelY,
+                    obs.distToPlayer, obs.myHealth,
+                    obs.gotHit ? 1 : 0, obs.dealtDamage ? 1 : 0
+                ];
+                
+                for (let i = 0; i < this.embeddingDim; i++) {
+                    for (let f = 0; f < features.length; f++) {
+                        const freq = Math.pow(2, f % 4);
+                        if (i % 2 === 0) {
+                            embedding[i] += features[f] * Math.sin(freq * i / this.embeddingDim);
+                        } else {
+                            embedding[i] += features[f] * Math.cos(freq * i / this.embeddingDim);
+                        }
+                    }
+                    embedding[i] = Math.tanh(embedding[i] / features.length);
+                }
+                
+                return embedding;
+            }
+            
+            matmul(a, b) {
+                // a: [seq, dim1], b: [dim1, dim2] -> [seq, dim2]
+                const result = [];
+                for (let i = 0; i < a.length; i++) {
+                    result[i] = [];
+                    for (let j = 0; j < b[0].length; j++) {
+                        let sum = 0;
+                        for (let k = 0; k < a[i].length; k++) {
+                            sum += a[i][k] * b[k][j];
+                        }
+                        result[i][j] = sum;
+                    }
+                }
+                return result;
+            }
+            
+            vecMatmul(vec, mat) {
+                const result = new Array(mat[0].length).fill(0);
+                for (let j = 0; j < mat[0].length; j++) {
+                    for (let i = 0; i < vec.length; i++) {
+                        result[j] += vec[i] * mat[i][j];
+                    }
+                }
+                return result;
+            }
+            
+            softmax(arr) {
+                const max = Math.max(...arr);
+                const exps = arr.map(x => Math.exp(x - max));
+                const sum = exps.reduce((a, b) => a + b, 0);
+                return exps.map(x => x / sum);
+            }
+            
+            gelu(x) {
+                return 0.5 * x * (1 + Math.tanh(Math.sqrt(2 / Math.PI) * (x + 0.044715 * Math.pow(x, 3))));
+            }
+            
+            layerNorm(vec) {
+                const mean = vec.reduce((a, b) => a + b, 0) / vec.length;
+                const variance = vec.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / vec.length;
+                const std = Math.sqrt(variance + 1e-5);
+                return vec.map(x => (x - mean) / std);
+            }
+            
+            // Self-attention mechanism
+            selfAttention(sequence) {
+                if (sequence.length === 0) return new Array(this.embeddingDim).fill(0);
+                
+                // Compute Q, K, V for all positions
+                const Q = this.matmul(sequence, this.Wq);
+                const K = this.matmul(sequence, this.Wk);
+                const V = this.matmul(sequence, this.Wv);
+                
+                // Scaled dot-product attention
+                const scale = Math.sqrt(this.embeddingDim);
+                const seqLen = sequence.length;
+                
+                // Compute attention scores
+                const attentionScores = [];
+                for (let i = 0; i < seqLen; i++) {
+                    attentionScores[i] = [];
+                    for (let j = 0; j < seqLen; j++) {
+                        let score = 0;
+                        for (let k = 0; k < this.embeddingDim; k++) {
+                            score += Q[i][k] * K[j][k];
+                        }
+                        // Causal mask: only attend to past and current
+                        if (j > i) {
+                            attentionScores[i][j] = -Infinity;
+                        } else {
+                            attentionScores[i][j] = score / scale;
+                        }
+                    }
+                }
+                
+                // Apply softmax row-wise
+                const attentionWeights = attentionScores.map(row => this.softmax(row));
+                this.lastAttentionWeights = attentionWeights;
+                
+                // Compute weighted sum of values (get last position output)
+                const lastIdx = seqLen - 1;
+                const output = new Array(this.embeddingDim).fill(0);
+                for (let j = 0; j < seqLen; j++) {
+                    for (let k = 0; k < this.embeddingDim; k++) {
+                        output[k] += attentionWeights[lastIdx][j] * V[j][k];
+                    }
+                }
+                
+                // Output projection
+                return this.vecMatmul(output, this.Wo);
+            }
+            
+            // Feed-forward network
+            feedForward(x) {
+                // First linear + GELU
+                let hidden = this.vecMatmul(x, this.W1);
+                hidden = hidden.map((v, i) => this.gelu(v + this.b1[i]));
+                
+                // Second linear
+                let output = this.vecMatmul(hidden, this.W2);
+                output = output.map((v, i) => v + this.b2[i]);
+                
+                return output;
+            }
+            
+            // Forward pass
+            forward(currentObs) {
+                // Add current observation to memory
+                const embedding = this.encodeObservation(currentObs);
+                this.memory.push(embedding);
+                
+                // Keep memory bounded
+                if (this.memory.length > this.maxMemory) {
+                    this.memory.shift();
+                }
+                
+                // Self-attention over memory
+                let x = this.selfAttention(this.memory);
+                x = this.layerNorm(x);
+                
+                // Residual connection
+                const lastEmb = this.memory[this.memory.length - 1];
+                x = x.map((v, i) => v + lastEmb[i]);
+                
+                // Feed-forward with residual
+                const ffOut = this.feedForward(x);
+                x = x.map((v, i) => v + ffOut[i]);
+                x = this.layerNorm(x);
+                
+                // Project to action space
+                const action = this.vecMatmul(x, this.Wout);
+                
+                return {
+                    dx: Math.tanh(action[0]),
+                    dy: Math.tanh(action[1]),
+                    aggression: (Math.tanh(action[2]) + 1) / 2 // 0 to 1
+                };
+            }
+            
+            // Simple gradient-free learning via evolution strategy
+            learn(reward) {
+                this.totalUpdates++;
+                const noise = this.learningRate * reward;
+                
+                // Perturb weights based on reward signal
+                const perturbMatrix = (mat, scale) => {
+                    for (let i = 0; i < mat.length; i++) {
+                        for (let j = 0; j < mat[i].length; j++) {
+                            mat[i][j] += (Math.random() * 2 - 1) * scale * noise;
+                            mat[i][j] = Math.max(-2, Math.min(2, mat[i][j])); // Clip weights
+                        }
+                    }
+                };
+                
+                perturbMatrix(this.Wq, 0.1);
+                perturbMatrix(this.Wk, 0.1);
+                perturbMatrix(this.Wv, 0.1);
+                perturbMatrix(this.Wo, 0.1);
+                perturbMatrix(this.W1, 0.05);
+                perturbMatrix(this.W2, 0.05);
+                perturbMatrix(this.Wout, 0.15);
+            }
+            
+            // Clone weights from another brain
+            cloneFrom(other) {
+                const copyMatrix = (src) => src.map(row => [...row]);
+                this.Wq = copyMatrix(other.Wq);
+                this.Wk = copyMatrix(other.Wk);
+                this.Wv = copyMatrix(other.Wv);
+                this.Wo = copyMatrix(other.Wo);
+                this.W1 = copyMatrix(other.W1);
+                this.W2 = copyMatrix(other.W2);
+                this.Wout = copyMatrix(other.Wout);
+                this.b1 = [...other.b1];
+                this.b2 = [...other.b2];
+            }
+            
+            getStats() {
+                return {
+                    memorySize: this.memory.length,
+                    totalUpdates: this.totalUpdates,
+                    attentionSpread: this.lastAttentionWeights ? 
+                        this.lastAttentionWeights[this.lastAttentionWeights.length - 1]
+                            .filter(w => w > 0.1).length : 0
+                };
+            }
+        }
+
+        // Shared knowledge base - enemies learn from each other
+        const sharedBrain = new TransformerBrain({
+            embeddingDim: 16,
+            numHeads: 4,
+            sequenceLength: 24,
+            learningRate: 0.02
+        });
+
+        // Enemies
+        let enemies = [];
+        let wave = 1;
+        let totalEnemiesKilled = 0;
+
+        class Enemy {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.health = 30 + wave * 10;
+                this.maxHealth = this.health;
+                this.baseSpeed = 0.012 + wave * 0.002;
+                this.speed = this.baseSpeed;
+                this.damage = 5 + wave;
+                this.attackCooldown = 0;
+                this.attackDelay = 1000;
+                this.size = 0.4;
+                
+                // Neural network brain
+                this.brain = new TransformerBrain({
+                    embeddingDim: 16,
+                    numHeads: 4,
+                    sequenceLength: 16,
+                    learningRate: 0.015
+                });
+                
+                // Inherit from shared brain with mutation
+                if (sharedBrain.totalUpdates > 0) {
+                    this.brain.cloneFrom(sharedBrain);
+                    // Add mutation
+                    this.brain.learn(Math.random() * 0.5 - 0.25);
+                }
+                
+                // Tracking
+                this.lastPlayerX = player.x;
+                this.lastPlayerY = player.y;
+                this.gotHit = false;
+                this.dealtDamage = false;
+                this.lifetime = 0;
+                this.damageDealt = 0;
+                this.timeSinceHit = 0;
+                
+                // Visual
+                this.hue = 30 + Math.random() * 30;
+            }
+
+            update(deltaTime) {
+                this.lifetime += deltaTime;
+                this.timeSinceHit += deltaTime;
+                
+                const dx = player.x - this.x;
+                const dy = player.y - this.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                // Calculate player velocity
+                const playerVelX = player.x - this.lastPlayerX;
+                const playerVelY = player.y - this.lastPlayerY;
+                this.lastPlayerX = player.x;
+                this.lastPlayerY = player.y;
+                
+                // Create observation
+                const observation = {
+                    playerDx: dx / 20,
+                    playerDy: dy / 20,
+                    playerVelX: playerVelX * 10,
+                    playerVelY: playerVelY * 10,
+                    distToPlayer: dist / 20,
+                    myHealth: this.health / this.maxHealth,
+                    gotHit: this.gotHit,
+                    dealtDamage: this.dealtDamage
+                };
+                
+                // Get action from transformer brain
+                const action = this.brain.forward(observation);
+                
+                // Reset flags
+                this.gotHit = false;
+                this.dealtDamage = false;
+                
+                // Movement based on neural network + basic heuristic blend
+                const nnInfluence = Math.min(1, this.brain.totalUpdates / 50);
+                
+                // Base direction toward player
+                const baseDx = dx / dist;
+                const baseDy = dy / dist;
+                
+                // Blend NN action with base behavior
+                let moveX, moveY;
+                if (dist > 0.8) {
+                    moveX = baseDx * (1 - nnInfluence * 0.5) + action.dx * nnInfluence * 0.5;
+                    moveY = baseDy * (1 - nnInfluence * 0.5) + action.dy * nnInfluence * 0.5;
+                    
+                    // Speed modulated by aggression
+                    const currentSpeed = this.baseSpeed * (0.5 + action.aggression);
+                    
+                    // Normalize and apply
+                    const moveDist = Math.sqrt(moveX * moveX + moveY * moveY);
+                    if (moveDist > 0) {
+                        moveX = (moveX / moveDist) * currentSpeed;
+                        moveY = (moveY / moveDist) * currentSpeed;
+                    }
+                    
+                    // Collision detection
+                    if (map[Math.floor(this.y)][Math.floor(this.x + moveX * 3)] === 0) {
+                        this.x += moveX;
+                    }
+                    if (map[Math.floor(this.y + moveY * 3)][Math.floor(this.x)] === 0) {
+                        this.y += moveY;
+                    }
+                } else {
+                    // Attack player
+                    this.attackCooldown -= deltaTime;
+                    if (this.attackCooldown <= 0) {
+                        player.health -= this.damage;
+                        this.attackCooldown = this.attackDelay * (1.5 - action.aggression);
+                        this.dealtDamage = true;
+                        this.damageDealt += this.damage;
+                        showDamage();
+                        
+                        // Reward for dealing damage
+                        this.brain.learn(0.5);
+                    }
+                }
+                
+                // Learning: punish getting hit, reward survival
+                if (this.timeSinceHit > 2000) {
+                    this.brain.learn(0.1); // Small reward for survival
+                    this.timeSinceHit = 0;
+                }
+            }
+            
+            takeDamage(amount) {
+                this.health -= amount;
+                this.gotHit = true;
+                this.timeSinceHit = 0;
+                
+                // Negative reward for getting hit
+                this.brain.learn(-0.3);
+                
+                return this.health <= 0;
+            }
+            
+            onDeath() {
+                // Transfer learning to shared brain on death
+                const fitness = this.damageDealt - (this.maxHealth - this.health) * 0.5 + this.lifetime / 1000;
+                
+                if (fitness > 0) {
+                    // Good enemy - share knowledge
+                    sharedBrain.learn(fitness * 0.01);
+                    
+                    // Blend weights into shared brain
+                    const blendRate = Math.min(0.3, fitness / 100);
+                    const blendMatrix = (shared, local) => {
+                        for (let i = 0; i < shared.length; i++) {
+                            for (let j = 0; j < shared[i].length; j++) {
+                                shared[i][j] = shared[i][j] * (1 - blendRate) + local[i][j] * blendRate;
+                            }
+                        }
+                    };
+                    
+                    blendMatrix(sharedBrain.Wq, this.brain.Wq);
+                    blendMatrix(sharedBrain.Wk, this.brain.Wk);
+                    blendMatrix(sharedBrain.Wv, this.brain.Wv);
+                    blendMatrix(sharedBrain.Wout, this.brain.Wout);
+                }
+            }
+        }
+
+        function spawnEnemies() {
+            enemies = [];
+            const count = 3 + wave * 2;
+            for (let i = 0; i < count; i++) {
+                let x, y;
+                let attempts = 0;
+                do {
+                    x = 2 + Math.random() * (mapWidth - 4);
+                    y = 2 + Math.random() * (mapHeight - 4);
+                    attempts++;
+                } while (
+                    (map[Math.floor(y)][Math.floor(x)] === 1 ||
+                    Math.sqrt((x - player.x) ** 2 + (y - player.y) ** 2) < 6) &&
+                    attempts < 100
+                );
+                enemies.push(new Enemy(x, y));
+            }
+            waveInProgress = true;
+        }
+
+        // Input handling
+        const keys = {};
+        let mouseMovement = { x: 0, y: 0 };
+
+        document.addEventListener('keydown', (e) => {
+            keys[e.key.toLowerCase()] = true;
+            if (e.key.toLowerCase() === 'r' && !player.isReloading && player.ammo < player.maxAmmo && player.reserveAmmo > 0) {
+                reload();
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            keys[e.key.toLowerCase()] = false;
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (document.pointerLockElement === canvas) {
+                mouseMovement.x += e.movementX;
+            }
+        });
+
+        document.addEventListener('mousedown', (e) => {
+            if (e.button === 0 && gameStarted && !gameOver) {
+                shoot();
+            }
+        });
+
+        canvas.addEventListener('click', () => {
+            if (gameStarted) {
+                canvas.requestPointerLock();
+            }
+        });
+
+        document.getElementById('startBtn').addEventListener('click', () => {
+            document.getElementById('startScreen').style.display = 'none';
+            gameStarted = true;
+            canvas.requestPointerLock();
+            spawnEnemies();
+        });
+
+        function reload() {
+            player.isReloading = true;
+            showMessage('RELOADING...');
+            setTimeout(() => {
+                const needed = player.maxAmmo - player.ammo;
+                const available = Math.min(needed, player.reserveAmmo);
+                player.ammo += available;
+                player.reserveAmmo -= available;
+                player.isReloading = false;
+                hideMessage();
+            }, player.reloadTime);
+        }
+
+        function shoot() {
+            if (player.shootCooldown > 0 || player.isReloading || player.ammo <= 0) return;
+            
+            player.ammo--;
+            player.shootCooldown = player.shootDelay;
+            
+            const rayAngle = player.angle;
+            let rayX = player.x;
+            let rayY = player.y;
+            const stepSize = 0.1;
+            
+            for (let i = 0; i < 100; i++) {
+                rayX += Math.cos(rayAngle) * stepSize;
+                rayY += Math.sin(rayAngle) * stepSize;
+                
+                if (map[Math.floor(rayY)][Math.floor(rayX)] === 1) break;
+                
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    const enemy = enemies[j];
+                    const dist = Math.sqrt((rayX - enemy.x) ** 2 + (rayY - enemy.y) ** 2);
+                    if (dist < enemy.size) {
+                        const killed = enemy.takeDamage(25);
+                        if (killed) {
+                            enemy.onDeath();
+                            enemies.splice(j, 1);
+                            player.score += 100 * wave;
+                            totalEnemiesKilled++;
+                        }
+                        return;
+                    }
+                }
+            }
+            
+            if (player.ammo === 0 && player.reserveAmmo > 0) {
+                reload();
+            }
+        }
+
+        function showDamage() {
+            const overlay = document.getElementById('damageOverlay');
+            overlay.style.opacity = '1';
+            setTimeout(() => overlay.style.opacity = '0', 100);
+        }
+
+        function showMessage(text) {
+            const msg = document.getElementById('message');
+            msg.textContent = text;
+            msg.style.display = 'block';
+        }
+
+        function hideMessage() {
+            document.getElementById('message').style.display = 'none';
+        }
+
+        function castRays() {
+            const fov = Math.PI / 3;
+            const numRays = canvas.width;
+            const halfFov = fov / 2;
+            
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height / 2);
+            gradient.addColorStop(0, '#111');
+            gradient.addColorStop(1, '#333');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height / 2);
+            
+            const floorGradient = ctx.createLinearGradient(0, canvas.height / 2, 0, canvas.height);
+            floorGradient.addColorStop(0, '#222');
+            floorGradient.addColorStop(1, '#444');
+            ctx.fillStyle = floorGradient;
+            ctx.fillRect(0, canvas.height / 2, canvas.width, canvas.height / 2);
+            
+            const zBuffer = [];
+            
+            for (let i = 0; i < numRays; i++) {
+                const rayAngle = player.angle - halfFov + (i / numRays) * fov;
+                
+                let rayX = player.x;
+                let rayY = player.y;
+                const stepSize = 0.02;
+                let distance = 0;
+                let hitSide = 0;
+                
+                while (distance < 20) {
+                    rayX += Math.cos(rayAngle) * stepSize;
+                    rayY += Math.sin(rayAngle) * stepSize;
+                    distance += stepSize;
+                    
+                    const mapX = Math.floor(rayX);
+                    const mapY = Math.floor(rayY);
+                    
+                    if (mapX >= 0 && mapX < mapWidth && mapY >= 0 && mapY < mapHeight) {
+                        if (map[mapY][mapX] === 1) {
+                            const dx = rayX - mapX;
+                            const dy = rayY - mapY;
+                            
+                            if (dx < 0.1) hitSide = 0;
+                            else if (dx > 0.9) hitSide = 1;
+                            else if (dy < 0.1) hitSide = 2;
+                            else hitSide = 3;
+                            
+                            break;
+                        }
+                    }
+                }
+                
+                const correctedDist = distance * Math.cos(rayAngle - player.angle);
+                zBuffer[i] = correctedDist;
+                
+                const wallHeight = Math.min(canvas.height * 1.5, (canvas.height / correctedDist) * 0.8);
+                const wallTop = (canvas.height - wallHeight) / 2;
+                
+                const colors = ['#8888aa', '#666688', '#884444', '#aa6666'];
+                const shade = Math.max(0.3, 1 - correctedDist / 15);
+                
+                ctx.fillStyle = colors[hitSide];
+                ctx.globalAlpha = shade;
+                ctx.fillRect(i, wallTop, 1, wallHeight);
+                ctx.globalAlpha = 1;
+            }
+            
+            return zBuffer;
+        }
+
+        function renderEnemies(zBuffer) {
+            const sortedEnemies = enemies.map(e => {
+                const dx = e.x - player.x;
+                const dy = e.y - player.y;
+                return { enemy: e, dist: Math.sqrt(dx * dx + dy * dy) };
+            }).sort((a, b) => b.dist - a.dist);
+            
+            for (const { enemy, dist } of sortedEnemies) {
+                const dx = enemy.x - player.x;
+                const dy = enemy.y - player.y;
+                
+                let angle = Math.atan2(dy, dx) - player.angle;
+                
+                while (angle > Math.PI) angle -= Math.PI * 2;
+                while (angle < -Math.PI) angle += Math.PI * 2;
+                
+                const fov = Math.PI / 3;
+                if (Math.abs(angle) < fov / 2) {
+                    const screenX = canvas.width / 2 + (angle / fov) * canvas.width;
+                    const size = (canvas.height / dist) * 0.5;
+                    
+                    const rayIndex = Math.floor(screenX);
+                    if (rayIndex >= 0 && rayIndex < zBuffer.length && dist < zBuffer[rayIndex]) {
+                        // Body color varies with learning
+                        const learnFactor = Math.min(1, enemy.brain.totalUpdates / 100);
+                        ctx.fillStyle = `hsl(${enemy.hue - learnFactor * 30}, ${70 + learnFactor * 20}%, ${40 + learnFactor * 15}%)`;
+                        ctx.fillRect(screenX - size / 2, canvas.height / 2 - size / 2, size, size);
+                        
+                        // Neural glow effect
+                        if (learnFactor > 0.3) {
+                            ctx.strokeStyle = `rgba(0, 255, 255, ${learnFactor * 0.5})`;
+                            ctx.lineWidth = 2;
+                            ctx.strokeRect(screenX - size / 2 - 2, canvas.height / 2 - size / 2 - 2, size + 4, size + 4);
+                        }
+                        
+                        // Eyes
+                        ctx.fillStyle = '#f00';
+                        const eyeSize = size / 6;
+                        ctx.fillRect(screenX - size / 4, canvas.height / 2 - size / 4, eyeSize, eyeSize);
+                        ctx.fillRect(screenX + size / 8, canvas.height / 2 - size / 4, eyeSize, eyeSize);
+                        
+                        // Health bar
+                        const healthWidth = size;
+                        const healthHeight = 4;
+                        ctx.fillStyle = '#400';
+                        ctx.fillRect(screenX - healthWidth / 2, canvas.height / 2 - size / 2 - 10, healthWidth, healthHeight);
+                        ctx.fillStyle = '#f00';
+                        ctx.fillRect(screenX - healthWidth / 2, canvas.height / 2 - size / 2 - 10, healthWidth * (enemy.health / enemy.maxHealth), healthHeight);
+                    }
+                }
+            }
+        }
+
+        function renderMinimap() {
+            minimapCtx.fillStyle = '#000';
+            minimapCtx.fillRect(0, 0, 150, 150);
+            
+            const scale = 150 / mapWidth;
+            
+            minimapCtx.fillStyle = '#444';
+            for (let y = 0; y < mapHeight; y++) {
+                for (let x = 0; x < mapWidth; x++) {
+                    if (map[y][x] === 1) {
+                        minimapCtx.fillRect(x * scale, y * scale, scale, scale);
+                    }
+                }
+            }
+            
+            for (const enemy of enemies) {
+                const learnFactor = Math.min(1, enemy.brain.totalUpdates / 100);
+                minimapCtx.fillStyle = `hsl(${enemy.hue}, 70%, ${50 + learnFactor * 30}%)`;
+                minimapCtx.beginPath();
+                minimapCtx.arc(enemy.x * scale, enemy.y * scale, 3, 0, Math.PI * 2);
+                minimapCtx.fill();
+            }
+            
+            minimapCtx.fillStyle = '#0f0';
+            minimapCtx.beginPath();
+            minimapCtx.arc(player.x * scale, player.y * scale, 4, 0, Math.PI * 2);
+            minimapCtx.fill();
+            
+            minimapCtx.strokeStyle = '#0f0';
+            minimapCtx.beginPath();
+            minimapCtx.moveTo(player.x * scale, player.y * scale);
+            minimapCtx.lineTo(
+                player.x * scale + Math.cos(player.angle) * 15,
+                player.y * scale + Math.sin(player.angle) * 15
+            );
+            minimapCtx.stroke();
+        }
+
+        function updateNeuralInfo() {
+            const stats = sharedBrain.getStats();
+            let avgUpdates = 0;
+            let maxUpdates = 0;
+            
+            for (const enemy of enemies) {
+                const u = enemy.brain.totalUpdates;
+                avgUpdates += u;
+                if (u > maxUpdates) maxUpdates = u;
+            }
+            avgUpdates = enemies.length > 0 ? Math.floor(avgUpdates / enemies.length) : 0;
+            
+            document.getElementById('nnStatus').innerHTML = `
+                Shared Brain Updates: ${sharedBrain.totalUpdates}<br>
+                Enemies Alive: ${enemies.length}<br>
+                Avg Learning Steps: ${avgUpdates}<br>
+                Max Learning Steps: ${maxUpdates}<br>
+                Total Killed: ${totalEnemiesKilled}
+            `;
+        }
+
+        function updateHUD() {
+            document.getElementById('health').textContent = `HEALTH: ${Math.max(0, player.health)}`;
+            document.getElementById('ammo').textContent = `AMMO: ${player.ammo} / ${player.reserveAmmo}`;
+            document.getElementById('score').textContent = `SCORE: ${player.score}`;
+            document.getElementById('wave').textContent = `WAVE: ${wave}`;
+        }
+
+        let lastTime = performance.now();
+        
+        function gameLoop() {
+            const now = performance.now();
+            const deltaTime = now - lastTime;
+            lastTime = now;
+            
+            if (!gameStarted || gameOver) {
+                requestAnimationFrame(gameLoop);
+                return;
+            }
+            
+            player.shootCooldown = Math.max(0, player.shootCooldown - deltaTime);
+            
+            // Track player position for enemy learning
+            player.positionHistory.push({ x: player.x, y: player.y, t: now });
+            if (player.positionHistory.length > 60) player.positionHistory.shift();
+            
+            player.angle += mouseMovement.x * 0.002;
+            mouseMovement.x = 0;
+            
+            const speed = keys['shift'] ? player.sprintSpeed : player.speed;
+            let moveX = 0;
+            let moveY = 0;
+            
+            if (keys['w']) {
+                moveX += Math.cos(player.angle) * speed;
+                moveY += Math.sin(player.angle) * speed;
+            }
+            if (keys['s']) {
+                moveX -= Math.cos(player.angle) * speed;
+                moveY -= Math.sin(player.angle) * speed;
+            }
+            if (keys['a']) {
+                moveX += Math.cos(player.angle - Math.PI / 2) * speed;
+                moveY += Math.sin(player.angle - Math.PI / 2) * speed;
+            }
+            if (keys['d']) {
+                moveX += Math.cos(player.angle + Math.PI / 2) * speed;
+                moveY += Math.sin(player.angle + Math.PI / 2) * speed;
+            }
+            
+            const margin = 0.2;
+            if (map[Math.floor(player.y)][Math.floor(player.x + moveX + Math.sign(moveX) * margin)] === 0) {
+                player.x += moveX;
+            }
+            if (map[Math.floor(player.y + moveY + Math.sign(moveY) * margin)][Math.floor(player.x)] === 0) {
+                player.y += moveY;
+            }
+            
+            for (const enemy of enemies) {
+                enemy.update(deltaTime);
+            }
+            
+            // Wave completion check - with flag to prevent rapid triggering
+            if (enemies.length === 0 && waveInProgress && !waveTransition) {
+                waveTransition = true;
+                waveInProgress = false;
+                wave++;
+                showMessage(`WAVE ${wave}\nEnemies are learning...`);
+                setTimeout(() => {
+                    hideMessage();
+                    spawnEnemies();
+                    player.reserveAmmo += 30;
+                    waveTransition = false;
+                }, 2500);
+            }
+            
+            if (player.health <= 0) {
+                gameOver = true;
+                showMessage(`GAME OVER\nScore: ${player.score}\nWave: ${wave}\nRefresh to restart`);
+            }
+            
+            const zBuffer = castRays();
+            renderEnemies(zBuffer);
+            renderMinimap();
+            updateHUD();
+            updateNeuralInfo();
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        gameLoop();
+    </script>
+</body>
+</html>
