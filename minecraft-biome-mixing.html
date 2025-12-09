@@ -1,0 +1,1741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neural Voxels - Biome Mixing AGI</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
+        #game { width: 100vw; height: 100vh; display: block; }
+        
+        #crosshair {
+            position: fixed; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none; z-index: 100;
+        }
+        #crosshair::before, #crosshair::after {
+            content: ''; position: absolute; background: white; mix-blend-mode: difference;
+        }
+        #crosshair::before { width: 24px; height: 2px; top: -1px; left: -12px; }
+        #crosshair::after { width: 2px; height: 24px; left: -1px; top: -12px; }
+        
+        #hotbar {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 3px; padding: 6px; background: rgba(0,0,0,0.7);
+            border-radius: 6px; z-index: 100;
+        }
+        .hotbar-slot {
+            width: 44px; height: 44px; border: 2px solid #555; border-radius: 4px;
+            display: flex; align-items: center; justify-content: center;
+            position: relative; cursor: pointer;
+        }
+        .hotbar-slot.selected { border-color: #fff; box-shadow: 0 0 8px rgba(255,255,255,0.5); }
+        .hotbar-slot canvas { width: 30px; height: 30px; image-rendering: pixelated; border-radius: 3px; }
+        .hotbar-slot .key-hint { position: absolute; bottom: 1px; right: 3px; font-size: 8px; color: #aaa; }
+        .hotbar-slot .count { position: absolute; bottom: 1px; left: 3px; font-size: 9px; color: #fff; text-shadow: 1px 1px 1px #000; }
+        
+        #info { position: fixed; top: 12px; left: 12px; color: white; font-size: 10px; text-shadow: 1px 1px 2px black; z-index: 100; line-height: 1.5; }
+        #info .nar { color: #00ffaa; }
+        #info .mix { color: #ffaa00; }
+        #info .music { color: #ff88ff; }
+        
+        #biome-mix {
+            position: fixed; top: 12px; left: 180px; color: white; font-size: 9px;
+            background: rgba(0,0,0,0.8); padding: 8px; border-radius: 6px; z-index: 100;
+            max-width: 200px;
+        }
+        #biome-mix h4 { color: #ffaa00; margin-bottom: 4px; font-size: 10px; }
+        .mix-bar { display: flex; align-items: center; margin: 2px 0; }
+        .mix-bar .name { width: 70px; font-size: 8px; }
+        .mix-bar .bar { flex: 1; height: 6px; background: #333; border-radius: 3px; overflow: hidden; }
+        .mix-bar .fill { height: 100%; transition: width 0.2s; }
+        
+        #nn-info {
+            position: fixed; top: 12px; right: 12px; color: white; font-size: 8px;
+            text-shadow: 1px 1px 2px black; z-index: 100; background: rgba(0,0,0,0.85);
+            padding: 8px; border-radius: 6px; max-width: 220px;
+        }
+        #nn-info h3 { margin-bottom: 3px; font-size: 10px; }
+        .nn-world { color: #00ffaa; }
+        .nn-tex { color: #ffaa00; }
+        .nn-music { color: #ff88ff; }
+        #nn-info .arch { font-family: monospace; font-size: 7px; line-height: 1.2; opacity: 0.8; margin: 3px 0; }
+        
+        #music-info {
+            position: fixed; bottom: 85px; right: 12px; color: white; font-size: 9px;
+            background: rgba(0,0,0,0.8); padding: 8px; border-radius: 6px; z-index: 100;
+        }
+        #music-info h4 { color: #ff88ff; margin-bottom: 3px; font-size: 10px; }
+        #music-viz { display: flex; gap: 2px; height: 28px; align-items: flex-end; margin-top: 4px; }
+        .viz-bar { width: 6px; background: linear-gradient(to top, #ff88ff, #88ffff); border-radius: 2px; transition: height 0.08s; }
+        #scale-info { font-size: 8px; opacity: 0.8; margin-top: 4px; }
+        
+        #inventory-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.75); display: none; align-items: center;
+            justify-content: center; z-index: 500;
+        }
+        #inventory-overlay.open { display: flex; }
+        #inventory {
+            background: #8b8b8b; border: 4px solid #373737;
+            border-radius: 4px; padding: 10px;
+        }
+        #inventory h2 { color: #3f3f3f; font-size: 14px; margin-bottom: 6px; text-align: center; }
+        .inv-grid { display: grid; grid-template-columns: repeat(9, 36px); gap: 2px; }
+        .inv-slot {
+            width: 36px; height: 36px; background: #8b8b8b; border: 2px solid;
+            border-color: #373737 #fff #fff #373737; display: flex;
+            align-items: center; justify-content: center; cursor: pointer; position: relative;
+        }
+        .inv-slot:hover { transform: scale(1.08); z-index: 10; }
+        .inv-slot canvas { width: 24px; height: 24px; image-rendering: pixelated; }
+        .inv-slot .item-count { position: absolute; bottom: 0; right: 2px; font-size: 9px; font-weight: bold; color: #fff; text-shadow: 1px 1px 1px #000; }
+        
+        #start-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(135deg, #0a1a1a 0%, #1a2a3a 50%, #0a2020 100%);
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; z-index: 200; color: white;
+        }
+        #start-screen h1 { font-size: 26px; text-shadow: 3px 3px 0 #000; margin-bottom: 5px; }
+        #start-screen .subtitle { font-size: 11px; opacity: 0.9; margin-bottom: 12px; }
+        .sub-nar { color: #00ffaa; }
+        .sub-mix { color: #ffaa00; }
+        .sub-music { color: #ff88ff; }
+        #start-screen .nn-desc { font-size: 10px; opacity: 0.7; margin-bottom: 14px; max-width: 500px; text-align: center; line-height: 1.6; }
+        #start-btn {
+            padding: 10px 32px; font-size: 16px;
+            background: linear-gradient(135deg, #00ffaa, #00aa77);
+            border: none; color: #000; cursor: pointer; border-radius: 6px;
+            transition: all 0.2s; font-weight: bold;
+        }
+        #start-btn:hover { transform: scale(1.05); box-shadow: 0 0 25px rgba(0,255,170,0.5); }
+        #controls-info { margin-top: 14px; text-align: center; font-size: 9px; opacity: 0.5; line-height: 1.8; }
+        
+        #loading {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #050a0a; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 300; color: white;
+        }
+        #loading h2 { margin-bottom: 10px; font-size: 13px; }
+        #progress-bar { width: 300px; height: 12px; background: #222; border-radius: 6px; overflow: hidden; }
+        #progress-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #00ffaa, #ffaa00, #ff88ff); transition: width 0.05s; }
+        #loading-text { margin-top: 6px; font-size: 10px; opacity: 0.7; }
+        #loss-display { margin-top: 6px; font-family: monospace; font-size: 10px; display: flex; gap: 12px; }
+        .loss-world { color: #00ffaa; }
+        .loss-tex { color: #ffaa00; }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <h2>🧠 Training Biome-Mixing NAR Transformers</h2>
+        <div id="progress-bar"><div id="progress-fill"></div></div>
+        <div id="loading-text">Initializing...</div>
+        <div id="loss-display">
+            <span class="loss-world">World: --</span>
+            <span class="loss-tex">Texture: --</span>
+        </div>
+    </div>
+
+    <div id="start-screen" style="display: none;">
+        <h1>🌍 BIOME MIXING AGI</h1>
+        <div class="subtitle">
+            <span class="sub-nar">16 Biomes</span> · 
+            <span class="sub-mix">Neural Blending</span> · 
+            <span class="sub-music">Adaptive Scales</span>
+        </div>
+        <div class="nn-desc">
+            The World Transformer outputs mixture weights over 16 biomes, creating hybrid terrain.
+            Watch the biome mix panel to see how biomes blend (Tropical Tundra? Desert Forest?).
+            Music adapts with biome-specific scales. Press M for music. C to craft.
+        </div>
+        <button id="start-btn">Enter World</button>
+        <div id="controls-info">
+            <div>WASD - Move | SPACE - Jump/Swim | SHIFT - Sprint | M - Music</div>
+            <div>Left Click - Break | Right Click - Place/Door | E - Inventory | C - Craft Door</div>
+        </div>
+    </div>
+    
+    <canvas id="game"></canvas>
+    <div id="crosshair"></div>
+    
+    <div id="inventory-overlay">
+        <div id="inventory">
+            <h2>Inventory (C = Craft Door from 6 Wood)</h2>
+            <div class="inv-grid" id="inv-blocks"></div>
+        </div>
+    </div>
+    
+    <div id="hotbar"></div>
+    
+    <div id="info">
+        <div>FPS: <span id="fps">0</span></div>
+        <div>Pos: <span id="pos">0, 0, 0</span></div>
+        <div class="mix">Biome: <span id="biome">--</span></div>
+        <div class="nar">World: <span id="world-epochs">0</span> ep</div>
+        <div class="music">Music: <span id="music-status">Off [M]</span></div>
+    </div>
+    
+    <div id="biome-mix">
+        <h4>🧬 Biome Mix (NN Output)</h4>
+        <div id="mix-bars"></div>
+    </div>
+    
+    <div id="nn-info">
+        <h3 class="nn-world">⚡ World NAR + Biome Mixing</h3>
+        <div class="arch">In[16] → H[64] → 2L → Height + 16 Biome Weights</div>
+        <div class="arch">Softmax → Blend surfaces, trees, features</div>
+        
+        <h3 class="nn-tex">🎨 Texture NAR</h3>
+        <div class="arch">Block⊕UV⊕Face → RGB patterns</div>
+        
+        <h3 class="nn-music">🎵 Music NAR + Scales</h3>
+        <div class="arch">Time⊕BiomeMix → Note+Dur+Vel+Arp</div>
+    </div>
+    
+    <div id="music-info">
+        <h4>🎵 Neural Music</h4>
+        <div>Chord: <span id="current-chord">I</span> | <span id="music-epochs">0</span> ep</div>
+        <div id="scale-info">Scale: Pentatonic</div>
+        <div id="music-viz"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+    // ═══════════════════════════════════════════════════════════════
+    // AUDIO
+    // ═══════════════════════════════════════════════════════════════
+    let audioCtx = null, masterGain = null, musicEnabled = false;
+    function initAudio() {
+        if (audioCtx) return;
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = audioCtx.createGain();
+        masterGain.gain.value = 0.22;
+        masterGain.connect(audioCtx.destination);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // SIMPLEX NOISE
+    // ═══════════════════════════════════════════════════════════════
+    class SimplexNoise {
+        constructor(seed) {
+            this.p = new Uint8Array(256);
+            this.perm = new Uint8Array(512);
+            const rng = this.mulberry32(seed * 1e6);
+            for (let i = 0; i < 256; i++) this.p[i] = i;
+            for (let i = 255; i > 0; i--) { const j = (rng() * (i + 1)) | 0; [this.p[i], this.p[j]] = [this.p[j], this.p[i]]; }
+            for (let i = 0; i < 512; i++) this.perm[i] = this.p[i & 255];
+        }
+        mulberry32(s) { return () => { let t = s += 0x6D2B79F5; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+        noise2D(x, y) {
+            const F2 = 0.3660254, G2 = 0.2113249;
+            const s = (x + y) * F2, i = Math.floor(x + s), j = Math.floor(y + s);
+            const t = (i + j) * G2, x0 = x - i + t, y0 = y - j + t;
+            const i1 = x0 > y0 ? 1 : 0, j1 = 1 - i1;
+            const x1 = x0 - i1 + G2, y1 = y0 - j1 + G2, x2 = x0 - 1 + 2 * G2, y2 = y0 - 1 + 2 * G2;
+            const ii = i & 255, jj = j & 255;
+            const g = (h, x, y) => { const a = h & 7, u = a < 4 ? x : y, v = a < 4 ? y : x; return ((a & 1) ? -u : u) + ((a & 2) ? -2 * v : 2 * v); };
+            let n0 = 0, n1 = 0, n2 = 0, t0 = 0.5 - x0*x0 - y0*y0, t1 = 0.5 - x1*x1 - y1*y1, t2 = 0.5 - x2*x2 - y2*y2;
+            if (t0 >= 0) { t0 *= t0; n0 = t0 * t0 * g(this.perm[ii + this.perm[jj]], x0, y0); }
+            if (t1 >= 0) { t1 *= t1; n1 = t1 * t1 * g(this.perm[ii + i1 + this.perm[jj + j1]], x1, y1); }
+            if (t2 >= 0) { t2 *= t2; n2 = t2 * t2 * g(this.perm[ii + 1 + this.perm[jj + 1]], x2, y2); }
+            return 70 * (n0 + n1 + n2);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // PURE NAR TRANSFORMER BASE
+    // ═══════════════════════════════════════════════════════════════
+    class PureNARTransformer {
+        constructor(inputDim, hiddenDim, outputDim, numLayers, seed) {
+            this.inputDim = inputDim;
+            this.hiddenDim = hiddenDim;
+            this.outputDim = outputDim;
+            this.numLayers = numLayers;
+            this.lr = 0.004;
+            this.rng = this.mulberry32(seed);
+            this.epochs = 0;
+            this.initWeights();
+        }
+        
+        mulberry32(s) { return () => { let t = s += 0x6D2B79F5; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+        
+        logUnaryEncode(val, bits) {
+            const t = new Float32Array(bits);
+            const v = Math.abs(val) & ((1 << bits) - 1);
+            const ones = v === 0 ? 0 : Math.min(bits, Math.ceil(Math.log2(v + 1)));
+            for (let i = 0; i < ones; i++) t[i] = 1;
+            if (val < 0) t[bits - 1] = -1;
+            return t;
+        }
+        
+        initWeights() {
+            const he = n => Math.sqrt(2/n);
+            this.Wemb = this.randMat(this.inputDim, this.hiddenDim, he(this.inputDim));
+            this.bemb = new Float32Array(this.hiddenDim);
+            
+            this.L = [];
+            for (let l = 0; l < this.numLayers; l++) {
+                this.L.push({
+                    Wq: this.randMat(this.hiddenDim, this.hiddenDim, he(this.hiddenDim)),
+                    Wk: this.randMat(this.hiddenDim, this.hiddenDim, he(this.hiddenDim)),
+                    Wv: this.randMat(this.hiddenDim, this.hiddenDim, he(this.hiddenDim)),
+                    Wo: this.randMat(this.hiddenDim, this.hiddenDim, he(this.hiddenDim)),
+                    W1: this.randMat(this.hiddenDim, this.hiddenDim * 2, he(this.hiddenDim)),
+                    b1: new Float32Array(this.hiddenDim * 2),
+                    W2: this.randMat(this.hiddenDim * 2, this.hiddenDim, he(this.hiddenDim * 2)),
+                    b2: new Float32Array(this.hiddenDim)
+                });
+            }
+            
+            this.Wout = this.randMat(this.hiddenDim, this.outputDim, he(this.hiddenDim));
+            this.bout = new Float32Array(this.outputDim);
+        }
+        
+        randMat(rows, cols, scale) {
+            const w = new Float32Array(rows * cols);
+            for (let i = 0; i < w.length; i++) w[i] = (this.rng() * 2 - 1) * scale;
+            return { w, rows, cols };
+        }
+        
+        batchMatMul(input, M, batch) {
+            const out = new Float32Array(batch * M.cols);
+            for (let b = 0; b < batch; b++) {
+                for (let j = 0; j < M.cols; j++) {
+                    let sum = 0;
+                    for (let i = 0; i < M.rows; i++) sum += input[b * M.rows + i] * M.w[i * M.cols + j];
+                    out[b * M.cols + j] = Math.max(-8, Math.min(8, sum));
+                }
+            }
+            return out;
+        }
+        
+        batchAddBias(x, bias, dim, batch) {
+            for (let b = 0; b < batch; b++)
+                for (let i = 0; i < dim; i++)
+                    x[b * dim + i] = Math.max(-8, Math.min(8, x[b * dim + i] + bias[i]));
+        }
+        
+        batchLayerNorm(x, dim, batch) {
+            for (let b = 0; b < batch; b++) {
+                const off = b * dim;
+                let mean = 0;
+                for (let i = 0; i < dim; i++) mean += x[off + i];
+                mean /= dim;
+                let vari = 0;
+                for (let i = 0; i < dim; i++) vari += (x[off + i] - mean) ** 2;
+                const std = Math.sqrt(vari / dim + 1e-5);
+                for (let i = 0; i < dim; i++) x[off + i] = Math.max(-8, Math.min(8, (x[off + i] - mean) / std));
+            }
+        }
+        
+        batchGelu(x) {
+            for (let i = 0; i < x.length; i++) {
+                const v = x[i];
+                x[i] = 0.5 * v * (1 + Math.tanh(0.7978845608 * (v + 0.044715 * v * v * v)));
+            }
+        }
+        
+        batchResAdd(x, r, scale = 0.5) {
+            for (let i = 0; i < x.length; i++) x[i] = Math.max(-8, Math.min(8, x[i] + r[i] * scale));
+        }
+        
+        forward(inputBatch, batch) {
+            let h = this.batchMatMul(inputBatch, this.Wemb, batch);
+            this.batchAddBias(h, this.bemb, this.hiddenDim, batch);
+            this.batchLayerNorm(h, this.hiddenDim, batch);
+            
+            for (const l of this.L) {
+                const hNorm = new Float32Array(h);
+                this.batchLayerNorm(hNorm, this.hiddenDim, batch);
+                let v = this.batchMatMul(hNorm, l.Wv, batch);
+                let a = this.batchMatMul(v, l.Wo, batch);
+                this.batchResAdd(h, a, 0.5);
+                
+                const h2 = new Float32Array(h);
+                this.batchLayerNorm(h2, this.hiddenDim, batch);
+                let ff = this.batchMatMul(h2, l.W1, batch);
+                this.batchAddBias(ff, l.b1, this.hiddenDim * 2, batch);
+                this.batchGelu(ff);
+                let ff2 = this.batchMatMul(ff, l.W2, batch);
+                this.batchAddBias(ff2, l.b2, this.hiddenDim, batch);
+                this.batchResAdd(h, ff2, 0.5);
+            }
+            
+            const out = this.batchMatMul(h, this.Wout, batch);
+            this.batchAddBias(out, this.bout, this.outputDim, batch);
+            return { h, out };
+        }
+        
+        updateWeights(grads, batch) {
+            const lr = this.lr / batch;
+            const update = (M, g) => {
+                for (let i = 0; i < M.w.length; i++) {
+                    M.w[i] -= lr * Math.max(-1, Math.min(1, g[i]));
+                    M.w[i] = Math.max(-3, Math.min(3, M.w[i]));
+                }
+            };
+            if (grads.Wout) update(this.Wout, grads.Wout);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 16 BIOMES WITH MIXING
+    // ═══════════════════════════════════════════════════════════════
+    const NUM_BIOMES = 16;
+    const BIOME_DATA = [
+        { name: 'Plains', surface: 1, treeChance: 0.008, treeType: 'oak', color: '#5da33a' },
+        { name: 'Desert', surface: 6, treeChance: 0.001, treeType: 'none', color: '#E6D69C' },
+        { name: 'Forest', surface: 1, treeChance: 0.05, treeType: 'oak', color: '#2d6b27' },
+        { name: 'Tundra', surface: 10, treeChance: 0.003, treeType: 'spruce', color: '#E8E8E8' },
+        { name: 'Ocean', surface: 11, treeChance: 0, treeType: 'none', color: '#2266AA' },
+        { name: 'Jungle', surface: 1, treeChance: 0.07, treeType: 'jungle', color: '#1E5631' },
+        { name: 'Swamp', surface: 16, treeChance: 0.025, treeType: 'swamp', color: '#4A5D23' },
+        { name: 'Mountains', surface: 19, treeChance: 0.002, treeType: 'spruce', color: '#6B6B6B' },
+        { name: 'Savanna', surface: 20, treeChance: 0.004, treeType: 'acacia', color: '#B8A862' },
+        { name: 'Taiga', surface: 21, treeChance: 0.04, treeType: 'spruce', color: '#4A6B4A' },
+        { name: 'Badlands', surface: 22, treeChance: 0, treeType: 'none', color: '#C45C3E' },
+        { name: 'Mushroom', surface: 23, treeChance: 0.03, treeType: 'mushroom', color: '#8B5A8B' },
+        { name: 'Cherry', surface: 1, treeChance: 0.035, treeType: 'cherry', color: '#FFB7C5' },
+        { name: 'Volcanic', surface: 24, treeChance: 0, treeType: 'none', color: '#2A2A2A' },
+        { name: 'Bamboo', surface: 1, treeChance: 0.08, treeType: 'bamboo', color: '#7CCD7C' },
+        { name: 'Coral', surface: 6, treeChance: 0.04, treeType: 'coral', color: '#FF6B9D' }
+    ];
+
+    // ═══════════════════════════════════════════════════════════════
+    // WORLD NAR WITH BIOME MIXING
+    // ═══════════════════════════════════════════════════════════════
+    class WorldNAR extends PureNARTransformer {
+        constructor(seed) {
+            // Output: 1 height + 16 biome weights
+            super(16, 64, 17, 2, seed);
+            this.simplex = new SimplexNoise(seed);
+            this.cache = new Map();
+            this.currentMix = new Float32Array(NUM_BIOMES);
+        }
+        
+        encodePos(x, z) {
+            const t = new Float32Array(16);
+            t.set(this.logUnaryEncode(Math.floor(x), 8), 0);
+            t.set(this.logUnaryEncode(Math.floor(z), 8), 8);
+            return t;
+        }
+        
+        softmax(logits) {
+            let max = -Infinity;
+            for (let i = 0; i < logits.length; i++) max = Math.max(max, logits[i]);
+            const exp = logits.map(l => Math.exp(l - max));
+            const sum = exp.reduce((a, b) => a + b, 0);
+            return exp.map(e => e / (sum + 1e-8));
+        }
+        
+        // Mix biome properties based on weights
+        mixBiomes(weights) {
+            let surface = 0, treeChance = 0, height = 0;
+            let treeTypes = {};
+            
+            for (let i = 0; i < NUM_BIOMES; i++) {
+                const w = weights[i];
+                if (w < 0.01) continue;
+                
+                const b = BIOME_DATA[i];
+                surface += b.surface * w;
+                treeChance += b.treeChance * w;
+                
+                if (b.treeType !== 'none') {
+                    treeTypes[b.treeType] = (treeTypes[b.treeType] || 0) + w;
+                }
+            }
+            
+            // Pick dominant tree type
+            let treeType = 'none', maxTreeW = 0;
+            for (const [type, w] of Object.entries(treeTypes)) {
+                if (w > maxTreeW) { maxTreeW = w; treeType = type; }
+            }
+            
+            // Dominant biome for display
+            let dominant = 0;
+            for (let i = 1; i < NUM_BIOMES; i++) {
+                if (weights[i] > weights[dominant]) dominant = i;
+            }
+            
+            return {
+                surface: Math.round(surface),
+                treeChance,
+                treeType,
+                dominant,
+                weights
+            };
+        }
+        
+        generateChunk(cx, cz) {
+            const key = `${cx},${cz}`;
+            if (this.cache.has(key)) return this.cache.get(key);
+            
+            const batch = 256;
+            const input = new Float32Array(batch * 16);
+            const startX = cx * 16, startZ = cz * 16;
+            
+            for (let i = 0; i < batch; i++) {
+                const lx = Math.floor(i / 16), lz = i % 16;
+                input.set(this.encodePos(startX + lx, startZ + lz), i * 16);
+            }
+            
+            const { out } = this.forward(input, batch);
+            const results = [];
+            
+            for (let i = 0; i < batch; i++) {
+                const height = Math.max(3, Math.min(32, Math.round(14 + Math.tanh(out[i * 17]) * 16)));
+                
+                // Get biome mixture weights via softmax
+                const biomeLogits = [];
+                for (let b = 0; b < NUM_BIOMES; b++) {
+                    biomeLogits.push(out[i * 17 + 1 + b]);
+                }
+                const weights = this.softmax(biomeLogits);
+                const mixed = this.mixBiomes(weights);
+                
+                results.push({ height, ...mixed });
+            }
+            
+            const data = { results, startX, startZ };
+            this.cache.set(key, data);
+            return data;
+        }
+        
+        generate(x, z) {
+            const cx = Math.floor(x / 16), cz = Math.floor(z / 16);
+            const data = this.generateChunk(cx, cz);
+            const lx = ((Math.floor(x) % 16) + 16) % 16;
+            const lz = ((Math.floor(z) % 16) + 16) % 16;
+            const result = data.results[lx * 16 + lz];
+            this.currentMix = result.weights;
+            return result;
+        }
+        
+        getTargetBiomeWeights(x, z) {
+            const cont = this.simplex.noise2D(x * 0.005, z * 0.005);
+            const temp = this.simplex.noise2D(x * 0.01 + 500, z * 0.01 + 500);
+            const moist = this.simplex.noise2D(x * 0.012 + 1000, z * 0.012 + 1000);
+            const weird = this.simplex.noise2D(x * 0.02 + 2000, z * 0.02 + 2000);
+            const volcanic = this.simplex.noise2D(x * 0.03 + 3000, z * 0.03 + 3000);
+            
+            // Create soft biome weights instead of hard assignment
+            const weights = new Float32Array(NUM_BIOMES);
+            
+            // Base temperature/moisture biomes
+            weights[0] = Math.max(0, 0.5 - Math.abs(temp) - Math.abs(moist) * 0.5); // Plains
+            weights[1] = Math.max(0, temp * 0.8 - moist * 0.5); // Desert
+            weights[2] = Math.max(0, moist * 0.6 + 0.2 - Math.abs(temp) * 0.3); // Forest
+            weights[3] = Math.max(0, -temp * 0.8 - moist * 0.3); // Tundra
+            weights[4] = Math.max(0, -cont * 1.5 - 0.3); // Ocean
+            weights[5] = Math.max(0, temp * 0.5 + moist * 0.5 - 0.2); // Jungle
+            weights[6] = Math.max(0, moist * 0.7 - Math.abs(temp) * 0.3 - 0.1); // Swamp
+            weights[7] = Math.max(0, weird * 0.8 + cont * 0.3 - 0.2); // Mountains
+            weights[8] = Math.max(0, temp * 0.4 - moist * 0.2 + 0.1); // Savanna
+            weights[9] = Math.max(0, -temp * 0.4 + moist * 0.3); // Taiga
+            weights[10] = Math.max(0, temp * 0.5 + weird * 0.3 - moist * 0.5 - 0.2); // Badlands
+            weights[11] = Math.max(0, weird * 0.6 + moist * 0.3 - Math.abs(temp) * 0.5); // Mushroom
+            weights[12] = Math.max(0, temp * 0.3 + moist * 0.2 + weird * 0.2 - 0.3); // Cherry
+            weights[13] = Math.max(0, volcanic - 0.5); // Volcanic
+            weights[14] = Math.max(0, temp * 0.4 + moist * 0.6 - weird * 0.2 - 0.3); // Bamboo
+            weights[15] = Math.max(0, -cont * 0.8 + temp * 0.3 - 0.4); // Coral
+            
+            // Normalize
+            let sum = 0;
+            for (let i = 0; i < NUM_BIOMES; i++) sum += weights[i];
+            if (sum < 0.01) { weights[0] = 1; sum = 1; }
+            for (let i = 0; i < NUM_BIOMES; i++) weights[i] /= sum;
+            
+            // Height based on dominant biome mix
+            let height = 14;
+            height += cont * 8;
+            height += weights[4] * -8; // Ocean lower
+            height += weights[7] * 10; // Mountains higher
+            height += weights[13] * 4; // Volcanic higher
+            height += this.simplex.noise2D(x * 0.05, z * 0.05) * 4;
+            
+            return { height: Math.max(3, Math.min(32, height)), weights };
+        }
+        
+        train(samples) {
+            const batch = samples.length;
+            const input = new Float32Array(batch * 16);
+            const targets = [];
+            
+            for (let i = 0; i < batch; i++) {
+                input.set(this.encodePos(samples[i][0], samples[i][1]), i * 16);
+                targets.push(this.getTargetBiomeWeights(samples[i][0], samples[i][1]));
+            }
+            
+            const { h, out } = this.forward(input, batch);
+            let loss = 0;
+            const gWout = new Float32Array(this.hiddenDim * 17);
+            
+            for (let b = 0; b < batch; b++) {
+                const t = targets[b];
+                const predH = 14 + Math.tanh(out[b * 17]) * 16;
+                loss += (predH - t.height) ** 2 * 0.1;
+                
+                const tg = 1 - Math.tanh(out[b * 17]) ** 2;
+                const dH = Math.max(-1, Math.min(1, 2 * (predH - t.height) * 16 * tg * 0.005));
+                
+                // Biome softmax cross-entropy with soft targets
+                const biomeLogits = [];
+                for (let i = 0; i < NUM_BIOMES; i++) biomeLogits.push(out[b * 17 + 1 + i]);
+                const predW = this.softmax(biomeLogits);
+                
+                for (let i = 0; i < NUM_BIOMES; i++) {
+                    loss -= t.weights[i] * Math.log(predW[i] + 1e-7) * 0.5;
+                }
+                
+                for (let i = 0; i < this.hiddenDim; i++) {
+                    gWout[i * 17] += dH * h[b * this.hiddenDim + i];
+                    for (let j = 0; j < NUM_BIOMES; j++) {
+                        const dB = (predW[j] - t.weights[j]) * 0.08;
+                        gWout[i * 17 + 1 + j] += dB * h[b * this.hiddenDim + i];
+                    }
+                }
+            }
+            
+            this.updateWeights({ Wout: gWout }, batch);
+            this.epochs++;
+            return loss / batch;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // TEXTURE NAR
+    // ═══════════════════════════════════════════════════════════════
+    class TextureNAR extends PureNARTransformer {
+        constructor(seed) {
+            super(16, 32, 3, 2, seed);
+            this.texSize = 8;
+            this.cache = new Map();
+            this.simplex = new SimplexNoise(seed + 100);
+        }
+        
+        encodePixel(blockType, u, v, face) {
+            const t = new Float32Array(16);
+            t.set(this.logUnaryEncode(blockType, 5), 0);
+            t.set(this.logUnaryEncode(u, 4), 5);
+            t.set(this.logUnaryEncode(v, 4), 9);
+            t.set(this.logUnaryEncode(face, 3), 13);
+            return t;
+        }
+        
+        generateTexture(blockType, face) {
+            const key = `${blockType}-${face}`;
+            if (this.cache.has(key)) return this.cache.get(key);
+            
+            const size = this.texSize;
+            const batch = size * size;
+            const input = new Float32Array(batch * 16);
+            
+            for (let v = 0; v < size; v++) {
+                for (let u = 0; u < size; u++) {
+                    input.set(this.encodePixel(blockType, u, v, face), (v * size + u) * 16);
+                }
+            }
+            
+            const { out } = this.forward(input, batch);
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            const imgData = ctx.createImageData(size, size);
+            
+            for (let i = 0; i < batch; i++) {
+                const r = Math.max(0, Math.min(255, Math.round((Math.tanh(out[i * 3]) * 0.5 + 0.5) * 255)));
+                const g = Math.max(0, Math.min(255, Math.round((Math.tanh(out[i * 3 + 1]) * 0.5 + 0.5) * 255)));
+                const b = Math.max(0, Math.min(255, Math.round((Math.tanh(out[i * 3 + 2]) * 0.5 + 0.5) * 255)));
+                imgData.data[i * 4] = r;
+                imgData.data[i * 4 + 1] = g;
+                imgData.data[i * 4 + 2] = b;
+                imgData.data[i * 4 + 3] = 255;
+            }
+            
+            ctx.putImageData(imgData, 0, 0);
+            
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.magFilter = THREE.NearestFilter;
+            tex.minFilter = THREE.NearestFilter;
+            
+            this.cache.set(key, { canvas, tex });
+            return { canvas, tex };
+        }
+        
+        getTargetRGB(blockType, u, v, face) {
+            const s = this.texSize;
+            const noise = (x, y, sc) => this.simplex.noise2D(x * sc, y * sc) * 0.5 + 0.5;
+            
+            switch (blockType) {
+                case 1: // Grass
+                    if (face === 0) { const n = noise(u, v, 2); return [0.2 + n * 0.1, 0.55 + n * 0.15, 0.15]; }
+                    return [0.45 + noise(u,v,3)*0.1, 0.35, 0.2];
+                case 2: return [0.45 + noise(u, v, 3) * 0.15, 0.35, 0.2]; // Dirt
+                case 3: const sn = noise(u, v, 4); return [0.45 + sn * 0.15, 0.45 + sn * 0.15, 0.48 + sn * 0.15]; // Stone
+                case 4: // Wood
+                    if (face === 0) { const r = Math.sin(Math.sqrt((u-4)**2+(v-4)**2)*1.5)*0.1; return [0.55+r, 0.35+r, 0.18]; }
+                    return [0.4 + noise(u, v, 6) * 0.1, 0.25, 0.12];
+                case 5: const ln = noise(u, v, 5); return [0.1, 0.4 + ln * 0.2, 0.12]; // Leaves
+                case 6: return [0.85 + noise(u, v, 8) * 0.1, 0.78, 0.55]; // Sand
+                case 7: return [0.1, 0.35 + noise(u, v, 3) * 0.15, 0.6]; // Water
+                case 8: // Brick
+                    const mortar = v % 4 < 1 || (v % 4 < 2 ? u % 4 : (u + 2) % 4) < 1;
+                    return mortar ? [0.7, 0.68, 0.65] : [0.65, 0.25, 0.2];
+                case 9: return [0.7, 0.85, 0.95]; // Glass
+                case 10: return [0.92, 0.94, 0.98]; // Snow
+                case 11: return [0.45 + noise(u, v, 7) * 0.2, 0.42, 0.4]; // Gravel
+                case 12: case 13: return [0.5, 0.32, 0.15]; // Door
+                case 14: return [0.3, 0.22, 0.12]; // Jungle wood
+                case 15: return [0.05, 0.32, 0.1]; // Jungle leaves
+                case 16: return [0.32 + noise(u, v, 4) * 0.1, 0.22, 0.12]; // Mud
+                case 17: return [0.2, 0.4, 0.15]; // Moss
+                case 18: return [0.6, 0.8, 0.9]; // Ice
+                case 19: return [0.35, 0.35, 0.38]; // Mountain stone
+                case 20: // Savanna grass
+                    if (face === 0) return [0.7 + noise(u,v,3)*0.1, 0.65, 0.35];
+                    return [0.55, 0.45, 0.25];
+                case 21: // Taiga grass
+                    if (face === 0) return [0.25, 0.4 + noise(u,v,3)*0.1, 0.25];
+                    return [0.35, 0.28, 0.18];
+                case 22: // Badlands terracotta
+                    const layer = Math.floor(v / 2);
+                    const colors = [[0.75, 0.45, 0.3], [0.85, 0.55, 0.35], [0.65, 0.35, 0.25]];
+                    return colors[layer % 3];
+                case 23: // Mycelium
+                    if (face === 0) return [0.55 + noise(u,v,4)*0.1, 0.45, 0.55];
+                    return [0.45, 0.35, 0.45];
+                case 24: // Basalt
+                    return [0.15 + noise(u,v,5)*0.1, 0.12, 0.12];
+                case 25: // Cherry leaves
+                    return [1.0, 0.7 + noise(u,v,4)*0.15, 0.75];
+                case 26: // Bamboo
+                    return [0.4, 0.6 + noise(u,v,8)*0.1, 0.3];
+                case 27: // Coral
+                    const cn = noise(u, v, 6);
+                    return [1.0 * cn + 0.4, 0.4 * cn + 0.2, 0.6 * cn + 0.3];
+                case 28: // Acacia wood
+                    return [0.55, 0.35, 0.2];
+                case 29: // Mushroom cap
+                    return [0.7, 0.15, 0.15];
+                default: return [0.5, 0.5, 0.5];
+            }
+        }
+        
+        train(samples) {
+            const batch = samples.length;
+            const input = new Float32Array(batch * 16);
+            const targets = [];
+            
+            for (let i = 0; i < batch; i++) {
+                const [bt, u, v, face] = samples[i];
+                input.set(this.encodePixel(bt, u, v, face), i * 16);
+                targets.push(this.getTargetRGB(bt, u, v, face));
+            }
+            
+            const { h, out } = this.forward(input, batch);
+            let loss = 0;
+            const gWout = new Float32Array(this.hiddenDim * 3);
+            
+            for (let b = 0; b < batch; b++) {
+                for (let c = 0; c < 3; c++) {
+                    const pred = Math.tanh(out[b * 3 + c]) * 0.5 + 0.5;
+                    const err = pred - targets[b][c];
+                    loss += err * err;
+                    const tg = 1 - Math.tanh(out[b * 3 + c]) ** 2;
+                    const grad = Math.max(-1, Math.min(1, err * tg * 0.5));
+                    for (let i = 0; i < this.hiddenDim; i++) {
+                        gWout[i * 3 + c] += grad * h[b * this.hiddenDim + i];
+                    }
+                }
+            }
+            
+            this.updateWeights({ Wout: gWout }, batch);
+            this.epochs++;
+            return loss / batch;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // IMPROVED MUSIC NAR - Scales, Arpeggios, Voice Leading
+    // ═══════════════════════════════════════════════════════════════
+    class MusicNAR extends PureNARTransformer {
+        constructor(seed) {
+            // Output: 12 notes + 4 durations + 4 articulations + arpeggio flag
+            super(20, 32, 21, 2, seed);
+            
+            // Biome-specific scales
+            this.scales = {
+                pentatonic: [0, 2, 4, 7, 9],
+                major: [0, 2, 4, 5, 7, 9, 11],
+                minor: [0, 2, 3, 5, 7, 8, 10],
+                dorian: [0, 2, 3, 5, 7, 9, 10],
+                phrygian: [0, 1, 3, 5, 7, 8, 10],
+                lydian: [0, 2, 4, 6, 7, 9, 11],
+                mixolydian: [0, 2, 4, 5, 7, 9, 10],
+                japanese: [0, 1, 5, 7, 8],
+                arabic: [0, 1, 4, 5, 7, 8, 11],
+                blues: [0, 3, 5, 6, 7, 10]
+            };
+            
+            // Biome to scale mapping
+            this.biomeScales = [
+                'major',       // Plains
+                'arabic',      // Desert
+                'dorian',      // Forest
+                'phrygian',    // Tundra
+                'lydian',      // Ocean
+                'pentatonic',  // Jungle
+                'minor',       // Swamp
+                'mixolydian',  // Mountains
+                'pentatonic',  // Savanna
+                'dorian',      // Taiga
+                'phrygian',    // Badlands
+                'lydian',      // Mushroom
+                'japanese',    // Cherry
+                'minor',       // Volcanic
+                'pentatonic',  // Bamboo
+                'lydian'       // Coral
+            ];
+            
+            this.baseFreq = 130.81;
+            this.chordProgs = [
+                [0, 3, 4, 0],      // I-IV-V-I
+                [0, 5, 3, 4],      // I-vi-IV-V
+                [0, 4, 5, 3],      // I-V-vi-IV
+                [0, 2, 4, 0],      // I-iii-V-I
+                [5, 3, 0, 4],      // vi-IV-I-V
+                [0, 3, 0, 4]       // I-IV-I-V
+            ];
+            this.progIdx = 0;
+            this.chordIdx = 0;
+            this.beat = 0;
+            this.measure = 0;
+            this.lastNote = 4;
+            this.currentScale = 'pentatonic';
+            this.vizBars = [];
+        }
+        
+        encodeState(time, biomeMix) {
+            const t = new Float32Array(20);
+            t.set(this.logUnaryEncode(time % 64, 6), 0);
+            // Encode top 4 biome weights
+            const sorted = [...biomeMix].map((w, i) => ({w, i})).sort((a, b) => b.w - a.w);
+            for (let i = 0; i < 4; i++) {
+                t[6 + i] = sorted[i].w;
+                t.set(this.logUnaryEncode(sorted[i].i, 4), 10 + i * 2);
+            }
+            return t;
+        }
+        
+        selectScale(biomeMix) {
+            // Blend scales based on biome weights
+            let dominant = 0;
+            for (let i = 1; i < NUM_BIOMES; i++) {
+                if (biomeMix[i] > biomeMix[dominant]) dominant = i;
+            }
+            this.currentScale = this.biomeScales[dominant];
+            return this.scales[this.currentScale];
+        }
+        
+        generate(biomeMix) {
+            const scale = this.selectScale(biomeMix);
+            const input = new Float32Array(20);
+            input.set(this.encodeState(this.beat + this.chordIdx * 4 + this.measure * 16, biomeMix), 0);
+            
+            const { out } = this.forward(input, 1);
+            
+            // Note selection with voice leading preference
+            let noteScores = [];
+            for (let i = 0; i < 12; i++) {
+                let score = out[i];
+                // Voice leading: prefer stepwise motion
+                const dist = Math.abs(i - this.lastNote);
+                if (dist <= 2) score += 0.3;
+                else if (dist > 5) score -= 0.2;
+                noteScores.push({ idx: i, score });
+            }
+            noteScores.sort((a, b) => b.score - a.score);
+            
+            // Map to scale
+            const noteIdx = Math.min(scale.length - 1, Math.max(0, noteScores[0].idx % scale.length));
+            const octave = Math.floor(noteScores[0].idx / scale.length);
+            const semitone = scale[noteIdx] + octave * 12;
+            
+            // Duration
+            let maxD = 0;
+            for (let i = 1; i < 4; i++) if (out[12 + i] > out[12 + maxD]) maxD = i;
+            const durations = [0.12, 0.2, 0.35, 0.5];
+            
+            // Articulation
+            let maxA = 0;
+            for (let i = 1; i < 4; i++) if (out[16 + i] > out[16 + maxA]) maxA = i;
+            const articulations = ['staccato', 'normal', 'legato', 'accent'];
+            
+            // Arpeggio decision
+            const doArp = out[20] > 0.3 && this.beat === 0;
+            
+            const freq = this.baseFreq * Math.pow(2, semitone / 12);
+            const duration = durations[maxD];
+            const articulation = articulations[maxA];
+            
+            // Velocity based on beat and articulation
+            let velocity = 0.45;
+            if (this.beat === 0) velocity += 0.15;
+            if (this.beat === 2) velocity += 0.08;
+            if (articulation === 'accent') velocity += 0.12;
+            if (articulation === 'staccato') velocity -= 0.05;
+            
+            // Biome mood modulation
+            const mood = biomeMix[4] * 0.7 + // Ocean quieter
+                        biomeMix[13] * 0.6 + // Volcanic darker
+                        biomeMix[5] * 1.1 + // Jungle brighter
+                        biomeMix[12] * 1.15 + // Cherry delicate
+                        (1 - biomeMix[4] - biomeMix[13]) * 0.95;
+            velocity *= Math.max(0.4, Math.min(1.2, mood + 0.5));
+            
+            this.lastNote = noteScores[0].idx;
+            
+            return { freq, duration, velocity, noteIdx, semitone, articulation, doArp, scale };
+        }
+        
+        advance() {
+            this.beat++;
+            if (this.beat >= 4) {
+                this.beat = 0;
+                this.chordIdx++;
+                if (this.chordIdx >= this.chordProgs[this.progIdx].length) {
+                    this.chordIdx = 0;
+                    this.measure++;
+                    if (this.rng() < 0.15) {
+                        this.progIdx = Math.floor(this.rng() * this.chordProgs.length);
+                    }
+                }
+            }
+            const chordNames = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°'];
+            const chord = this.chordProgs[this.progIdx][this.chordIdx];
+            document.getElementById('current-chord').textContent = chordNames[chord] || 'I';
+            document.getElementById('scale-info').textContent = `Scale: ${this.currentScale}`;
+        }
+        
+        getTarget(time, biomeMix) {
+            const scale = this.selectScale(biomeMix);
+            const beat = time % 4;
+            const chord = this.chordProgs[0][Math.floor(time / 4) % 4];
+            const isStrong = beat === 0 || beat === 2;
+            
+            // Prefer chord tones on strong beats
+            let noteIdx;
+            if (isStrong && this.rng() < 0.65) {
+                const chordTones = [0, 2, 4].map(i => (chord + i) % scale.length);
+                noteIdx = chordTones[Math.floor(this.rng() * 3)];
+            } else {
+                // Stepwise motion preference
+                const step = this.rng() < 0.6 ? (this.rng() < 0.5 ? 1 : -1) : Math.floor(this.rng() * scale.length);
+                noteIdx = Math.max(0, Math.min(scale.length - 1, this.lastNote + step));
+            }
+            
+            const durIdx = isStrong ? (this.rng() < 0.5 ? 2 : 3) : (this.rng() < 0.6 ? 0 : 1);
+            const artIdx = isStrong ? (this.rng() < 0.3 ? 3 : 1) : (this.rng() < 0.4 ? 0 : 1);
+            const doArp = beat === 0 && this.rng() < 0.25;
+            
+            return { noteIdx: noteIdx + Math.floor(this.rng() * 2) * scale.length, durIdx, artIdx, doArp };
+        }
+        
+        train(biomeMix) {
+            const batch = 24;
+            const input = new Float32Array(batch * 20);
+            const targets = [];
+            
+            for (let i = 0; i < batch; i++) {
+                const time = Math.floor(this.rng() * 64);
+                input.set(this.encodeState(time, biomeMix), i * 20);
+                targets.push(this.getTarget(time, biomeMix));
+            }
+            
+            const { h, out } = this.forward(input, batch);
+            let loss = 0;
+            const gWout = new Float32Array(this.hiddenDim * 21);
+            
+            for (let b = 0; b < batch; b++) {
+                const t = targets[b];
+                
+                // Note softmax
+                let maxV = -Infinity, sumE = 0;
+                for (let i = 0; i < 12; i++) maxV = Math.max(maxV, out[b * 21 + i]);
+                const noteProbs = [];
+                for (let i = 0; i < 12; i++) { const e = Math.exp(out[b * 21 + i] - maxV); noteProbs.push(e); sumE += e; }
+                for (let i = 0; i < 12; i++) noteProbs[i] /= sumE;
+                loss -= Math.log(noteProbs[t.noteIdx % 12] + 1e-7);
+                
+                // Duration softmax
+                maxV = -Infinity; sumE = 0;
+                for (let i = 0; i < 4; i++) maxV = Math.max(maxV, out[b * 21 + 12 + i]);
+                const durProbs = [];
+                for (let i = 0; i < 4; i++) { const e = Math.exp(out[b * 21 + 12 + i] - maxV); durProbs.push(e); sumE += e; }
+                for (let i = 0; i < 4; i++) durProbs[i] /= sumE;
+                loss -= Math.log(durProbs[t.durIdx] + 1e-7);
+                
+                // Articulation softmax
+                maxV = -Infinity; sumE = 0;
+                for (let i = 0; i < 4; i++) maxV = Math.max(maxV, out[b * 21 + 16 + i]);
+                const artProbs = [];
+                for (let i = 0; i < 4; i++) { const e = Math.exp(out[b * 21 + 16 + i] - maxV); artProbs.push(e); sumE += e; }
+                for (let i = 0; i < 4; i++) artProbs[i] /= sumE;
+                loss -= Math.log(artProbs[t.artIdx] + 1e-7);
+                
+                // Gradients
+                for (let i = 0; i < this.hiddenDim; i++) {
+                    for (let j = 0; j < 12; j++) {
+                        gWout[i * 21 + j] += (noteProbs[j] - (j === t.noteIdx % 12 ? 1 : 0)) * 0.08 * h[b * this.hiddenDim + i];
+                    }
+                    for (let j = 0; j < 4; j++) {
+                        gWout[i * 21 + 12 + j] += (durProbs[j] - (j === t.durIdx ? 1 : 0)) * 0.08 * h[b * this.hiddenDim + i];
+                        gWout[i * 21 + 16 + j] += (artProbs[j] - (j === t.artIdx ? 1 : 0)) * 0.08 * h[b * this.hiddenDim + i];
+                    }
+                }
+            }
+            
+            this.updateWeights({ Wout: gWout }, batch);
+            this.epochs++;
+            return loss / batch;
+        }
+        
+        playNote(freq, duration, velocity, articulation, doArp) {
+            if (!audioCtx || !musicEnabled) return;
+            const now = audioCtx.currentTime;
+            
+            const playTone = (f, time, dur, vel) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                
+                osc.type = this.rng() < 0.7 ? 'sine' : 'triangle';
+                osc.frequency.value = f;
+                
+                const attack = articulation === 'staccato' ? 0.01 : 0.03;
+                const release = articulation === 'legato' ? dur * 0.9 : dur * 0.6;
+                
+                gain.gain.setValueAtTime(0, time);
+                gain.gain.linearRampToValueAtTime(vel * 0.28, time + attack);
+                gain.gain.exponentialRampToValueAtTime(0.001, time + release);
+                
+                osc.connect(gain);
+                gain.connect(masterGain);
+                osc.start(time);
+                osc.stop(time + release + 0.05);
+            };
+            
+            if (doArp) {
+                // Arpeggio: play root, third, fifth
+                const arpNotes = [1, 1.25, 1.5];
+                arpNotes.forEach((mult, i) => {
+                    playTone(freq * mult, now + i * 0.08, duration * 0.7, velocity * 0.7);
+                });
+            } else {
+                playTone(freq, now, duration, velocity);
+            }
+            
+            // Occasional bass note on beat 1
+            if (this.beat === 0 && this.rng() < 0.4) {
+                playTone(freq / 2, now, duration * 1.5, velocity * 0.5);
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // GAME SETUP
+    // ═══════════════════════════════════════════════════════════════
+    const CHUNK_SIZE = 16, RENDER_DISTANCE = 5, SEA_LEVEL = 7;
+    
+    const B = {
+        AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, WOOD: 4, LEAVES: 5, SAND: 6, WATER: 7,
+        BRICK: 8, GLASS: 9, SNOW: 10, GRAVEL: 11, DOOR_BOTTOM: 12, DOOR_TOP: 13,
+        JUNGLE_WOOD: 14, JUNGLE_LEAVES: 15, MUD: 16, MOSS: 17, ICE: 18, MOUNTAIN_STONE: 19,
+        SAVANNA_GRASS: 20, TAIGA_GRASS: 21, TERRACOTTA: 22, MYCELIUM: 23, BASALT: 24,
+        CHERRY_LEAVES: 25, BAMBOO: 26, CORAL: 27, ACACIA_WOOD: 28, MUSHROOM_CAP: 29
+    };
+
+    let world = new Map(), doorStates = new Map(), chunks = new Map(), chunkMeshes = new Map();
+    let selectedBlock = B.GRASS, worldNN, textureNN, musicNN, inventoryOpen = false;
+    const inventory = {};
+    const ALL_BLOCKS = [B.GRASS, B.DIRT, B.STONE, B.WOOD, B.LEAVES, B.SAND, B.SNOW, B.BRICK, B.GLASS, 
+                       B.DOOR_BOTTOM, B.JUNGLE_WOOD, B.MUD, B.MOSS, B.ICE, B.MOUNTAIN_STONE,
+                       B.SAVANNA_GRASS, B.TAIGA_GRASS, B.TERRACOTTA, B.MYCELIUM, B.BASALT,
+                       B.CHERRY_LEAVES, B.BAMBOO, B.CORAL, B.ACACIA_WOOD, B.MUSHROOM_CAP];
+    ALL_BLOCKS.forEach(b => inventory[b] = 64);
+
+    const canvas = document.getElementById('game');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(1);
+    renderer.setClearColor(0x87CEEB);
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(0x87CEEB, 45, 105);
+
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 150);
+    camera.position.set(0, 20, 0);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+    const sun = new THREE.DirectionalLight(0xffffff, 0.65);
+    sun.position.set(50, 100, 50);
+    scene.add(sun);
+
+    const player = { velocity: new THREE.Vector3(), onGround: false, height: 1.7 };
+    const keys = {};
+    let isLocked = false, pitch = 0, yaw = 0;
+
+    const getBlockKey = (x, y, z) => `${x},${y},${z}`;
+    const getBlock = (x, y, z) => world.get(getBlockKey(x, y, z)) || B.AIR;
+    const setBlock = (x, y, z, type) => { if (type === B.AIR) world.delete(getBlockKey(x, y, z)); else world.set(getBlockKey(x, y, z), type); };
+    const getChunkKey = (cx, cz) => `${cx},${cz}`;
+    const seededRandom = (x, z, seed = 54321) => { const n = Math.sin(x * 12.9898 + z * 78.233 + seed) * 43758.5453; return n - Math.floor(n); };
+
+    const materialCache = new Map();
+    
+    function getMaterial(blockType, faceType) {
+        const isT = blockType === B.WATER || blockType === B.GLASS || blockType === B.ICE;
+        const key = `${blockType}-${faceType}`;
+        if (materialCache.has(key)) return materialCache.get(key);
+        
+        const { tex } = textureNN.generateTexture(blockType, faceType);
+        const mat = new THREE.MeshLambertMaterial({
+            map: tex, transparent: isT,
+            opacity: blockType === B.WATER ? 0.6 : blockType === B.GLASS ? 0.4 : blockType === B.ICE ? 0.8 : 1,
+            side: isT ? THREE.DoubleSide : THREE.FrontSide
+        });
+        materialCache.set(key, mat);
+        return mat;
+    }
+
+    function generateTree(x, y, z, type) {
+        if (type === 'none') return;
+        
+        const types = {
+            oak: { wood: B.WOOD, leaf: B.LEAVES, h: [4, 3], crown: 2 },
+            jungle: { wood: B.JUNGLE_WOOD, leaf: B.JUNGLE_LEAVES, h: [8, 5], crown: 3 },
+            spruce: { wood: B.WOOD, leaf: B.LEAVES, h: [6, 3], conical: true },
+            swamp: { wood: B.WOOD, leaf: B.MOSS, h: [3, 2], crown: 2 },
+            acacia: { wood: B.ACACIA_WOOD, leaf: B.LEAVES, h: [4, 2], flat: true },
+            cherry: { wood: B.WOOD, leaf: B.CHERRY_LEAVES, h: [4, 2], crown: 3 },
+            bamboo: { wood: B.BAMBOO, leaf: B.BAMBOO, h: [8, 6], thin: true },
+            mushroom: { wood: B.WOOD, leaf: B.MUSHROOM_CAP, h: [5, 3], mushroom: true },
+            coral: { wood: B.CORAL, leaf: B.CORAL, h: [3, 2], coral: true }
+        };
+        
+        const t = types[type];
+        if (!t) return;
+        
+        const th = t.h[0] + Math.floor(seededRandom(x, z, 999) * t.h[1]);
+        
+        if (t.thin) {
+            for (let ty = 1; ty <= th; ty++) setBlock(x, y + ty, z, t.wood);
+            setBlock(x, y + th + 1, z, t.leaf);
+            return;
+        }
+        
+        if (t.coral) {
+            for (let ty = 1; ty <= th; ty++) {
+                setBlock(x, y + ty, z, t.wood);
+                if (ty > 1 && seededRandom(x + ty, z, 888) > 0.5) {
+                    const dx = seededRandom(x, z + ty, 777) > 0.5 ? 1 : -1;
+                    setBlock(x + dx, y + ty, z, t.leaf);
+                }
+            }
+            return;
+        }
+        
+        for (let ty = 1; ty <= th; ty++) setBlock(x, y + ty, z, t.wood);
+        
+        if (t.conical) {
+            for (let layer = 0; layer < 4; layer++) {
+                const ly = y + th - layer * 2, radius = layer + 1;
+                for (let dx = -radius; dx <= radius; dx++) for (let dz = -radius; dz <= radius; dz++) {
+                    if (Math.abs(dx) + Math.abs(dz) <= radius + 1 && (dx !== 0 || dz !== 0))
+                        if (getBlock(x + dx, ly, z + dz) === B.AIR) setBlock(x + dx, ly, z + dz, t.leaf);
+                }
+            }
+            setBlock(x, y + th + 1, z, t.leaf);
+        } else if (t.flat) {
+            for (let dx = -3; dx <= 3; dx++) for (let dz = -3; dz <= 3; dz++) {
+                if (Math.abs(dx) + Math.abs(dz) <= 4 && getBlock(x + dx, y + th, z + dz) === B.AIR)
+                    setBlock(x + dx, y + th, z + dz, t.leaf);
+            }
+        } else if (t.mushroom) {
+            for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
+                if (Math.abs(dx) + Math.abs(dz) <= 3)
+                    setBlock(x + dx, y + th, z + dz, t.leaf);
+            }
+        } else {
+            const cr = t.crown || 2;
+            for (let dx = -cr; dx <= cr; dx++) for (let dz = -cr; dz <= cr; dz++) 
+                for (let dy = th - 1; dy <= th + 2; dy++) {
+                    if (Math.abs(dx) + Math.abs(dz) <= cr + 1 && (dx !== 0 || dz !== 0 || dy > th))
+                        if (getBlock(x + dx, y + dy, z + dz) === B.AIR) setBlock(x + dx, y + dy, z + dz, t.leaf);
+                }
+        }
+    }
+
+    function generateChunk(cx, cz) {
+        const key = getChunkKey(cx, cz);
+        if (chunks.has(key)) return;
+        chunks.set(key, true);
+        
+        const chunkData = worldNN.generateChunk(cx, cz);
+        
+        for (let i = 0; i < chunkData.results.length; i++) {
+            const lx = Math.floor(i / 16), lz = i % 16;
+            const x = chunkData.startX + lx, z = chunkData.startZ + lz;
+            const { height, surface, treeChance, treeType, dominant } = chunkData.results[i];
+            
+            const isOcean = dominant === 4 || dominant === 15;
+            const groundH = isOcean ? Math.min(height, SEA_LEVEL - 2) : height;
+            
+            for (let y = 0; y <= groundH; y++) {
+                let block;
+                if (y === groundH) block = surface || B.GRASS;
+                else if (y > groundH - 3) block = isOcean ? B.SAND : B.DIRT;
+                else block = dominant === 7 ? B.MOUNTAIN_STONE : dominant === 13 ? B.BASALT : B.STONE;
+                setBlock(x, y, z, block);
+            }
+            
+            if (isOcean) {
+                for (let y = groundH + 1; y <= SEA_LEVEL; y++) {
+                    setBlock(x, y, z, dominant === 3 ? B.ICE : B.WATER);
+                }
+            }
+            
+            if (!isOcean && seededRandom(x, z) < treeChance && height > SEA_LEVEL + 1) {
+                generateTree(x, height, z, treeType);
+            }
+        }
+    }
+
+    function buildChunkMesh(cx, cz) {
+        const key = getChunkKey(cx, cz);
+        if (chunkMeshes.has(key)) chunkMeshes.get(key).forEach(m => scene.remove(m));
+        
+        const geoData = new Map();
+        const startX = cx * CHUNK_SIZE, startZ = cz * CHUNK_SIZE;
+        
+        for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+            for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+                const x = startX + lx, z = startZ + lz;
+                for (let y = 0; y < 50; y++) {
+                    const bt = getBlock(x, y, z);
+                    if (bt === B.AIR || bt === B.DOOR_TOP) continue;
+                    
+                    const isDoor = bt === B.DOOR_BOTTOM;
+                    const doorOpen = isDoor && doorStates.get(getBlockKey(x, y, z));
+                    
+                    const checkFace = (nx, ny, nz) => {
+                        const nb = getBlock(x + nx, y + ny, z + nz);
+                        return nb === B.AIR || (bt !== B.WATER && nb === B.WATER) || nb === B.DOOR_TOP || nb === B.GLASS;
+                    };
+                    
+                    const faces = [];
+                    if (checkFace(0, 1, 0)) faces.push({ dir: 'top', type: 0 });
+                    if (checkFace(0, -1, 0)) faces.push({ dir: 'bottom', type: 1 });
+                    if (checkFace(1, 0, 0)) faces.push({ dir: 'right', type: 2 });
+                    if (checkFace(-1, 0, 0)) faces.push({ dir: 'left', type: 2 });
+                    if (checkFace(0, 0, 1)) faces.push({ dir: 'front', type: 2 });
+                    if (checkFace(0, 0, -1)) faces.push({ dir: 'back', type: 2 });
+                    
+                    faces.forEach(({ dir, type }) => {
+                        const matKey = `${bt}-${type}`;
+                        if (!geoData.has(matKey)) geoData.set(matKey, { pos: [], norm: [], uv: [], bt, faceType: type });
+                        const g = geoData.get(matKey);
+                        if (isDoor) addDoorFace(g, x, y, z, dir, doorOpen);
+                        else addFace(g, x, y, z, dir);
+                    });
+                    
+                    if (isDoor) {
+                        const matKey = `${B.DOOR_TOP}-2`;
+                        if (!geoData.has(matKey)) geoData.set(matKey, { pos: [], norm: [], uv: [], bt: B.DOOR_TOP, faceType: 2 });
+                        const g = geoData.get(matKey);
+                        ['front', 'back', 'left', 'right', 'top'].forEach(dir => addDoorFace(g, x, y + 1, z, dir, doorOpen));
+                    }
+                }
+            }
+        }
+        
+        const meshes = [];
+        geoData.forEach((g) => {
+            if (g.pos.length === 0) return;
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.Float32BufferAttribute(g.pos, 3));
+            geo.setAttribute('normal', new THREE.Float32BufferAttribute(g.norm, 3));
+            geo.setAttribute('uv', new THREE.Float32BufferAttribute(g.uv, 2));
+            const mat = getMaterial(g.bt, g.faceType);
+            const mesh = new THREE.Mesh(geo, mat);
+            scene.add(mesh);
+            meshes.push(mesh);
+        });
+        
+        chunkMeshes.set(key, meshes);
+    }
+
+    function addFace(g, x, y, z, face) {
+        const s = 0.5;
+        const fd = {
+            top:    { v: [[x-s,y+s,z+s], [x+s,y+s,z+s], [x+s,y+s,z-s], [x-s,y+s,z-s]], n: [0,1,0] },
+            bottom: { v: [[x-s,y-s,z-s], [x+s,y-s,z-s], [x+s,y-s,z+s], [x-s,y-s,z+s]], n: [0,-1,0] },
+            front:  { v: [[x-s,y-s,z+s], [x+s,y-s,z+s], [x+s,y+s,z+s], [x-s,y+s,z+s]], n: [0,0,1] },
+            back:   { v: [[x+s,y-s,z-s], [x-s,y-s,z-s], [x-s,y+s,z-s], [x+s,y+s,z-s]], n: [0,0,-1] },
+            right:  { v: [[x+s,y-s,z+s], [x+s,y-s,z-s], [x+s,y+s,z-s], [x+s,y+s,z+s]], n: [1,0,0] },
+            left:   { v: [[x-s,y-s,z-s], [x-s,y-s,z+s], [x-s,y+s,z+s], [x-s,y+s,z-s]], n: [-1,0,0] }
+        };
+        const uvs = [[0,0], [1,0], [1,1], [0,1]];
+        const f = fd[face];
+        [0,1,2,0,2,3].forEach(i => { g.pos.push(...f.v[i]); g.norm.push(...f.n); g.uv.push(...uvs[i]); });
+    }
+    
+    function addDoorFace(g, x, y, z, face, isOpen) {
+        const s = 0.5, t = 0.1;
+        const ox = isOpen ? 0.4 : 0, oz = isOpen ? -0.4 : 0;
+        const fd = {
+            top:    { v: [[x-s+ox,y+s,z+t+oz], [x+s+ox,y+s,z+t+oz], [x+s+ox,y+s,z-t+oz], [x-s+ox,y+s,z-t+oz]], n: [0,1,0] },
+            bottom: { v: [[x-s+ox,y-s,z-t+oz], [x+s+ox,y-s,z-t+oz], [x+s+ox,y-s,z+t+oz], [x-s+ox,y-s,z+t+oz]], n: [0,-1,0] },
+            front:  { v: [[x-s+ox,y-s,z+t+oz], [x+s+ox,y-s,z+t+oz], [x+s+ox,y+s,z+t+oz], [x-s+ox,y+s,z+t+oz]], n: [0,0,1] },
+            back:   { v: [[x+s+ox,y-s,z-t+oz], [x-s+ox,y-s,z-t+oz], [x-s+ox,y+s,z-t+oz], [x+s+ox,y+s,z-t+oz]], n: [0,0,-1] },
+            right:  { v: [[x+s+ox,y-s,z+t+oz], [x+s+ox,y-s,z-t+oz], [x+s+ox,y+s,z-t+oz], [x+s+ox,y+s,z+t+oz]], n: [1,0,0] },
+            left:   { v: [[x-s+ox,y-s,z-t+oz], [x-s+ox,y-s,z+t+oz], [x-s+ox,y+s,z+t+oz], [x-s+ox,y+s,z-t+oz]], n: [-1,0,0] }
+        };
+        const uvs = [[0,0], [1,0], [1,1], [0,1]];
+        const f = fd[face];
+        [0,1,2,0,2,3].forEach(i => { g.pos.push(...f.v[i]); g.norm.push(...f.n); g.uv.push(...uvs[i]); });
+    }
+
+    function updateChunks() {
+        const pcx = Math.floor(camera.position.x / CHUNK_SIZE);
+        const pcz = Math.floor(camera.position.z / CHUNK_SIZE);
+        
+        let generated = 0;
+        for (let dx = -RENDER_DISTANCE; dx <= RENDER_DISTANCE; dx++) {
+            for (let dz = -RENDER_DISTANCE; dz <= RENDER_DISTANCE; dz++) {
+                if (dx*dx + dz*dz > RENDER_DISTANCE * RENDER_DISTANCE) continue;
+                const cx = pcx + dx, cz = pcz + dz;
+                const key = getChunkKey(cx, cz);
+                if (!chunks.has(key)) {
+                    generateChunk(cx, cz);
+                    buildChunkMesh(cx, cz);
+                    generated++;
+                    if (generated >= 3) return;
+                } else if (!chunkMeshes.has(key)) {
+                    buildChunkMesh(cx, cz);
+                    generated++;
+                    if (generated >= 3) return;
+                }
+            }
+        }
+        
+        chunkMeshes.forEach((meshes, key) => {
+            const [cx, cz] = key.split(',').map(Number);
+            if ((cx - pcx) ** 2 + (cz - pcz) ** 2 > (RENDER_DISTANCE + 2) ** 2) {
+                meshes.forEach(m => scene.remove(m));
+                chunkMeshes.delete(key);
+            }
+        });
+    }
+
+    function rebuildNearbyChunks(wx, wz) {
+        const cx = Math.floor(wx / CHUNK_SIZE), cz = Math.floor(wz / CHUNK_SIZE);
+        for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+            if (chunks.has(getChunkKey(cx + dx, cz + dz))) buildChunkMesh(cx + dx, cz + dz);
+        }
+    }
+
+    function getTargetBlock() {
+        const dir = new THREE.Vector3();
+        camera.getWorldDirection(dir);
+        
+        let x = camera.position.x, y = camera.position.y, z = camera.position.z;
+        let vx = Math.floor(x), vy = Math.floor(y), vz = Math.floor(z);
+        
+        const stepX = dir.x >= 0 ? 1 : -1, stepY = dir.y >= 0 ? 1 : -1, stepZ = dir.z >= 0 ? 1 : -1;
+        const tDeltaX = dir.x !== 0 ? Math.abs(1 / dir.x) : 1e10;
+        const tDeltaY = dir.y !== 0 ? Math.abs(1 / dir.y) : 1e10;
+        const tDeltaZ = dir.z !== 0 ? Math.abs(1 / dir.z) : 1e10;
+        
+        let tMaxX = dir.x !== 0 ? ((stepX > 0 ? vx + 1 - x : x - vx) / Math.abs(dir.x)) : 1e10;
+        let tMaxY = dir.y !== 0 ? ((stepY > 0 ? vy + 1 - y : y - vy) / Math.abs(dir.y)) : 1e10;
+        let tMaxZ = dir.z !== 0 ? ((stepZ > 0 ? vz + 1 - z : z - vz) / Math.abs(dir.z)) : 1e10;
+        
+        let lastVx = vx, lastVy = vy, lastVz = vz;
+        
+        for (let i = 0; i < 50; i++) {
+            const b = getBlock(vx, vy, vz);
+            if (b !== B.AIR && b !== B.WATER && b !== B.DOOR_TOP) {
+                const dist = Math.sqrt((vx - camera.position.x) ** 2 + (vy - camera.position.y) ** 2 + (vz - camera.position.z) ** 2);
+                if (dist > 5) return { hit: null, place: null };
+                return { hit: { x: vx, y: vy, z: vz }, place: { x: lastVx, y: lastVy, z: lastVz } };
+            }
+            lastVx = vx; lastVy = vy; lastVz = vz;
+            if (tMaxX < tMaxY) {
+                if (tMaxX < tMaxZ) { vx += stepX; tMaxX += tDeltaX; }
+                else { vz += stepZ; tMaxZ += tDeltaZ; }
+            } else {
+                if (tMaxY < tMaxZ) { vy += stepY; tMaxY += tDeltaY; }
+                else { vz += stepZ; tMaxZ += tDeltaZ; }
+            }
+            if (Math.sqrt((vx - camera.position.x) ** 2 + (vy - camera.position.y) ** 2 + (vz - camera.position.z) ** 2) > 5.5) break;
+        }
+        return { hit: null, place: null };
+    }
+
+    const highlight = new THREE.Mesh(new THREE.BoxGeometry(1.02, 1.02, 1.02), new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.5 }));
+    highlight.visible = false;
+    scene.add(highlight);
+
+    function checkCollision(x, y, z) {
+        for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) for (let dy = 0; dy <= 2; dy++) {
+            const bx = Math.floor(x + dx * 0.3), by = Math.floor(y + dy), bz = Math.floor(z + dz * 0.3);
+            const b = getBlock(bx, by, bz);
+            if (b !== B.AIR && b !== B.WATER && b !== B.DOOR_TOP) {
+                if (b === B.DOOR_BOTTOM && doorStates.get(getBlockKey(bx, by, bz))) continue;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    let currentBiomeMix = new Float32Array(NUM_BIOMES);
+
+    function updatePlayer() {
+        if (inventoryOpen) return;
+        camera.quaternion.setFromEuler(new THREE.Euler(pitch, yaw, 0, 'YXZ'));
+        const forward = new THREE.Vector3(); camera.getWorldDirection(forward); forward.y = 0; forward.normalize();
+        const right = new THREE.Vector3(); right.crossVectors(forward, new THREE.Vector3(0, 1, 0));
+        const speed = keys['ShiftLeft'] ? 0.26 : 0.14;
+        const move = new THREE.Vector3();
+        if (keys['KeyW']) move.add(forward); if (keys['KeyS']) move.sub(forward);
+        if (keys['KeyD']) move.add(right); if (keys['KeyA']) move.sub(right);
+        if (move.length() > 0) move.normalize().multiplyScalar(speed);
+        
+        const newX = camera.position.x + move.x, newZ = camera.position.z + move.z;
+        if (!checkCollision(newX, camera.position.y - player.height + 0.1, camera.position.z)) camera.position.x = newX;
+        if (!checkCollision(camera.position.x, camera.position.y - player.height + 0.1, newZ)) camera.position.z = newZ;
+        
+        const inWater = getBlock(Math.floor(camera.position.x), Math.floor(camera.position.y), Math.floor(camera.position.z)) === B.WATER;
+        player.velocity.y -= inWater ? 0.004 : 0.015;
+        if (keys['Space']) {
+            if (inWater) player.velocity.y = 0.07;
+            else if (player.onGround) { player.velocity.y = 0.26; player.onGround = false; }
+        }
+        
+        const newY = camera.position.y + player.velocity.y, feetY = newY - player.height;
+        if (player.velocity.y < 0) {
+            if (checkCollision(camera.position.x, feetY, camera.position.z)) {
+                camera.position.y = Math.floor(feetY) + 1 + player.height;
+                player.velocity.y = 0; player.onGround = true;
+            } else { camera.position.y = newY; player.onGround = false; }
+        } else {
+            if (checkCollision(camera.position.x, newY + 0.1, camera.position.z)) player.velocity.y = 0;
+            else camera.position.y = newY;
+        }
+        
+        if (camera.position.y < -20) { camera.position.y = 30; player.velocity.y = 0; }
+        
+        const result = worldNN.generate(camera.position.x, camera.position.z);
+        currentBiomeMix = result.weights;
+        
+        // Update biome mix display
+        updateBiomeMixDisplay(result.weights, result.dominant);
+        
+        document.getElementById('biome').textContent = BIOME_DATA[result.dominant].name;
+        document.getElementById('pos').textContent = `${camera.position.x.toFixed(0)}, ${camera.position.y.toFixed(1)}, ${camera.position.z.toFixed(0)}`;
+    }
+
+    function updateBiomeMixDisplay(weights, dominant) {
+        const sorted = [...weights].map((w, i) => ({w, i, name: BIOME_DATA[i].name, color: BIOME_DATA[i].color}))
+            .sort((a, b) => b.w - a.w)
+            .slice(0, 5);
+        
+        const container = document.getElementById('mix-bars');
+        container.innerHTML = '';
+        
+        sorted.forEach(({w, name, color}) => {
+            if (w < 0.02) return;
+            const bar = document.createElement('div');
+            bar.className = 'mix-bar';
+            bar.innerHTML = `<span class="name">${name}</span><div class="bar"><div class="fill" style="width:${w*100}%;background:${color}"></div></div>`;
+            container.appendChild(bar);
+        });
+    }
+
+    function craftDoor() {
+        if ((inventory[B.WOOD] || 0) >= 6) {
+            inventory[B.WOOD] -= 6;
+            inventory[B.DOOR_BOTTOM] = (inventory[B.DOOR_BOTTOM] || 0) + 1;
+            updateHotbar();
+            return true;
+        }
+        return false;
+    }
+
+    function setupMusicViz() {
+        const viz = document.getElementById('music-viz');
+        for (let i = 0; i < 12; i++) {
+            const bar = document.createElement('div');
+            bar.className = 'viz-bar';
+            bar.style.height = '3px';
+            viz.appendChild(bar);
+            musicNN.vizBars.push(bar);
+        }
+    }
+
+    function renderBlockIcon(blockType) {
+        const { canvas } = textureNN.generateTexture(blockType, 0);
+        return canvas;
+    }
+
+    function setupInventory() {
+        const invBlocks = document.getElementById('inv-blocks');
+        ALL_BLOCKS.forEach(bt => {
+            const slot = document.createElement('div'); slot.className = 'inv-slot';
+            slot.appendChild(renderBlockIcon(bt).cloneNode(true));
+            const count = document.createElement('span'); count.className = 'item-count'; count.textContent = inventory[bt];
+            slot.appendChild(count);
+            slot.dataset.block = bt;
+            slot.onclick = () => { selectedBlock = bt; updateHotbar(); };
+            invBlocks.appendChild(slot);
+        });
+    }
+
+    function setupHotbar() {
+        const hotbar = document.getElementById('hotbar');
+        const hbBlocks = [B.GRASS, B.DIRT, B.STONE, B.WOOD, B.BRICK, B.GLASS, B.DOOR_BOTTOM, B.SAND, B.SNOW];
+        hbBlocks.forEach((bt, i) => {
+            const slot = document.createElement('div');
+            slot.className = 'hotbar-slot' + (bt === selectedBlock ? ' selected' : '');
+            slot.appendChild(renderBlockIcon(bt).cloneNode(true));
+            slot.innerHTML += `<span class="key-hint">${i + 1}</span><span class="count">${inventory[bt]}</span>`;
+            slot.onclick = () => { selectedBlock = bt; updateHotbar(); };
+            hotbar.appendChild(slot);
+        });
+    }
+
+    function updateHotbar() {
+        const hbBlocks = [B.GRASS, B.DIRT, B.STONE, B.WOOD, B.BRICK, B.GLASS, B.DOOR_BOTTOM, B.SAND, B.SNOW];
+        document.querySelectorAll('#hotbar .hotbar-slot').forEach((slot, i) => {
+            slot.classList.toggle('selected', hbBlocks[i] === selectedBlock);
+            slot.querySelector('.count').textContent = inventory[hbBlocks[i]];
+        });
+    }
+
+    function toggleInventory() {
+        inventoryOpen = !inventoryOpen;
+        document.getElementById('inventory-overlay').classList.toggle('open', inventoryOpen);
+        if (inventoryOpen) document.exitPointerLock(); else canvas.requestPointerLock();
+    }
+
+    document.addEventListener('keydown', e => {
+        keys[e.code] = true;
+        if (e.code === 'KeyE') { toggleInventory(); return; }
+        if (e.code === 'KeyC' && !inventoryOpen) { craftDoor(); return; }
+        if (e.code === 'Escape' && inventoryOpen) { toggleInventory(); return; }
+        if (e.code === 'KeyM') {
+            initAudio();
+            musicEnabled = !musicEnabled;
+            document.getElementById('music-status').textContent = musicEnabled ? 'Playing' : 'Off [M]';
+        }
+        const n = parseInt(e.key);
+        if (n >= 1 && n <= 9) {
+            const hbBlocks = [B.GRASS, B.DIRT, B.STONE, B.WOOD, B.BRICK, B.GLASS, B.DOOR_BOTTOM, B.SAND, B.SNOW];
+            selectedBlock = hbBlocks[n - 1]; updateHotbar();
+        }
+    });
+    document.addEventListener('keyup', e => keys[e.code] = false);
+    document.addEventListener('mousemove', e => {
+        if (!isLocked || inventoryOpen) return;
+        yaw -= e.movementX * 0.002; pitch -= e.movementY * 0.002;
+        pitch = Math.max(-1.5, Math.min(1.5, pitch));
+    });
+
+    canvas.addEventListener('mousedown', e => {
+        if (!isLocked || inventoryOpen) return;
+        const target = getTargetBlock();
+        
+        if (e.button === 0 && target.hit) {
+            const bt = getBlock(target.hit.x, target.hit.y, target.hit.z);
+            if (bt !== B.AIR) inventory[bt] = (inventory[bt] || 0) + 1;
+            setBlock(target.hit.x, target.hit.y, target.hit.z, B.AIR);
+            if (bt === B.DOOR_BOTTOM) {
+                setBlock(target.hit.x, target.hit.y + 1, target.hit.z, B.AIR);
+                doorStates.delete(getBlockKey(target.hit.x, target.hit.y, target.hit.z));
+            }
+            rebuildNearbyChunks(target.hit.x, target.hit.z);
+            updateHotbar();
+        } else if (e.button === 2 && target.hit) {
+            const hitBlock = getBlock(target.hit.x, target.hit.y, target.hit.z);
+            if (hitBlock === B.DOOR_BOTTOM) {
+                const doorKey = getBlockKey(target.hit.x, target.hit.y, target.hit.z);
+                doorStates.set(doorKey, !doorStates.get(doorKey));
+                rebuildNearbyChunks(target.hit.x, target.hit.z);
+                return;
+            }
+            if (target.place && (inventory[selectedBlock] || 0) > 0) {
+                const px = Math.floor(camera.position.x), py = Math.floor(camera.position.y), pz = Math.floor(camera.position.z);
+                const { x, y, z } = target.place;
+                if (!(x === px && z === pz && (y === py || y === py - 1 || y === py - 2))) {
+                    setBlock(x, y, z, selectedBlock);
+                    inventory[selectedBlock]--;
+                    if (selectedBlock === B.DOOR_BOTTOM) {
+                        setBlock(x, y + 1, z, B.DOOR_TOP);
+                        doorStates.set(getBlockKey(x, y, z), false);
+                    }
+                    rebuildNearbyChunks(x, z);
+                    updateHotbar();
+                }
+            }
+        }
+    });
+    
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+    canvas.addEventListener('wheel', e => {
+        if (inventoryOpen) return;
+        const hbBlocks = [B.GRASS, B.DIRT, B.STONE, B.WOOD, B.BRICK, B.GLASS, B.DOOR_BOTTOM, B.SAND, B.SNOW];
+        let idx = hbBlocks.indexOf(selectedBlock);
+        idx = (idx + Math.sign(e.deltaY) + hbBlocks.length) % hbBlocks.length;
+        selectedBlock = hbBlocks[idx]; updateHotbar();
+    });
+    document.addEventListener('pointerlockchange', () => { isLocked = document.pointerLockElement === canvas; });
+    document.getElementById('start-btn').addEventListener('click', () => {
+        document.getElementById('start-screen').style.display = 'none';
+        canvas.requestPointerLock();
+        initAudio();
+    });
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    async function initialTraining() {
+        const loadingText = document.getElementById('loading-text');
+        const progressFill = document.getElementById('progress-fill');
+        
+        for (let epoch = 0; epoch < 180; epoch++) {
+            const samples = [];
+            for (let i = 0; i < 64; i++) samples.push([(worldNN.rng() - 0.5) * 350, (worldNN.rng() - 0.5) * 350]);
+            const loss = worldNN.train(samples);
+            
+            progressFill.style.width = (epoch / 180 * 40) + '%';
+            loadingText.textContent = `Training World NAR (16 biomes): ${epoch + 1}/180`;
+            document.querySelector('.loss-world').textContent = `World: ${loss.toFixed(3)}`;
+            document.getElementById('world-epochs').textContent = worldNN.epochs;
+            
+            if (epoch % 20 === 0) await new Promise(r => setTimeout(r, 0));
+        }
+        
+        for (let epoch = 0; epoch < 100; epoch++) {
+            const samples = [];
+            for (let i = 0; i < 48; i++) {
+                samples.push([
+                    Math.floor(textureNN.rng() * 29) + 1,
+                    Math.floor(textureNN.rng() * 8),
+                    Math.floor(textureNN.rng() * 8),
+                    Math.floor(textureNN.rng() * 3)
+                ]);
+            }
+            const loss = textureNN.train(samples);
+            
+            progressFill.style.width = (40 + epoch / 100 * 30) + '%';
+            loadingText.textContent = `Training Texture NAR: ${epoch + 1}/100`;
+            document.querySelector('.loss-tex').textContent = `Texture: ${loss.toFixed(3)}`;
+            
+            if (epoch % 15 === 0) await new Promise(r => setTimeout(r, 0));
+        }
+        
+        loadingText.textContent = 'Generating world...';
+        for (let cx = -2; cx <= 2; cx++) {
+            for (let cz = -2; cz <= 2; cz++) {
+                generateChunk(cx, cz);
+                buildChunkMesh(cx, cz);
+            }
+            progressFill.style.width = (70 + (cx + 2) / 5 * 30) + '%';
+            await new Promise(r => setTimeout(r, 0));
+        }
+    }
+
+    let frames = 0, lastTime = performance.now(), learnCounter = 0, musicCounter = 0;
+
+    function animate() {
+        requestAnimationFrame(animate);
+        frames++;
+        const now = performance.now();
+        if (now - lastTime >= 1000) {
+            document.getElementById('fps').textContent = frames;
+            frames = 0; lastTime = now;
+        }
+        
+        if (isLocked && !inventoryOpen) {
+            updatePlayer();
+            updateChunks();
+            
+            learnCounter++;
+            if (learnCounter >= 120) {
+                learnCounter = 0;
+                const samples = [];
+                for (let i = 0; i < 32; i++) {
+                    samples.push([
+                        camera.position.x + (worldNN.rng() - 0.5) * 180,
+                        camera.position.z + (worldNN.rng() - 0.5) * 180
+                    ]);
+                }
+                worldNN.train(samples);
+                document.getElementById('world-epochs').textContent = worldNN.epochs;
+            }
+            
+            musicCounter++;
+            if (musicCounter >= 10 && musicEnabled) {
+                musicCounter = 0;
+                
+                musicNN.train(currentBiomeMix);
+                document.getElementById('music-epochs').textContent = musicNN.epochs;
+                
+                const { freq, duration, velocity, noteIdx, articulation, doArp } = musicNN.generate(currentBiomeMix);
+                musicNN.playNote(freq, duration, velocity, articulation, doArp);
+                musicNN.advance();
+                
+                musicNN.vizBars.forEach((bar, i) => {
+                    bar.style.height = (i === noteIdx % 12 ? velocity * 26 : Math.max(3, parseFloat(bar.style.height) * 0.7)) + 'px';
+                });
+            }
+            
+            const target = getTargetBlock();
+            if (target.hit) {
+                highlight.position.set(target.hit.x, target.hit.y, target.hit.z);
+                highlight.visible = true;
+            } else highlight.visible = false;
+        }
+        
+        renderer.render(scene, camera);
+    }
+
+    async function init() {
+        document.getElementById('loading-text').textContent = 'Initializing biome-mixing transformers...';
+        const seed = Date.now() % 100000;
+        worldNN = new WorldNAR(seed);
+        textureNN = new TextureNAR(seed + 1);
+        musicNN = new MusicNAR(seed + 2);
+        
+        await initialTraining();
+        
+        setupHotbar();
+        setupInventory();
+        setupMusicViz();
+        
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('start-screen').style.display = 'flex';
+        animate();
+    }
+
+    init();
+    </script>
+</body>
+</html>

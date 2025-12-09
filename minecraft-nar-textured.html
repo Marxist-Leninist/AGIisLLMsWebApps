@@ -1,0 +1,1585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neural Voxels - NAR + Neural Textures</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
+        #game { width: 100vw; height: 100vh; display: block; }
+        
+        #crosshair {
+            position: fixed; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none; z-index: 100;
+        }
+        #crosshair::before, #crosshair::after {
+            content: ''; position: absolute; background: white; mix-blend-mode: difference;
+        }
+        #crosshair::before { width: 24px; height: 2px; top: -1px; left: -12px; }
+        #crosshair::after { width: 2px; height: 24px; left: -1px; top: -12px; }
+        
+        #hotbar {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 3px; padding: 6px; background: rgba(0,0,0,0.7);
+            border-radius: 6px; z-index: 100;
+        }
+        .hotbar-slot {
+            width: 46px; height: 46px; border: 2px solid #555; border-radius: 4px;
+            display: flex; align-items: center; justify-content: center;
+            position: relative; cursor: pointer;
+        }
+        .hotbar-slot.selected { border-color: #fff; box-shadow: 0 0 8px rgba(255,255,255,0.5); }
+        .hotbar-slot canvas { width: 32px; height: 32px; image-rendering: pixelated; border-radius: 3px; }
+        .hotbar-slot .key-hint { position: absolute; bottom: 1px; right: 3px; font-size: 9px; color: #aaa; }
+        .hotbar-slot .count { position: absolute; bottom: 1px; left: 3px; font-size: 10px; color: #fff; text-shadow: 1px 1px 1px #000; }
+        
+        #info { position: fixed; top: 15px; left: 15px; color: white; font-size: 11px; text-shadow: 1px 1px 2px black; z-index: 100; line-height: 1.5; }
+        #info .nar { color: #00ffaa; }
+        #info .tex { color: #ffaa00; }
+        #info .music { color: #ff88ff; }
+        
+        #nn-info {
+            position: fixed; top: 15px; right: 15px; color: white; font-size: 9px;
+            text-shadow: 1px 1px 2px black; z-index: 100; background: rgba(0,0,0,0.8);
+            padding: 8px; border-radius: 6px; max-width: 240px;
+        }
+        #nn-info h3 { margin-bottom: 4px; font-size: 11px; }
+        .nn-world { color: #00ffaa; }
+        .nn-tex { color: #ffaa00; }
+        .nn-music { color: #ff88ff; }
+        #nn-info .arch { font-family: monospace; font-size: 7px; line-height: 1.3; opacity: 0.85; margin: 4px 0; }
+        
+        #music-info {
+            position: fixed; bottom: 90px; right: 15px; color: white; font-size: 10px;
+            background: rgba(0,0,0,0.75); padding: 8px; border-radius: 6px; z-index: 100;
+        }
+        #music-info h4 { color: #ff88ff; margin-bottom: 4px; font-size: 11px; }
+        #music-viz { display: flex; gap: 2px; height: 30px; align-items: flex-end; margin-top: 5px; }
+        .viz-bar { width: 8px; background: linear-gradient(to top, #ff88ff, #88ffff); border-radius: 2px; transition: height 0.1s; }
+        
+        #crafting-hint {
+            position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
+            color: #aaa; font-size: 11px; background: rgba(0,0,0,0.6);
+            padding: 4px 10px; border-radius: 4px; z-index: 100;
+        }
+        
+        #inventory-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); display: none; align-items: center;
+            justify-content: center; z-index: 500;
+        }
+        #inventory-overlay.open { display: flex; }
+        #inventory {
+            background: #8b8b8b; border: 4px solid #373737;
+            border-radius: 4px; padding: 12px;
+        }
+        #inventory h2 { color: #3f3f3f; font-size: 16px; margin-bottom: 8px; text-align: center; }
+        .inv-section { margin-bottom: 10px; }
+        .inv-section h3 { color: #555; font-size: 11px; margin-bottom: 4px; }
+        .inv-grid { display: grid; grid-template-columns: repeat(9, 40px); gap: 2px; }
+        .inv-slot {
+            width: 40px; height: 40px; background: #8b8b8b; border: 2px solid;
+            border-color: #373737 #fff #fff #373737; display: flex;
+            align-items: center; justify-content: center; cursor: pointer; position: relative;
+        }
+        .inv-slot:hover { transform: scale(1.08); z-index: 10; }
+        .inv-slot canvas { width: 28px; height: 28px; image-rendering: pixelated; }
+        .inv-slot .item-count { position: absolute; bottom: 0; right: 2px; font-size: 10px; font-weight: bold; color: #fff; text-shadow: 1px 1px 1px #000; }
+        .craft-slot { background: #6b6b6b !important; }
+        .craft-result { background: #8b6b5b !important; border-color: #5b3b2b #daa #daa #5b3b2b !important; }
+        
+        #start-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(135deg, #0a1a1a 0%, #1a2a3a 50%, #0a2020 100%);
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; z-index: 200; color: white;
+        }
+        #start-screen h1 { font-size: 28px; text-shadow: 3px 3px 0 #000; margin-bottom: 6px; }
+        #start-screen .subtitle { font-size: 12px; opacity: 0.9; margin-bottom: 4px; }
+        .sub-nar { color: #00ffaa; }
+        .sub-tex { color: #ffaa00; }
+        .sub-music { color: #ff88ff; }
+        #start-screen .nn-desc { font-size: 10px; opacity: 0.7; margin-bottom: 16px; max-width: 480px; text-align: center; line-height: 1.6; }
+        #start-btn {
+            padding: 10px 36px; font-size: 18px;
+            background: linear-gradient(135deg, #00ffaa, #00aa77);
+            border: none; color: #000; cursor: pointer; border-radius: 6px;
+            transition: all 0.2s; font-weight: bold;
+        }
+        #start-btn:hover { transform: scale(1.05); box-shadow: 0 0 25px rgba(0,255,170,0.5); }
+        #controls-info { margin-top: 18px; text-align: center; font-size: 10px; opacity: 0.5; line-height: 1.8; }
+        
+        #loading {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #050a0a; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 300; color: white;
+        }
+        #loading h2 { margin-bottom: 12px; font-size: 14px; }
+        #progress-bar { width: 320px; height: 14px; background: #222; border-radius: 7px; overflow: hidden; }
+        #progress-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #00ffaa, #ffaa00, #ff88ff); transition: width 0.05s; }
+        #loading-text { margin-top: 8px; font-size: 11px; opacity: 0.7; }
+        #loss-display { margin-top: 8px; font-family: monospace; font-size: 11px; display: flex; gap: 15px; }
+        .loss-world { color: #00ffaa; }
+        .loss-tex { color: #ffaa00; }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <h2>🧠 Training 3 NAR Log-Unary Tensor Transformers</h2>
+        <div id="progress-bar"><div id="progress-fill"></div></div>
+        <div id="loading-text">Initializing...</div>
+        <div id="loss-display">
+            <span class="loss-world">World: --</span>
+            <span class="loss-tex">Texture: --</span>
+        </div>
+    </div>
+
+    <div id="start-screen" style="display: none;">
+        <h1>🎨 NEURAL VOXELS</h1>
+        <div class="subtitle">
+            <span class="sub-nar">NAR World Gen</span> · 
+            <span class="sub-tex">Neural Textures</span> · 
+            <span class="sub-music">Adaptive Music</span>
+        </div>
+        <div class="nn-desc">
+            Three neural networks power this world: (1) NAR transformer generates terrain in parallel,
+            (2) Texture NN paints patterns on blocks - wood grain, stone cracks, grass blades,
+            (3) Music NN composes biome-adaptive melodies. Press M for music. C to craft doors from wood.
+        </div>
+        <button id="start-btn">Enter World</button>
+        <div id="controls-info">
+            <div>WASD - Move | SPACE - Jump/Swim | SHIFT - Sprint | M - Music</div>
+            <div>Left Click - Break | Right Click - Place/Door | E - Inventory | C - Craft</div>
+        </div>
+    </div>
+    
+    <canvas id="game"></canvas>
+    <div id="crosshair"></div>
+    
+    <div id="inventory-overlay">
+        <div id="inventory">
+            <h2>Inventory</h2>
+            <div class="inv-section">
+                <h3>Crafting (C to quick-craft door: 6 wood → 1 door)</h3>
+                <div class="inv-grid" id="craft-grid"></div>
+            </div>
+            <div class="inv-section">
+                <h3>Blocks</h3>
+                <div class="inv-grid" id="inv-blocks"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="hotbar"></div>
+    <div id="crafting-hint">C - Craft Door (6 Wood)</div>
+    
+    <div id="info">
+        <div>FPS: <span id="fps">0</span></div>
+        <div>Pos: <span id="pos">0, 0, 0</span></div>
+        <div>Biome: <span id="biome">--</span></div>
+        <div class="nar">World NN: <span id="world-epochs">0</span> epochs</div>
+        <div class="tex">Texture NN: <span id="tex-epochs">0</span> epochs</div>
+        <div class="music">Music: <span id="music-status">Off [M]</span></div>
+    </div>
+    
+    <div id="nn-info">
+        <h3 class="nn-world">⚡ World NAR Transformer</h3>
+        <div class="arch">Input[256×16] → Batch[48] → 2 Layers → Height+Biome</div>
+        
+        <h3 class="nn-tex">🎨 Texture NAR Transformer</h3>
+        <div class="arch">Input[BlockType⊕U⊕V⊕Face] → Batch[32] → RGB Pattern</div>
+        
+        <h3 class="nn-music">🎵 Music NAR Transformer</h3>
+        <div class="arch">Input[Time⊕Biome] → Note+Duration+Velocity</div>
+        
+        <div style="margin-top:8px; font-size:8px; opacity:0.7;">
+            All pure NAR - fully batched forward & backward passes
+        </div>
+    </div>
+    
+    <div id="music-info">
+        <h4>🎵 Neural Music</h4>
+        <div>Key: C | Chord: <span id="current-chord">I</span></div>
+        <div style="font-size:9px; opacity:0.7;">Training: <span id="music-epochs">0</span> | Loss: <span id="music-loss">--</span></div>
+        <div id="music-viz"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+    // ═══════════════════════════════════════════════════════════════
+    // AUDIO SYSTEM
+    // ═══════════════════════════════════════════════════════════════
+    let audioCtx = null, masterGain = null, musicEnabled = false;
+    function initAudio() {
+        if (audioCtx) return;
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = audioCtx.createGain();
+        masterGain.gain.value = 0.25;
+        masterGain.connect(audioCtx.destination);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // SIMPLEX NOISE
+    // ═══════════════════════════════════════════════════════════════
+    class SimplexNoise {
+        constructor(seed) {
+            this.p = new Uint8Array(256);
+            this.perm = new Uint8Array(512);
+            const rng = this.mulberry32(seed * 1e6);
+            for (let i = 0; i < 256; i++) this.p[i] = i;
+            for (let i = 255; i > 0; i--) { const j = (rng() * (i + 1)) | 0; [this.p[i], this.p[j]] = [this.p[j], this.p[i]]; }
+            for (let i = 0; i < 512; i++) this.perm[i] = this.p[i & 255];
+        }
+        mulberry32(s) { return () => { let t = s += 0x6D2B79F5; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+        noise2D(x, y) {
+            const F2 = 0.3660254, G2 = 0.2113249;
+            const s = (x + y) * F2, i = Math.floor(x + s), j = Math.floor(y + s);
+            const t = (i + j) * G2, x0 = x - i + t, y0 = y - j + t;
+            const i1 = x0 > y0 ? 1 : 0, j1 = 1 - i1;
+            const x1 = x0 - i1 + G2, y1 = y0 - j1 + G2, x2 = x0 - 1 + 2 * G2, y2 = y0 - 1 + 2 * G2;
+            const ii = i & 255, jj = j & 255;
+            const g = (h, x, y) => { const a = h & 7, u = a < 4 ? x : y, v = a < 4 ? y : x; return ((a & 1) ? -u : u) + ((a & 2) ? -2 * v : 2 * v); };
+            let n0 = 0, n1 = 0, n2 = 0, t0 = 0.5 - x0*x0 - y0*y0, t1 = 0.5 - x1*x1 - y1*y1, t2 = 0.5 - x2*x2 - y2*y2;
+            if (t0 >= 0) { t0 *= t0; n0 = t0 * t0 * g(this.perm[ii + this.perm[jj]], x0, y0); }
+            if (t1 >= 0) { t1 *= t1; n1 = t1 * t1 * g(this.perm[ii + i1 + this.perm[jj + j1]], x1, y1); }
+            if (t2 >= 0) { t2 *= t2; n2 = t2 * t2 * g(this.perm[ii + 1 + this.perm[jj + 1]], x2, y2); }
+            return 70 * (n0 + n1 + n2);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // PURE NAR LOG-UNARY TENSOR TRANSFORMER BASE
+    // ═══════════════════════════════════════════════════════════════
+    class PureNARTransformer {
+        constructor(inputDim, hiddenDim, outputDim, numLayers, seed) {
+            this.inputDim = inputDim;
+            this.hiddenDim = hiddenDim;
+            this.outputDim = outputDim;
+            this.numLayers = numLayers;
+            this.lr = 0.004;
+            this.rng = this.mulberry32(seed);
+            this.epochs = 0;
+            this.initWeights();
+        }
+        
+        mulberry32(s) { return () => { let t = s += 0x6D2B79F5; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+        
+        logUnaryEncode(val, bits) {
+            const t = new Float32Array(bits);
+            const v = Math.abs(val) & ((1 << bits) - 1);
+            const ones = v === 0 ? 0 : Math.min(bits, Math.ceil(Math.log2(v + 1)));
+            for (let i = 0; i < ones; i++) t[i] = 1;
+            if (val < 0) t[bits - 1] = -1;
+            return t;
+        }
+        
+        initWeights() {
+            const he = n => Math.sqrt(2/n);
+            this.Wemb = this.randMat(this.inputDim, this.hiddenDim, he(this.inputDim));
+            this.bemb = new Float32Array(this.hiddenDim);
+            
+            this.L = [];
+            for (let l = 0; l < this.numLayers; l++) {
+                this.L.push({
+                    Wv: this.randMat(this.hiddenDim, this.hiddenDim, he(this.hiddenDim)),
+                    Wo: this.randMat(this.hiddenDim, this.hiddenDim, he(this.hiddenDim)),
+                    W1: this.randMat(this.hiddenDim, this.hiddenDim * 2, he(this.hiddenDim)),
+                    b1: new Float32Array(this.hiddenDim * 2),
+                    W2: this.randMat(this.hiddenDim * 2, this.hiddenDim, he(this.hiddenDim * 2)),
+                    b2: new Float32Array(this.hiddenDim)
+                });
+            }
+            
+            this.Wout = this.randMat(this.hiddenDim, this.outputDim, he(this.hiddenDim));
+            this.bout = new Float32Array(this.outputDim);
+        }
+        
+        randMat(rows, cols, scale) {
+            const w = new Float32Array(rows * cols);
+            for (let i = 0; i < w.length; i++) w[i] = (this.rng() * 2 - 1) * scale;
+            return { w, rows, cols };
+        }
+        
+        // Batched ops
+        batchMatMul(input, M, batch) {
+            const out = new Float32Array(batch * M.cols);
+            for (let b = 0; b < batch; b++) {
+                for (let j = 0; j < M.cols; j++) {
+                    let sum = 0;
+                    for (let i = 0; i < M.rows; i++) sum += input[b * M.rows + i] * M.w[i * M.cols + j];
+                    out[b * M.cols + j] = Math.max(-8, Math.min(8, sum));
+                }
+            }
+            return out;
+        }
+        
+        batchAddBias(x, bias, dim, batch) {
+            for (let b = 0; b < batch; b++)
+                for (let i = 0; i < dim; i++)
+                    x[b * dim + i] = Math.max(-8, Math.min(8, x[b * dim + i] + bias[i]));
+        }
+        
+        batchLayerNorm(x, dim, batch) {
+            for (let b = 0; b < batch; b++) {
+                const off = b * dim;
+                let mean = 0;
+                for (let i = 0; i < dim; i++) mean += x[off + i];
+                mean /= dim;
+                let vari = 0;
+                for (let i = 0; i < dim; i++) vari += (x[off + i] - mean) ** 2;
+                const std = Math.sqrt(vari / dim + 1e-5);
+                for (let i = 0; i < dim; i++) x[off + i] = Math.max(-8, Math.min(8, (x[off + i] - mean) / std));
+            }
+        }
+        
+        batchGelu(x) {
+            for (let i = 0; i < x.length; i++) {
+                const v = x[i];
+                x[i] = 0.5 * v * (1 + Math.tanh(0.7978845608 * (v + 0.044715 * v * v * v)));
+            }
+        }
+        
+        batchResAdd(x, r, scale = 0.5) {
+            for (let i = 0; i < x.length; i++) x[i] = Math.max(-8, Math.min(8, x[i] + r[i] * scale));
+        }
+        
+        forward(inputBatch, batch) {
+            let h = this.batchMatMul(inputBatch, this.Wemb, batch);
+            this.batchAddBias(h, this.bemb, this.hiddenDim, batch);
+            this.batchLayerNorm(h, this.hiddenDim, batch);
+            
+            for (const l of this.L) {
+                const hNorm = new Float32Array(h);
+                this.batchLayerNorm(hNorm, this.hiddenDim, batch);
+                let v = this.batchMatMul(hNorm, l.Wv, batch);
+                let a = this.batchMatMul(v, l.Wo, batch);
+                this.batchResAdd(h, a, 0.5);
+                
+                const h2 = new Float32Array(h);
+                this.batchLayerNorm(h2, this.hiddenDim, batch);
+                let ff = this.batchMatMul(h2, l.W1, batch);
+                this.batchAddBias(ff, l.b1, this.hiddenDim * 2, batch);
+                this.batchGelu(ff);
+                let ff2 = this.batchMatMul(ff, l.W2, batch);
+                this.batchAddBias(ff2, l.b2, this.hiddenDim, batch);
+                this.batchResAdd(h, ff2, 0.5);
+            }
+            
+            const out = this.batchMatMul(h, this.Wout, batch);
+            this.batchAddBias(out, this.bout, this.outputDim, batch);
+            return { h, out };
+        }
+        
+        // Pure NAR batched SGD update
+        updateWeights(grads, batch) {
+            const lr = this.lr / batch;
+            const update = (M, g) => {
+                for (let i = 0; i < M.w.length; i++) {
+                    M.w[i] -= lr * Math.max(-1, Math.min(1, g[i]));
+                    M.w[i] = Math.max(-3, Math.min(3, M.w[i]));
+                }
+            };
+            if (grads.Wout) update(this.Wout, grads.Wout);
+            if (grads.Wemb) update(this.Wemb, grads.Wemb);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // WORLD NAR TRANSFORMER
+    // ═══════════════════════════════════════════════════════════════
+    class WorldNAR extends PureNARTransformer {
+        constructor(seed) {
+            super(16, 48, 9, 2, seed); // 16 in (8+8 log-unary), 9 out (1 height + 8 biomes)
+            this.simplex = new SimplexNoise(seed);
+            this.cache = new Map();
+        }
+        
+        encodePos(x, z) {
+            const t = new Float32Array(16);
+            t.set(this.logUnaryEncode(Math.floor(x), 8), 0);
+            t.set(this.logUnaryEncode(Math.floor(z), 8), 8);
+            return t;
+        }
+        
+        generateChunk(cx, cz) {
+            const key = `${cx},${cz}`;
+            if (this.cache.has(key)) return this.cache.get(key);
+            
+            const batch = 256;
+            const input = new Float32Array(batch * 16);
+            const startX = cx * 16, startZ = cz * 16;
+            
+            for (let i = 0; i < batch; i++) {
+                const lx = Math.floor(i / 16), lz = i % 16;
+                input.set(this.encodePos(startX + lx, startZ + lz), i * 16);
+            }
+            
+            const { out } = this.forward(input, batch);
+            const results = [];
+            
+            for (let i = 0; i < batch; i++) {
+                const height = Math.max(3, Math.min(28, Math.round(12 + Math.tanh(out[i * 9]) * 14)));
+                let biome = 0, maxP = -Infinity;
+                for (let b = 0; b < 8; b++) {
+                    const p = out[i * 9 + 1 + b];
+                    if (p > maxP) { maxP = p; biome = b; }
+                }
+                results.push({ height, biome });
+            }
+            
+            const data = { results, startX, startZ };
+            this.cache.set(key, data);
+            return data;
+        }
+        
+        generate(x, z) {
+            const cx = Math.floor(x / 16), cz = Math.floor(z / 16);
+            const data = this.generateChunk(cx, cz);
+            const lx = ((Math.floor(x) % 16) + 16) % 16;
+            const lz = ((Math.floor(z) % 16) + 16) % 16;
+            return data.results[lx * 16 + lz];
+        }
+        
+        getTarget(x, z) {
+            const cont = this.simplex.noise2D(x * 0.006, z * 0.006);
+            const temp = this.simplex.noise2D(x * 0.012 + 500, z * 0.012 + 500);
+            const moist = this.simplex.noise2D(x * 0.015 + 1000, z * 0.015 + 1000);
+            const mount = this.simplex.noise2D(x * 0.02 + 2000, z * 0.02 + 2000);
+            
+            let height = 12 + cont * 8 + this.simplex.noise2D(x * 0.04, z * 0.04) * 4;
+            let biome;
+            if (cont < -0.4) { biome = 4; height = Math.min(height, 5); }
+            else if (mount > 0.5 && height > 14) { biome = 7; height += mount * 6; }
+            else if (temp > 0.4 && moist < -0.1) biome = 1;
+            else if (temp > 0.3 && moist > 0.3) biome = 5;
+            else if (temp > 0.1 && moist > 0.1) biome = 2;
+            else if (temp < -0.35) biome = 3;
+            else if (moist > 0.4 && cont > -0.2) { biome = 6; height = Math.max(7, Math.min(9, height)); }
+            else biome = 0;
+            
+            return { height: Math.max(3, Math.min(28, height)), biome };
+        }
+        
+        train(samples) {
+            const batch = samples.length;
+            const input = new Float32Array(batch * 16);
+            const targets = [];
+            
+            for (let i = 0; i < batch; i++) {
+                input.set(this.encodePos(samples[i][0], samples[i][1]), i * 16);
+                targets.push(this.getTarget(samples[i][0], samples[i][1]));
+            }
+            
+            const { h, out } = this.forward(input, batch);
+            let loss = 0;
+            const gWout = new Float32Array(this.hiddenDim * 9);
+            
+            for (let b = 0; b < batch; b++) {
+                const t = targets[b];
+                const predH = 12 + Math.tanh(out[b * 9]) * 14;
+                loss += (predH - t.height) ** 2;
+                
+                // Height grad
+                const tg = 1 - Math.tanh(out[b * 9]) ** 2;
+                const dH = Math.max(-1, Math.min(1, 2 * (predH - t.height) * 14 * tg * 0.01));
+                
+                // Biome softmax grad
+                let maxV = -Infinity, sumE = 0;
+                for (let i = 1; i < 9; i++) maxV = Math.max(maxV, out[b * 9 + i]);
+                const probs = [];
+                for (let i = 1; i < 9; i++) { const e = Math.exp(out[b * 9 + i] - maxV); probs.push(e); sumE += e; }
+                for (let i = 0; i < 8; i++) probs[i] /= sumE;
+                loss -= Math.log(probs[t.biome] + 1e-7);
+                
+                // Accumulate grads
+                for (let i = 0; i < this.hiddenDim; i++) {
+                    gWout[i * 9] += dH * h[b * this.hiddenDim + i];
+                    for (let j = 0; j < 8; j++) {
+                        const dB = (probs[j] - (j === t.biome ? 1 : 0)) * 0.05;
+                        gWout[i * 9 + 1 + j] += dB * h[b * this.hiddenDim + i];
+                    }
+                }
+            }
+            
+            this.updateWeights({ Wout: gWout }, batch);
+            this.epochs++;
+            return loss / batch;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // TEXTURE NAR TRANSFORMER - Generates block patterns!
+    // ═══════════════════════════════════════════════════════════════
+    class TextureNAR extends PureNARTransformer {
+        constructor(seed) {
+            // Input: blockType(5) + u(4) + v(4) + face(3) = 16 bits
+            // Output: RGB (3)
+            super(16, 32, 3, 2, seed);
+            this.texSize = 8;
+            this.cache = new Map();
+            this.simplex = new SimplexNoise(seed + 100);
+        }
+        
+        encodePixel(blockType, u, v, face) {
+            const t = new Float32Array(16);
+            t.set(this.logUnaryEncode(blockType, 5), 0);
+            t.set(this.logUnaryEncode(u, 4), 5);
+            t.set(this.logUnaryEncode(v, 4), 9);
+            t.set(this.logUnaryEncode(face, 3), 13);
+            return t;
+        }
+        
+        generateTexture(blockType, face) {
+            const key = `${blockType}-${face}`;
+            if (this.cache.has(key)) return this.cache.get(key);
+            
+            const size = this.texSize;
+            const batch = size * size;
+            const input = new Float32Array(batch * 16);
+            
+            for (let v = 0; v < size; v++) {
+                for (let u = 0; u < size; u++) {
+                    input.set(this.encodePixel(blockType, u, v, face), (v * size + u) * 16);
+                }
+            }
+            
+            const { out } = this.forward(input, batch);
+            
+            // Create canvas texture
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            const imgData = ctx.createImageData(size, size);
+            
+            for (let i = 0; i < batch; i++) {
+                const r = Math.max(0, Math.min(255, Math.round((Math.tanh(out[i * 3]) * 0.5 + 0.5) * 255)));
+                const g = Math.max(0, Math.min(255, Math.round((Math.tanh(out[i * 3 + 1]) * 0.5 + 0.5) * 255)));
+                const b = Math.max(0, Math.min(255, Math.round((Math.tanh(out[i * 3 + 2]) * 0.5 + 0.5) * 255)));
+                imgData.data[i * 4] = r;
+                imgData.data[i * 4 + 1] = g;
+                imgData.data[i * 4 + 2] = b;
+                imgData.data[i * 4 + 3] = 255;
+            }
+            
+            ctx.putImageData(imgData, 0, 0);
+            
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.magFilter = THREE.NearestFilter;
+            tex.minFilter = THREE.NearestFilter;
+            
+            this.cache.set(key, { canvas, tex });
+            return { canvas, tex };
+        }
+        
+        // Target textures - procedural patterns the NN learns
+        getTargetRGB(blockType, u, v, face) {
+            const s = this.texSize;
+            const nu = u / s, nv = v / s;
+            const noise = (x, y, sc) => this.simplex.noise2D(x * sc, y * sc) * 0.5 + 0.5;
+            
+            // Block-specific patterns
+            switch (blockType) {
+                case 1: // Grass
+                    if (face === 0) { // top - green with blade pattern
+                        const blade = Math.sin(u * 3.14 + v * 0.5) * 0.15;
+                        const n = noise(u, v, 2);
+                        return [0.2 + n * 0.1, 0.55 + blade + n * 0.15, 0.15 + n * 0.1];
+                    } else if (face === 1) { // bottom - dirt
+                        return [0.45 + noise(u,v,3)*0.1, 0.35 + noise(u,v,3)*0.08, 0.2];
+                    } else { // side - gradient dirt to grass
+                        const grad = nv;
+                        const n = noise(u, v, 2);
+                        return [0.35 + grad*0.15 + n*0.1, 0.3 + (1-grad)*0.3 + n*0.1, 0.15 + n*0.05];
+                    }
+                
+                case 2: // Dirt
+                    const dn = noise(u, v, 3);
+                    return [0.45 + dn * 0.15, 0.35 + dn * 0.1, 0.2 + dn * 0.05];
+                
+                case 3: // Stone
+                    const sn = noise(u, v, 4);
+                    const crack = Math.abs(Math.sin(u * 2 + v * 1.5)) < 0.1 ? -0.15 : 0;
+                    return [0.45 + sn * 0.15 + crack, 0.45 + sn * 0.15 + crack, 0.48 + sn * 0.15 + crack];
+                
+                case 4: // Wood
+                    if (face === 0 || face === 1) { // top/bottom - rings
+                        const cx = u - s/2, cy = v - s/2;
+                        const ring = Math.sin(Math.sqrt(cx*cx + cy*cy) * 1.5) * 0.1;
+                        return [0.55 + ring, 0.35 + ring, 0.18];
+                    } else { // side - vertical grain
+                        const grain = Math.sin(u * 0.8) * 0.08 + noise(u, v, 6) * 0.1;
+                        return [0.4 + grain, 0.25 + grain, 0.12 + grain * 0.5];
+                    }
+                
+                case 5: // Leaves
+                    const ln = noise(u, v, 5);
+                    const hole = ln < 0.3 ? 0.15 : 0;
+                    return [0.1 + hole, 0.4 + ln * 0.2 - hole, 0.12 + hole];
+                
+                case 6: // Sand
+                    const san = noise(u, v, 8);
+                    return [0.85 + san * 0.1, 0.78 + san * 0.1, 0.55 + san * 0.15];
+                
+                case 7: // Water
+                    const wn = noise(u + Date.now() * 0.0001, v, 3);
+                    return [0.1, 0.35 + wn * 0.15, 0.6 + wn * 0.2];
+                
+                case 8: // Brick
+                    const brickH = v % 4 < 1 ? 0.25 : 0;
+                    const brickV = (v % 4 < 2 ? u % 4 : (u + 2) % 4) < 1 ? 0.25 : 0;
+                    const mortar = brickH > 0 || brickV > 0;
+                    if (mortar) return [0.7, 0.68, 0.65];
+                    return [0.65 + noise(u,v,4)*0.1, 0.25 + noise(u,v,4)*0.08, 0.2];
+                
+                case 9: // Glass
+                    return [0.7, 0.85, 0.95];
+                
+                case 10: // Snow
+                    const snn = noise(u, v, 6);
+                    return [0.92 + snn * 0.08, 0.94 + snn * 0.06, 0.98];
+                
+                case 11: // Gravel
+                    const gn = noise(u, v, 7);
+                    const pebble = noise(u * 3, v * 3, 10) > 0.6 ? 0.15 : 0;
+                    return [0.45 + gn * 0.2 + pebble, 0.42 + gn * 0.2 + pebble, 0.4 + gn * 0.2 + pebble];
+                
+                case 12: case 13: // Door
+                    const panel = (u > 1 && u < 6 && v > 1 && v < 6) ? 0.08 : 0;
+                    const doorN = noise(u, v, 4) * 0.1;
+                    return [0.5 + doorN - panel, 0.32 + doorN - panel, 0.15 + doorN * 0.5];
+                
+                case 14: // Jungle wood
+                    const jgrain = Math.sin(u * 0.6) * 0.06 + noise(u, v, 5) * 0.08;
+                    return [0.3 + jgrain, 0.22 + jgrain, 0.12];
+                
+                case 15: // Jungle leaves
+                    const jln = noise(u, v, 4);
+                    return [0.05, 0.32 + jln * 0.18, 0.1];
+                
+                case 16: // Mud
+                    const mn = noise(u, v, 4);
+                    return [0.32 + mn * 0.1, 0.22 + mn * 0.08, 0.12 + mn * 0.05];
+                
+                case 17: // Moss
+                    const mosn = noise(u, v, 6);
+                    return [0.2 + mosn * 0.1, 0.4 + mosn * 0.15, 0.15];
+                
+                case 18: // Ice
+                    const icen = noise(u, v, 3);
+                    return [0.6 + icen * 0.15, 0.8 + icen * 0.1, 0.9 + icen * 0.1];
+                
+                case 19: // Mountain stone
+                    const msn = noise(u, v, 5);
+                    return [0.35 + msn * 0.15, 0.35 + msn * 0.15, 0.38 + msn * 0.15];
+                
+                default:
+                    return [0.5, 0.5, 0.5];
+            }
+        }
+        
+        train(samples) {
+            const batch = samples.length;
+            const input = new Float32Array(batch * 16);
+            const targets = [];
+            
+            for (let i = 0; i < batch; i++) {
+                const [bt, u, v, face] = samples[i];
+                input.set(this.encodePixel(bt, u, v, face), i * 16);
+                targets.push(this.getTargetRGB(bt, u, v, face));
+            }
+            
+            const { h, out } = this.forward(input, batch);
+            let loss = 0;
+            const gWout = new Float32Array(this.hiddenDim * 3);
+            
+            for (let b = 0; b < batch; b++) {
+                for (let c = 0; c < 3; c++) {
+                    const pred = Math.tanh(out[b * 3 + c]) * 0.5 + 0.5;
+                    const tgt = targets[b][c];
+                    const err = pred - tgt;
+                    loss += err * err;
+                    
+                    const tg = 1 - Math.tanh(out[b * 3 + c]) ** 2;
+                    const grad = Math.max(-1, Math.min(1, err * tg * 0.5));
+                    
+                    for (let i = 0; i < this.hiddenDim; i++) {
+                        gWout[i * 3 + c] += grad * h[b * this.hiddenDim + i];
+                    }
+                }
+            }
+            
+            this.updateWeights({ Wout: gWout }, batch);
+            this.epochs++;
+            return loss / batch;
+        }
+        
+        clearCache() {
+            this.cache.forEach(({ tex }) => tex.dispose());
+            this.cache.clear();
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // MUSIC NAR TRANSFORMER - Only trains when enabled
+    // ═══════════════════════════════════════════════════════════════
+    class MusicNAR extends PureNARTransformer {
+        constructor(seed) {
+            super(12, 24, 14, 1, seed); // 12 in, 14 out (10 notes + 4 durations)
+            this.scale = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21];
+            this.durations = [0.15, 0.2, 0.3, 0.5];
+            this.baseFreq = 130.81;
+            this.chordProg = [[0, 3, 4, 0], [0, 5, 3, 4], [0, 4, 5, 3]];
+            this.progIdx = 0;
+            this.chordIdx = 0;
+            this.beat = 0;
+            this.lastLoss = 0;
+            this.vizBars = [];
+            
+            // Shadow model for live swap
+            this.shadowWeights = null;
+            this.trainCounter = 0;
+        }
+        
+        encodeState(time, biome) {
+            const t = new Float32Array(12);
+            t.set(this.logUnaryEncode(time % 64, 6), 0);
+            t.set(this.logUnaryEncode(biome, 6), 6);
+            return t;
+        }
+        
+        generate(biome) {
+            const input = new Float32Array(12);
+            input.set(this.encodeState(this.beat + this.chordIdx * 4, biome), 0);
+            
+            const { out } = this.forward(input, 1);
+            
+            // Get note from softmax
+            let maxN = 0, maxP = out[0];
+            for (let i = 1; i < 10; i++) if (out[i] > maxP) { maxP = out[i]; maxN = i; }
+            
+            // Get duration
+            let maxD = 0, maxDP = out[10];
+            for (let i = 1; i < 4; i++) if (out[10 + i] > maxDP) { maxDP = out[10 + i]; maxD = i; }
+            
+            const noteIdx = Math.min(9, Math.max(0, maxN));
+            const freq = this.baseFreq * Math.pow(2, this.scale[noteIdx] / 12);
+            const duration = this.durations[maxD];
+            const velocity = 0.5 + (this.beat === 0 ? 0.2 : 0) + this.rng() * 0.15;
+            
+            const biomeVelMod = [1, 0.8, 1.1, 0.7, 0.5, 1.2, 0.75, 0.85][biome] || 1;
+            
+            return { freq, duration, velocity: velocity * biomeVelMod, noteIdx };
+        }
+        
+        advance() {
+            this.beat++;
+            if (this.beat >= 4) {
+                this.beat = 0;
+                this.chordIdx++;
+                if (this.chordIdx >= this.chordProg[this.progIdx].length) {
+                    this.chordIdx = 0;
+                    if (this.rng() < 0.15) this.progIdx = Math.floor(this.rng() * this.chordProg.length);
+                }
+            }
+            const chordNames = ['I', 'ii', 'iii', 'IV', 'V', 'vi'];
+            document.getElementById('current-chord').textContent = chordNames[this.chordProg[this.progIdx][this.chordIdx]] || 'I';
+        }
+        
+        // Training targets from music theory
+        getTarget(time, biome) {
+            const beat = time % 4;
+            const chord = this.chordProg[0][Math.floor(time / 4) % 4];
+            const isStrong = beat === 0 || beat === 2;
+            
+            // Prefer chord tones on strong beats
+            let noteIdx;
+            if (isStrong && this.rng() < 0.7) {
+                const chordTones = [chord, chord + 2, chord + 4];
+                noteIdx = chordTones[Math.floor(this.rng() * 3)] % 10;
+            } else {
+                noteIdx = Math.floor(this.rng() * 10);
+            }
+            
+            // Duration based on beat strength
+            const durIdx = isStrong ? (this.rng() < 0.6 ? 2 : 3) : (this.rng() < 0.7 ? 0 : 1);
+            
+            return { noteIdx, durIdx };
+        }
+        
+        train(biome) {
+            const batch = 16;
+            const input = new Float32Array(batch * 12);
+            const targets = [];
+            
+            for (let i = 0; i < batch; i++) {
+                const time = Math.floor(this.rng() * 64);
+                input.set(this.encodeState(time, biome), i * 12);
+                targets.push(this.getTarget(time, biome));
+            }
+            
+            const { h, out } = this.forward(input, batch);
+            let loss = 0;
+            const gWout = new Float32Array(this.hiddenDim * 14);
+            
+            for (let b = 0; b < batch; b++) {
+                const t = targets[b];
+                
+                // Note softmax loss
+                let maxV = -Infinity, sumE = 0;
+                for (let i = 0; i < 10; i++) maxV = Math.max(maxV, out[b * 14 + i]);
+                const noteProbs = [];
+                for (let i = 0; i < 10; i++) { const e = Math.exp(out[b * 14 + i] - maxV); noteProbs.push(e); sumE += e; }
+                for (let i = 0; i < 10; i++) noteProbs[i] /= sumE;
+                loss -= Math.log(noteProbs[t.noteIdx] + 1e-7);
+                
+                // Duration softmax loss
+                maxV = -Infinity; sumE = 0;
+                for (let i = 0; i < 4; i++) maxV = Math.max(maxV, out[b * 14 + 10 + i]);
+                const durProbs = [];
+                for (let i = 0; i < 4; i++) { const e = Math.exp(out[b * 14 + 10 + i] - maxV); durProbs.push(e); sumE += e; }
+                for (let i = 0; i < 4; i++) durProbs[i] /= sumE;
+                loss -= Math.log(durProbs[t.durIdx] + 1e-7);
+                
+                // Gradients
+                for (let i = 0; i < this.hiddenDim; i++) {
+                    for (let j = 0; j < 10; j++) {
+                        gWout[i * 14 + j] += (noteProbs[j] - (j === t.noteIdx ? 1 : 0)) * 0.1 * h[b * this.hiddenDim + i];
+                    }
+                    for (let j = 0; j < 4; j++) {
+                        gWout[i * 14 + 10 + j] += (durProbs[j] - (j === t.durIdx ? 1 : 0)) * 0.1 * h[b * this.hiddenDim + i];
+                    }
+                }
+            }
+            
+            this.updateWeights({ Wout: gWout }, batch);
+            this.epochs++;
+            this.lastLoss = loss / batch;
+            
+            // Periodically "push" to live by clearing any cached state
+            this.trainCounter++;
+            
+            return this.lastLoss;
+        }
+        
+        playNote(freq, duration, velocity) {
+            if (!audioCtx || !musicEnabled) return;
+            const now = audioCtx.currentTime;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0, now);
+            gain.gain.linearRampToValueAtTime(velocity * 0.3, now + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+            osc.connect(gain);
+            gain.connect(masterGain);
+            osc.start(now);
+            osc.stop(now + duration + 0.05);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // GAME SETUP
+    // ═══════════════════════════════════════════════════════════════
+    const CHUNK_SIZE = 16, RENDER_DISTANCE = 5, SEA_LEVEL = 7;
+    
+    const B = {
+        AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, WOOD: 4, LEAVES: 5, SAND: 6, WATER: 7,
+        BRICK: 8, GLASS: 9, SNOW: 10, GRAVEL: 11, DOOR_BOTTOM: 12, DOOR_TOP: 13,
+        JUNGLE_WOOD: 14, JUNGLE_LEAVES: 15, MUD: 16, MOSS: 17, ICE: 18, MOUNTAIN_STONE: 19
+    };
+    
+    const BIOMES = {
+        0: { name: 'Plains', surface: B.GRASS, treeChance: 0.008, treeType: 'oak' },
+        1: { name: 'Desert', surface: B.SAND, treeChance: 0.002, treeType: 'none' },
+        2: { name: 'Forest', surface: B.GRASS, treeChance: 0.045, treeType: 'oak' },
+        3: { name: 'Tundra', surface: B.SNOW, treeChance: 0.003, treeType: 'spruce' },
+        4: { name: 'Ocean', surface: B.GRAVEL, treeChance: 0, treeType: 'none' },
+        5: { name: 'Jungle', surface: B.GRASS, treeChance: 0.06, treeType: 'jungle' },
+        6: { name: 'Swamp', surface: B.MUD, treeChance: 0.02, treeType: 'swamp' },
+        7: { name: 'Mountains', surface: B.MOUNTAIN_STONE, treeChance: 0.002, treeType: 'spruce' }
+    };
+
+    let world = new Map(), doorStates = new Map(), chunks = new Map(), chunkMeshes = new Map();
+    let selectedBlock = B.GRASS, worldNN, textureNN, musicNN, inventoryOpen = false;
+    const inventory = {};
+    const ALL_BLOCKS = [B.GRASS, B.DIRT, B.STONE, B.WOOD, B.LEAVES, B.SAND, B.SNOW, B.BRICK, B.GLASS, B.GRAVEL, B.DOOR_BOTTOM, B.JUNGLE_WOOD, B.MUD, B.MOSS, B.ICE, B.MOUNTAIN_STONE, B.WATER];
+    ALL_BLOCKS.forEach(b => inventory[b] = 64);
+
+    const canvas = document.getElementById('game');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(1);
+    renderer.setClearColor(0x87CEEB);
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(0x87CEEB, 45, 105);
+
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 150);
+    camera.position.set(0, 20, 0);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+    const sun = new THREE.DirectionalLight(0xffffff, 0.65);
+    sun.position.set(50, 100, 50);
+    scene.add(sun);
+
+    const player = { velocity: new THREE.Vector3(), onGround: false, height: 1.7, speed: 0.14, sprintSpeed: 0.26, jumpForce: 0.26 };
+    const keys = {};
+    let isLocked = false, pitch = 0, yaw = 0;
+
+    const getBlockKey = (x, y, z) => `${x},${y},${z}`;
+    const getBlock = (x, y, z) => world.get(getBlockKey(x, y, z)) || B.AIR;
+    const setBlock = (x, y, z, type) => { if (type === B.AIR) world.delete(getBlockKey(x, y, z)); else world.set(getBlockKey(x, y, z), type); };
+    const getChunkKey = (cx, cz) => `${cx},${cz}`;
+    const seededRandom = (x, z, seed = 54321) => { const n = Math.sin(x * 12.9898 + z * 78.233 + seed) * 43758.5453; return n - Math.floor(n); };
+
+    // Material cache using neural textures
+    const materialCache = new Map();
+    
+    function getMaterial(blockType, faceType) {
+        const isTransparent = blockType === B.WATER || blockType === B.GLASS || blockType === B.ICE;
+        const key = `${blockType}-${faceType}-${isTransparent}`;
+        
+        if (materialCache.has(key)) return materialCache.get(key);
+        
+        const { tex } = textureNN.generateTexture(blockType, faceType);
+        
+        const mat = new THREE.MeshLambertMaterial({
+            map: tex,
+            transparent: isTransparent,
+            opacity: blockType === B.WATER ? 0.6 : blockType === B.GLASS ? 0.4 : blockType === B.ICE ? 0.8 : 1,
+            side: isTransparent ? THREE.DoubleSide : THREE.FrontSide
+        });
+        
+        materialCache.set(key, mat);
+        return mat;
+    }
+
+    function generateTree(x, y, z, type) {
+        if (type === 'none') return;
+        const woodType = type === 'jungle' ? B.JUNGLE_WOOD : B.WOOD;
+        const leafType = type === 'jungle' ? B.JUNGLE_LEAVES : type === 'swamp' ? B.MOSS : B.LEAVES;
+        
+        if (type === 'oak') {
+            const th = 4 + (seededRandom(x, z, 999) * 3 | 0);
+            for (let ty = 1; ty <= th; ty++) setBlock(x, y + ty, z, woodType);
+            for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) for (let dy = th - 1; dy <= th + 2; dy++) {
+                if (Math.abs(dx) + Math.abs(dz) <= 3 && (dx !== 0 || dz !== 0 || dy > th))
+                    if (getBlock(x + dx, y + dy, z + dz) === B.AIR) setBlock(x + dx, y + dy, z + dz, leafType);
+            }
+        } else if (type === 'jungle') {
+            const th = 8 + (seededRandom(x, z, 999) * 5 | 0);
+            for (let ty = 1; ty <= th; ty++) setBlock(x, y + ty, z, woodType);
+            for (let dx = -3; dx <= 3; dx++) for (let dz = -3; dz <= 3; dz++) for (let dy = th - 2; dy <= th + 3; dy++) {
+                if (Math.abs(dx) + Math.abs(dz) <= 4 && (dx !== 0 || dz !== 0 || dy > th))
+                    if (getBlock(x + dx, y + dy, z + dz) === B.AIR) setBlock(x + dx, y + dy, z + dz, leafType);
+            }
+        } else if (type === 'spruce') {
+            const th = 6 + (seededRandom(x, z, 999) * 3 | 0);
+            for (let ty = 1; ty <= th; ty++) setBlock(x, y + ty, z, woodType);
+            for (let layer = 0; layer < 4; layer++) {
+                const ly = y + th - layer * 2, radius = layer + 1;
+                for (let dx = -radius; dx <= radius; dx++) for (let dz = -radius; dz <= radius; dz++) {
+                    if (Math.abs(dx) + Math.abs(dz) <= radius + 1 && (dx !== 0 || dz !== 0))
+                        if (getBlock(x + dx, ly, z + dz) === B.AIR) setBlock(x + dx, ly, z + dz, leafType);
+                }
+            }
+            setBlock(x, y + th + 1, z, leafType);
+        } else if (type === 'swamp') {
+            const th = 3 + (seededRandom(x, z, 999) * 2 | 0);
+            for (let ty = 1; ty <= th; ty++) setBlock(x, y + ty, z, woodType);
+            for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
+                if (Math.abs(dx) + Math.abs(dz) <= 2 && (dx !== 0 || dz !== 0))
+                    if (getBlock(x + dx, y + th, z + dz) === B.AIR) setBlock(x + dx, y + th, z + dz, leafType);
+            }
+        }
+    }
+
+    function generateChunk(cx, cz) {
+        const key = getChunkKey(cx, cz);
+        if (chunks.has(key)) return;
+        chunks.set(key, true);
+        
+        const chunkData = worldNN.generateChunk(cx, cz);
+        
+        for (let i = 0; i < chunkData.results.length; i++) {
+            const lx = Math.floor(i / 16), lz = i % 16;
+            const x = chunkData.startX + lx, z = chunkData.startZ + lz;
+            const { height, biome } = chunkData.results[i];
+            const bc = BIOMES[biome];
+            const isOcean = biome === 4;
+            const groundH = isOcean ? Math.min(height, SEA_LEVEL - 2) : height;
+            
+            for (let y = 0; y <= groundH; y++) {
+                let block;
+                if (y === groundH) block = bc.surface;
+                else if (y > groundH - 3) block = isOcean ? B.SAND : (biome === 6 ? B.MUD : B.DIRT);
+                else block = biome === 7 ? B.MOUNTAIN_STONE : B.STONE;
+                setBlock(x, y, z, block);
+            }
+            
+            if (isOcean || biome === 6) {
+                for (let y = groundH + 1; y <= SEA_LEVEL; y++) {
+                    setBlock(x, y, z, biome === 3 ? B.ICE : B.WATER);
+                }
+            }
+            
+            if (!isOcean && seededRandom(x, z) < bc.treeChance && height > SEA_LEVEL + 1) {
+                generateTree(x, height, z, bc.treeType);
+            }
+        }
+    }
+
+    function buildChunkMesh(cx, cz) {
+        const key = getChunkKey(cx, cz);
+        if (chunkMeshes.has(key)) chunkMeshes.get(key).forEach(m => scene.remove(m));
+        
+        // Group by material
+        const geoData = new Map(); // key: "blockType-faceType" -> {pos, norm, uv}
+        const startX = cx * CHUNK_SIZE, startZ = cz * CHUNK_SIZE;
+        
+        for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+            for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+                const x = startX + lx, z = startZ + lz;
+                for (let y = 0; y < 45; y++) {
+                    const bt = getBlock(x, y, z);
+                    if (bt === B.AIR || bt === B.DOOR_TOP) continue;
+                    
+                    const isDoor = bt === B.DOOR_BOTTOM;
+                    const doorOpen = isDoor && doorStates.get(getBlockKey(x, y, z));
+                    const above = getBlock(x, y + 1, z);
+                    
+                    const checkFace = (nx, ny, nz) => {
+                        const nb = getBlock(x + nx, y + ny, z + nz);
+                        return nb === B.AIR || (bt !== B.WATER && nb === B.WATER) || nb === B.DOOR_TOP || nb === B.GLASS;
+                    };
+                    
+                    const faces = [];
+                    if (checkFace(0, 1, 0)) faces.push({ dir: 'top', type: 0 });
+                    if (checkFace(0, -1, 0)) faces.push({ dir: 'bottom', type: 1 });
+                    if (checkFace(1, 0, 0)) faces.push({ dir: 'right', type: 2 });
+                    if (checkFace(-1, 0, 0)) faces.push({ dir: 'left', type: 2 });
+                    if (checkFace(0, 0, 1)) faces.push({ dir: 'front', type: 2 });
+                    if (checkFace(0, 0, -1)) faces.push({ dir: 'back', type: 2 });
+                    
+                    faces.forEach(({ dir, type }) => {
+                        const matKey = `${bt}-${type}`;
+                        if (!geoData.has(matKey)) geoData.set(matKey, { pos: [], norm: [], uv: [], bt, faceType: type });
+                        const g = geoData.get(matKey);
+                        if (isDoor) addDoorFace(g, x, y, z, dir, doorOpen);
+                        else addFace(g, x, y, z, dir);
+                    });
+                    
+                    // Door top part
+                    if (isDoor) {
+                        const matKey = `${B.DOOR_TOP}-2`;
+                        if (!geoData.has(matKey)) geoData.set(matKey, { pos: [], norm: [], uv: [], bt: B.DOOR_TOP, faceType: 2 });
+                        const g = geoData.get(matKey);
+                        ['front', 'back', 'left', 'right', 'top'].forEach(dir => addDoorFace(g, x, y + 1, z, dir, doorOpen));
+                    }
+                }
+            }
+        }
+        
+        const meshes = [];
+        geoData.forEach((g) => {
+            if (g.pos.length === 0) return;
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.Float32BufferAttribute(g.pos, 3));
+            geo.setAttribute('normal', new THREE.Float32BufferAttribute(g.norm, 3));
+            geo.setAttribute('uv', new THREE.Float32BufferAttribute(g.uv, 2));
+            
+            const mat = getMaterial(g.bt, g.faceType);
+            const mesh = new THREE.Mesh(geo, mat);
+            scene.add(mesh);
+            meshes.push(mesh);
+        });
+        
+        chunkMeshes.set(key, meshes);
+    }
+
+    function addFace(g, x, y, z, face) {
+        const s = 0.5;
+        const fd = {
+            top:    { v: [[x-s,y+s,z+s], [x+s,y+s,z+s], [x+s,y+s,z-s], [x-s,y+s,z-s]], n: [0,1,0] },
+            bottom: { v: [[x-s,y-s,z-s], [x+s,y-s,z-s], [x+s,y-s,z+s], [x-s,y-s,z+s]], n: [0,-1,0] },
+            front:  { v: [[x-s,y-s,z+s], [x+s,y-s,z+s], [x+s,y+s,z+s], [x-s,y+s,z+s]], n: [0,0,1] },
+            back:   { v: [[x+s,y-s,z-s], [x-s,y-s,z-s], [x-s,y+s,z-s], [x+s,y+s,z-s]], n: [0,0,-1] },
+            right:  { v: [[x+s,y-s,z+s], [x+s,y-s,z-s], [x+s,y+s,z-s], [x+s,y+s,z+s]], n: [1,0,0] },
+            left:   { v: [[x-s,y-s,z-s], [x-s,y-s,z+s], [x-s,y+s,z+s], [x-s,y+s,z-s]], n: [-1,0,0] }
+        };
+        const uvs = [[0,0], [1,0], [1,1], [0,1]];
+        const f = fd[face];
+        [0,1,2,0,2,3].forEach(i => { g.pos.push(...f.v[i]); g.norm.push(...f.n); g.uv.push(...uvs[i]); });
+    }
+    
+    function addDoorFace(g, x, y, z, face, isOpen) {
+        const s = 0.5, t = 0.1;
+        const ox = isOpen ? 0.4 : 0, oz = isOpen ? -0.4 : 0;
+        const fd = {
+            top:    { v: [[x-s+ox,y+s,z+t+oz], [x+s+ox,y+s,z+t+oz], [x+s+ox,y+s,z-t+oz], [x-s+ox,y+s,z-t+oz]], n: [0,1,0] },
+            bottom: { v: [[x-s+ox,y-s,z-t+oz], [x+s+ox,y-s,z-t+oz], [x+s+ox,y-s,z+t+oz], [x-s+ox,y-s,z+t+oz]], n: [0,-1,0] },
+            front:  { v: [[x-s+ox,y-s,z+t+oz], [x+s+ox,y-s,z+t+oz], [x+s+ox,y+s,z+t+oz], [x-s+ox,y+s,z+t+oz]], n: [0,0,1] },
+            back:   { v: [[x+s+ox,y-s,z-t+oz], [x-s+ox,y-s,z-t+oz], [x-s+ox,y+s,z-t+oz], [x+s+ox,y+s,z-t+oz]], n: [0,0,-1] },
+            right:  { v: [[x+s+ox,y-s,z+t+oz], [x+s+ox,y-s,z-t+oz], [x+s+ox,y+s,z-t+oz], [x+s+ox,y+s,z+t+oz]], n: [1,0,0] },
+            left:   { v: [[x-s+ox,y-s,z-t+oz], [x-s+ox,y-s,z+t+oz], [x-s+ox,y+s,z+t+oz], [x-s+ox,y+s,z-t+oz]], n: [-1,0,0] }
+        };
+        const uvs = [[0,0], [1,0], [1,1], [0,1]];
+        const f = fd[face];
+        [0,1,2,0,2,3].forEach(i => { g.pos.push(...f.v[i]); g.norm.push(...f.n); g.uv.push(...uvs[i]); });
+    }
+
+    function updateChunks() {
+        const pcx = Math.floor(camera.position.x / CHUNK_SIZE);
+        const pcz = Math.floor(camera.position.z / CHUNK_SIZE);
+        
+        let generated = 0;
+        for (let dx = -RENDER_DISTANCE; dx <= RENDER_DISTANCE; dx++) {
+            for (let dz = -RENDER_DISTANCE; dz <= RENDER_DISTANCE; dz++) {
+                if (dx*dx + dz*dz > RENDER_DISTANCE * RENDER_DISTANCE) continue;
+                const cx = pcx + dx, cz = pcz + dz;
+                const key = getChunkKey(cx, cz);
+                if (!chunks.has(key)) {
+                    generateChunk(cx, cz);
+                    buildChunkMesh(cx, cz);
+                    generated++;
+                    if (generated >= 3) return;
+                } else if (!chunkMeshes.has(key)) {
+                    buildChunkMesh(cx, cz);
+                    generated++;
+                    if (generated >= 3) return;
+                }
+            }
+        }
+        
+        chunkMeshes.forEach((meshes, key) => {
+            const [cx, cz] = key.split(',').map(Number);
+            if ((cx - pcx) ** 2 + (cz - pcz) ** 2 > (RENDER_DISTANCE + 2) ** 2) {
+                meshes.forEach(m => scene.remove(m));
+                chunkMeshes.delete(key);
+            }
+        });
+    }
+
+    function rebuildNearbyChunks(wx, wz) {
+        const cx = Math.floor(wx / CHUNK_SIZE), cz = Math.floor(wz / CHUNK_SIZE);
+        for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+            if (chunks.has(getChunkKey(cx + dx, cz + dz))) buildChunkMesh(cx + dx, cz + dz);
+        }
+    }
+
+    function getTargetBlock() {
+        const dir = new THREE.Vector3();
+        camera.getWorldDirection(dir);
+        
+        let x = camera.position.x, y = camera.position.y, z = camera.position.z;
+        let vx = Math.floor(x), vy = Math.floor(y), vz = Math.floor(z);
+        
+        const stepX = dir.x >= 0 ? 1 : -1, stepY = dir.y >= 0 ? 1 : -1, stepZ = dir.z >= 0 ? 1 : -1;
+        const tDeltaX = dir.x !== 0 ? Math.abs(1 / dir.x) : 1e10;
+        const tDeltaY = dir.y !== 0 ? Math.abs(1 / dir.y) : 1e10;
+        const tDeltaZ = dir.z !== 0 ? Math.abs(1 / dir.z) : 1e10;
+        
+        let tMaxX = dir.x !== 0 ? ((stepX > 0 ? vx + 1 - x : x - vx) / Math.abs(dir.x)) : 1e10;
+        let tMaxY = dir.y !== 0 ? ((stepY > 0 ? vy + 1 - y : y - vy) / Math.abs(dir.y)) : 1e10;
+        let tMaxZ = dir.z !== 0 ? ((stepZ > 0 ? vz + 1 - z : z - vz) / Math.abs(dir.z)) : 1e10;
+        
+        let lastVx = vx, lastVy = vy, lastVz = vz;
+        
+        for (let i = 0; i < 50; i++) {
+            const b = getBlock(vx, vy, vz);
+            if (b !== B.AIR && b !== B.WATER && b !== B.DOOR_TOP) {
+                const dist = Math.sqrt((vx - camera.position.x) ** 2 + (vy - camera.position.y) ** 2 + (vz - camera.position.z) ** 2);
+                if (dist > 5) return { hit: null, place: null };
+                return { hit: { x: vx, y: vy, z: vz }, place: { x: lastVx, y: lastVy, z: lastVz } };
+            }
+            lastVx = vx; lastVy = vy; lastVz = vz;
+            if (tMaxX < tMaxY) {
+                if (tMaxX < tMaxZ) { vx += stepX; tMaxX += tDeltaX; }
+                else { vz += stepZ; tMaxZ += tDeltaZ; }
+            } else {
+                if (tMaxY < tMaxZ) { vy += stepY; tMaxY += tDeltaY; }
+                else { vz += stepZ; tMaxZ += tDeltaZ; }
+            }
+            if (Math.sqrt((vx - camera.position.x) ** 2 + (vy - camera.position.y) ** 2 + (vz - camera.position.z) ** 2) > 5.5) break;
+        }
+        return { hit: null, place: null };
+    }
+
+    const highlight = new THREE.Mesh(new THREE.BoxGeometry(1.02, 1.02, 1.02), new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.5 }));
+    highlight.visible = false;
+    scene.add(highlight);
+
+    function checkCollision(x, y, z) {
+        for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) for (let dy = 0; dy <= 2; dy++) {
+            const bx = Math.floor(x + dx * 0.3), by = Math.floor(y + dy), bz = Math.floor(z + dz * 0.3);
+            const b = getBlock(bx, by, bz);
+            if (b !== B.AIR && b !== B.WATER && b !== B.DOOR_TOP) {
+                if (b === B.DOOR_BOTTOM && doorStates.get(getBlockKey(bx, by, bz))) continue;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function updatePlayer() {
+        if (inventoryOpen) return 0;
+        camera.quaternion.setFromEuler(new THREE.Euler(pitch, yaw, 0, 'YXZ'));
+        const forward = new THREE.Vector3(); camera.getWorldDirection(forward); forward.y = 0; forward.normalize();
+        const right = new THREE.Vector3(); right.crossVectors(forward, new THREE.Vector3(0, 1, 0));
+        const speed = keys['ShiftLeft'] ? player.sprintSpeed : player.speed;
+        const move = new THREE.Vector3();
+        if (keys['KeyW']) move.add(forward); if (keys['KeyS']) move.sub(forward);
+        if (keys['KeyD']) move.add(right); if (keys['KeyA']) move.sub(right);
+        if (move.length() > 0) move.normalize().multiplyScalar(speed);
+        
+        const newX = camera.position.x + move.x, newZ = camera.position.z + move.z;
+        if (!checkCollision(newX, camera.position.y - player.height + 0.1, camera.position.z)) camera.position.x = newX;
+        if (!checkCollision(camera.position.x, camera.position.y - player.height + 0.1, newZ)) camera.position.z = newZ;
+        
+        const inWater = getBlock(Math.floor(camera.position.x), Math.floor(camera.position.y), Math.floor(camera.position.z)) === B.WATER;
+        player.velocity.y -= inWater ? 0.004 : 0.015;
+        if (keys['Space']) {
+            if (inWater) player.velocity.y = 0.07;
+            else if (player.onGround) { player.velocity.y = player.jumpForce; player.onGround = false; }
+        }
+        
+        const newY = camera.position.y + player.velocity.y, feetY = newY - player.height;
+        if (player.velocity.y < 0) {
+            if (checkCollision(camera.position.x, feetY, camera.position.z)) {
+                camera.position.y = Math.floor(feetY) + 1 + player.height;
+                player.velocity.y = 0; player.onGround = true;
+            } else { camera.position.y = newY; player.onGround = false; }
+        } else {
+            if (checkCollision(camera.position.x, newY + 0.1, camera.position.z)) player.velocity.y = 0;
+            else camera.position.y = newY;
+        }
+        
+        if (camera.position.y < -20) { camera.position.y = 30; player.velocity.y = 0; }
+        
+        const { biome } = worldNN.generate(camera.position.x, camera.position.z);
+        document.getElementById('biome').textContent = BIOMES[biome].name;
+        document.getElementById('pos').textContent = `${camera.position.x.toFixed(0)}, ${camera.position.y.toFixed(1)}, ${camera.position.z.toFixed(0)}`;
+        
+        return biome;
+    }
+
+    // Crafting: 6 wood -> 1 door
+    function craftDoor() {
+        if ((inventory[B.WOOD] || 0) >= 6) {
+            inventory[B.WOOD] -= 6;
+            inventory[B.DOOR_BOTTOM] = (inventory[B.DOOR_BOTTOM] || 0) + 1;
+            updateHotbar();
+            updateInventoryUI();
+            return true;
+        }
+        return false;
+    }
+
+    function setupMusicViz() {
+        const viz = document.getElementById('music-viz');
+        for (let i = 0; i < 10; i++) {
+            const bar = document.createElement('div');
+            bar.className = 'viz-bar';
+            bar.style.height = '3px';
+            viz.appendChild(bar);
+            musicNN.vizBars.push(bar);
+        }
+    }
+
+    function renderBlockIcon(blockType) {
+        const { canvas } = textureNN.generateTexture(blockType, 0);
+        return canvas;
+    }
+
+    function setupInventory() {
+        const invBlocks = document.getElementById('inv-blocks');
+        ALL_BLOCKS.forEach(bt => {
+            const slot = document.createElement('div'); slot.className = 'inv-slot';
+            slot.appendChild(renderBlockIcon(bt).cloneNode(true));
+            const count = document.createElement('span'); count.className = 'item-count'; count.textContent = inventory[bt];
+            slot.appendChild(count);
+            slot.dataset.block = bt;
+            slot.onclick = () => { selectedBlock = bt; updateHotbar(); };
+            invBlocks.appendChild(slot);
+        });
+        
+        // Craft grid hint
+        const craftGrid = document.getElementById('craft-grid');
+        const craftHint = document.createElement('div');
+        craftHint.className = 'inv-slot craft-slot';
+        craftHint.innerHTML = '<span style="font-size:9px;color:#555">6🪵→🚪</span>';
+        craftHint.onclick = () => { if(craftDoor()) alert('Crafted 1 Door!'); };
+        craftGrid.appendChild(craftHint);
+    }
+
+    function updateInventoryUI() {
+        document.querySelectorAll('#inv-blocks .inv-slot').forEach(slot => {
+            const bt = parseInt(slot.dataset.block);
+            slot.querySelector('.item-count').textContent = inventory[bt] || 0;
+        });
+    }
+
+    function setupHotbar() {
+        const hotbar = document.getElementById('hotbar');
+        const hbBlocks = [B.GRASS, B.DIRT, B.STONE, B.WOOD, B.BRICK, B.GLASS, B.DOOR_BOTTOM, B.SAND, B.SNOW];
+        hbBlocks.forEach((bt, i) => {
+            const slot = document.createElement('div');
+            slot.className = 'hotbar-slot' + (bt === selectedBlock ? ' selected' : '');
+            slot.appendChild(renderBlockIcon(bt).cloneNode(true));
+            slot.innerHTML += `<span class="key-hint">${i + 1}</span><span class="count">${inventory[bt]}</span>`;
+            slot.onclick = () => { selectedBlock = bt; updateHotbar(); };
+            hotbar.appendChild(slot);
+        });
+    }
+
+    function updateHotbar() {
+        const hbBlocks = [B.GRASS, B.DIRT, B.STONE, B.WOOD, B.BRICK, B.GLASS, B.DOOR_BOTTOM, B.SAND, B.SNOW];
+        const slots = document.querySelectorAll('#hotbar .hotbar-slot');
+        slots.forEach((slot, i) => {
+            slot.classList.toggle('selected', hbBlocks[i] === selectedBlock);
+            slot.querySelector('.count').textContent = inventory[hbBlocks[i]];
+        });
+    }
+
+    function toggleInventory() {
+        inventoryOpen = !inventoryOpen;
+        document.getElementById('inventory-overlay').classList.toggle('open', inventoryOpen);
+        if (inventoryOpen) { document.exitPointerLock(); updateInventoryUI(); }
+        else canvas.requestPointerLock();
+    }
+
+    document.addEventListener('keydown', e => {
+        keys[e.code] = true;
+        if (e.code === 'KeyE') { toggleInventory(); return; }
+        if (e.code === 'KeyC' && !inventoryOpen) { if(craftDoor()) console.log('Crafted door!'); return; }
+        if (e.code === 'Escape' && inventoryOpen) { toggleInventory(); return; }
+        if (e.code === 'KeyM') {
+            initAudio();
+            musicEnabled = !musicEnabled;
+            document.getElementById('music-status').textContent = musicEnabled ? 'Playing' : 'Off [M]';
+        }
+        const n = parseInt(e.key);
+        if (n >= 1 && n <= 9) {
+            const hbBlocks = [B.GRASS, B.DIRT, B.STONE, B.WOOD, B.BRICK, B.GLASS, B.DOOR_BOTTOM, B.SAND, B.SNOW];
+            selectedBlock = hbBlocks[n - 1]; updateHotbar();
+        }
+    });
+    document.addEventListener('keyup', e => keys[e.code] = false);
+    document.addEventListener('mousemove', e => {
+        if (!isLocked || inventoryOpen) return;
+        yaw -= e.movementX * 0.002; pitch -= e.movementY * 0.002;
+        pitch = Math.max(-1.5, Math.min(1.5, pitch));
+    });
+
+    canvas.addEventListener('mousedown', e => {
+        if (!isLocked || inventoryOpen) return;
+        const target = getTargetBlock();
+        
+        if (e.button === 0 && target.hit) {
+            const bt = getBlock(target.hit.x, target.hit.y, target.hit.z);
+            if (bt !== B.AIR) inventory[bt] = (inventory[bt] || 0) + 1;
+            setBlock(target.hit.x, target.hit.y, target.hit.z, B.AIR);
+            if (bt === B.DOOR_BOTTOM) {
+                setBlock(target.hit.x, target.hit.y + 1, target.hit.z, B.AIR);
+                doorStates.delete(getBlockKey(target.hit.x, target.hit.y, target.hit.z));
+            }
+            rebuildNearbyChunks(target.hit.x, target.hit.z);
+            updateHotbar();
+        } else if (e.button === 2 && target.hit) {
+            const hitBlock = getBlock(target.hit.x, target.hit.y, target.hit.z);
+            if (hitBlock === B.DOOR_BOTTOM) {
+                const doorKey = getBlockKey(target.hit.x, target.hit.y, target.hit.z);
+                doorStates.set(doorKey, !doorStates.get(doorKey));
+                rebuildNearbyChunks(target.hit.x, target.hit.z);
+                return;
+            }
+            if (target.place && (inventory[selectedBlock] || 0) > 0) {
+                const px = Math.floor(camera.position.x), py = Math.floor(camera.position.y), pz = Math.floor(camera.position.z);
+                const { x, y, z } = target.place;
+                if (!(x === px && z === pz && (y === py || y === py - 1 || y === py - 2))) {
+                    setBlock(x, y, z, selectedBlock);
+                    inventory[selectedBlock]--;
+                    if (selectedBlock === B.DOOR_BOTTOM) {
+                        setBlock(x, y + 1, z, B.DOOR_TOP);
+                        doorStates.set(getBlockKey(x, y, z), false);
+                    }
+                    rebuildNearbyChunks(x, z);
+                    updateHotbar();
+                }
+            }
+        }
+    });
+    
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+    canvas.addEventListener('wheel', e => {
+        if (inventoryOpen) return;
+        const hbBlocks = [B.GRASS, B.DIRT, B.STONE, B.WOOD, B.BRICK, B.GLASS, B.DOOR_BOTTOM, B.SAND, B.SNOW];
+        let idx = hbBlocks.indexOf(selectedBlock);
+        idx = (idx + Math.sign(e.deltaY) + hbBlocks.length) % hbBlocks.length;
+        selectedBlock = hbBlocks[idx]; updateHotbar();
+    });
+    document.addEventListener('pointerlockchange', () => { isLocked = document.pointerLockElement === canvas; });
+    document.getElementById('start-btn').addEventListener('click', () => {
+        document.getElementById('start-screen').style.display = 'none';
+        canvas.requestPointerLock();
+        initAudio();
+    });
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    async function initialTraining() {
+        const loadingText = document.getElementById('loading-text');
+        const progressFill = document.getElementById('progress-fill');
+        
+        // Train world NN
+        for (let epoch = 0; epoch < 150; epoch++) {
+            const samples = [];
+            for (let i = 0; i < 64; i++) samples.push([(worldNN.rng() - 0.5) * 300, (worldNN.rng() - 0.5) * 300]);
+            const loss = worldNN.train(samples);
+            
+            progressFill.style.width = (epoch / 150 * 35) + '%';
+            loadingText.textContent = `Training World NAR: ${epoch + 1}/150`;
+            document.querySelector('.loss-world').textContent = `World: ${loss.toFixed(3)}`;
+            document.getElementById('world-epochs').textContent = worldNN.epochs;
+            
+            if (epoch % 15 === 0) await new Promise(r => setTimeout(r, 0));
+        }
+        
+        // Train texture NN
+        for (let epoch = 0; epoch < 120; epoch++) {
+            const samples = [];
+            for (let i = 0; i < 48; i++) {
+                const bt = Math.floor(textureNN.rng() * 19) + 1;
+                const u = Math.floor(textureNN.rng() * 8);
+                const v = Math.floor(textureNN.rng() * 8);
+                const face = Math.floor(textureNN.rng() * 3);
+                samples.push([bt, u, v, face]);
+            }
+            const loss = textureNN.train(samples);
+            
+            progressFill.style.width = (35 + epoch / 120 * 35) + '%';
+            loadingText.textContent = `Training Texture NAR: ${epoch + 1}/120`;
+            document.querySelector('.loss-tex').textContent = `Texture: ${loss.toFixed(3)}`;
+            document.getElementById('tex-epochs').textContent = textureNN.epochs;
+            
+            if (epoch % 15 === 0) await new Promise(r => setTimeout(r, 0));
+        }
+        
+        // Generate initial chunks
+        loadingText.textContent = 'Generating world...';
+        for (let cx = -2; cx <= 2; cx++) {
+            for (let cz = -2; cz <= 2; cz++) {
+                generateChunk(cx, cz);
+                buildChunkMesh(cx, cz);
+            }
+            progressFill.style.width = (70 + (cx + 2) / 5 * 30) + '%';
+            await new Promise(r => setTimeout(r, 0));
+        }
+    }
+
+    let frames = 0, lastTime = performance.now(), learnCounter = 0, musicCounter = 0, texLearnCounter = 0;
+    let currentBiome = 0;
+
+    function animate() {
+        requestAnimationFrame(animate);
+        frames++;
+        const now = performance.now();
+        if (now - lastTime >= 1000) {
+            document.getElementById('fps').textContent = frames;
+            frames = 0; lastTime = now;
+        }
+        
+        if (isLocked && !inventoryOpen) {
+            currentBiome = updatePlayer();
+            updateChunks();
+            
+            // World background learning
+            learnCounter++;
+            if (learnCounter >= 120) {
+                learnCounter = 0;
+                const samples = [];
+                for (let i = 0; i < 32; i++) {
+                    samples.push([
+                        camera.position.x + (worldNN.rng() - 0.5) * 160,
+                        camera.position.z + (worldNN.rng() - 0.5) * 160
+                    ]);
+                }
+                worldNN.train(samples);
+                document.getElementById('world-epochs').textContent = worldNN.epochs;
+            }
+            
+            // Texture background learning
+            texLearnCounter++;
+            if (texLearnCounter >= 180) {
+                texLearnCounter = 0;
+                const samples = [];
+                for (let i = 0; i < 32; i++) {
+                    samples.push([
+                        Math.floor(textureNN.rng() * 19) + 1,
+                        Math.floor(textureNN.rng() * 8),
+                        Math.floor(textureNN.rng() * 8),
+                        Math.floor(textureNN.rng() * 3)
+                    ]);
+                }
+                textureNN.train(samples);
+                document.getElementById('tex-epochs').textContent = textureNN.epochs;
+            }
+            
+            // Music - only train when enabled!
+            musicCounter++;
+            if (musicCounter >= 12 && musicEnabled) {
+                musicCounter = 0;
+                
+                // Train music NN while playing
+                musicNN.train(currentBiome);
+                document.getElementById('music-epochs').textContent = musicNN.epochs;
+                document.getElementById('music-loss').textContent = musicNN.lastLoss.toFixed(2);
+                
+                const { freq, duration, velocity, noteIdx } = musicNN.generate(currentBiome);
+                musicNN.playNote(freq, duration, velocity);
+                musicNN.advance();
+                
+                musicNN.vizBars.forEach((bar, i) => {
+                    bar.style.height = (i === noteIdx ? velocity * 28 : Math.max(3, parseFloat(bar.style.height) * 0.7)) + 'px';
+                });
+            }
+            
+            const target = getTargetBlock();
+            if (target.hit) {
+                highlight.position.set(target.hit.x, target.hit.y, target.hit.z);
+                highlight.visible = true;
+            } else highlight.visible = false;
+        }
+        
+        renderer.render(scene, camera);
+    }
+
+    async function init() {
+        document.getElementById('loading-text').textContent = 'Initializing NAR transformers...';
+        const seed = Date.now() % 100000;
+        worldNN = new WorldNAR(seed);
+        textureNN = new TextureNAR(seed + 1);
+        musicNN = new MusicNAR(seed + 2);
+        
+        await initialTraining();
+        
+        setupHotbar();
+        setupInventory();
+        setupMusicViz();
+        
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('start-screen').style.display = 'flex';
+        animate();
+    }
+
+    init();
+    </script>
+</body>
+</html>

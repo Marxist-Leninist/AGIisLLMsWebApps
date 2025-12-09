@@ -1,0 +1,1698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transformer TDM - Neural Network Warfare</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500;700&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #0a0a0f;
+            font-family: 'Rajdhani', sans-serif;
+            overflow: hidden;
+            color: #e0e0e0;
+        }
+        
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #gameCanvas {
+            display: block;
+        }
+        
+        /* HUD Overlay */
+        #hud {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        /* Team Scores */
+        .team-score {
+            position: absolute;
+            top: 20px;
+            padding: 15px 30px;
+            font-family: 'Orbitron', monospace;
+            font-size: 28px;
+            font-weight: 900;
+            border-radius: 4px;
+            backdrop-filter: blur(10px);
+            letter-spacing: 2px;
+        }
+        
+        #blueScore {
+            left: 20px;
+            background: linear-gradient(135deg, rgba(30,90,200,0.85) 0%, rgba(20,60,140,0.9) 100%);
+            border: 2px solid rgba(100,160,255,0.6);
+            box-shadow: 0 0 30px rgba(50,120,255,0.4), inset 0 0 20px rgba(100,180,255,0.2);
+            text-shadow: 0 0 10px rgba(100,180,255,0.8);
+        }
+        
+        #redScore {
+            right: 20px;
+            background: linear-gradient(135deg, rgba(200,40,40,0.85) 0%, rgba(140,20,20,0.9) 100%);
+            border: 2px solid rgba(255,100,100,0.6);
+            box-shadow: 0 0 30px rgba(255,50,50,0.4), inset 0 0 20px rgba(255,100,100,0.2);
+            text-shadow: 0 0 10px rgba(255,100,100,0.8);
+        }
+        
+        /* Neural Network Status Panel */
+        #nnPanel {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 380px;
+            background: linear-gradient(180deg, rgba(15,15,25,0.95) 0%, rgba(10,10,18,0.98) 100%);
+            border: 1px solid rgba(80,120,200,0.3);
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 0 40px rgba(0,50,150,0.3);
+        }
+        
+        #nnPanel h3 {
+            font-family: 'Orbitron', monospace;
+            font-size: 14px;
+            color: #6af;
+            margin-bottom: 12px;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            border-bottom: 1px solid rgba(100,170,255,0.3);
+            padding-bottom: 8px;
+        }
+        
+        .agent-status {
+            display: flex;
+            align-items: center;
+            margin: 8px 0;
+            padding: 8px;
+            background: rgba(30,50,80,0.4);
+            border-radius: 4px;
+            border-left: 3px solid #4af;
+        }
+        
+        .agent-status.enemy {
+            border-left-color: #f55;
+            background: rgba(80,30,30,0.4);
+        }
+        
+        .agent-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            margin-right: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Orbitron', monospace;
+            font-size: 11px;
+            font-weight: 700;
+        }
+        
+        .agent-status:not(.enemy) .agent-icon {
+            background: linear-gradient(135deg, #2a5acc, #1a3a8c);
+            box-shadow: 0 0 15px rgba(50,100,255,0.5);
+        }
+        
+        .agent-status.enemy .agent-icon {
+            background: linear-gradient(135deg, #cc3030, #8c1a1a);
+            box-shadow: 0 0 15px rgba(255,50,50,0.5);
+        }
+        
+        .agent-info {
+            flex: 1;
+        }
+        
+        .agent-name {
+            font-weight: 700;
+            font-size: 13px;
+            margin-bottom: 4px;
+        }
+        
+        .agent-stats {
+            display: flex;
+            gap: 15px;
+            font-size: 11px;
+            color: #888;
+        }
+        
+        .stat-val {
+            color: #adf;
+        }
+        
+        .agent-status.enemy .stat-val {
+            color: #faa;
+        }
+        
+        .health-bar {
+            width: 60px;
+            height: 6px;
+            background: rgba(0,0,0,0.5);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        
+        .health-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #2f5, #0a0);
+            transition: width 0.2s;
+        }
+        
+        .health-fill.low {
+            background: linear-gradient(90deg, #f55, #a00);
+        }
+        
+        /* Learning Metrics */
+        #learningPanel {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 300px;
+            background: linear-gradient(180deg, rgba(15,15,25,0.95) 0%, rgba(10,10,18,0.98) 100%);
+            border: 1px solid rgba(200,80,80,0.3);
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 0 40px rgba(150,0,0,0.2);
+        }
+        
+        #learningPanel h3 {
+            font-family: 'Orbitron', monospace;
+            font-size: 14px;
+            color: #fa6;
+            margin-bottom: 12px;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            border-bottom: 1px solid rgba(255,170,100,0.3);
+            padding-bottom: 8px;
+        }
+        
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 6px 0;
+            font-size: 12px;
+        }
+        
+        .metric-label {
+            color: #888;
+        }
+        
+        .metric-value {
+            font-family: 'Orbitron', monospace;
+            color: #fff;
+        }
+        
+        /* Crosshair */
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+        
+        #crosshair::before,
+        #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255,255,255,0.9);
+            box-shadow: 0 0 5px rgba(255,255,255,0.5);
+        }
+        
+        #crosshair::before {
+            width: 2px;
+            height: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            top: -25px;
+        }
+        
+        #crosshair::after {
+            width: 20px;
+            height: 2px;
+            top: 50%;
+            transform: translateY(-50%);
+            left: -25px;
+        }
+        
+        .crosshair-dot {
+            width: 4px;
+            height: 4px;
+            background: #f33;
+            border-radius: 50%;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 8px #f33;
+        }
+        
+        /* Controls Info */
+        #controls {
+            position: absolute;
+            top: 80px;
+            left: 20px;
+            font-size: 11px;
+            color: #666;
+            line-height: 1.8;
+        }
+        
+        #controls span {
+            color: #aaa;
+            font-family: 'Orbitron', monospace;
+            background: rgba(255,255,255,0.1);
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin-right: 5px;
+        }
+        
+        /* Kill Feed */
+        #killFeed {
+            position: absolute;
+            top: 80px;
+            right: 20px;
+            width: 280px;
+            max-height: 200px;
+            overflow: hidden;
+        }
+        
+        .kill-entry {
+            padding: 6px 12px;
+            margin: 4px 0;
+            background: rgba(0,0,0,0.6);
+            border-radius: 4px;
+            font-size: 12px;
+            animation: fadeIn 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        
+        .kill-entry .killer {
+            font-weight: 700;
+        }
+        
+        .kill-entry .killer.blue { color: #6af; }
+        .kill-entry .killer.red { color: #f66; }
+        .kill-entry .victim.blue { color: #6af; }
+        .kill-entry .victim.red { color: #f66; }
+        
+        /* Attention Visualization */
+        #attentionViz {
+            position: absolute;
+            top: 50%;
+            left: 20px;
+            transform: translateY(-50%);
+            width: 180px;
+            background: rgba(10,10,20,0.9);
+            border: 1px solid rgba(100,150,255,0.2);
+            border-radius: 6px;
+            padding: 10px;
+        }
+        
+        #attentionViz h4 {
+            font-family: 'Orbitron', monospace;
+            font-size: 10px;
+            color: #6af;
+            letter-spacing: 2px;
+            margin-bottom: 8px;
+        }
+        
+        #attentionCanvas {
+            width: 160px;
+            height: 100px;
+            background: rgba(0,0,0,0.5);
+            border-radius: 4px;
+        }
+        
+        /* Loading Screen */
+        #loadingScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #0a0a15 0%, #101020 50%, #0a0a15 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            transition: opacity 0.5s;
+        }
+        
+        #loadingScreen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        #loadingScreen h1 {
+            font-family: 'Orbitron', monospace;
+            font-size: 48px;
+            font-weight: 900;
+            background: linear-gradient(90deg, #4af, #a6f, #f6a);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: 8px;
+            margin-bottom: 30px;
+            text-shadow: 0 0 60px rgba(100,150,255,0.5);
+        }
+        
+        .loading-bar {
+            width: 300px;
+            height: 4px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+        
+        .loading-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4af, #a6f);
+            animation: loading 2s ease-in-out;
+        }
+        
+        @keyframes loading {
+            0% { width: 0%; }
+            100% { width: 100%; }
+        }
+        
+        #loadingScreen p {
+            color: #666;
+            font-size: 14px;
+            letter-spacing: 4px;
+        }
+        
+        /* Start Button */
+        #startBtn {
+            margin-top: 40px;
+            padding: 15px 50px;
+            font-family: 'Orbitron', monospace;
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: 4px;
+            background: linear-gradient(135deg, #2a5acc, #1a3a8c);
+            border: 2px solid #4af;
+            color: #fff;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            pointer-events: auto;
+        }
+        
+        #startBtn:hover {
+            background: linear-gradient(135deg, #3a6adc, #2a4a9c);
+            box-shadow: 0 0 30px rgba(50,120,255,0.6);
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        
+        <div id="hud">
+            <div id="blueScore" class="team-score">BLUE: <span id="blueScoreVal">0</span></div>
+            <div id="redScore" class="team-score">RED: <span id="redScoreVal">0</span></div>
+            
+            <div id="crosshair"><div class="crosshair-dot"></div></div>
+            
+            <div id="controls">
+                <div><span>WASD</span> Move</div>
+                <div><span>MOUSE</span> Aim</div>
+                <div><span>CLICK</span> Shoot</div>
+                <div><span>SPACE</span> Jump</div>
+            </div>
+            
+            <div id="killFeed"></div>
+            
+            <div id="nnPanel">
+                <h3>⚡ Blue Team Transformers</h3>
+                <div id="blueAgents"></div>
+                <div style="margin-top:12px; border-top: 1px solid rgba(255,100,100,0.2); padding-top:12px;">
+                    <h3 style="color:#f66;">⚡ Red Team Transformers</h3>
+                    <div id="redAgents"></div>
+                </div>
+            </div>
+            
+            <div id="learningPanel">
+                <h3>📊 Learning Metrics</h3>
+                <div class="metric-row">
+                    <span class="metric-label">Blue Attention Updates</span>
+                    <span class="metric-value" id="blueUpdates">0</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Red Attention Updates</span>
+                    <span class="metric-value" id="redUpdates">0</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Blue Avg Reward</span>
+                    <span class="metric-value" id="blueReward">0.00</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Red Avg Reward</span>
+                    <span class="metric-value" id="redReward">0.00</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Episodes</span>
+                    <span class="metric-value" id="episodes">0</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Time</span>
+                    <span class="metric-value" id="gameTime">0:00</span>
+                </div>
+            </div>
+            
+            <div id="attentionViz">
+                <h4>ATTENTION HEADS</h4>
+                <canvas id="attentionCanvas"></canvas>
+            </div>
+        </div>
+        
+        <div id="loadingScreen">
+            <h1>TRANSFORMER TDM</h1>
+            <div class="loading-bar"><div class="loading-fill"></div></div>
+            <p>INITIALIZING NEURAL NETWORKS</p>
+            <button id="startBtn">ENGAGE</button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // ============================================
+        // TRANSFORMER NEURAL NETWORK IMPLEMENTATION
+        // ============================================
+        
+        class TransformerAgent {
+            constructor(id, team, config = {}) {
+                this.id = id;
+                this.team = team;
+                this.dModel = config.dModel || 64;
+                this.nHeads = config.nHeads || 4;
+                this.headDim = this.dModel / this.nHeads;
+                this.seqLen = config.seqLen || 16;
+                this.learningRate = config.learningRate || 0.01;
+                
+                // Initialize attention weights
+                this.Wq = this.initWeights(this.dModel, this.dModel);
+                this.Wk = this.initWeights(this.dModel, this.dModel);
+                this.Wv = this.initWeights(this.dModel, this.dModel);
+                this.Wo = this.initWeights(this.dModel, this.dModel);
+                
+                // FFN weights
+                this.W1 = this.initWeights(this.dModel, this.dModel * 4);
+                this.W2 = this.initWeights(this.dModel * 4, this.dModel);
+                
+                // Policy head
+                this.policyW = this.initWeights(this.dModel, 8); // 8 actions
+                
+                // Experience buffer
+                this.experienceBuffer = [];
+                this.maxBufferSize = 1000;
+                
+                // Stats
+                this.kills = 0;
+                this.deaths = 0;
+                this.updateCount = 0;
+                this.totalReward = 0;
+                this.rewardHistory = [];
+                
+                // Current attention weights for visualization
+                this.lastAttention = null;
+            }
+            
+            initWeights(inDim, outDim) {
+                const weights = [];
+                const scale = Math.sqrt(2.0 / (inDim + outDim));
+                for (let i = 0; i < inDim; i++) {
+                    weights[i] = [];
+                    for (let j = 0; j < outDim; j++) {
+                        weights[i][j] = (Math.random() * 2 - 1) * scale;
+                    }
+                }
+                return weights;
+            }
+            
+            matmul(A, B) {
+                const result = [];
+                for (let i = 0; i < A.length; i++) {
+                    result[i] = [];
+                    for (let j = 0; j < B[0].length; j++) {
+                        let sum = 0;
+                        for (let k = 0; k < B.length; k++) {
+                            sum += A[i][k] * B[k][j];
+                        }
+                        result[i][j] = sum;
+                    }
+                }
+                return result;
+            }
+            
+            vecMatmul(vec, mat) {
+                const result = [];
+                for (let j = 0; j < mat[0].length; j++) {
+                    let sum = 0;
+                    for (let i = 0; i < vec.length; i++) {
+                        sum += vec[i] * mat[i][j];
+                    }
+                    result[j] = sum;
+                }
+                return result;
+            }
+            
+            softmax(arr) {
+                const max = Math.max(...arr);
+                const exp = arr.map(x => Math.exp(x - max));
+                const sum = exp.reduce((a, b) => a + b, 0);
+                return exp.map(x => x / sum);
+            }
+            
+            relu(x) {
+                return Math.max(0, x);
+            }
+            
+            // Self-attention mechanism
+            attention(query, keys, values) {
+                const scores = [];
+                for (let i = 0; i < keys.length; i++) {
+                    let score = 0;
+                    for (let j = 0; j < query.length; j++) {
+                        score += query[j] * keys[i][j];
+                    }
+                    scores.push(score / Math.sqrt(this.headDim));
+                }
+                
+                const attnWeights = this.softmax(scores);
+                this.lastAttention = attnWeights;
+                
+                const output = new Array(values[0].length).fill(0);
+                for (let i = 0; i < values.length; i++) {
+                    for (let j = 0; j < values[i].length; j++) {
+                        output[j] += attnWeights[i] * values[i][j];
+                    }
+                }
+                
+                return output;
+            }
+            
+            // Forward pass
+            forward(state) {
+                // Pad state to dModel
+                const paddedState = new Array(this.dModel).fill(0);
+                for (let i = 0; i < Math.min(state.length, this.dModel); i++) {
+                    paddedState[i] = state[i];
+                }
+                
+                // Compute Q, K, V
+                const Q = this.vecMatmul(paddedState, this.Wq);
+                const K = [this.vecMatmul(paddedState, this.Wk)];
+                const V = [this.vecMatmul(paddedState, this.Wv)];
+                
+                // Add historical context if available
+                const historyLen = Math.min(this.experienceBuffer.length, this.seqLen - 1);
+                for (let i = 0; i < historyLen; i++) {
+                    const idx = this.experienceBuffer.length - historyLen + i;
+                    const histState = new Array(this.dModel).fill(0);
+                    for (let j = 0; j < Math.min(this.experienceBuffer[idx].state.length, this.dModel); j++) {
+                        histState[j] = this.experienceBuffer[idx].state[j];
+                    }
+                    K.push(this.vecMatmul(histState, this.Wk));
+                    V.push(this.vecMatmul(histState, this.Wv));
+                }
+                
+                // Self-attention
+                const attnOut = this.attention(Q, K, V);
+                
+                // Output projection
+                const projected = this.vecMatmul(attnOut, this.Wo);
+                
+                // Residual + LayerNorm (simplified)
+                const residual = projected.map((v, i) => v + paddedState[i]);
+                
+                // FFN
+                const hidden = this.vecMatmul(residual, this.W1).map(x => this.relu(x));
+                const ffnOut = this.vecMatmul(hidden, this.W2);
+                
+                // Final residual
+                const output = ffnOut.map((v, i) => v + residual[i]);
+                
+                // Policy head
+                const logits = this.vecMatmul(output, this.policyW);
+                const probs = this.softmax(logits);
+                
+                return { probs, features: output };
+            }
+            
+            // Select action with epsilon-greedy exploration
+            selectAction(state, epsilon = 0.1) {
+                const { probs } = this.forward(state);
+                
+                if (Math.random() < epsilon) {
+                    return Math.floor(Math.random() * probs.length);
+                }
+                
+                // Sample from probability distribution
+                const rand = Math.random();
+                let cumulative = 0;
+                for (let i = 0; i < probs.length; i++) {
+                    cumulative += probs[i];
+                    if (rand < cumulative) return i;
+                }
+                return probs.length - 1;
+            }
+            
+            // Store experience
+            storeExperience(state, action, reward, nextState, done) {
+                this.experienceBuffer.push({ state, action, reward, nextState, done });
+                if (this.experienceBuffer.length > this.maxBufferSize) {
+                    this.experienceBuffer.shift();
+                }
+                this.totalReward += reward;
+                this.rewardHistory.push(reward);
+                if (this.rewardHistory.length > 100) this.rewardHistory.shift();
+            }
+            
+            // Simple policy gradient update
+            learn(batchSize = 32) {
+                if (this.experienceBuffer.length < batchSize) return;
+                
+                // Sample batch
+                const indices = [];
+                for (let i = 0; i < batchSize; i++) {
+                    indices.push(Math.floor(Math.random() * this.experienceBuffer.length));
+                }
+                
+                // Compute gradients and update weights
+                for (const idx of indices) {
+                    const exp = this.experienceBuffer[idx];
+                    const { probs } = this.forward(exp.state);
+                    
+                    // Policy gradient: increase probability of good actions
+                    const advantage = exp.reward;
+                    
+                    // Update policy weights (simplified gradient)
+                    for (let i = 0; i < this.policyW.length; i++) {
+                        for (let j = 0; j < this.policyW[i].length; j++) {
+                            const grad = (j === exp.action ? 1 - probs[j] : -probs[j]) * advantage;
+                            this.policyW[i][j] += this.learningRate * grad * 0.01;
+                        }
+                    }
+                }
+                
+                this.updateCount++;
+            }
+            
+            getAverageReward() {
+                if (this.rewardHistory.length === 0) return 0;
+                return this.rewardHistory.reduce((a, b) => a + b, 0) / this.rewardHistory.length;
+            }
+        }
+        
+        // ============================================
+        // GAME ENGINE
+        // ============================================
+        
+        class Game {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.scene = new THREE.Scene();
+                this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+                this.renderer.toneMappingExposure = 1.2;
+                
+                // Game state
+                this.blueScore = 0;
+                this.redScore = 0;
+                this.gameTime = 0;
+                this.episodes = 0;
+                this.isRunning = false;
+                
+                // Player
+                this.player = {
+                    position: new THREE.Vector3(0, 1.6, 0),
+                    velocity: new THREE.Vector3(),
+                    rotation: { x: 0, y: 0 },
+                    health: 100,
+                    isGrounded: true
+                };
+                
+                // Agents
+                this.blueAgents = [];
+                this.redAgents = [];
+                this.projectiles = [];
+                this.particles = [];
+                
+                // Input
+                this.keys = {};
+                this.mouse = { x: 0, y: 0 };
+                this.isPointerLocked = false;
+                
+                // Initialize
+                this.setupScene();
+                this.setupLighting();
+                this.createArena();
+                this.createAgents();
+                this.setupInput();
+                this.setupAttentionViz();
+                
+                // Start button
+                document.getElementById('startBtn').addEventListener('click', () => {
+                    this.start();
+                });
+            }
+            
+            setupScene() {
+                // Fog for atmosphere
+                this.scene.fog = new THREE.FogExp2(0x0a0a15, 0.015);
+                this.scene.background = new THREE.Color(0x0a0a15);
+            }
+            
+            setupLighting() {
+                // Ambient light
+                const ambient = new THREE.AmbientLight(0x303050, 0.4);
+                this.scene.add(ambient);
+                
+                // Main directional light (sun-like)
+                const sun = new THREE.DirectionalLight(0xffeedd, 1.2);
+                sun.position.set(50, 80, 30);
+                sun.castShadow = true;
+                sun.shadow.mapSize.width = 2048;
+                sun.shadow.mapSize.height = 2048;
+                sun.shadow.camera.near = 0.5;
+                sun.shadow.camera.far = 200;
+                sun.shadow.camera.left = -60;
+                sun.shadow.camera.right = 60;
+                sun.shadow.camera.top = 60;
+                sun.shadow.camera.bottom = -60;
+                sun.shadow.bias = -0.0001;
+                this.scene.add(sun);
+                
+                // Blue team area light
+                const blueLight = new THREE.PointLight(0x3366ff, 2, 30);
+                blueLight.position.set(-25, 5, 0);
+                this.scene.add(blueLight);
+                
+                // Red team area light
+                const redLight = new THREE.PointLight(0xff3333, 2, 30);
+                redLight.position.set(25, 5, 0);
+                this.scene.add(redLight);
+                
+                // Rim lights
+                const rimLight1 = new THREE.SpotLight(0x6699ff, 1, 100, Math.PI / 4, 0.5);
+                rimLight1.position.set(-40, 20, 40);
+                this.scene.add(rimLight1);
+                
+                const rimLight2 = new THREE.SpotLight(0xff6644, 1, 100, Math.PI / 4, 0.5);
+                rimLight2.position.set(40, 20, -40);
+                this.scene.add(rimLight2);
+            }
+            
+            createArena() {
+                // Floor with PBR-like material
+                const floorGeo = new THREE.PlaneGeometry(80, 80, 40, 40);
+                const floorMat = new THREE.MeshStandardMaterial({
+                    color: 0x1a1a25,
+                    roughness: 0.8,
+                    metalness: 0.2
+                });
+                const floor = new THREE.Mesh(floorGeo, floorMat);
+                floor.rotation.x = -Math.PI / 2;
+                floor.receiveShadow = true;
+                this.scene.add(floor);
+                
+                // Grid lines on floor
+                const gridHelper = new THREE.GridHelper(80, 40, 0x333355, 0x222244);
+                gridHelper.position.y = 0.01;
+                this.scene.add(gridHelper);
+                
+                // Walls
+                this.createWalls();
+                
+                // Cover objects
+                this.createCover();
+                
+                // Team spawn indicators
+                this.createSpawnAreas();
+            }
+            
+            createWalls() {
+                const wallMat = new THREE.MeshStandardMaterial({
+                    color: 0x252535,
+                    roughness: 0.6,
+                    metalness: 0.3
+                });
+                
+                const wallHeight = 8;
+                const wallThickness = 1;
+                const arenaSize = 40;
+                
+                const walls = [
+                    { pos: [0, wallHeight/2, -arenaSize], size: [arenaSize*2, wallHeight, wallThickness] },
+                    { pos: [0, wallHeight/2, arenaSize], size: [arenaSize*2, wallHeight, wallThickness] },
+                    { pos: [-arenaSize, wallHeight/2, 0], size: [wallThickness, wallHeight, arenaSize*2] },
+                    { pos: [arenaSize, wallHeight/2, 0], size: [wallThickness, wallHeight, arenaSize*2] }
+                ];
+                
+                walls.forEach(w => {
+                    const geo = new THREE.BoxGeometry(...w.size);
+                    const mesh = new THREE.Mesh(geo, wallMat);
+                    mesh.position.set(...w.pos);
+                    mesh.castShadow = true;
+                    mesh.receiveShadow = true;
+                    this.scene.add(mesh);
+                });
+            }
+            
+            createCover() {
+                const coverMat = new THREE.MeshStandardMaterial({
+                    color: 0x333344,
+                    roughness: 0.5,
+                    metalness: 0.4
+                });
+                
+                // Various cover positions
+                const coverPositions = [
+                    { pos: [-15, 1.5, 0], size: [3, 3, 6] },
+                    { pos: [15, 1.5, 0], size: [3, 3, 6] },
+                    { pos: [0, 1.5, -15], size: [6, 3, 3] },
+                    { pos: [0, 1.5, 15], size: [6, 3, 3] },
+                    { pos: [-8, 1, -8], size: [2, 2, 2] },
+                    { pos: [8, 1, 8], size: [2, 2, 2] },
+                    { pos: [-8, 1, 8], size: [2, 2, 2] },
+                    { pos: [8, 1, -8], size: [2, 2, 2] },
+                    { pos: [0, 2, 0], size: [4, 4, 4] }, // Center structure
+                    { pos: [-25, 1.5, -10], size: [2, 3, 4] },
+                    { pos: [-25, 1.5, 10], size: [2, 3, 4] },
+                    { pos: [25, 1.5, -10], size: [2, 3, 4] },
+                    { pos: [25, 1.5, 10], size: [2, 3, 4] }
+                ];
+                
+                this.coverObjects = [];
+                coverPositions.forEach(c => {
+                    const geo = new THREE.BoxGeometry(...c.size);
+                    const mesh = new THREE.Mesh(geo, coverMat);
+                    mesh.position.set(...c.pos);
+                    mesh.castShadow = true;
+                    mesh.receiveShadow = true;
+                    this.scene.add(mesh);
+                    this.coverObjects.push({
+                        mesh,
+                        bounds: {
+                            min: new THREE.Vector3(c.pos[0] - c.size[0]/2, 0, c.pos[2] - c.size[2]/2),
+                            max: new THREE.Vector3(c.pos[0] + c.size[0]/2, c.pos[1] + c.size[1]/2, c.pos[2] + c.size[2]/2)
+                        }
+                    });
+                });
+            }
+            
+            createSpawnAreas() {
+                // Blue spawn indicator
+                const blueSpawnGeo = new THREE.RingGeometry(4, 5, 32);
+                const blueSpawnMat = new THREE.MeshBasicMaterial({ color: 0x3366ff, side: THREE.DoubleSide, transparent: true, opacity: 0.5 });
+                const blueSpawn = new THREE.Mesh(blueSpawnGeo, blueSpawnMat);
+                blueSpawn.rotation.x = -Math.PI / 2;
+                blueSpawn.position.set(-30, 0.1, 0);
+                this.scene.add(blueSpawn);
+                
+                // Red spawn indicator
+                const redSpawnGeo = new THREE.RingGeometry(4, 5, 32);
+                const redSpawnMat = new THREE.MeshBasicMaterial({ color: 0xff3333, side: THREE.DoubleSide, transparent: true, opacity: 0.5 });
+                const redSpawn = new THREE.Mesh(redSpawnGeo, redSpawnMat);
+                redSpawn.rotation.x = -Math.PI / 2;
+                redSpawn.position.set(30, 0.1, 0);
+                this.scene.add(redSpawn);
+            }
+            
+            createAgentMesh(team) {
+                const group = new THREE.Group();
+                
+                // Body
+                const bodyGeo = new THREE.CylinderGeometry(0.4, 0.5, 1.6, 8);
+                const bodyMat = new THREE.MeshStandardMaterial({
+                    color: team === 'blue' ? 0x2255cc : 0xcc2222,
+                    roughness: 0.3,
+                    metalness: 0.7,
+                    emissive: team === 'blue' ? 0x112266 : 0x661111,
+                    emissiveIntensity: 0.3
+                });
+                const body = new THREE.Mesh(bodyGeo, bodyMat);
+                body.position.y = 0.8;
+                body.castShadow = true;
+                group.add(body);
+                
+                // Head
+                const headGeo = new THREE.SphereGeometry(0.3, 16, 16);
+                const headMat = new THREE.MeshStandardMaterial({
+                    color: team === 'blue' ? 0x4488ff : 0xff4444,
+                    roughness: 0.2,
+                    metalness: 0.8,
+                    emissive: team === 'blue' ? 0x224488 : 0x882222,
+                    emissiveIntensity: 0.5
+                });
+                const head = new THREE.Mesh(headGeo, headMat);
+                head.position.y = 1.8;
+                head.castShadow = true;
+                group.add(head);
+                
+                // Eye visor
+                const visorGeo = new THREE.BoxGeometry(0.5, 0.1, 0.1);
+                const visorMat = new THREE.MeshBasicMaterial({
+                    color: team === 'blue' ? 0x00ffff : 0xff6600
+                });
+                const visor = new THREE.Mesh(visorGeo, visorMat);
+                visor.position.set(0, 1.85, 0.25);
+                group.add(visor);
+                
+                // Neural network "antenna"
+                const antennaGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.3);
+                const antennaMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+                const antenna = new THREE.Mesh(antennaGeo, antennaMat);
+                antenna.position.set(0, 2.2, 0);
+                group.add(antenna);
+                
+                // Antenna tip (glowing)
+                const tipGeo = new THREE.SphereGeometry(0.05);
+                const tipMat = new THREE.MeshBasicMaterial({
+                    color: team === 'blue' ? 0x00ffff : 0xff6600
+                });
+                const tip = new THREE.Mesh(tipGeo, tipMat);
+                tip.position.set(0, 2.35, 0);
+                group.add(tip);
+                
+                return group;
+            }
+            
+            createAgents() {
+                // Create 3 blue team transformers
+                for (let i = 0; i < 3; i++) {
+                    const nn = new TransformerAgent(`B${i+1}`, 'blue');
+                    const mesh = this.createAgentMesh('blue');
+                    mesh.position.set(-30 + Math.random() * 5, 0, -5 + i * 5);
+                    this.scene.add(mesh);
+                    
+                    this.blueAgents.push({
+                        nn,
+                        mesh,
+                        health: 100,
+                        position: mesh.position.clone(),
+                        velocity: new THREE.Vector3(),
+                        lastShot: 0,
+                        target: null,
+                        state: 'patrol'
+                    });
+                }
+                
+                // Create 3 red team transformers
+                for (let i = 0; i < 3; i++) {
+                    const nn = new TransformerAgent(`R${i+1}`, 'red', { learningRate: 0.012 });
+                    const mesh = this.createAgentMesh('red');
+                    mesh.position.set(30 - Math.random() * 5, 0, -5 + i * 5);
+                    this.scene.add(mesh);
+                    
+                    this.redAgents.push({
+                        nn,
+                        mesh,
+                        health: 100,
+                        position: mesh.position.clone(),
+                        velocity: new THREE.Vector3(),
+                        lastShot: 0,
+                        target: null,
+                        state: 'patrol'
+                    });
+                }
+                
+                this.updateAgentUI();
+            }
+            
+            setupInput() {
+                document.addEventListener('keydown', (e) => {
+                    this.keys[e.code] = true;
+                });
+                
+                document.addEventListener('keyup', (e) => {
+                    this.keys[e.code] = false;
+                });
+                
+                document.addEventListener('mousemove', (e) => {
+                    if (this.isPointerLocked) {
+                        this.player.rotation.y -= e.movementX * 0.002;
+                        this.player.rotation.x -= e.movementY * 0.002;
+                        this.player.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, this.player.rotation.x));
+                    }
+                });
+                
+                this.canvas.addEventListener('click', () => {
+                    if (!this.isPointerLocked && this.isRunning) {
+                        this.canvas.requestPointerLock();
+                    } else if (this.isPointerLocked) {
+                        this.playerShoot();
+                    }
+                });
+                
+                document.addEventListener('pointerlockchange', () => {
+                    this.isPointerLocked = document.pointerLockElement === this.canvas;
+                });
+                
+                window.addEventListener('resize', () => {
+                    this.camera.aspect = window.innerWidth / window.innerHeight;
+                    this.camera.updateProjectionMatrix();
+                    this.renderer.setSize(window.innerWidth, window.innerHeight);
+                });
+            }
+            
+            setupAttentionViz() {
+                this.attentionCanvas = document.getElementById('attentionCanvas');
+                this.attentionCtx = this.attentionCanvas.getContext('2d');
+                this.attentionCanvas.width = 160;
+                this.attentionCanvas.height = 100;
+            }
+            
+            start() {
+                document.getElementById('loadingScreen').classList.add('hidden');
+                this.isRunning = true;
+                this.player.position.set(-25, 1.6, 0);
+                this.animate();
+            }
+            
+            getAgentState(agent, team) {
+                const state = [];
+                
+                // Own position (normalized)
+                state.push(agent.position.x / 40);
+                state.push(agent.position.z / 40);
+                
+                // Own health
+                state.push(agent.health / 100);
+                
+                // Own velocity
+                state.push(agent.velocity.x);
+                state.push(agent.velocity.z);
+                
+                // Find nearest enemy
+                const enemies = team === 'blue' ? this.redAgents : this.blueAgents;
+                let nearestDist = Infinity;
+                let nearestEnemy = null;
+                
+                for (const enemy of enemies) {
+                    if (enemy.health <= 0) continue;
+                    const dist = agent.position.distanceTo(enemy.position);
+                    if (dist < nearestDist) {
+                        nearestDist = dist;
+                        nearestEnemy = enemy;
+                    }
+                }
+                
+                if (nearestEnemy) {
+                    // Relative position to nearest enemy
+                    state.push((nearestEnemy.position.x - agent.position.x) / 40);
+                    state.push((nearestEnemy.position.z - agent.position.z) / 40);
+                    state.push(nearestDist / 40);
+                    state.push(nearestEnemy.health / 100);
+                } else {
+                    state.push(0, 0, 1, 0);
+                }
+                
+                // Player info for blue team (they learn from player)
+                if (team === 'blue') {
+                    const playerDist = agent.position.distanceTo(this.player.position);
+                    state.push((this.player.position.x - agent.position.x) / 40);
+                    state.push((this.player.position.z - agent.position.z) / 40);
+                    state.push(playerDist / 40);
+                } else {
+                    state.push(0, 0, 1);
+                }
+                
+                // Nearby cover
+                let nearestCover = Infinity;
+                for (const cover of this.coverObjects) {
+                    const dist = agent.position.distanceTo(cover.mesh.position);
+                    if (dist < nearestCover) nearestCover = dist;
+                }
+                state.push(nearestCover / 20);
+                
+                // Team alive count
+                const aliveTeam = (team === 'blue' ? this.blueAgents : this.redAgents).filter(a => a.health > 0).length;
+                const aliveEnemy = (team === 'blue' ? this.redAgents : this.blueAgents).filter(a => a.health > 0).length;
+                state.push(aliveTeam / 3);
+                state.push(aliveEnemy / 3);
+                
+                return state;
+            }
+            
+            executeAction(agent, action) {
+                const speed = 0.15;
+                const actions = [
+                    () => { agent.velocity.z -= speed; }, // Forward
+                    () => { agent.velocity.z += speed; }, // Back
+                    () => { agent.velocity.x -= speed; }, // Left
+                    () => { agent.velocity.x += speed; }, // Right
+                    () => { this.agentShoot(agent); },    // Shoot
+                    () => { /* Strafe left + shoot */ agent.velocity.x -= speed * 0.5; this.agentShoot(agent); },
+                    () => { /* Strafe right + shoot */ agent.velocity.x += speed * 0.5; this.agentShoot(agent); },
+                    () => { /* Hold position */ }
+                ];
+                
+                if (actions[action]) actions[action]();
+            }
+            
+            updateAgents(delta) {
+                const now = Date.now();
+                
+                // Update blue agents
+                for (const agent of this.blueAgents) {
+                    if (agent.health <= 0) continue;
+                    
+                    const state = this.getAgentState(agent, 'blue');
+                    const action = agent.nn.selectAction(state, 0.15);
+                    
+                    this.executeAction(agent, action);
+                    
+                    // Apply movement
+                    agent.position.add(agent.velocity);
+                    agent.velocity.multiplyScalar(0.9);
+                    
+                    // Boundary check
+                    agent.position.x = Math.max(-38, Math.min(38, agent.position.x));
+                    agent.position.z = Math.max(-38, Math.min(38, agent.position.z));
+                    
+                    // Update mesh
+                    agent.mesh.position.copy(agent.position);
+                    
+                    // Face nearest enemy
+                    const enemies = this.redAgents.filter(e => e.health > 0);
+                    if (enemies.length > 0) {
+                        let nearest = enemies[0];
+                        let nearestDist = agent.position.distanceTo(nearest.position);
+                        for (const e of enemies) {
+                            const d = agent.position.distanceTo(e.position);
+                            if (d < nearestDist) {
+                                nearestDist = d;
+                                nearest = e;
+                            }
+                        }
+                        const angle = Math.atan2(nearest.position.x - agent.position.x, nearest.position.z - agent.position.z);
+                        agent.mesh.rotation.y = angle;
+                    }
+                    
+                    // Calculate reward
+                    let reward = 0;
+                    const nearestEnemy = this.redAgents.filter(e => e.health > 0)
+                        .sort((a, b) => agent.position.distanceTo(a.position) - agent.position.distanceTo(b.position))[0];
+                    
+                    if (nearestEnemy) {
+                        const dist = agent.position.distanceTo(nearestEnemy.position);
+                        // Reward for maintaining optimal combat distance
+                        if (dist > 8 && dist < 20) reward += 0.1;
+                        // Small reward for being near cover
+                        const nearCover = this.coverObjects.some(c => agent.position.distanceTo(c.mesh.position) < 5);
+                        if (nearCover) reward += 0.05;
+                    }
+                    
+                    const nextState = this.getAgentState(agent, 'blue');
+                    agent.nn.storeExperience(state, action, reward, nextState, false);
+                    
+                    // Learning step
+                    if (Math.random() < 0.1) agent.nn.learn();
+                }
+                
+                // Update red agents (independent learning)
+                for (const agent of this.redAgents) {
+                    if (agent.health <= 0) continue;
+                    
+                    const state = this.getAgentState(agent, 'red');
+                    const action = agent.nn.selectAction(state, 0.15);
+                    
+                    this.executeAction(agent, action);
+                    
+                    agent.position.add(agent.velocity);
+                    agent.velocity.multiplyScalar(0.9);
+                    
+                    agent.position.x = Math.max(-38, Math.min(38, agent.position.x));
+                    agent.position.z = Math.max(-38, Math.min(38, agent.position.z));
+                    
+                    agent.mesh.position.copy(agent.position);
+                    
+                    // Face nearest enemy
+                    const enemies = this.blueAgents.filter(e => e.health > 0);
+                    if (enemies.length > 0) {
+                        let nearest = enemies[0];
+                        let nearestDist = agent.position.distanceTo(nearest.position);
+                        for (const e of enemies) {
+                            const d = agent.position.distanceTo(e.position);
+                            if (d < nearestDist) {
+                                nearestDist = d;
+                                nearest = e;
+                            }
+                        }
+                        const angle = Math.atan2(nearest.position.x - agent.position.x, nearest.position.z - agent.position.z);
+                        agent.mesh.rotation.y = angle;
+                    }
+                    
+                    // Independent reward calculation
+                    let reward = 0;
+                    const nearestEnemy = this.blueAgents.filter(e => e.health > 0)
+                        .sort((a, b) => agent.position.distanceTo(a.position) - agent.position.distanceTo(b.position))[0];
+                    
+                    if (nearestEnemy) {
+                        const dist = agent.position.distanceTo(nearestEnemy.position);
+                        if (dist > 8 && dist < 20) reward += 0.1;
+                    }
+                    
+                    const nextState = this.getAgentState(agent, 'red');
+                    agent.nn.storeExperience(state, action, reward, nextState, false);
+                    
+                    if (Math.random() < 0.1) agent.nn.learn();
+                }
+            }
+            
+            agentShoot(agent) {
+                const now = Date.now();
+                if (now - agent.lastShot < 400) return;
+                agent.lastShot = now;
+                
+                // Create projectile
+                const direction = new THREE.Vector3(0, 0, 1);
+                direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), agent.mesh.rotation.y);
+                
+                const projGeo = new THREE.SphereGeometry(0.1);
+                const projMat = new THREE.MeshBasicMaterial({
+                    color: agent.nn.team === 'blue' ? 0x00ffff : 0xff6600
+                });
+                const proj = new THREE.Mesh(projGeo, projMat);
+                proj.position.copy(agent.position);
+                proj.position.y = 1.5;
+                this.scene.add(proj);
+                
+                this.projectiles.push({
+                    mesh: proj,
+                    velocity: direction.multiplyScalar(1.5),
+                    team: agent.nn.team,
+                    shooter: agent,
+                    lifetime: 0
+                });
+                
+                // Muzzle flash
+                this.createMuzzleFlash(agent.position.clone().add(new THREE.Vector3(0, 1.5, 0)), agent.nn.team);
+            }
+            
+            playerShoot() {
+                const now = Date.now();
+                if (!this.lastPlayerShot) this.lastPlayerShot = 0;
+                if (now - this.lastPlayerShot < 200) return;
+                this.lastPlayerShot = now;
+                
+                const direction = new THREE.Vector3(0, 0, -1);
+                direction.applyEuler(new THREE.Euler(this.player.rotation.x, this.player.rotation.y, 0, 'YXZ'));
+                
+                const projGeo = new THREE.SphereGeometry(0.1);
+                const projMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+                const proj = new THREE.Mesh(projGeo, projMat);
+                proj.position.copy(this.player.position);
+                this.scene.add(proj);
+                
+                this.projectiles.push({
+                    mesh: proj,
+                    velocity: direction.multiplyScalar(2),
+                    team: 'blue',
+                    shooter: 'player',
+                    lifetime: 0
+                });
+                
+                this.createMuzzleFlash(this.player.position.clone(), 'blue');
+            }
+            
+            createMuzzleFlash(position, team) {
+                const flashGeo = new THREE.SphereGeometry(0.3);
+                const flashMat = new THREE.MeshBasicMaterial({
+                    color: team === 'blue' ? 0x88ffff : 0xffaa00,
+                    transparent: true,
+                    opacity: 1
+                });
+                const flash = new THREE.Mesh(flashGeo, flashMat);
+                flash.position.copy(position);
+                this.scene.add(flash);
+                
+                this.particles.push({
+                    mesh: flash,
+                    lifetime: 0,
+                    maxLife: 5,
+                    type: 'flash'
+                });
+            }
+            
+            createHitEffect(position, team) {
+                for (let i = 0; i < 8; i++) {
+                    const particleGeo = new THREE.SphereGeometry(0.05);
+                    const particleMat = new THREE.MeshBasicMaterial({
+                        color: team === 'blue' ? 0xff4444 : 0x44ff44,
+                        transparent: true,
+                        opacity: 1
+                    });
+                    const particle = new THREE.Mesh(particleGeo, particleMat);
+                    particle.position.copy(position);
+                    this.scene.add(particle);
+                    
+                    this.particles.push({
+                        mesh: particle,
+                        velocity: new THREE.Vector3(
+                            (Math.random() - 0.5) * 0.3,
+                            Math.random() * 0.2,
+                            (Math.random() - 0.5) * 0.3
+                        ),
+                        lifetime: 0,
+                        maxLife: 30,
+                        type: 'spark'
+                    });
+                }
+            }
+            
+            updateProjectiles() {
+                for (let i = this.projectiles.length - 1; i >= 0; i--) {
+                    const proj = this.projectiles[i];
+                    proj.mesh.position.add(proj.velocity);
+                    proj.lifetime++;
+                    
+                    // Check hits on enemies
+                    const targets = proj.team === 'blue' ? this.redAgents : this.blueAgents;
+                    for (const target of targets) {
+                        if (target.health <= 0) continue;
+                        if (proj.mesh.position.distanceTo(target.position) < 1) {
+                            target.health -= 25;
+                            this.createHitEffect(proj.mesh.position.clone(), proj.team);
+                            
+                            // Reward for hitting
+                            if (proj.shooter !== 'player' && proj.shooter.nn) {
+                                proj.shooter.nn.storeExperience(
+                                    this.getAgentState(proj.shooter, proj.shooter.nn.team),
+                                    4,
+                                    2.0,
+                                    this.getAgentState(proj.shooter, proj.shooter.nn.team),
+                                    false
+                                );
+                            }
+                            
+                            if (target.health <= 0) {
+                                this.handleKill(proj.shooter, target, proj.team);
+                            }
+                            
+                            this.scene.remove(proj.mesh);
+                            this.projectiles.splice(i, 1);
+                            break;
+                        }
+                    }
+                    
+                    // Remove old projectiles
+                    if (proj.lifetime > 200 || 
+                        Math.abs(proj.mesh.position.x) > 45 ||
+                        Math.abs(proj.mesh.position.z) > 45) {
+                        this.scene.remove(proj.mesh);
+                        this.projectiles.splice(i, 1);
+                    }
+                }
+            }
+            
+            updateParticles() {
+                for (let i = this.particles.length - 1; i >= 0; i--) {
+                    const p = this.particles[i];
+                    p.lifetime++;
+                    
+                    if (p.type === 'spark') {
+                        p.mesh.position.add(p.velocity);
+                        p.velocity.y -= 0.01;
+                        p.mesh.material.opacity = 1 - (p.lifetime / p.maxLife);
+                    } else if (p.type === 'flash') {
+                        p.mesh.scale.multiplyScalar(0.8);
+                        p.mesh.material.opacity *= 0.7;
+                    }
+                    
+                    if (p.lifetime >= p.maxLife) {
+                        this.scene.remove(p.mesh);
+                        this.particles.splice(i, 1);
+                    }
+                }
+            }
+            
+            handleKill(killer, victim, killerTeam) {
+                if (killerTeam === 'blue') {
+                    this.blueScore++;
+                    document.getElementById('blueScoreVal').textContent = this.blueScore;
+                } else {
+                    this.redScore++;
+                    document.getElementById('redScoreVal').textContent = this.redScore;
+                }
+                
+                // Update NN stats
+                if (killer !== 'player' && killer.nn) {
+                    killer.nn.kills++;
+                    killer.nn.storeExperience(
+                        this.getAgentState(killer, killer.nn.team),
+                        4,
+                        10.0,
+                        this.getAgentState(killer, killer.nn.team),
+                        false
+                    );
+                }
+                if (victim.nn) {
+                    victim.nn.deaths++;
+                    victim.nn.storeExperience(
+                        this.getAgentState(victim, victim.nn.team),
+                        0,
+                        -5.0,
+                        this.getAgentState(victim, victim.nn.team),
+                        true
+                    );
+                }
+                
+                // Kill feed
+                this.addKillFeed(killer, victim, killerTeam);
+                
+                // Hide victim
+                victim.mesh.visible = false;
+                
+                // Respawn after delay
+                setTimeout(() => {
+                    victim.health = 100;
+                    victim.mesh.visible = true;
+                    if (victim.nn.team === 'blue') {
+                        victim.position.set(-30 + Math.random() * 5, 0, -5 + Math.random() * 10);
+                    } else {
+                        victim.position.set(30 - Math.random() * 5, 0, -5 + Math.random() * 10);
+                    }
+                    victim.mesh.position.copy(victim.position);
+                    this.episodes++;
+                }, 3000);
+                
+                this.updateAgentUI();
+            }
+            
+            addKillFeed(killer, victim, killerTeam) {
+                const feed = document.getElementById('killFeed');
+                const entry = document.createElement('div');
+                entry.className = 'kill-entry';
+                
+                const killerName = killer === 'player' ? 'YOU' : killer.nn.id;
+                const victimName = victim.nn.id;
+                const victimTeam = victim.nn.team;
+                
+                entry.innerHTML = `
+                    <span class="killer ${killerTeam}">${killerName}</span>
+                    <span>→</span>
+                    <span class="victim ${victimTeam}">${victimName}</span>
+                `;
+                
+                feed.insertBefore(entry, feed.firstChild);
+                
+                if (feed.children.length > 5) {
+                    feed.removeChild(feed.lastChild);
+                }
+            }
+            
+            updatePlayer(delta) {
+                // Movement
+                const moveSpeed = 0.2;
+                const direction = new THREE.Vector3();
+                
+                if (this.keys['KeyW']) direction.z -= 1;
+                if (this.keys['KeyS']) direction.z += 1;
+                if (this.keys['KeyA']) direction.x -= 1;
+                if (this.keys['KeyD']) direction.x += 1;
+                
+                direction.normalize();
+                direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.player.rotation.y);
+                
+                this.player.velocity.x = direction.x * moveSpeed;
+                this.player.velocity.z = direction.z * moveSpeed;
+                
+                // Jump
+                if (this.keys['Space'] && this.player.isGrounded) {
+                    this.player.velocity.y = 0.2;
+                    this.player.isGrounded = false;
+                }
+                
+                // Gravity
+                this.player.velocity.y -= 0.01;
+                
+                // Apply velocity
+                this.player.position.add(this.player.velocity);
+                
+                // Ground check
+                if (this.player.position.y < 1.6) {
+                    this.player.position.y = 1.6;
+                    this.player.velocity.y = 0;
+                    this.player.isGrounded = true;
+                }
+                
+                // Boundary check
+                this.player.position.x = Math.max(-38, Math.min(38, this.player.position.x));
+                this.player.position.z = Math.max(-38, Math.min(38, this.player.position.z));
+                
+                // Update camera
+                this.camera.position.copy(this.player.position);
+                this.camera.rotation.order = 'YXZ';
+                this.camera.rotation.y = this.player.rotation.y;
+                this.camera.rotation.x = this.player.rotation.x;
+            }
+            
+            updateAgentUI() {
+                const blueContainer = document.getElementById('blueAgents');
+                const redContainer = document.getElementById('redAgents');
+                
+                blueContainer.innerHTML = '';
+                redContainer.innerHTML = '';
+                
+                for (const agent of this.blueAgents) {
+                    const div = document.createElement('div');
+                    div.className = 'agent-status';
+                    const healthPercent = Math.max(0, agent.health);
+                    div.innerHTML = `
+                        <div class="agent-icon">TF</div>
+                        <div class="agent-info">
+                            <div class="agent-name">${agent.nn.id} - Transformer</div>
+                            <div class="agent-stats">
+                                <span>K:<span class="stat-val">${agent.nn.kills}</span></span>
+                                <span>D:<span class="stat-val">${agent.nn.deaths}</span></span>
+                                <div class="health-bar">
+                                    <div class="health-fill ${healthPercent < 30 ? 'low' : ''}" style="width:${healthPercent}%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    blueContainer.appendChild(div);
+                }
+                
+                for (const agent of this.redAgents) {
+                    const div = document.createElement('div');
+                    div.className = 'agent-status enemy';
+                    const healthPercent = Math.max(0, agent.health);
+                    div.innerHTML = `
+                        <div class="agent-icon">TF</div>
+                        <div class="agent-info">
+                            <div class="agent-name">${agent.nn.id} - Transformer</div>
+                            <div class="agent-stats">
+                                <span>K:<span class="stat-val">${agent.nn.kills}</span></span>
+                                <span>D:<span class="stat-val">${agent.nn.deaths}</span></span>
+                                <div class="health-bar">
+                                    <div class="health-fill ${healthPercent < 30 ? 'low' : ''}" style="width:${healthPercent}%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    redContainer.appendChild(div);
+                }
+            }
+            
+            updateLearningMetrics() {
+                let blueUpdates = 0, redUpdates = 0;
+                let blueReward = 0, redReward = 0;
+                
+                for (const a of this.blueAgents) {
+                    blueUpdates += a.nn.updateCount;
+                    blueReward += a.nn.getAverageReward();
+                }
+                for (const a of this.redAgents) {
+                    redUpdates += a.nn.updateCount;
+                    redReward += a.nn.getAverageReward();
+                }
+                
+                document.getElementById('blueUpdates').textContent = blueUpdates;
+                document.getElementById('redUpdates').textContent = redUpdates;
+                document.getElementById('blueReward').textContent = (blueReward / 3).toFixed(2);
+                document.getElementById('redReward').textContent = (redReward / 3).toFixed(2);
+                document.getElementById('episodes').textContent = this.episodes;
+                
+                const minutes = Math.floor(this.gameTime / 60);
+                const seconds = Math.floor(this.gameTime % 60);
+                document.getElementById('gameTime').textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            }
+            
+            drawAttentionViz() {
+                const ctx = this.attentionCtx;
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.fillRect(0, 0, 160, 100);
+                
+                // Draw attention weights for first blue agent
+                const agent = this.blueAgents[0];
+                if (agent && agent.nn.lastAttention) {
+                    const attn = agent.nn.lastAttention;
+                    const barWidth = 150 / attn.length;
+                    
+                    for (let i = 0; i < attn.length; i++) {
+                        const height = attn[i] * 80;
+                        const hue = 200 + attn[i] * 60;
+                        ctx.fillStyle = `hsla(${hue}, 80%, 60%, 0.8)`;
+                        ctx.fillRect(5 + i * barWidth, 90 - height, barWidth - 2, height);
+                    }
+                }
+            }
+            
+            animate() {
+                if (!this.isRunning) return;
+                requestAnimationFrame(() => this.animate());
+                
+                const delta = 1/60;
+                this.gameTime += delta;
+                
+                this.updatePlayer(delta);
+                this.updateAgents(delta);
+                this.updateProjectiles();
+                this.updateParticles();
+                
+                if (Math.floor(this.gameTime * 10) % 5 === 0) {
+                    this.updateAgentUI();
+                    this.updateLearningMetrics();
+                    this.drawAttentionViz();
+                }
+                
+                this.renderer.render(this.scene, this.camera);
+            }
+        }
+        
+        // Initialize game
+        const game = new Game();
+    </script>
+</body>
+</html>

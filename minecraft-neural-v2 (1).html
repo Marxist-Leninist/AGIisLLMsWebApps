@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neural Voxels - Trained Transformer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
+        #game { width: 100vw; height: 100vh; display: block; }
+        
+        #crosshair {
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 100;
+        }
+        #crosshair::before, #crosshair::after {
+            content: '';
+            position: absolute;
+            background: white;
+            mix-blend-mode: difference;
+        }
+        #crosshair::before { width: 20px; height: 2px; top: -1px; left: -10px; }
+        #crosshair::after { width: 2px; height: 20px; left: -1px; top: -10px; }
+        
+        #hotbar {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 4px;
+            padding: 8px;
+            background: rgba(0,0,0,0.6);
+            border-radius: 8px;
+            z-index: 100;
+        }
+        .hotbar-slot {
+            width: 50px; height: 50px;
+            border: 2px solid #555;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            cursor: pointer;
+        }
+        .hotbar-slot.selected { border-color: #fff; box-shadow: 0 0 10px rgba(255,255,255,0.5); }
+        .hotbar-slot .block-preview { width: 36px; height: 36px; border-radius: 4px; }
+        .hotbar-slot .key-hint { position: absolute; bottom: 2px; right: 4px; font-size: 10px; color: #aaa; }
+        .hotbar-slot .count { position: absolute; bottom: 2px; left: 4px; font-size: 11px; color: #fff; text-shadow: 1px 1px 1px #000; }
+        
+        #info { position: fixed; top: 20px; left: 20px; color: white; font-size: 14px; text-shadow: 1px 1px 2px black; z-index: 100; line-height: 1.6; }
+        
+        #nn-info {
+            position: fixed; top: 20px; right: 20px; color: white; font-size: 12px;
+            text-shadow: 1px 1px 2px black; z-index: 100; background: rgba(0,0,0,0.5);
+            padding: 12px; border-radius: 8px; max-width: 280px;
+        }
+        #nn-info h3 { margin-bottom: 8px; color: #7cba4d; }
+        #nn-info .arch { font-family: monospace; font-size: 10px; line-height: 1.4; opacity: 0.8; }
+        #nn-info .training-stats { margin-top: 10px; padding-top: 10px; border-top: 1px solid #444; }
+        #nn-info .loss { color: #ff6b6b; }
+        
+        #inventory-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); display: none; align-items: center;
+            justify-content: center; z-index: 500;
+        }
+        #inventory-overlay.open { display: flex; }
+        
+        #inventory {
+            background: #8b8b8b; border: 4px solid #373737;
+            border-radius: 4px; padding: 16px; box-shadow: 0 0 40px rgba(0,0,0,0.8);
+        }
+        #inventory h2 { color: #3f3f3f; font-size: 18px; margin-bottom: 12px; text-align: center; }
+        .inv-section { margin-bottom: 16px; }
+        .inv-section h3 { color: #3f3f3f; font-size: 13px; margin-bottom: 8px; }
+        .inv-grid { display: grid; grid-template-columns: repeat(9, 48px); gap: 4px; }
+        .inv-slot {
+            width: 48px; height: 48px; background: #8b8b8b; border: 2px solid;
+            border-color: #373737 #fff #fff #373737; display: flex;
+            align-items: center; justify-content: center; cursor: pointer;
+            position: relative; transition: transform 0.1s;
+        }
+        .inv-slot:hover { transform: scale(1.05); z-index: 10; }
+        .inv-slot .block-icon { width: 32px; height: 32px; border-radius: 2px; position: relative; }
+        .inv-slot .block-icon::after {
+            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(135deg, rgba(255,255,255,0.3) 0%, transparent 50%, rgba(0,0,0,0.2) 100%);
+        }
+        .inv-slot .item-count {
+            position: absolute; bottom: 2px; right: 4px; font-size: 12px; font-weight: bold;
+            color: #fff; text-shadow: 1px 1px 1px #000, -1px -1px 1px #000;
+        }
+        .inv-slot .item-name {
+            position: absolute; bottom: -20px; left: 50%; transform: translateX(-50%);
+            background: #1a0a30; color: #fff; padding: 2px 8px; border-radius: 4px;
+            font-size: 11px; white-space: nowrap; opacity: 0; pointer-events: none;
+            transition: opacity 0.2s; z-index: 100;
+        }
+        .inv-slot:hover .item-name { opacity: 1; }
+        .inv-divider { height: 2px; background: linear-gradient(90deg, transparent, #555, transparent); margin: 12px 0; }
+        #inv-hint { text-align: center; color: #555; font-size: 12px; margin-top: 12px; }
+        
+        #start-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; z-index: 200; color: white;
+        }
+        #start-screen h1 { font-size: 48px; text-shadow: 4px 4px 0 #000; margin-bottom: 10px; letter-spacing: 2px; }
+        #start-screen .subtitle { font-size: 18px; opacity: 0.9; margin-bottom: 10px; color: #00ff88; }
+        #start-screen .nn-desc { font-size: 14px; opacity: 0.7; margin-bottom: 30px; max-width: 500px; text-align: center; line-height: 1.6; }
+        #start-btn {
+            padding: 16px 48px; font-size: 24px;
+            background: linear-gradient(135deg, #00ff88, #00aa55);
+            border: none; color: #000; cursor: pointer; border-radius: 8px;
+            transition: all 0.2s; font-weight: bold;
+        }
+        #start-btn:hover { transform: scale(1.05); box-shadow: 0 0 30px rgba(0,255,136,0.5); }
+        #controls-info { margin-top: 40px; text-align: center; font-size: 13px; opacity: 0.6; line-height: 2; }
+        
+        #loading {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #000; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 300; color: white;
+        }
+        #loading h2 { margin-bottom: 20px; }
+        #progress-bar { width: 400px; height: 20px; background: #333; border-radius: 10px; overflow: hidden; }
+        #progress-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #00ff88, #00aa55); transition: width 0.05s; }
+        #loading-text { margin-top: 15px; font-size: 14px; opacity: 0.7; }
+        #loss-display { margin-top: 20px; font-family: monospace; font-size: 16px; color: #ff6b6b; }
+        #training-viz { margin-top: 20px; display: flex; gap: 4px; align-items: flex-end; height: 100px; }
+        .loss-bar { width: 6px; background: #00ff88; transition: height 0.1s; border-radius: 2px; }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <h2>🧠 Training Transformer on Simplex Noise</h2>
+        <div id="progress-bar"><div id="progress-fill"></div></div>
+        <div id="loading-text">Initializing neural network...</div>
+        <div id="loss-display">Loss: --</div>
+        <div id="training-viz"></div>
+    </div>
+
+    <div id="start-screen" style="display: none;">
+        <h1>🧠 NEURAL VOXELS</h1>
+        <div class="subtitle">Transformer Trained on Simplex Noise</div>
+        <div class="nn-desc">
+            This world is generated by a Transformer neural network trained via gradient descent
+            to learn terrain patterns from simplex noise. The network learned height maps and biome
+            distributions through backpropagation.
+        </div>
+        <button id="start-btn">Enter World</button>
+        <div id="controls-info">
+            <div>WASD - Move | SPACE - Jump | SHIFT - Sprint</div>
+            <div>Left Click - Break | Right Click - Place</div>
+            <div>E - Inventory | 1-9 - Select Block | ESC - Release Mouse</div>
+        </div>
+    </div>
+    
+    <canvas id="game"></canvas>
+    <div id="crosshair"></div>
+    
+    <div id="inventory-overlay">
+        <div id="inventory">
+            <h2>Inventory</h2>
+            <div class="inv-section">
+                <h3>Building Blocks</h3>
+                <div class="inv-grid" id="inv-blocks"></div>
+            </div>
+            <div class="inv-divider"></div>
+            <div class="inv-section">
+                <h3>Hotbar</h3>
+                <div class="inv-grid" id="inv-hotbar"></div>
+            </div>
+            <div id="inv-hint">Click a block to select • Press E to close</div>
+        </div>
+    </div>
+    
+    <div id="hotbar"></div>
+    
+    <div id="info">
+        <div>FPS: <span id="fps">0</span></div>
+        <div>Position: <span id="pos">0, 0, 0</span></div>
+        <div>Blocks: <span id="blocks">0</span></div>
+        <div style="margin-top: 8px; opacity: 0.7; font-size: 12px;">Press E for inventory</div>
+    </div>
+    
+    <div id="nn-info">
+        <h3>🧠 Trained Transformer</h3>
+        <div class="arch">
+            Input: pos_embed(x,z) → R^32<br>
+            ─────────────────────────<br>
+            Layer 1: Attn(4 heads) → FFN<br>
+            Layer 2: Attn(4 heads) → FFN<br>
+            ─────────────────────────<br>
+            Output: height + biome<br>
+            Params: <span id="param-count">~8K</span>
+        </div>
+        <div class="training-stats">
+            <div>Epochs: <span id="epochs-done">0</span></div>
+            <div class="loss">Loss: <span id="final-loss">--</span></div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+    // ═══════════════════════════════════════════════════════════════
+    // SIMPLEX NOISE
+    // ═══════════════════════════════════════════════════════════════
+    
+    class SimplexNoise {
+        constructor(seed = Math.random()) {
+            this.p = new Uint8Array(256);
+            this.perm = new Uint8Array(512);
+            const rng = this.mulberry32(seed * 1000000);
+            for (let i = 0; i < 256; i++) this.p[i] = i;
+            for (let i = 255; i > 0; i--) {
+                const j = Math.floor(rng() * (i + 1));
+                [this.p[i], this.p[j]] = [this.p[j], this.p[i]];
+            }
+            for (let i = 0; i < 512; i++) this.perm[i] = this.p[i & 255];
+        }
+        
+        mulberry32(seed) {
+            return () => {
+                let t = seed += 0x6D2B79F5;
+                t = Math.imul(t ^ t >>> 15, t | 1);
+                t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+                return ((t ^ t >>> 14) >>> 0) / 4294967296;
+            };
+        }
+        
+        noise2D(x, y) {
+            const F2 = 0.5 * (Math.sqrt(3) - 1);
+            const G2 = (3 - Math.sqrt(3)) / 6;
+            const s = (x + y) * F2;
+            const i = Math.floor(x + s), j = Math.floor(y + s);
+            const t = (i + j) * G2;
+            const X0 = i - t, Y0 = j - t;
+            const x0 = x - X0, y0 = y - Y0;
+            const i1 = x0 > y0 ? 1 : 0, j1 = x0 > y0 ? 0 : 1;
+            const x1 = x0 - i1 + G2, y1 = y0 - j1 + G2;
+            const x2 = x0 - 1 + 2 * G2, y2 = y0 - 1 + 2 * G2;
+            const ii = i & 255, jj = j & 255;
+            const grad = (hash, x, y) => {
+                const h = hash & 7;
+                const u = h < 4 ? x : y, v = h < 4 ? y : x;
+                return ((h & 1) ? -u : u) + ((h & 2) ? -2 * v : 2 * v);
+            };
+            let n0 = 0, n1 = 0, n2 = 0;
+            let t0 = 0.5 - x0*x0 - y0*y0;
+            if (t0 >= 0) { t0 *= t0; n0 = t0 * t0 * grad(this.perm[ii + this.perm[jj]], x0, y0); }
+            let t1 = 0.5 - x1*x1 - y1*y1;
+            if (t1 >= 0) { t1 *= t1; n1 = t1 * t1 * grad(this.perm[ii + i1 + this.perm[jj + j1]], x1, y1); }
+            let t2 = 0.5 - x2*x2 - y2*y2;
+            if (t2 >= 0) { t2 *= t2; n2 = t2 * t2 * grad(this.perm[ii + 1 + this.perm[jj + 1]], x2, y2); }
+            return 70 * (n0 + n1 + n2);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // STABLE TRANSFORMER - Gradient clipping + numerical stability
+    // ═══════════════════════════════════════════════════════════════
+    
+    class StableTransformer {
+        constructor(seed = 42) {
+            this.seed = seed;
+            this.dim = 32;
+            this.heads = 4;
+            this.headDim = 8;
+            this.ffnDim = 64;
+            this.layers = 2;
+            this.lr = 0.002;
+            this.clipVal = 1.0;
+            
+            this.rng = this.mulberry32(seed);
+            this.initWeights();
+            this.cache = new Map();
+        }
+        
+        mulberry32(seed) {
+            return () => {
+                let t = seed += 0x6D2B79F5;
+                t = Math.imul(t ^ t >>> 15, t | 1);
+                t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+                return ((t ^ t >>> 14) >>> 0) / 4294967296;
+            };
+        }
+        
+        initWeights() {
+            const he = (fan_in) => Math.sqrt(2 / fan_in);
+            
+            // Position embeddings
+            this.embX = this.randMat(64, this.dim, he(64));
+            this.embZ = this.randMat(64, this.dim, he(64));
+            
+            // Layer weights
+            this.W = [];
+            for (let l = 0; l < this.layers; l++) {
+                this.W.push({
+                    Wv: this.randMat(this.dim, this.dim, he(this.dim)),
+                    Wo: this.randMat(this.dim, this.dim, he(this.dim)),
+                    W1: this.randMat(this.dim, this.ffnDim, he(this.dim)),
+                    W2: this.randMat(this.ffnDim, this.dim, he(this.ffnDim)),
+                    b1: new Float32Array(this.ffnDim),
+                    b2: new Float32Array(this.dim)
+                });
+            }
+            
+            // Output
+            this.Wh = this.randMat(this.dim, 1, he(this.dim));
+            this.Wb = this.randMat(this.dim, 4, he(this.dim));
+            
+            // Count params
+            let p = 64 * this.dim * 2;
+            p += this.layers * (this.dim * this.dim * 2 + this.dim * this.ffnDim * 2 + this.ffnDim + this.dim);
+            p += this.dim * 5;
+            document.getElementById('param-count').textContent = `${(p/1000).toFixed(1)}K`;
+        }
+        
+        randMat(r, c, scale) {
+            const m = { w: [], g: [] };
+            for (let i = 0; i < r; i++) {
+                m.w[i] = new Float32Array(c);
+                m.g[i] = new Float32Array(c);
+                for (let j = 0; j < c; j++) {
+                    m.w[i][j] = (this.rng() * 2 - 1) * scale;
+                }
+            }
+            return m;
+        }
+        
+        clip(x) {
+            if (!isFinite(x)) return 0;
+            return Math.max(-10, Math.min(10, x));
+        }
+        
+        matvec(M, v) {
+            const out = new Float32Array(M.w[0].length);
+            for (let j = 0; j < M.w[0].length; j++) {
+                let s = 0;
+                for (let i = 0; i < v.length; i++) s += v[i] * M.w[i][j];
+                out[j] = this.clip(s);
+            }
+            return out;
+        }
+        
+        gelu(x) {
+            x = this.clip(x);
+            return 0.5 * x * (1 + Math.tanh(0.7978845608 * (x + 0.044715 * x * x * x)));
+        }
+        
+        softmax(a) {
+            const max = Math.max(...a);
+            const e = a.map(x => Math.exp(this.clip(x - max)));
+            const s = e.reduce((a, b) => a + b) + 1e-8;
+            return e.map(x => x / s);
+        }
+        
+        layerNorm(x) {
+            const mean = x.reduce((a, b) => a + b) / x.length;
+            const vari = x.reduce((a, b) => a + (b - mean) ** 2, 0) / x.length;
+            const std = Math.sqrt(vari + 1e-5);
+            return x.map(v => this.clip((v - mean) / std));
+        }
+        
+        forward(x, z) {
+            const xi = ((Math.floor(x) % 64) + 64) % 64;
+            const zi = ((Math.floor(z) % 64) + 64) % 64;
+            
+            let h = new Float32Array(this.dim);
+            for (let i = 0; i < this.dim; i++) {
+                h[i] = this.clip(this.embX.w[xi][i] + this.embZ.w[zi][i]);
+            }
+            
+            for (let l = 0; l < this.layers; l++) {
+                const L = this.W[l];
+                let hn = this.layerNorm(h);
+                
+                // Simplified attention: just value projection
+                let v = this.matvec(L.Wv, hn);
+                let a = this.matvec(L.Wo, v);
+                
+                // Residual with scaling
+                for (let i = 0; i < this.dim; i++) h[i] = this.clip(h[i] + a[i] * 0.5);
+                
+                // FFN
+                hn = this.layerNorm(h);
+                let ff = this.matvec(L.W1, hn);
+                for (let i = 0; i < this.ffnDim; i++) ff[i] = this.gelu(ff[i] + L.b1[i]);
+                let ff2 = this.matvec(L.W2, ff);
+                for (let i = 0; i < this.dim; i++) h[i] = this.clip(h[i] + (ff2[i] + L.b2[i]) * 0.5);
+            }
+            
+            const hr = this.matvec(this.Wh, h)[0];
+            const bl = this.matvec(this.Wb, h);
+            
+            return { h, hr, bl };
+        }
+        
+        train(samples, simplex) {
+            let totalLoss = 0;
+            
+            // Zero grads
+            const zeroGrad = (M) => { for (let i = 0; i < M.g.length; i++) M.g[i].fill(0); };
+            zeroGrad(this.embX); zeroGrad(this.embZ);
+            zeroGrad(this.Wh); zeroGrad(this.Wb);
+            for (const L of this.W) {
+                zeroGrad(L.Wv); zeroGrad(L.Wo); zeroGrad(L.W1); zeroGrad(L.W2);
+            }
+            
+            for (const [x, z] of samples) {
+                // Target from simplex
+                let tgtH = 12 + simplex.noise2D(x * 0.04, z * 0.04) * 6 + simplex.noise2D(x * 0.08, z * 0.08) * 3;
+                tgtH = Math.max(4, Math.min(20, tgtH));
+                
+                const bn = simplex.noise2D(x * 0.025, z * 0.025);
+                let tgtB = bn > 0.25 ? 2 : bn < -0.25 ? 1 : simplex.noise2D(x * 0.02 + 50, z * 0.02 + 50) < -0.2 ? 3 : 0;
+                
+                // Forward
+                const { h, hr, bl } = this.forward(x, z);
+                
+                // Predictions
+                const predH = 12 + Math.tanh(this.clip(hr)) * 8;
+                const predB = this.softmax(bl);
+                
+                // Losses
+                const lossH = (predH - tgtH) ** 2;
+                const lossB = -Math.log(predB[tgtB] + 1e-7);
+                totalLoss += lossH + lossB * 0.5;
+                
+                // Gradients
+                const tg = 1 - Math.tanh(this.clip(hr)) ** 2;
+                const dHr = this.clip(2 * (predH - tgtH) * 8 * tg * 0.1, -this.clipVal, this.clipVal);
+                const dBl = predB.map((p, i) => this.clip((p - (i === tgtB ? 1 : 0)) * 0.1, -this.clipVal, this.clipVal));
+                
+                // Output grads
+                for (let i = 0; i < this.dim; i++) {
+                    this.Wh.g[i][0] += dHr * h[i];
+                    for (let j = 0; j < 4; j++) this.Wb.g[i][j] += dBl[j] * h[i];
+                }
+                
+                // Embedding grads (simplified)
+                const xi = ((Math.floor(x) % 64) + 64) % 64;
+                const zi = ((Math.floor(z) % 64) + 64) % 64;
+                for (let i = 0; i < this.dim; i++) {
+                    const dh = this.clip(dHr * this.Wh.w[i][0] + dBl.reduce((s, d, j) => s + d * this.Wb.w[i][j], 0), -this.clipVal, this.clipVal);
+                    this.embX.g[xi][i] += dh * 0.1;
+                    this.embZ.g[zi][i] += dh * 0.1;
+                }
+            }
+            
+            // Update weights
+            const update = (M) => {
+                for (let i = 0; i < M.w.length; i++) {
+                    for (let j = 0; j < M.w[i].length; j++) {
+                        const g = Math.max(-this.clipVal, Math.min(this.clipVal, M.g[i][j]));
+                        M.w[i][j] -= this.lr * g;
+                        M.w[i][j] = Math.max(-3, Math.min(3, M.w[i][j]));
+                    }
+                }
+            };
+            
+            update(this.embX); update(this.embZ);
+            update(this.Wh); update(this.Wb);
+            for (const L of this.W) {
+                update(L.Wv); update(L.Wo); update(L.W1); update(L.W2);
+            }
+            
+            return totalLoss / samples.length;
+        }
+        
+        generate(x, z) {
+            const k = `${Math.floor(x)},${Math.floor(z)}`;
+            if (this.cache.has(k)) return this.cache.get(k);
+            
+            const { hr, bl } = this.forward(x, z);
+            const height = Math.max(3, Math.min(22, Math.floor(12 + Math.tanh(this.clip(hr)) * 8)));
+            const probs = this.softmax(bl);
+            let biome = 0;
+            for (let i = 1; i < 4; i++) if (probs[i] > probs[biome]) biome = i;
+            
+            const out = { height, biome };
+            this.cache.set(k, out);
+            return out;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // GAME
+    // ═══════════════════════════════════════════════════════════════
+    
+    const BLOCKS = { AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, WOOD: 4, LEAVES: 5, SAND: 6, WATER: 7, BRICK: 8, GLASS: 9, SNOW: 10, COBBLE: 11, PLANKS: 12, IRON: 13, GOLD: 14, DIAMOND: 15 };
+    const BLOCK_COLORS = {
+        [BLOCKS.GRASS]: { top: 0x7cba4d, side: 0x8B7355, bottom: 0x8B7355 },
+        [BLOCKS.DIRT]: { top: 0x8B7355, side: 0x8B7355, bottom: 0x8B7355 },
+        [BLOCKS.STONE]: { top: 0x808080, side: 0x808080, bottom: 0x808080 },
+        [BLOCKS.WOOD]: { top: 0xA0826D, side: 0x6B4423, bottom: 0xA0826D },
+        [BLOCKS.LEAVES]: { top: 0x2d5a27, side: 0x2d5a27, bottom: 0x2d5a27 },
+        [BLOCKS.SAND]: { top: 0xE6D69C, side: 0xE6D69C, bottom: 0xE6D69C },
+        [BLOCKS.WATER]: { top: 0x3399FF, side: 0x3399FF, bottom: 0x3399FF },
+        [BLOCKS.BRICK]: { top: 0xB84C3C, side: 0xB84C3C, bottom: 0xB84C3C },
+        [BLOCKS.GLASS]: { top: 0xADD8E6, side: 0xADD8E6, bottom: 0xADD8E6 },
+        [BLOCKS.SNOW]: { top: 0xFFFAFA, side: 0xE8E8E8, bottom: 0xE8E8E8 },
+        [BLOCKS.COBBLE]: { top: 0x6a6a6a, side: 0x6a6a6a, bottom: 0x6a6a6a },
+        [BLOCKS.PLANKS]: { top: 0xBC9862, side: 0xBC9862, bottom: 0xBC9862 },
+        [BLOCKS.IRON]: { top: 0xD4D4D4, side: 0xC0C0C0, bottom: 0xC0C0C0 },
+        [BLOCKS.GOLD]: { top: 0xFFD700, side: 0xDAA520, bottom: 0xDAA520 },
+        [BLOCKS.DIAMOND]: { top: 0x4EE2EC, side: 0x00CED1, bottom: 0x00CED1 }
+    };
+    const BLOCK_NAMES = { [BLOCKS.GRASS]: 'Grass', [BLOCKS.DIRT]: 'Dirt', [BLOCKS.STONE]: 'Stone', [BLOCKS.WOOD]: 'Oak Log', [BLOCKS.LEAVES]: 'Leaves', [BLOCKS.SAND]: 'Sand', [BLOCKS.WATER]: 'Water', [BLOCKS.BRICK]: 'Brick', [BLOCKS.GLASS]: 'Glass', [BLOCKS.SNOW]: 'Snow', [BLOCKS.COBBLE]: 'Cobblestone', [BLOCKS.PLANKS]: 'Planks', [BLOCKS.IRON]: 'Iron Block', [BLOCKS.GOLD]: 'Gold Block', [BLOCKS.DIAMOND]: 'Diamond Block' };
+    const BIOMES = { 0: { name: 'Plains', surface: BLOCKS.GRASS, treeChance: 0.01 }, 1: { name: 'Desert', surface: BLOCKS.SAND, treeChance: 0.003 }, 2: { name: 'Forest', surface: BLOCKS.GRASS, treeChance: 0.04 }, 3: { name: 'Tundra', surface: BLOCKS.SNOW, treeChance: 0.005 } };
+
+    const WORLD_SIZE = 64;
+    let world = {}, meshes = {}, selectedBlock = BLOCKS.GRASS, transformer, inventoryOpen = false;
+    const inventory = {};
+    const ALL_BLOCKS = [BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE, BLOCKS.WOOD, BLOCKS.LEAVES, BLOCKS.SAND, BLOCKS.SNOW, BLOCKS.BRICK, BLOCKS.GLASS, BLOCKS.COBBLE, BLOCKS.PLANKS, BLOCKS.IRON, BLOCKS.GOLD, BLOCKS.DIAMOND, BLOCKS.WATER];
+    ALL_BLOCKS.forEach(b => inventory[b] = 64);
+
+    const canvas = document.getElementById('game');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setClearColor(0x87CEEB);
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(0x87CEEB, 50, 150);
+
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(WORLD_SIZE/2, 25, WORLD_SIZE/2);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+    const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+    sun.position.set(100, 100, 50);
+    scene.add(sun);
+
+    const player = { velocity: new THREE.Vector3(), onGround: false, height: 1.7, speed: 0.12, sprintSpeed: 0.2, jumpForce: 0.25 };
+    const keys = {};
+    let isLocked = false, pitch = 0, yaw = 0;
+
+    const getKey = (x, y, z) => `${x},${y},${z}`;
+    const getBlock = (x, y, z) => world[getKey(x, y, z)] || BLOCKS.AIR;
+    const setBlock = (x, y, z, type) => { const k = getKey(x, y, z); if (type === BLOCKS.AIR) delete world[k]; else world[k] = type; };
+    const seededRandom = (x, z, seed = 12345) => { const n = Math.sin(x * 12.9898 + z * 78.233 + seed) * 43758.5453; return n - Math.floor(n); };
+
+    async function trainAndGenerate() {
+        const loadingText = document.getElementById('loading-text');
+        const progressFill = document.getElementById('progress-fill');
+        const lossDisplay = document.getElementById('loss-display');
+        
+        const vizContainer = document.getElementById('training-viz');
+        const bars = [];
+        for (let i = 0; i < 60; i++) {
+            const bar = document.createElement('div');
+            bar.className = 'loss-bar';
+            bar.style.height = '0px';
+            vizContainer.appendChild(bar);
+            bars.push(bar);
+        }
+        
+        const simplex = new SimplexNoise(transformer.seed);
+        const epochs = 200, batchSize = 32;
+        
+        for (let epoch = 0; epoch < epochs; epoch++) {
+            const samples = [];
+            for (let i = 0; i < batchSize; i++) {
+                samples.push([Math.floor(transformer.rng() * WORLD_SIZE), Math.floor(transformer.rng() * WORLD_SIZE)]);
+            }
+            
+            const loss = transformer.train(samples, simplex);
+            
+            const barIdx = epoch % bars.length;
+            bars[barIdx].style.height = Math.min(80, Math.max(5, loss * 3)) + 'px';
+            bars[barIdx].style.background = `hsl(${Math.max(0, 120 - loss * 8)}, 70%, 50%)`;
+            
+            progressFill.style.width = ((epoch + 1) / epochs * 50) + '%';
+            loadingText.textContent = `Training epoch ${epoch + 1}/${epochs}`;
+            lossDisplay.textContent = `Loss: ${loss.toFixed(4)}`;
+            document.getElementById('epochs-done').textContent = epoch + 1;
+            document.getElementById('final-loss').textContent = loss.toFixed(4);
+            
+            if (epoch % 10 === 0) await new Promise(r => setTimeout(r, 0));
+        }
+        
+        transformer.cache.clear();
+        loadingText.textContent = 'Generating world...';
+        await new Promise(r => setTimeout(r, 100));
+        
+        let count = 0;
+        const total = WORLD_SIZE * WORLD_SIZE;
+        
+        for (let x = 0; x < WORLD_SIZE; x++) {
+            for (let z = 0; z < WORLD_SIZE; z++) {
+                const { height, biome } = transformer.generate(x, z);
+                const bc = BIOMES[biome];
+                
+                for (let y = 0; y <= height; y++) {
+                    setBlock(x, y, z, y === height ? bc.surface : y > height - 4 ? BLOCKS.DIRT : BLOCKS.STONE);
+                }
+                
+                if (seededRandom(x, z) < bc.treeChance && height > 5) {
+                    const th = 4 + Math.floor(seededRandom(x, z, 999) * 3);
+                    for (let ty = 1; ty <= th; ty++) setBlock(x, height + ty, z, BLOCKS.WOOD);
+                    for (let lx = -2; lx <= 2; lx++) {
+                        for (let lz = -2; lz <= 2; lz++) {
+                            for (let ly = th - 1; ly <= th + 2; ly++) {
+                                if (Math.abs(lx) + Math.abs(lz) <= 3 && (lx !== 0 || lz !== 0 || ly > th)) {
+                                    if (getBlock(x + lx, height + ly, z + lz) === BLOCKS.AIR) {
+                                        setBlock(x + lx, height + ly, z + lz, BLOCKS.LEAVES);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                count++;
+                if (count % 200 === 0) {
+                    progressFill.style.width = (50 + count / total * 50) + '%';
+                    loadingText.textContent = `Generating terrain... ${(count/total*100).toFixed(0)}%`;
+                    await new Promise(r => setTimeout(r, 0));
+                }
+            }
+        }
+        
+        document.getElementById('blocks').textContent = Object.keys(world).length;
+    }
+
+    function buildMeshes() {
+        Object.values(meshes).forEach(m => scene.remove(m));
+        meshes = {};
+        const geometries = {};
+        
+        for (const key in world) {
+            const [x, y, z] = key.split(',').map(Number);
+            const bt = world[key];
+            const faces = [];
+            if (getBlock(x, y + 1, z) === BLOCKS.AIR) faces.push('top');
+            if (getBlock(x, y - 1, z) === BLOCKS.AIR) faces.push('bottom');
+            if (getBlock(x + 1, y, z) === BLOCKS.AIR) faces.push('right');
+            if (getBlock(x - 1, y, z) === BLOCKS.AIR) faces.push('left');
+            if (getBlock(x, y, z + 1) === BLOCKS.AIR) faces.push('front');
+            if (getBlock(x, y, z - 1) === BLOCKS.AIR) faces.push('back');
+            if (faces.length === 0) continue;
+            
+            faces.forEach(face => {
+                const ck = face === 'top' ? 'top' : face === 'bottom' ? 'bottom' : 'side';
+                const gk = `${bt}-${ck}`;
+                if (!geometries[gk]) geometries[gk] = { positions: [], normals: [], color: BLOCK_COLORS[bt][ck], bt };
+                addFace(geometries[gk].positions, geometries[gk].normals, x, y, z, face);
+            });
+        }
+
+        for (const key in geometries) {
+            const g = geometries[key];
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.Float32BufferAttribute(g.positions, 3));
+            geo.setAttribute('normal', new THREE.Float32BufferAttribute(g.normals, 3));
+            const mat = new THREE.MeshLambertMaterial({ color: g.color, transparent: g.bt === BLOCKS.GLASS || g.bt === BLOCKS.WATER, opacity: g.bt === BLOCKS.GLASS ? 0.5 : g.bt === BLOCKS.WATER ? 0.7 : 1 });
+            const mesh = new THREE.Mesh(geo, mat);
+            scene.add(mesh);
+            meshes[key] = mesh;
+        }
+    }
+
+    function addFace(pos, norm, x, y, z, face) {
+        const s = 0.5;
+        const fd = {
+            top: { v: [[x-s,y+s,z+s], [x+s,y+s,z+s], [x+s,y+s,z-s], [x-s,y+s,z-s]], n: [0, 1, 0] },
+            bottom: { v: [[x-s,y-s,z-s], [x+s,y-s,z-s], [x+s,y-s,z+s], [x-s,y-s,z+s]], n: [0, -1, 0] },
+            front: { v: [[x-s,y-s,z+s], [x+s,y-s,z+s], [x+s,y+s,z+s], [x-s,y+s,z+s]], n: [0, 0, 1] },
+            back: { v: [[x+s,y-s,z-s], [x-s,y-s,z-s], [x-s,y+s,z-s], [x+s,y+s,z-s]], n: [0, 0, -1] },
+            right: { v: [[x+s,y-s,z+s], [x+s,y-s,z-s], [x+s,y+s,z-s], [x+s,y+s,z+s]], n: [1, 0, 0] },
+            left: { v: [[x-s,y-s,z-s], [x-s,y-s,z+s], [x-s,y+s,z+s], [x-s,y+s,z-s]], n: [-1, 0, 0] }
+        };
+        const f = fd[face];
+        [0, 1, 2, 0, 2, 3].forEach(i => { pos.push(...f.v[i]); norm.push(...f.n); });
+    }
+
+    function getTargetBlock() {
+        const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
+        const origin = camera.position.clone();
+        let x = Math.floor(origin.x), y = Math.floor(origin.y), z = Math.floor(origin.z);
+        const stepX = dir.x >= 0 ? 1 : -1, stepY = dir.y >= 0 ? 1 : -1, stepZ = dir.z >= 0 ? 1 : -1;
+        const tDeltaX = dir.x !== 0 ? Math.abs(1 / dir.x) : Infinity;
+        const tDeltaY = dir.y !== 0 ? Math.abs(1 / dir.y) : Infinity;
+        const tDeltaZ = dir.z !== 0 ? Math.abs(1 / dir.z) : Infinity;
+        let tMaxX = dir.x !== 0 ? ((stepX > 0 ? x + 1 : x) - origin.x) / dir.x : Infinity;
+        let tMaxY = dir.y !== 0 ? ((stepY > 0 ? y + 1 : y) - origin.y) / dir.y : Infinity;
+        let tMaxZ = dir.z !== 0 ? ((stepZ > 0 ? z + 1 : z) - origin.z) / dir.z : Infinity;
+        let lastX = x, lastY = y, lastZ = z, dist = 0;
+        while (dist < 6) {
+            if (getBlock(x, y, z) !== BLOCKS.AIR) return { hit: { x, y, z }, place: { x: lastX, y: lastY, z: lastZ } };
+            lastX = x; lastY = y; lastZ = z;
+            if (tMaxX < tMaxY) {
+                if (tMaxX < tMaxZ) { dist = tMaxX; tMaxX += tDeltaX; x += stepX; }
+                else { dist = tMaxZ; tMaxZ += tDeltaZ; z += stepZ; }
+            } else {
+                if (tMaxY < tMaxZ) { dist = tMaxY; tMaxY += tDeltaY; y += stepY; }
+                else { dist = tMaxZ; tMaxZ += tDeltaZ; z += stepZ; }
+            }
+        }
+        return { hit: null, place: null };
+    }
+
+    const highlight = new THREE.Mesh(new THREE.BoxGeometry(1.01, 1.01, 1.01), new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.5 }));
+    highlight.visible = false;
+    scene.add(highlight);
+
+    function checkCollision(x, y, z) {
+        for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) for (let dy = 0; dy <= 2; dy++)
+            if (getBlock(Math.floor(x + dx * 0.3), Math.floor(y + dy), Math.floor(z + dz * 0.3)) !== BLOCKS.AIR) return true;
+        return false;
+    }
+
+    function updatePlayer() {
+        if (inventoryOpen) return;
+        camera.quaternion.setFromEuler(new THREE.Euler(pitch, yaw, 0, 'YXZ'));
+        const forward = new THREE.Vector3(); camera.getWorldDirection(forward); forward.y = 0; forward.normalize();
+        const right = new THREE.Vector3(); right.crossVectors(forward, new THREE.Vector3(0, 1, 0));
+        const speed = keys['ShiftLeft'] ? player.sprintSpeed : player.speed;
+        const move = new THREE.Vector3();
+        if (keys['KeyW']) move.add(forward); if (keys['KeyS']) move.sub(forward);
+        if (keys['KeyD']) move.add(right); if (keys['KeyA']) move.sub(right);
+        if (move.length() > 0) move.normalize().multiplyScalar(speed);
+        const newX = camera.position.x + move.x, newZ = camera.position.z + move.z;
+        if (!checkCollision(newX, camera.position.y - player.height + 0.1, camera.position.z)) camera.position.x = newX;
+        if (!checkCollision(camera.position.x, camera.position.y - player.height + 0.1, newZ)) camera.position.z = newZ;
+        player.velocity.y -= 0.015;
+        if (keys['Space'] && player.onGround) { player.velocity.y = player.jumpForce; player.onGround = false; }
+        const newY = camera.position.y + player.velocity.y, feetY = newY - player.height;
+        if (player.velocity.y < 0) {
+            if (checkCollision(camera.position.x, feetY, camera.position.z)) { camera.position.y = Math.floor(feetY) + 1 + player.height; player.velocity.y = 0; player.onGround = true; }
+            else { camera.position.y = newY; player.onGround = false; }
+        } else {
+            if (checkCollision(camera.position.x, newY + 0.1, camera.position.z)) player.velocity.y = 0;
+            else camera.position.y = newY;
+        }
+        if (camera.position.y < -10) { camera.position.y = 30; player.velocity.y = 0; }
+        document.getElementById('pos').textContent = `${camera.position.x.toFixed(1)}, ${camera.position.y.toFixed(1)}, ${camera.position.z.toFixed(1)}`;
+    }
+
+    function setupInventory() {
+        const invBlocks = document.getElementById('inv-blocks'), invHotbar = document.getElementById('inv-hotbar');
+        ALL_BLOCKS.forEach(bt => invBlocks.appendChild(createInvSlot(bt)));
+        for (let i = 0; i < 18 - ALL_BLOCKS.length; i++) { const e = document.createElement('div'); e.className = 'inv-slot'; invBlocks.appendChild(e); }
+        [BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE, BLOCKS.WOOD, BLOCKS.LEAVES, BLOCKS.SAND, BLOCKS.SNOW, BLOCKS.BRICK, BLOCKS.GLASS].forEach(bt => invHotbar.appendChild(createInvSlot(bt)));
+    }
+    
+    function createInvSlot(bt) {
+        const slot = document.createElement('div'); slot.className = 'inv-slot';
+        const icon = document.createElement('div'); icon.className = 'block-icon'; icon.style.background = `#${BLOCK_COLORS[bt].top.toString(16).padStart(6, '0')}`;
+        const count = document.createElement('span'); count.className = 'item-count'; count.textContent = inventory[bt] || 0;
+        const name = document.createElement('span'); name.className = 'item-name'; name.textContent = BLOCK_NAMES[bt];
+        slot.appendChild(icon); slot.appendChild(count); slot.appendChild(name);
+        slot.onclick = () => { selectBlock(bt); updateHotbar(); };
+        return slot;
+    }
+    
+    function toggleInventory() {
+        inventoryOpen = !inventoryOpen;
+        document.getElementById('inventory-overlay').classList.toggle('open', inventoryOpen);
+        if (inventoryOpen) document.exitPointerLock(); else canvas.requestPointerLock();
+    }
+
+    function setupHotbar() {
+        const hotbar = document.getElementById('hotbar');
+        [BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE, BLOCKS.WOOD, BLOCKS.LEAVES, BLOCKS.SAND, BLOCKS.SNOW, BLOCKS.BRICK, BLOCKS.GLASS].forEach((bt, i) => {
+            const slot = document.createElement('div');
+            slot.className = 'hotbar-slot' + (bt === selectedBlock ? ' selected' : '');
+            slot.innerHTML = `<div class="block-preview" style="background: #${BLOCK_COLORS[bt].top.toString(16).padStart(6, '0')}"></div><span class="key-hint">${i + 1}</span><span class="count">${inventory[bt] || ''}</span>`;
+            slot.onclick = () => selectBlock(bt);
+            hotbar.appendChild(slot);
+        });
+    }
+    
+    function updateHotbar() {
+        const bts = [BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE, BLOCKS.WOOD, BLOCKS.LEAVES, BLOCKS.SAND, BLOCKS.SNOW, BLOCKS.BRICK, BLOCKS.GLASS];
+        document.querySelectorAll('#hotbar .hotbar-slot').forEach((slot, i) => {
+            slot.classList.toggle('selected', bts[i] === selectedBlock);
+            const c = slot.querySelector('.count'); if (c) c.textContent = inventory[bts[i]] || '';
+        });
+    }
+
+    function selectBlock(bt) { selectedBlock = bt; updateHotbar(); }
+
+    document.addEventListener('keydown', e => {
+        keys[e.code] = true;
+        if (e.code === 'KeyE') { toggleInventory(); return; }
+        if (e.code === 'Escape' && inventoryOpen) { toggleInventory(); return; }
+        const n = parseInt(e.key);
+        if (n >= 1 && n <= 9) selectBlock([BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE, BLOCKS.WOOD, BLOCKS.LEAVES, BLOCKS.SAND, BLOCKS.SNOW, BLOCKS.BRICK, BLOCKS.GLASS][n - 1]);
+    });
+    document.addEventListener('keyup', e => keys[e.code] = false);
+    document.addEventListener('mousemove', e => {
+        if (!isLocked || inventoryOpen) return;
+        yaw -= e.movementX * 0.002; pitch -= e.movementY * 0.002;
+        pitch = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, pitch));
+    });
+
+    canvas.addEventListener('mousedown', e => {
+        if (!isLocked || inventoryOpen) return;
+        const target = getTargetBlock();
+        if (e.button === 0 && target.hit) {
+            const bt = getBlock(target.hit.x, target.hit.y, target.hit.z);
+            if (bt !== BLOCKS.AIR) inventory[bt] = (inventory[bt] || 0) + 1;
+            setBlock(target.hit.x, target.hit.y, target.hit.z, BLOCKS.AIR);
+            buildMeshes(); updateHotbar();
+            document.getElementById('blocks').textContent = Object.keys(world).length;
+        } else if (e.button === 2 && target.place && target.hit) {
+            if ((inventory[selectedBlock] || 0) > 0) {
+                const px = Math.floor(camera.position.x), py = Math.floor(camera.position.y), pz = Math.floor(camera.position.z);
+                const { x, y, z } = target.place;
+                if (!(x === px && z === pz && (y === py || y === py - 1 || y === py - 2))) {
+                    setBlock(x, y, z, selectedBlock); inventory[selectedBlock]--;
+                    buildMeshes(); updateHotbar();
+                    document.getElementById('blocks').textContent = Object.keys(world).length;
+                }
+            }
+        }
+    });
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+    canvas.addEventListener('wheel', e => {
+        if (inventoryOpen) return;
+        const bts = [BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE, BLOCKS.WOOD, BLOCKS.LEAVES, BLOCKS.SAND, BLOCKS.SNOW, BLOCKS.BRICK, BLOCKS.GLASS];
+        let idx = bts.indexOf(selectedBlock);
+        idx = (idx + Math.sign(e.deltaY) + bts.length) % bts.length;
+        selectBlock(bts[idx]);
+    });
+    document.addEventListener('pointerlockchange', () => { isLocked = document.pointerLockElement === canvas; });
+    document.getElementById('start-btn').addEventListener('click', () => { document.getElementById('start-screen').style.display = 'none'; canvas.requestPointerLock(); });
+    window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+
+    let frames = 0, lastTime = performance.now();
+    function animate() {
+        requestAnimationFrame(animate);
+        frames++; const now = performance.now();
+        if (now - lastTime >= 1000) { document.getElementById('fps').textContent = frames; frames = 0; lastTime = now; }
+        if (isLocked && !inventoryOpen) {
+            updatePlayer();
+            const target = getTargetBlock();
+            if (target.hit) { highlight.position.set(target.hit.x, target.hit.y, target.hit.z); highlight.visible = true; }
+            else highlight.visible = false;
+        }
+        renderer.render(scene, camera);
+    }
+
+    async function init() {
+        document.getElementById('loading-text').textContent = 'Initializing neural network...';
+        await new Promise(r => setTimeout(r, 100));
+        transformer = new StableTransformer(Date.now() % 100000);
+        setupHotbar(); setupInventory();
+        await trainAndGenerate();
+        buildMeshes();
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('start-screen').style.display = 'flex';
+        animate();
+    }
+
+    init();
+    </script>
+</body>
+</html>

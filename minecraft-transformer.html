@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voxel World - Transformer Generated</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
+        #game { width: 100vw; height: 100vh; display: block; }
+        
+        #crosshair {
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 100;
+        }
+        #crosshair::before, #crosshair::after {
+            content: '';
+            position: absolute;
+            background: white;
+            mix-blend-mode: difference;
+        }
+        #crosshair::before { width: 20px; height: 2px; top: -1px; left: -10px; }
+        #crosshair::after { width: 2px; height: 20px; left: -1px; top: -10px; }
+        
+        #hotbar {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 4px;
+            padding: 8px;
+            background: rgba(0,0,0,0.6);
+            border-radius: 8px;
+            z-index: 100;
+        }
+        .hotbar-slot {
+            width: 50px; height: 50px;
+            border: 2px solid #555;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            cursor: pointer;
+        }
+        .hotbar-slot.selected { border-color: #fff; box-shadow: 0 0 10px rgba(255,255,255,0.5); }
+        .hotbar-slot .block-preview {
+            width: 36px; height: 36px;
+            border-radius: 4px;
+        }
+        .hotbar-slot .key-hint {
+            position: absolute;
+            bottom: 2px; right: 4px;
+            font-size: 10px;
+            color: #aaa;
+        }
+        
+        #info {
+            position: fixed;
+            top: 20px; left: 20px;
+            color: white;
+            font-size: 14px;
+            text-shadow: 1px 1px 2px black;
+            z-index: 100;
+            line-height: 1.6;
+        }
+        
+        #nn-info {
+            position: fixed;
+            top: 20px; right: 20px;
+            color: white;
+            font-size: 12px;
+            text-shadow: 1px 1px 2px black;
+            z-index: 100;
+            background: rgba(0,0,0,0.5);
+            padding: 12px;
+            border-radius: 8px;
+            max-width: 280px;
+        }
+        #nn-info h3 { margin-bottom: 8px; color: #7cba4d; }
+        #nn-info .arch { font-family: monospace; font-size: 10px; line-height: 1.4; opacity: 0.8; }
+        
+        #start-screen {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+            color: white;
+        }
+        #start-screen h1 {
+            font-size: 48px;
+            text-shadow: 4px 4px 0 #000;
+            margin-bottom: 10px;
+            letter-spacing: 2px;
+        }
+        #start-screen .subtitle {
+            font-size: 18px;
+            opacity: 0.9;
+            margin-bottom: 10px;
+            color: #00ff88;
+        }
+        #start-screen .nn-desc {
+            font-size: 14px;
+            opacity: 0.7;
+            margin-bottom: 30px;
+            max-width: 500px;
+            text-align: center;
+            line-height: 1.6;
+        }
+        #start-btn {
+            padding: 16px 48px;
+            font-size: 24px;
+            background: linear-gradient(135deg, #00ff88, #00aa55);
+            border: none;
+            color: #000;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.2s;
+            font-weight: bold;
+        }
+        #start-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 30px rgba(0,255,136,0.5);
+        }
+        #controls-info {
+            margin-top: 40px;
+            text-align: center;
+            font-size: 13px;
+            opacity: 0.6;
+            line-height: 2;
+        }
+        #loading {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 300;
+            color: white;
+        }
+        #loading h2 { margin-bottom: 20px; }
+        #progress-bar {
+            width: 300px;
+            height: 20px;
+            background: #333;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        #progress-fill {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #00ff88, #00aa55);
+            transition: width 0.1s;
+        }
+        #loading-text { margin-top: 15px; font-size: 14px; opacity: 0.7; }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <h2>🧠 Initializing Transformer Neural Network</h2>
+        <div id="progress-bar"><div id="progress-fill"></div></div>
+        <div id="loading-text">Building attention layers...</div>
+    </div>
+
+    <div id="start-screen" style="display: none;">
+        <h1>🧠 NEURAL VOXELS</h1>
+        <div class="subtitle">Transformer-Generated World</div>
+        <div class="nn-desc">
+            This world is generated by a small Transformer neural network with self-attention layers.
+            The network takes (x, z) coordinates as input tokens and predicts terrain height and block types
+            through learned attention patterns.
+        </div>
+        <button id="start-btn">Enter World</button>
+        <div id="controls-info">
+            <div>WASD - Move | SPACE - Jump | SHIFT - Sprint</div>
+            <div>Left Click - Break Block | Right Click - Place Block</div>
+            <div>1-9 - Select Block | Scroll - Change Block | ESC - Release Mouse</div>
+        </div>
+    </div>
+    
+    <canvas id="game"></canvas>
+    <div id="crosshair"></div>
+    
+    <div id="hotbar"></div>
+    
+    <div id="info">
+        <div>FPS: <span id="fps">0</span></div>
+        <div>Position: <span id="pos">0, 0, 0</span></div>
+        <div>Blocks: <span id="blocks">0</span></div>
+    </div>
+    
+    <div id="nn-info">
+        <h3>🧠 Transformer Architecture</h3>
+        <div class="arch">
+            Input: pos_embed(x,z) → R^32<br>
+            ─────────────────────────<br>
+            Layer 1: MultiHeadAttn(4 heads)<br>
+            &nbsp;&nbsp;→ LayerNorm → FFN(32→64→32)<br>
+            Layer 2: MultiHeadAttn(4 heads)<br>
+            &nbsp;&nbsp;→ LayerNorm → FFN(32→64→32)<br>
+            ─────────────────────────<br>
+            Output: height (1) + biome (4)<br>
+            Params: <span id="param-count">~6K</span>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+    // ═══════════════════════════════════════════════════════════════
+    // TRANSFORMER NEURAL NETWORK FOR WORLD GENERATION
+    // ═══════════════════════════════════════════════════════════════
+    
+    class TransformerWorldGenerator {
+        constructor(seed = 42) {
+            this.seed = seed;
+            this.embedDim = 32;
+            this.numHeads = 4;
+            this.headDim = this.embedDim / this.numHeads;
+            this.ffnDim = 64;
+            this.numLayers = 2;
+            
+            // Initialize weights with seeded random
+            this.rng = this.mulberry32(seed);
+            this.initializeWeights();
+            
+            // Cache for generated values
+            this.cache = new Map();
+        }
+        
+        // Seeded PRNG
+        mulberry32(seed) {
+            return () => {
+                let t = seed += 0x6D2B79F5;
+                t = Math.imul(t ^ t >>> 15, t | 1);
+                t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+                return ((t ^ t >>> 14) >>> 0) / 4294967296;
+            };
+        }
+        
+        // Xavier initialization
+        xavier(rows, cols) {
+            const scale = Math.sqrt(6 / (rows + cols));
+            const weights = [];
+            for (let i = 0; i < rows; i++) {
+                weights[i] = [];
+                for (let j = 0; j < cols; j++) {
+                    weights[i][j] = (this.rng() * 2 - 1) * scale;
+                }
+            }
+            return weights;
+        }
+        
+        initializeWeights() {
+            this.layers = [];
+            
+            // Positional encoding weights (learnable)
+            this.posEmbedX = this.xavier(256, this.embedDim);
+            this.posEmbedZ = this.xavier(256, this.embedDim);
+            
+            // Transformer layers
+            for (let l = 0; l < this.numLayers; l++) {
+                this.layers.push({
+                    // Multi-head attention
+                    Wq: this.xavier(this.embedDim, this.embedDim),
+                    Wk: this.xavier(this.embedDim, this.embedDim),
+                    Wv: this.xavier(this.embedDim, this.embedDim),
+                    Wo: this.xavier(this.embedDim, this.embedDim),
+                    
+                    // Layer norm params
+                    ln1_gamma: Array(this.embedDim).fill(1),
+                    ln1_beta: Array(this.embedDim).fill(0),
+                    
+                    // FFN
+                    W1: this.xavier(this.embedDim, this.ffnDim),
+                    b1: Array(this.ffnDim).fill(0),
+                    W2: this.xavier(this.ffnDim, this.embedDim),
+                    b2: Array(this.embedDim).fill(0),
+                    
+                    // Layer norm 2
+                    ln2_gamma: Array(this.embedDim).fill(1),
+                    ln2_beta: Array(this.embedDim).fill(0),
+                });
+            }
+            
+            // Output projection
+            this.outHeight = this.xavier(this.embedDim, 1);
+            this.outBiome = this.xavier(this.embedDim, 4);
+            
+            // Count parameters
+            let params = 256 * this.embedDim * 2; // pos embeds
+            params += this.numLayers * (
+                this.embedDim * this.embedDim * 4 + // attention
+                this.embedDim * 2 * 2 + // layer norms
+                this.embedDim * this.ffnDim + this.ffnDim + // FFN1
+                this.ffnDim * this.embedDim + this.embedDim  // FFN2
+            );
+            params += this.embedDim * 5; // output
+            document.getElementById('param-count').textContent = `${(params/1000).toFixed(1)}K`;
+        }
+        
+        // Matrix operations
+        matmul(a, b) {
+            const result = [];
+            for (let i = 0; i < a.length; i++) {
+                result[i] = [];
+                for (let j = 0; j < b[0].length; j++) {
+                    let sum = 0;
+                    for (let k = 0; k < b.length; k++) {
+                        sum += a[i][k] * b[k][j];
+                    }
+                    result[i][j] = sum;
+                }
+            }
+            return result;
+        }
+        
+        vecMatmul(vec, mat) {
+            const result = [];
+            for (let j = 0; j < mat[0].length; j++) {
+                let sum = 0;
+                for (let i = 0; i < vec.length; i++) {
+                    sum += vec[i] * mat[i][j];
+                }
+                result[j] = sum;
+            }
+            return result;
+        }
+        
+        // Activation functions
+        gelu(x) {
+            return 0.5 * x * (1 + Math.tanh(Math.sqrt(2 / Math.PI) * (x + 0.044715 * x * x * x)));
+        }
+        
+        softmax(arr) {
+            const max = Math.max(...arr);
+            const exp = arr.map(x => Math.exp(x - max));
+            const sum = exp.reduce((a, b) => a + b);
+            return exp.map(x => x / sum);
+        }
+        
+        layerNorm(x, gamma, beta) {
+            const mean = x.reduce((a, b) => a + b) / x.length;
+            const variance = x.reduce((a, b) => a + (b - mean) ** 2, 0) / x.length;
+            const std = Math.sqrt(variance + 1e-5);
+            return x.map((v, i) => gamma[i] * (v - mean) / std + beta[i]);
+        }
+        
+        // Multi-head self attention (single token version for efficiency)
+        multiHeadAttention(x, layer) {
+            // For single position, attention is simpler
+            // Q, K, V projections
+            const q = this.vecMatmul(x, layer.Wq);
+            const k = this.vecMatmul(x, layer.Wk);
+            const v = this.vecMatmul(x, layer.Wv);
+            
+            // Split into heads and compute attention
+            const headOutputs = [];
+            for (let h = 0; h < this.numHeads; h++) {
+                const start = h * this.headDim;
+                const end = start + this.headDim;
+                
+                const qh = q.slice(start, end);
+                const kh = k.slice(start, end);
+                const vh = v.slice(start, end);
+                
+                // Attention score (dot product)
+                let score = 0;
+                for (let i = 0; i < this.headDim; i++) {
+                    score += qh[i] * kh[i];
+                }
+                score /= Math.sqrt(this.headDim);
+                
+                // For single token, softmax of single value = 1
+                // So output is just v scaled
+                headOutputs.push(...vh);
+            }
+            
+            // Output projection
+            return this.vecMatmul(headOutputs, layer.Wo);
+        }
+        
+        // Feed-forward network
+        ffn(x, layer) {
+            // First linear + GELU
+            let hidden = this.vecMatmul(x, layer.W1);
+            hidden = hidden.map((v, i) => this.gelu(v + layer.b1[i]));
+            
+            // Second linear
+            let out = this.vecMatmul(hidden, layer.W2);
+            return out.map((v, i) => v + layer.b2[i]);
+        }
+        
+        // Get positional embedding
+        getPositionEmbedding(x, z) {
+            // Normalize to 0-255 range with wrapping
+            const xi = ((x % 256) + 256) % 256;
+            const zi = ((z % 256) + 256) % 256;
+            
+            // Combine x and z embeddings
+            const xEmbed = this.posEmbedX[Math.floor(xi)];
+            const zEmbed = this.posEmbedZ[Math.floor(zi)];
+            
+            // Add fractional interpolation for smoothness
+            const xFrac = xi - Math.floor(xi);
+            const zFrac = zi - Math.floor(zi);
+            const xEmbed2 = this.posEmbedX[(Math.floor(xi) + 1) % 256];
+            const zEmbed2 = this.posEmbedZ[(Math.floor(zi) + 1) % 256];
+            
+            return xEmbed.map((v, i) => {
+                const xVal = v * (1 - xFrac) + xEmbed2[i] * xFrac;
+                const zVal = zEmbed[i] * (1 - zFrac) + zEmbed2[i] * zFrac;
+                return xVal + zVal;
+            });
+        }
+        
+        // Forward pass
+        forward(x, z) {
+            const cacheKey = `${x},${z}`;
+            if (this.cache.has(cacheKey)) {
+                return this.cache.get(cacheKey);
+            }
+            
+            // Get input embedding
+            let hidden = this.getPositionEmbedding(x, z);
+            
+            // Pass through transformer layers
+            for (const layer of this.layers) {
+                // Self-attention with residual
+                const attnOut = this.multiHeadAttention(hidden, layer);
+                hidden = hidden.map((v, i) => v + attnOut[i]);
+                hidden = this.layerNorm(hidden, layer.ln1_gamma, layer.ln1_beta);
+                
+                // FFN with residual
+                const ffnOut = this.ffn(hidden, layer);
+                hidden = hidden.map((v, i) => v + ffnOut[i]);
+                hidden = this.layerNorm(hidden, layer.ln2_gamma, layer.ln2_beta);
+            }
+            
+            // Output projections
+            const heightRaw = this.vecMatmul(hidden, this.outHeight)[0];
+            const biomeLogits = this.vecMatmul(hidden, this.outBiome);
+            const biomeSoftmax = this.softmax(biomeLogits);
+            
+            // Scale height to reasonable terrain range
+            const height = Math.floor(8 + (Math.tanh(heightRaw) + 1) * 10);
+            
+            // Get biome from argmax
+            let biome = 0;
+            let maxProb = biomeSoftmax[0];
+            for (let i = 1; i < biomeSoftmax.length; i++) {
+                if (biomeSoftmax[i] > maxProb) {
+                    maxProb = biomeSoftmax[i];
+                    biome = i;
+                }
+            }
+            
+            const result = { height, biome, probs: biomeSoftmax };
+            this.cache.set(cacheKey, result);
+            return result;
+        }
+        
+        // Generate terrain at position
+        generate(x, z) {
+            return this.forward(x, z);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // GAME ENGINE
+    // ═══════════════════════════════════════════════════════════════
+    
+    // Block types
+    const BLOCKS = {
+        AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, WOOD: 4,
+        LEAVES: 5, SAND: 6, WATER: 7, BRICK: 8, GLASS: 9, SNOW: 10
+    };
+
+    const BLOCK_COLORS = {
+        [BLOCKS.GRASS]: { top: 0x7cba4d, side: 0x8B7355, bottom: 0x8B7355 },
+        [BLOCKS.DIRT]: { top: 0x8B7355, side: 0x8B7355, bottom: 0x8B7355 },
+        [BLOCKS.STONE]: { top: 0x808080, side: 0x808080, bottom: 0x808080 },
+        [BLOCKS.WOOD]: { top: 0xA0826D, side: 0x6B4423, bottom: 0xA0826D },
+        [BLOCKS.LEAVES]: { top: 0x2d5a27, side: 0x2d5a27, bottom: 0x2d5a27 },
+        [BLOCKS.SAND]: { top: 0xE6D69C, side: 0xE6D69C, bottom: 0xE6D69C },
+        [BLOCKS.WATER]: { top: 0x3399FF, side: 0x3399FF, bottom: 0x3399FF },
+        [BLOCKS.BRICK]: { top: 0xB84C3C, side: 0xB84C3C, bottom: 0xB84C3C },
+        [BLOCKS.GLASS]: { top: 0xADD8E6, side: 0xADD8E6, bottom: 0xADD8E6 },
+        [BLOCKS.SNOW]: { top: 0xFFFAFA, side: 0xE8E8E8, bottom: 0xE8E8E8 }
+    };
+
+    // Biome configurations
+    const BIOMES = {
+        0: { name: 'Plains', surface: BLOCKS.GRASS, treeChance: 0.008 },
+        1: { name: 'Desert', surface: BLOCKS.SAND, treeChance: 0.001 },
+        2: { name: 'Forest', surface: BLOCKS.GRASS, treeChance: 0.03 },
+        3: { name: 'Tundra', surface: BLOCKS.SNOW, treeChance: 0.005 }
+    };
+
+    // Game state
+    const WORLD_SIZE = 64;
+    let world = {};
+    let meshes = {};
+    let selectedBlock = BLOCKS.GRASS;
+    let transformer;
+
+    // Three.js setup
+    const canvas = document.getElementById('game');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setClearColor(0x87CEEB);
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(0x87CEEB, 50, 150);
+
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(WORLD_SIZE/2, 25, WORLD_SIZE/2);
+
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(100, 100, 50);
+    scene.add(directionalLight);
+
+    // Player state
+    const player = {
+        velocity: new THREE.Vector3(),
+        onGround: false,
+        height: 1.7,
+        speed: 0.12,
+        sprintSpeed: 0.2,
+        jumpForce: 0.25
+    };
+
+    // Controls
+    const keys = {};
+    let isLocked = false;
+    let pitch = 0, yaw = 0;
+
+    function getKey(x, y, z) {
+        return `${x},${y},${z}`;
+    }
+
+    function getBlock(x, y, z) {
+        return world[getKey(x, y, z)] || BLOCKS.AIR;
+    }
+
+    function setBlock(x, y, z, type) {
+        const key = getKey(x, y, z);
+        if (type === BLOCKS.AIR) {
+            delete world[key];
+        } else {
+            world[key] = type;
+        }
+    }
+
+    // Seeded random for trees
+    function seededRandom(x, z, seed = 12345) {
+        const n = Math.sin(x * 12.9898 + z * 78.233 + seed) * 43758.5453;
+        return n - Math.floor(n);
+    }
+
+    async function generateWorld() {
+        world = {};
+        const loadingText = document.getElementById('loading-text');
+        const progressFill = document.getElementById('progress-fill');
+        
+        const total = WORLD_SIZE * WORLD_SIZE;
+        let count = 0;
+        
+        for (let x = 0; x < WORLD_SIZE; x++) {
+            for (let z = 0; z < WORLD_SIZE; z++) {
+                // Neural network forward pass
+                const { height, biome } = transformer.generate(x, z);
+                const biomeConfig = BIOMES[biome];
+                
+                for (let y = 0; y <= height; y++) {
+                    let blockType;
+                    if (y === height) {
+                        blockType = biomeConfig.surface;
+                    } else if (y > height - 4) {
+                        blockType = BLOCKS.DIRT;
+                    } else {
+                        blockType = BLOCKS.STONE;
+                    }
+                    setBlock(x, y, z, blockType);
+                }
+                
+                // Trees based on biome
+                if (seededRandom(x, z) < biomeConfig.treeChance && height > 5) {
+                    const treeHeight = 4 + Math.floor(seededRandom(x, z, 999) * 3);
+                    for (let ty = 1; ty <= treeHeight; ty++) {
+                        setBlock(x, height + ty, z, BLOCKS.WOOD);
+                    }
+                    // Leaves
+                    for (let lx = -2; lx <= 2; lx++) {
+                        for (let lz = -2; lz <= 2; lz++) {
+                            for (let ly = treeHeight - 1; ly <= treeHeight + 2; ly++) {
+                                if (Math.abs(lx) + Math.abs(lz) <= 3 && (lx !== 0 || lz !== 0 || ly > treeHeight)) {
+                                    const nx = x + lx, nz = z + lz, ny = height + ly;
+                                    if (getBlock(nx, ny, nz) === BLOCKS.AIR) {
+                                        setBlock(nx, ny, nz, BLOCKS.LEAVES);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                count++;
+                if (count % 100 === 0) {
+                    const pct = (count / total * 100).toFixed(0);
+                    progressFill.style.width = pct + '%';
+                    loadingText.textContent = `Generating terrain... ${pct}% (${count}/${total} blocks)`;
+                    await new Promise(r => setTimeout(r, 0));
+                }
+            }
+        }
+        
+        loadingText.textContent = 'Building meshes...';
+        await new Promise(r => setTimeout(r, 10));
+        
+        document.getElementById('blocks').textContent = Object.keys(world).length;
+    }
+
+    function buildMeshes() {
+        Object.values(meshes).forEach(mesh => scene.remove(mesh));
+        meshes = {};
+
+        const geometries = {};
+        
+        for (const key in world) {
+            const [x, y, z] = key.split(',').map(Number);
+            const blockType = world[key];
+            
+            const faces = [];
+            if (getBlock(x, y + 1, z) === BLOCKS.AIR) faces.push('top');
+            if (getBlock(x, y - 1, z) === BLOCKS.AIR) faces.push('bottom');
+            if (getBlock(x + 1, y, z) === BLOCKS.AIR) faces.push('right');
+            if (getBlock(x - 1, y, z) === BLOCKS.AIR) faces.push('left');
+            if (getBlock(x, y, z + 1) === BLOCKS.AIR) faces.push('front');
+            if (getBlock(x, y, z - 1) === BLOCKS.AIR) faces.push('back');
+            
+            if (faces.length === 0) continue;
+            
+            faces.forEach(face => {
+                const colorKey = face === 'top' ? 'top' : (face === 'bottom' ? 'bottom' : 'side');
+                const color = BLOCK_COLORS[blockType][colorKey];
+                const geoKey = `${blockType}-${colorKey}`;
+                
+                if (!geometries[geoKey]) {
+                    geometries[geoKey] = { positions: [], normals: [], color, blockType };
+                }
+                
+                addFace(geometries[geoKey].positions, geometries[geoKey].normals, x, y, z, face);
+            });
+        }
+
+        for (const key in geometries) {
+            const geo = geometries[key];
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(geo.positions, 3));
+            geometry.setAttribute('normal', new THREE.Float32BufferAttribute(geo.normals, 3));
+            
+            const isTransparent = geo.blockType === BLOCKS.GLASS || geo.blockType === BLOCKS.WATER;
+            const material = new THREE.MeshLambertMaterial({ 
+                color: geo.color,
+                transparent: isTransparent,
+                opacity: geo.blockType === BLOCKS.GLASS ? 0.5 : (geo.blockType === BLOCKS.WATER ? 0.7 : 1)
+            });
+            
+            const mesh = new THREE.Mesh(geometry, material);
+            scene.add(mesh);
+            meshes[key] = mesh;
+        }
+    }
+
+    function addFace(positions, normals, x, y, z, face) {
+        const s = 0.5;
+        const faceData = {
+            top: { verts: [[x-s,y+s,z+s], [x+s,y+s,z+s], [x+s,y+s,z-s], [x-s,y+s,z-s]], normal: [0, 1, 0] },
+            bottom: { verts: [[x-s,y-s,z-s], [x+s,y-s,z-s], [x+s,y-s,z+s], [x-s,y-s,z+s]], normal: [0, -1, 0] },
+            front: { verts: [[x-s,y-s,z+s], [x+s,y-s,z+s], [x+s,y+s,z+s], [x-s,y+s,z+s]], normal: [0, 0, 1] },
+            back: { verts: [[x+s,y-s,z-s], [x-s,y-s,z-s], [x-s,y+s,z-s], [x+s,y+s,z-s]], normal: [0, 0, -1] },
+            right: { verts: [[x+s,y-s,z+s], [x+s,y-s,z-s], [x+s,y+s,z-s], [x+s,y+s,z+s]], normal: [1, 0, 0] },
+            left: { verts: [[x-s,y-s,z-s], [x-s,y-s,z+s], [x-s,y+s,z+s], [x-s,y+s,z-s]], normal: [-1, 0, 0] }
+        };
+        
+        const f = faceData[face];
+        [0, 1, 2, 0, 2, 3].forEach(i => {
+            positions.push(...f.verts[i]);
+            normals.push(...f.normal);
+        });
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // FIXED RAYCASTING - Proper DDA algorithm
+    // ═══════════════════════════════════════════════════════════════
+    
+    function getTargetBlock() {
+        const dir = new THREE.Vector3();
+        camera.getWorldDirection(dir);
+        
+        const origin = camera.position.clone();
+        const maxDist = 6;
+        
+        // Current voxel position
+        let x = Math.floor(origin.x);
+        let y = Math.floor(origin.y);
+        let z = Math.floor(origin.z);
+        
+        // Direction signs
+        const stepX = dir.x >= 0 ? 1 : -1;
+        const stepY = dir.y >= 0 ? 1 : -1;
+        const stepZ = dir.z >= 0 ? 1 : -1;
+        
+        // Delta T for each axis (how far along ray to cross one voxel)
+        const tDeltaX = dir.x !== 0 ? Math.abs(1 / dir.x) : Infinity;
+        const tDeltaY = dir.y !== 0 ? Math.abs(1 / dir.y) : Infinity;
+        const tDeltaZ = dir.z !== 0 ? Math.abs(1 / dir.z) : Infinity;
+        
+        // Initial T values (distance to first voxel boundary)
+        let tMaxX = dir.x !== 0 ? ((stepX > 0 ? x + 1 : x) - origin.x) / dir.x : Infinity;
+        let tMaxY = dir.y !== 0 ? ((stepY > 0 ? y + 1 : y) - origin.y) / dir.y : Infinity;
+        let tMaxZ = dir.z !== 0 ? ((stepZ > 0 ? z + 1 : z) - origin.z) / dir.z : Infinity;
+        
+        let lastX = x, lastY = y, lastZ = z;
+        let dist = 0;
+        
+        while (dist < maxDist) {
+            // Check current voxel
+            if (getBlock(x, y, z) !== BLOCKS.AIR) {
+                return {
+                    hit: { x, y, z },
+                    place: { x: lastX, y: lastY, z: lastZ }
+                };
+            }
+            
+            // Store last empty position
+            lastX = x; lastY = y; lastZ = z;
+            
+            // Step to next voxel (DDA)
+            if (tMaxX < tMaxY) {
+                if (tMaxX < tMaxZ) {
+                    dist = tMaxX;
+                    tMaxX += tDeltaX;
+                    x += stepX;
+                } else {
+                    dist = tMaxZ;
+                    tMaxZ += tDeltaZ;
+                    z += stepZ;
+                }
+            } else {
+                if (tMaxY < tMaxZ) {
+                    dist = tMaxY;
+                    tMaxY += tDeltaY;
+                    y += stepY;
+                } else {
+                    dist = tMaxZ;
+                    tMaxZ += tDeltaZ;
+                    z += stepZ;
+                }
+            }
+        }
+        
+        return { hit: null, place: null };
+    }
+
+    // Highlight
+    const highlightGeo = new THREE.BoxGeometry(1.01, 1.01, 1.01);
+    const highlightMat = new THREE.MeshBasicMaterial({ 
+        color: 0xffffff, wireframe: true, transparent: true, opacity: 0.5
+    });
+    const highlight = new THREE.Mesh(highlightGeo, highlightMat);
+    highlight.visible = false;
+    scene.add(highlight);
+
+    // Collision
+    function checkCollision(x, y, z) {
+        const margin = 0.3;
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dz = -1; dz <= 1; dz++) {
+                for (let dy = 0; dy <= Math.ceil(player.height); dy++) {
+                    const bx = Math.floor(x + dx * margin);
+                    const by = Math.floor(y + dy);
+                    const bz = Math.floor(z + dz * margin);
+                    if (getBlock(bx, by, bz) !== BLOCKS.AIR) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    function updatePlayer() {
+        const euler = new THREE.Euler(pitch, yaw, 0, 'YXZ');
+        camera.quaternion.setFromEuler(euler);
+        
+        const forward = new THREE.Vector3();
+        camera.getWorldDirection(forward);
+        forward.y = 0;
+        forward.normalize();
+        
+        const right = new THREE.Vector3();
+        right.crossVectors(forward, new THREE.Vector3(0, 1, 0));
+        
+        const speed = keys['ShiftLeft'] ? player.sprintSpeed : player.speed;
+        const move = new THREE.Vector3();
+        
+        if (keys['KeyW']) move.add(forward);
+        if (keys['KeyS']) move.sub(forward);
+        if (keys['KeyD']) move.add(right);
+        if (keys['KeyA']) move.sub(right);
+        
+        if (move.length() > 0) {
+            move.normalize().multiplyScalar(speed);
+        }
+        
+        const newX = camera.position.x + move.x;
+        const newZ = camera.position.z + move.z;
+        
+        if (!checkCollision(newX, camera.position.y - player.height + 0.1, camera.position.z)) {
+            camera.position.x = newX;
+        }
+        if (!checkCollision(camera.position.x, camera.position.y - player.height + 0.1, newZ)) {
+            camera.position.z = newZ;
+        }
+        
+        player.velocity.y -= 0.015;
+        
+        if (keys['Space'] && player.onGround) {
+            player.velocity.y = player.jumpForce;
+            player.onGround = false;
+        }
+        
+        const newY = camera.position.y + player.velocity.y;
+        const feetY = newY - player.height;
+        
+        if (player.velocity.y < 0) {
+            if (checkCollision(camera.position.x, feetY, camera.position.z)) {
+                camera.position.y = Math.floor(feetY) + 1 + player.height;
+                player.velocity.y = 0;
+                player.onGround = true;
+            } else {
+                camera.position.y = newY;
+                player.onGround = false;
+            }
+        } else {
+            if (checkCollision(camera.position.x, newY + 0.1, camera.position.z)) {
+                player.velocity.y = 0;
+            } else {
+                camera.position.y = newY;
+            }
+        }
+        
+        if (camera.position.y < -10) {
+            camera.position.y = 30;
+            player.velocity.y = 0;
+        }
+        
+        const p = camera.position;
+        document.getElementById('pos').textContent = 
+            `${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}`;
+    }
+
+    // Hotbar
+    function setupHotbar() {
+        const hotbar = document.getElementById('hotbar');
+        const blockTypes = [BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE, BLOCKS.WOOD, 
+                          BLOCKS.LEAVES, BLOCKS.SAND, BLOCKS.SNOW, BLOCKS.BRICK, BLOCKS.GLASS];
+        
+        blockTypes.forEach((type, i) => {
+            const slot = document.createElement('div');
+            slot.className = 'hotbar-slot' + (type === selectedBlock ? ' selected' : '');
+            slot.innerHTML = `
+                <div class="block-preview" style="background: #${BLOCK_COLORS[type].top.toString(16).padStart(6, '0')}"></div>
+                <span class="key-hint">${i + 1}</span>
+            `;
+            slot.onclick = () => selectBlock(type);
+            hotbar.appendChild(slot);
+        });
+    }
+
+    function selectBlock(type) {
+        selectedBlock = type;
+        const blockTypes = [BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE, BLOCKS.WOOD, 
+                          BLOCKS.LEAVES, BLOCKS.SAND, BLOCKS.SNOW, BLOCKS.BRICK, BLOCKS.GLASS];
+        document.querySelectorAll('.hotbar-slot').forEach((slot, i) => {
+            slot.classList.toggle('selected', blockTypes[i] === type);
+        });
+    }
+
+    // Events
+    document.addEventListener('keydown', e => {
+        keys[e.code] = true;
+        const num = parseInt(e.key);
+        if (num >= 1 && num <= 9) {
+            const blockTypes = [BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE, BLOCKS.WOOD, 
+                              BLOCKS.LEAVES, BLOCKS.SAND, BLOCKS.SNOW, BLOCKS.BRICK, BLOCKS.GLASS];
+            selectBlock(blockTypes[num - 1]);
+        }
+    });
+
+    document.addEventListener('keyup', e => keys[e.code] = false);
+
+    document.addEventListener('mousemove', e => {
+        if (!isLocked) return;
+        yaw -= e.movementX * 0.002;
+        pitch -= e.movementY * 0.002;
+        pitch = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, pitch));
+    });
+
+    canvas.addEventListener('mousedown', e => {
+        if (!isLocked) return;
+        
+        const target = getTargetBlock();
+        
+        if (e.button === 0 && target.hit) {
+            setBlock(target.hit.x, target.hit.y, target.hit.z, BLOCKS.AIR);
+            buildMeshes();
+            document.getElementById('blocks').textContent = Object.keys(world).length;
+        } else if (e.button === 2 && target.place && target.hit) {
+            const px = Math.floor(camera.position.x);
+            const py = Math.floor(camera.position.y);
+            const pz = Math.floor(camera.position.z);
+            
+            const { x, y, z } = target.place;
+            if (!(x === px && z === pz && (y === py || y === py - 1 || y === py - 2))) {
+                setBlock(x, y, z, selectedBlock);
+                buildMeshes();
+                document.getElementById('blocks').textContent = Object.keys(world).length;
+            }
+        }
+    });
+
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+    canvas.addEventListener('wheel', e => {
+        const blockTypes = [BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE, BLOCKS.WOOD, 
+                          BLOCKS.LEAVES, BLOCKS.SAND, BLOCKS.SNOW, BLOCKS.BRICK, BLOCKS.GLASS];
+        let idx = blockTypes.indexOf(selectedBlock);
+        idx = (idx + Math.sign(e.deltaY) + blockTypes.length) % blockTypes.length;
+        selectBlock(blockTypes[idx]);
+    });
+
+    document.addEventListener('pointerlockchange', () => {
+        isLocked = document.pointerLockElement === canvas;
+    });
+
+    document.getElementById('start-btn').addEventListener('click', () => {
+        document.getElementById('start-screen').style.display = 'none';
+        canvas.requestPointerLock();
+    });
+
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // FPS
+    let frames = 0, lastTime = performance.now();
+
+    function animate() {
+        requestAnimationFrame(animate);
+        
+        frames++;
+        const now = performance.now();
+        if (now - lastTime >= 1000) {
+            document.getElementById('fps').textContent = frames;
+            frames = 0;
+            lastTime = now;
+        }
+        
+        if (isLocked) {
+            updatePlayer();
+            
+            const target = getTargetBlock();
+            if (target.hit) {
+                highlight.position.set(target.hit.x, target.hit.y, target.hit.z);
+                highlight.visible = true;
+            } else {
+                highlight.visible = false;
+            }
+        }
+        
+        renderer.render(scene, camera);
+    }
+
+    // Initialize
+    async function init() {
+        document.getElementById('loading-text').textContent = 'Initializing Transformer...';
+        await new Promise(r => setTimeout(r, 100));
+        
+        // Create transformer with random seed
+        transformer = new TransformerWorldGenerator(Date.now() % 100000);
+        
+        document.getElementById('loading-text').textContent = 'Generating world with neural network...';
+        await new Promise(r => setTimeout(r, 100));
+        
+        setupHotbar();
+        await generateWorld();
+        buildMeshes();
+        
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('start-screen').style.display = 'flex';
+        
+        animate();
+    }
+
+    init();
+    </script>
+</body>
+</html>

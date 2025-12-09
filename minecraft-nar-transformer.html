@@ -1,0 +1,1264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neural Voxels - NAR Transformer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
+        #game { width: 100vw; height: 100vh; display: block; }
+        
+        #crosshair {
+            position: fixed; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none; z-index: 100;
+        }
+        #crosshair::before, #crosshair::after {
+            content: ''; position: absolute; background: white; mix-blend-mode: difference;
+        }
+        #crosshair::before { width: 24px; height: 2px; top: -1px; left: -12px; }
+        #crosshair::after { width: 2px; height: 24px; left: -1px; top: -12px; }
+        
+        #hotbar {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 3px; padding: 6px; background: rgba(0,0,0,0.7);
+            border-radius: 6px; z-index: 100;
+        }
+        .hotbar-slot {
+            width: 46px; height: 46px; border: 2px solid #555; border-radius: 4px;
+            display: flex; align-items: center; justify-content: center;
+            position: relative; cursor: pointer;
+        }
+        .hotbar-slot.selected { border-color: #fff; box-shadow: 0 0 8px rgba(255,255,255,0.5); }
+        .hotbar-slot .block-preview { width: 32px; height: 32px; border-radius: 3px; }
+        .hotbar-slot .key-hint { position: absolute; bottom: 1px; right: 3px; font-size: 9px; color: #aaa; }
+        .hotbar-slot .count { position: absolute; bottom: 1px; left: 3px; font-size: 10px; color: #fff; text-shadow: 1px 1px 1px #000; }
+        
+        #info { position: fixed; top: 15px; left: 15px; color: white; font-size: 12px; text-shadow: 1px 1px 2px black; z-index: 100; line-height: 1.4; }
+        #info .nar { color: #00ffaa; }
+        #info .music { color: #ff88ff; }
+        
+        #nn-info {
+            position: fixed; top: 15px; right: 15px; color: white; font-size: 9px;
+            text-shadow: 1px 1px 2px black; z-index: 100; background: rgba(0,0,0,0.75);
+            padding: 8px; border-radius: 6px; max-width: 230px;
+        }
+        #nn-info h3 { margin-bottom: 4px; color: #00ffaa; font-size: 11px; }
+        #nn-info .arch { font-family: monospace; font-size: 8px; line-height: 1.3; opacity: 0.9; }
+        #nn-info .stats { margin-top: 6px; padding-top: 6px; border-top: 1px solid #444; }
+        
+        #music-info {
+            position: fixed; bottom: 90px; right: 15px; color: white; font-size: 10px;
+            background: rgba(0,0,0,0.75); padding: 8px; border-radius: 6px; z-index: 100;
+        }
+        #music-info h4 { color: #ff88ff; margin-bottom: 4px; font-size: 11px; }
+        #music-viz { display: flex; gap: 2px; height: 30px; align-items: flex-end; margin-top: 5px; }
+        .viz-bar { width: 8px; background: linear-gradient(to top, #ff88ff, #88ffff); border-radius: 2px; transition: height 0.1s; }
+        
+        #inventory-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); display: none; align-items: center;
+            justify-content: center; z-index: 500;
+        }
+        #inventory-overlay.open { display: flex; }
+        #inventory {
+            background: #8b8b8b; border: 4px solid #373737;
+            border-radius: 4px; padding: 12px;
+        }
+        #inventory h2 { color: #3f3f3f; font-size: 16px; margin-bottom: 10px; text-align: center; }
+        .inv-grid { display: grid; grid-template-columns: repeat(10, 40px); gap: 2px; }
+        .inv-slot {
+            width: 40px; height: 40px; background: #8b8b8b; border: 2px solid;
+            border-color: #373737 #fff #fff #373737; display: flex;
+            align-items: center; justify-content: center; cursor: pointer; position: relative;
+        }
+        .inv-slot:hover { transform: scale(1.08); z-index: 10; }
+        .inv-slot .block-icon { width: 28px; height: 28px; border-radius: 2px; }
+        .inv-slot .item-count { position: absolute; bottom: 0; right: 2px; font-size: 10px; font-weight: bold; color: #fff; text-shadow: 1px 1px 1px #000; }
+        
+        #start-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(135deg, #0a1a1a 0%, #1a3a2a 50%, #0a2020 100%);
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; z-index: 200; color: white;
+        }
+        #start-screen h1 { font-size: 32px; text-shadow: 3px 3px 0 #000; margin-bottom: 6px; }
+        #start-screen .subtitle { font-size: 13px; opacity: 0.9; margin-bottom: 5px; color: #00ffaa; }
+        #start-screen .nn-desc { font-size: 11px; opacity: 0.7; margin-bottom: 18px; max-width: 440px; text-align: center; line-height: 1.5; }
+        #start-btn {
+            padding: 10px 36px; font-size: 18px;
+            background: linear-gradient(135deg, #00ffaa, #00aa77);
+            border: none; color: #000; cursor: pointer; border-radius: 6px;
+            transition: all 0.2s; font-weight: bold;
+        }
+        #start-btn:hover { transform: scale(1.05); box-shadow: 0 0 25px rgba(0,255,170,0.5); }
+        #controls-info { margin-top: 20px; text-align: center; font-size: 10px; opacity: 0.5; line-height: 1.7; }
+        
+        #loading {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #050a0a; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 300; color: white;
+        }
+        #loading h2 { margin-bottom: 12px; font-size: 16px; }
+        #progress-bar { width: 300px; height: 14px; background: #222; border-radius: 7px; overflow: hidden; }
+        #progress-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #00ffaa, #00aa77); transition: width 0.05s; }
+        #loading-text { margin-top: 8px; font-size: 11px; opacity: 0.7; }
+        #loss-display { margin-top: 10px; font-family: monospace; font-size: 12px; color: #00ffaa; }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <h2>🧠⚡ Training NAR Log-Unary Tensor Transformer</h2>
+        <div id="progress-bar"><div id="progress-fill"></div></div>
+        <div id="loading-text">Initializing parallel generation...</div>
+        <div id="loss-display">Loss: --</div>
+    </div>
+
+    <div id="start-screen" style="display: none;">
+        <h1>⚡ NAR NEURAL VOXELS</h1>
+        <div class="subtitle">Non-Autoregressive Parallel Chunk Generation</div>
+        <div class="nn-desc">
+            Unlike autoregressive models that generate one position at a time, this NAR transformer
+            generates ALL 256 positions in a chunk simultaneously in a single batched forward pass.
+            ~100x faster chunk generation. Press M for neural music.
+        </div>
+        <button id="start-btn">Enter World</button>
+        <div id="controls-info">
+            <div>WASD - Move | SPACE - Jump/Swim | SHIFT - Sprint | M - Music</div>
+            <div>Left Click - Break | Right Click - Place/Open Door | E - Inventory</div>
+        </div>
+    </div>
+    
+    <canvas id="game"></canvas>
+    <div id="crosshair"></div>
+    
+    <div id="inventory-overlay">
+        <div id="inventory">
+            <h2>Inventory</h2>
+            <div class="inv-grid" id="inv-blocks"></div>
+        </div>
+    </div>
+    
+    <div id="hotbar"></div>
+    
+    <div id="info">
+        <div>FPS: <span id="fps">0</span></div>
+        <div>Pos: <span id="pos">0, 0, 0</span></div>
+        <div>Chunk: <span id="chunk">0, 0</span></div>
+        <div>Biome: <span id="biome">--</span></div>
+        <div class="nar">NAR Gen: <span id="gen-time">--</span>ms/chunk</div>
+        <div class="music">Music: <span id="music-status">Off [M]</span></div>
+    </div>
+    
+    <div id="nn-info">
+        <h3>⚡ NAR Transformer</h3>
+        <div class="arch">
+╔═ NON-AUTOREGRESSIVE ═══════════╗
+│ Input: 256 positions parallel  │
+│ Batch[256×16] log-unary tensor │
+╠════════════════════════════════╣
+│ Batched MatMul: [256×16]→[256×48]│
+│ Layer 1: BatchAttn → BatchFFN  │
+│ Layer 2: BatchAttn → BatchFFN  │
+╠════════════════════════════════╣
+│ Output: 256 heights + biomes   │
+│ ALL IN ONE FORWARD PASS        │
+╚════════════════════════════════╝
+        </div>
+        <div class="stats">
+            <div>Epochs: <span id="epochs-done">0</span></div>
+            <div>Chunks: <span id="chunk-count">0</span></div>
+            <div>Blocks: <span id="block-count">0</span></div>
+        </div>
+    </div>
+    
+    <div id="music-info">
+        <h4>🎵 Neural Music</h4>
+        <div>Key: <span id="music-key">C</span> | Chord: <span id="current-chord">I</span></div>
+        <div id="music-viz"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+    // ═══════════════════════════════════════════════════════════════
+    // AUDIO
+    // ═══════════════════════════════════════════════════════════════
+    let audioCtx = null, masterGain = null, musicEnabled = false;
+    function initAudio() {
+        if (audioCtx) return;
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = audioCtx.createGain();
+        masterGain.gain.value = 0.25;
+        masterGain.connect(audioCtx.destination);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // SIMPLEX NOISE
+    // ═══════════════════════════════════════════════════════════════
+    class SimplexNoise {
+        constructor(seed) {
+            this.p = new Uint8Array(256);
+            this.perm = new Uint8Array(512);
+            const rng = this.mulberry32(seed * 1e6);
+            for (let i = 0; i < 256; i++) this.p[i] = i;
+            for (let i = 255; i > 0; i--) { const j = (rng() * (i + 1)) | 0; [this.p[i], this.p[j]] = [this.p[j], this.p[i]]; }
+            for (let i = 0; i < 512; i++) this.perm[i] = this.p[i & 255];
+        }
+        mulberry32(s) { return () => { let t = s += 0x6D2B79F5; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+        noise2D(x, y) {
+            const F2 = 0.3660254, G2 = 0.2113249;
+            const s = (x + y) * F2, i = Math.floor(x + s), j = Math.floor(y + s);
+            const t = (i + j) * G2, x0 = x - i + t, y0 = y - j + t;
+            const i1 = x0 > y0 ? 1 : 0, j1 = 1 - i1;
+            const x1 = x0 - i1 + G2, y1 = y0 - j1 + G2, x2 = x0 - 1 + 2 * G2, y2 = y0 - 1 + 2 * G2;
+            const ii = i & 255, jj = j & 255;
+            const g = (h, x, y) => { const a = h & 7, u = a < 4 ? x : y, v = a < 4 ? y : x; return ((a & 1) ? -u : u) + ((a & 2) ? -2 * v : 2 * v); };
+            let n0 = 0, n1 = 0, n2 = 0, t0 = 0.5 - x0*x0 - y0*y0, t1 = 0.5 - x1*x1 - y1*y1, t2 = 0.5 - x2*x2 - y2*y2;
+            if (t0 >= 0) { t0 *= t0; n0 = t0 * t0 * g(this.perm[ii + this.perm[jj]], x0, y0); }
+            if (t1 >= 0) { t1 *= t1; n1 = t1 * t1 * g(this.perm[ii + i1 + this.perm[jj + j1]], x1, y1); }
+            if (t2 >= 0) { t2 *= t2; n2 = t2 * t2 * g(this.perm[ii + 1 + this.perm[jj + 1]], x2, y2); }
+            return 70 * (n0 + n1 + n2);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // NAR (NON-AUTOREGRESSIVE) LOG-UNARY TENSOR TRANSFORMER
+    // Generates ALL chunk positions in parallel via batched operations
+    // ═══════════════════════════════════════════════════════════════
+    class NARLogUnaryTransformer {
+        constructor(seed = 42) {
+            this.seed = seed;
+            this.logBits = 8;
+            this.inputDim = 16;      // 8 for x + 8 for z
+            this.hiddenDim = 48;
+            this.numLayers = 2;
+            this.numBiomes = 8;
+            this.lr = 0.004;
+            
+            this.rng = this.mulberry32(seed);
+            this.simplex = new SimplexNoise(seed);
+            this.initWeights();
+            this.cache = new Map();
+            this.totalEpochs = 0;
+            this.lastGenTime = 0;
+        }
+        
+        mulberry32(s) { return () => { let t = s += 0x6D2B79F5; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+        
+        // Log-unary encoding: N → ceil(log2(N+1)) ones
+        logUnaryEncode(pos, bits) {
+            const tensor = new Float32Array(bits);
+            const absPos = Math.abs(pos) & 255;
+            const numOnes = absPos === 0 ? 0 : Math.min(bits, Math.ceil(Math.log2(absPos + 1)));
+            for (let i = 0; i < numOnes; i++) tensor[i] = 1.0;
+            if (pos < 0) tensor[bits - 1] = -1;
+            return tensor;
+        }
+        
+        initWeights() {
+            const he = n => Math.sqrt(2/n);
+            // Weights stored as 2D Float32Arrays for fast batched ops
+            this.Wemb = this.randMat(this.inputDim, this.hiddenDim, he(this.inputDim));
+            this.bemb = new Float32Array(this.hiddenDim);
+            
+            this.L = [];
+            for (let l = 0; l < this.numLayers; l++) {
+                this.L.push({
+                    Wv: this.randMat(this.hiddenDim, this.hiddenDim, he(this.hiddenDim)),
+                    Wo: this.randMat(this.hiddenDim, this.hiddenDim, he(this.hiddenDim)),
+                    W1: this.randMat(this.hiddenDim, this.hiddenDim * 2, he(this.hiddenDim)),
+                    b1: new Float32Array(this.hiddenDim * 2),
+                    W2: this.randMat(this.hiddenDim * 2, this.hiddenDim, he(this.hiddenDim * 2)),
+                    b2: new Float32Array(this.hiddenDim)
+                });
+            }
+            
+            this.Wh = this.randMat(this.hiddenDim, 1, he(this.hiddenDim));
+            this.Wb = this.randMat(this.hiddenDim, this.numBiomes, he(this.hiddenDim));
+        }
+        
+        randMat(rows, cols, scale) {
+            const w = new Float32Array(rows * cols);
+            for (let i = 0; i < w.length; i++) w[i] = (this.rng() * 2 - 1) * scale;
+            return { w, rows, cols, g: new Float32Array(rows * cols) };
+        }
+        
+        // ═══════════════════════════════════════════════════════════
+        // BATCHED OPERATIONS - Key to NAR speedup
+        // ═══════════════════════════════════════════════════════════
+        
+        // Batched matrix multiply: [batch, inDim] × [inDim, outDim] = [batch, outDim]
+        batchMatMul(input, M) {
+            const batch = input.length / M.rows;
+            const out = new Float32Array(batch * M.cols);
+            
+            for (let b = 0; b < batch; b++) {
+                const inOffset = b * M.rows;
+                const outOffset = b * M.cols;
+                
+                for (let j = 0; j < M.cols; j++) {
+                    let sum = 0;
+                    for (let i = 0; i < M.rows; i++) {
+                        sum += input[inOffset + i] * M.w[i * M.cols + j];
+                    }
+                    out[outOffset + j] = Math.max(-8, Math.min(8, sum));
+                }
+            }
+            return out;
+        }
+        
+        // Batched GELU activation
+        batchGelu(x) {
+            for (let i = 0; i < x.length; i++) {
+                const v = x[i];
+                x[i] = 0.5 * v * (1 + Math.tanh(0.7978845608 * (v + 0.044715 * v * v * v)));
+            }
+            return x;
+        }
+        
+        // Batched layer norm
+        batchLayerNorm(x, dim) {
+            const batch = x.length / dim;
+            for (let b = 0; b < batch; b++) {
+                const offset = b * dim;
+                let mean = 0, vari = 0;
+                for (let i = 0; i < dim; i++) mean += x[offset + i];
+                mean /= dim;
+                for (let i = 0; i < dim; i++) vari += (x[offset + i] - mean) ** 2;
+                const std = Math.sqrt(vari / dim + 1e-5);
+                for (let i = 0; i < dim; i++) {
+                    x[offset + i] = Math.max(-8, Math.min(8, (x[offset + i] - mean) / std));
+                }
+            }
+            return x;
+        }
+        
+        // Batched bias add
+        batchAddBias(x, bias, dim) {
+            const batch = x.length / dim;
+            for (let b = 0; b < batch; b++) {
+                const offset = b * dim;
+                for (let i = 0; i < dim; i++) {
+                    x[offset + i] = Math.max(-8, Math.min(8, x[offset + i] + bias[i]));
+                }
+            }
+            return x;
+        }
+        
+        // Batched residual add with scale
+        batchResidualAdd(x, residual, scale = 0.5) {
+            for (let i = 0; i < x.length; i++) {
+                x[i] = Math.max(-8, Math.min(8, x[i] + residual[i] * scale));
+            }
+            return x;
+        }
+        
+        // Batched softmax per row
+        batchSoftmax(x, dim) {
+            const batch = x.length / dim;
+            const out = new Float32Array(x.length);
+            for (let b = 0; b < batch; b++) {
+                const offset = b * dim;
+                let max = -Infinity;
+                for (let i = 0; i < dim; i++) max = Math.max(max, x[offset + i]);
+                let sum = 0;
+                for (let i = 0; i < dim; i++) {
+                    out[offset + i] = Math.exp(Math.max(-8, Math.min(8, x[offset + i] - max)));
+                    sum += out[offset + i];
+                }
+                for (let i = 0; i < dim; i++) out[offset + i] /= (sum + 1e-8);
+            }
+            return out;
+        }
+        
+        // ═══════════════════════════════════════════════════════════
+        // NAR FORWARD PASS - Process entire batch at once
+        // ═══════════════════════════════════════════════════════════
+        batchForward(positions) {
+            const batch = positions.length;
+            
+            // Create batched input tensor [batch, inputDim]
+            const input = new Float32Array(batch * this.inputDim);
+            for (let b = 0; b < batch; b++) {
+                const [x, z] = positions[b];
+                const logX = this.logUnaryEncode(Math.floor(x), this.logBits);
+                const logZ = this.logUnaryEncode(Math.floor(z), this.logBits);
+                input.set(logX, b * this.inputDim);
+                input.set(logZ, b * this.inputDim + this.logBits);
+            }
+            
+            // Project to hidden: [batch, inputDim] → [batch, hiddenDim]
+            let h = this.batchMatMul(input, this.Wemb);
+            this.batchAddBias(h, this.bemb, this.hiddenDim);
+            this.batchLayerNorm(h, this.hiddenDim);
+            
+            // Transformer layers
+            for (const layer of this.L) {
+                const hNorm = new Float32Array(h);
+                this.batchLayerNorm(hNorm, this.hiddenDim);
+                
+                // Simplified attention (single token per position, so just value projection)
+                let v = this.batchMatMul(hNorm, layer.Wv);
+                let a = this.batchMatMul(v, layer.Wo);
+                this.batchResidualAdd(h, a, 0.5);
+                
+                // FFN
+                const h2Norm = new Float32Array(h);
+                this.batchLayerNorm(h2Norm, this.hiddenDim);
+                let ff = this.batchMatMul(h2Norm, layer.W1);
+                this.batchAddBias(ff, layer.b1, this.hiddenDim * 2);
+                this.batchGelu(ff);
+                let ff2 = this.batchMatMul(ff, layer.W2);
+                this.batchAddBias(ff2, layer.b2, this.hiddenDim);
+                this.batchResidualAdd(h, ff2, 0.5);
+            }
+            
+            // Output heads
+            const heightOut = this.batchMatMul(h, this.Wh);
+            const biomeOut = this.batchMatMul(h, this.Wb);
+            
+            return { h, heightOut, biomeOut, input };
+        }
+        
+        // ═══════════════════════════════════════════════════════════
+        // NAR CHUNK GENERATION - All 256 positions at once!
+        // ═══════════════════════════════════════════════════════════
+        generateChunk(cx, cz, chunkSize = 16) {
+            const startTime = performance.now();
+            
+            // Check cache first
+            const cacheKey = `${cx},${cz}`;
+            if (this.cache.has(cacheKey)) return this.cache.get(cacheKey);
+            
+            // Build all positions for this chunk
+            const positions = [];
+            const startX = cx * chunkSize, startZ = cz * chunkSize;
+            
+            for (let lx = 0; lx < chunkSize; lx++) {
+                for (let lz = 0; lz < chunkSize; lz++) {
+                    positions.push([startX + lx, startZ + lz]);
+                }
+            }
+            
+            // SINGLE batched forward pass for entire chunk!
+            const { heightOut, biomeOut } = this.batchForward(positions);
+            
+            // Decode outputs
+            const results = new Array(positions.length);
+            for (let i = 0; i < positions.length; i++) {
+                const height = Math.max(3, Math.min(28, Math.round(12 + Math.tanh(heightOut[i]) * 14)));
+                
+                // Get biome from softmax
+                const biomeProbs = this.batchSoftmax(
+                    biomeOut.slice(i * this.numBiomes, (i + 1) * this.numBiomes),
+                    this.numBiomes
+                );
+                let biome = 0;
+                for (let b = 1; b < this.numBiomes; b++) {
+                    if (biomeProbs[b] > biomeProbs[biome]) biome = b;
+                }
+                
+                results[i] = { height, biome };
+            }
+            
+            // Store in cache
+            const chunkData = { results, startX, startZ, chunkSize };
+            this.cache.set(cacheKey, chunkData);
+            
+            this.lastGenTime = performance.now() - startTime;
+            return chunkData;
+        }
+        
+        // Single position lookup (uses cache)
+        generate(x, z) {
+            const cx = Math.floor(x / 16), cz = Math.floor(z / 16);
+            const chunkData = this.generateChunk(cx, cz);
+            const lx = ((Math.floor(x) % 16) + 16) % 16;
+            const lz = ((Math.floor(z) % 16) + 16) % 16;
+            return chunkData.results[lx * 16 + lz];
+        }
+        
+        // Get target for training
+        getTargetBiome(x, z) {
+            const cont = this.simplex.noise2D(x * 0.006, z * 0.006);
+            const temp = this.simplex.noise2D(x * 0.012 + 500, z * 0.012 + 500);
+            const moist = this.simplex.noise2D(x * 0.015 + 1000, z * 0.015 + 1000);
+            const mountain = this.simplex.noise2D(x * 0.02 + 2000, z * 0.02 + 2000);
+            
+            let height = 12 + cont * 8 + this.simplex.noise2D(x * 0.04, z * 0.04) * 4;
+            height += this.simplex.noise2D(x * 0.08, z * 0.08) * 2;
+            
+            let biome;
+            if (cont < -0.4) { biome = 4; height = Math.min(height, 5); }
+            else if (mountain > 0.5 && height > 14) { biome = 7; height += mountain * 6; }
+            else if (temp > 0.4 && moist < -0.1) { biome = 1; }
+            else if (temp > 0.3 && moist > 0.3) { biome = 5; }
+            else if (temp > 0.1 && moist > 0.1) { biome = 2; }
+            else if (temp < -0.35) { biome = 3; }
+            else if (moist > 0.4 && cont > -0.2) { biome = 6; height = Math.max(7, Math.min(9, height)); }
+            else { biome = 0; }
+            
+            return { height: Math.max(3, Math.min(28, height)), biome };
+        }
+        
+        // Batched training
+        train(samples) {
+            const batch = samples.length;
+            
+            // Get targets
+            const targets = samples.map(([x, z]) => this.getTargetBiome(x, z));
+            
+            // Forward pass
+            const { h, heightOut, biomeOut, input } = this.batchForward(samples);
+            
+            // Compute loss and gradients
+            let totalLoss = 0;
+            
+            // Zero gradients
+            this.Wemb.g.fill(0);
+            this.Wh.g.fill(0);
+            this.Wb.g.fill(0);
+            
+            for (let b = 0; b < batch; b++) {
+                const target = targets[b];
+                const predH = 12 + Math.tanh(heightOut[b]) * 14;
+                
+                const biomeSlice = biomeOut.slice(b * this.numBiomes, (b + 1) * this.numBiomes);
+                const predB = this.batchSoftmax(biomeSlice, this.numBiomes);
+                
+                const lossH = (predH - target.height) ** 2;
+                const lossB = -Math.log(predB[target.biome] + 1e-7);
+                totalLoss += lossH * 0.3 + lossB;
+                
+                // Gradient for height
+                const tg = 1 - Math.tanh(heightOut[b]) ** 2;
+                const dHr = Math.max(-1, Math.min(1, 2 * (predH - target.height) * 14 * tg * 0.02));
+                
+                // Gradient for biome
+                const dBl = predB.map((p, i) => Math.max(-1, Math.min(1, (p - (i === target.biome ? 1 : 0)) * 0.1)));
+                
+                // Accumulate output gradients
+                const hOffset = b * this.hiddenDim;
+                for (let i = 0; i < this.hiddenDim; i++) {
+                    this.Wh.g[i] += dHr * h[hOffset + i];
+                    for (let j = 0; j < this.numBiomes; j++) {
+                        this.Wb.g[i * this.numBiomes + j] += dBl[j] * h[hOffset + i];
+                    }
+                }
+            }
+            
+            // Update weights
+            const update = (M) => {
+                for (let i = 0; i < M.w.length; i++) {
+                    const g = Math.max(-1, Math.min(1, M.g[i] / batch));
+                    M.w[i] -= this.lr * g;
+                    M.w[i] = Math.max(-3, Math.min(3, M.w[i]));
+                }
+            };
+            
+            update(this.Wemb);
+            update(this.Wh);
+            update(this.Wb);
+            for (const l of this.L) {
+                update(l.Wv); update(l.Wo); update(l.W1); update(l.W2);
+            }
+            
+            this.totalEpochs++;
+            return totalLoss / batch;
+        }
+        
+        backgroundLearn(px, pz, radius = 80) {
+            const samples = [];
+            for (let i = 0; i < 32; i++) {
+                samples.push([px + (this.rng() - 0.5) * radius * 2, pz + (this.rng() - 0.5) * radius * 2]);
+            }
+            return this.train(samples);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // MUSIC TRANSFORMER (simplified)
+    // ═══════════════════════════════════════════════════════════════
+    class MusicNN {
+        constructor(seed) {
+            this.rng = this.mulberry32(seed);
+            this.scale = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21];
+            this.baseFreq = 130.81;
+            this.chordProg = [[0, 3, 4, 0], [0, 5, 3, 4], [0, 0, 3, 4]];
+            this.progIdx = 0;
+            this.chordIdx = 0;
+            this.beat = 0;
+            this.vizBars = [];
+        }
+        mulberry32(s) { return () => { let t = s += 0x6D2B79F5; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+        
+        generate(biome) {
+            const prog = this.chordProg[this.progIdx];
+            const chord = prog[this.chordIdx];
+            const isStrong = this.beat % 2 === 0;
+            
+            let noteIdx;
+            if (isStrong && this.rng() < 0.6) {
+                const chordTones = [0, 2, 4];
+                noteIdx = chordTones[Math.floor(this.rng() * 3)] + chord;
+            } else {
+                noteIdx = Math.floor(this.rng() * this.scale.length);
+            }
+            noteIdx = Math.max(0, Math.min(this.scale.length - 1, noteIdx));
+            
+            const freq = this.baseFreq * Math.pow(2, this.scale[noteIdx] / 12);
+            const duration = isStrong ? 0.3 : 0.15;
+            const velocity = 0.5 + (this.beat === 0 ? 0.2 : 0) + this.rng() * 0.2;
+            
+            // Biome mood
+            const biomeVelMod = [1, 0.8, 1.1, 0.7, 0.6, 1.2, 0.8, 0.9][biome] || 1;
+            
+            return { freq, duration, velocity: velocity * biomeVelMod, noteIdx };
+        }
+        
+        advance() {
+            this.beat++;
+            if (this.beat >= 4) {
+                this.beat = 0;
+                this.chordIdx++;
+                if (this.chordIdx >= this.chordProg[this.progIdx].length) {
+                    this.chordIdx = 0;
+                    if (this.rng() < 0.2) this.progIdx = Math.floor(this.rng() * this.chordProg.length);
+                }
+            }
+            const chordNames = ['I', 'ii', 'iii', 'IV', 'V', 'vi'];
+            document.getElementById('current-chord').textContent = chordNames[this.chordProg[this.progIdx][this.chordIdx]] || 'I';
+        }
+        
+        playNote(freq, duration, velocity) {
+            if (!audioCtx || !musicEnabled) return;
+            const now = audioCtx.currentTime;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0, now);
+            gain.gain.linearRampToValueAtTime(velocity * 0.35, now + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+            osc.connect(gain);
+            gain.connect(masterGain);
+            osc.start(now);
+            osc.stop(now + duration + 0.05);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // GAME
+    // ═══════════════════════════════════════════════════════════════
+    const CHUNK_SIZE = 16;
+    const RENDER_DISTANCE = 5;
+    const SEA_LEVEL = 7;
+    
+    const B = {
+        AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, WOOD: 4, LEAVES: 5, SAND: 6, WATER: 7,
+        BRICK: 8, GLASS: 9, SNOW: 10, GRAVEL: 11, DOOR_BOTTOM: 12, DOOR_TOP: 13,
+        JUNGLE_WOOD: 14, JUNGLE_LEAVES: 15, MUD: 16, MOSS: 17, ICE: 18, MOUNTAIN_STONE: 19
+    };
+    
+    const BLOCK_COLORS = {
+        [B.GRASS]: { top: 0x5da33a, side: 0x8B7355, bottom: 0x8B7355 },
+        [B.DIRT]: { top: 0x8B7355, side: 0x8B7355, bottom: 0x8B7355 },
+        [B.STONE]: { top: 0x808080, side: 0x707070, bottom: 0x707070 },
+        [B.WOOD]: { top: 0xA0826D, side: 0x6B4423, bottom: 0xA0826D },
+        [B.LEAVES]: { top: 0x2d6b27, side: 0x2d6b27, bottom: 0x2d6b27 },
+        [B.SAND]: { top: 0xE6D69C, side: 0xD4C48A, bottom: 0xD4C48A },
+        [B.WATER]: { top: 0x2266AA, side: 0x1a5590, bottom: 0x1a5590 },
+        [B.BRICK]: { top: 0xB84C3C, side: 0xA84030, bottom: 0xA84030 },
+        [B.GLASS]: { top: 0xADD8E6, side: 0xADD8E6, bottom: 0xADD8E6 },
+        [B.SNOW]: { top: 0xFFFAFA, side: 0xE8E8E8, bottom: 0xE8E8E8 },
+        [B.GRAVEL]: { top: 0x888888, side: 0x777777, bottom: 0x777777 },
+        [B.DOOR_BOTTOM]: { top: 0x8B5A2B, side: 0x8B5A2B, bottom: 0x8B5A2B },
+        [B.DOOR_TOP]: { top: 0x8B5A2B, side: 0x6B4423, bottom: 0x8B5A2B },
+        [B.JUNGLE_WOOD]: { top: 0x5C4033, side: 0x4A3728, bottom: 0x5C4033 },
+        [B.JUNGLE_LEAVES]: { top: 0x1E5631, side: 0x1E5631, bottom: 0x1E5631 },
+        [B.MUD]: { top: 0x5C4033, side: 0x4A3728, bottom: 0x4A3728 },
+        [B.MOSS]: { top: 0x4A7023, side: 0x3D5C1C, bottom: 0x3D5C1C },
+        [B.ICE]: { top: 0xA5F2F3, side: 0x8ED8D8, bottom: 0x8ED8D8 },
+        [B.MOUNTAIN_STONE]: { top: 0x6B6B6B, side: 0x5A5A5A, bottom: 0x5A5A5A }
+    };
+    
+    const BIOMES = {
+        0: { name: 'Plains', surface: B.GRASS, treeChance: 0.008, treeType: 'oak' },
+        1: { name: 'Desert', surface: B.SAND, treeChance: 0.002, treeType: 'none' },
+        2: { name: 'Forest', surface: B.GRASS, treeChance: 0.045, treeType: 'oak' },
+        3: { name: 'Tundra', surface: B.SNOW, treeChance: 0.003, treeType: 'spruce' },
+        4: { name: 'Ocean', surface: B.GRAVEL, treeChance: 0, treeType: 'none' },
+        5: { name: 'Jungle', surface: B.GRASS, treeChance: 0.06, treeType: 'jungle' },
+        6: { name: 'Swamp', surface: B.MUD, treeChance: 0.02, treeType: 'swamp' },
+        7: { name: 'Mountains', surface: B.MOUNTAIN_STONE, treeChance: 0.002, treeType: 'spruce' }
+    };
+
+    let world = new Map(), doorStates = new Map(), chunks = new Map(), chunkMeshes = new Map();
+    let selectedBlock = B.GRASS, worldNN, musicNN, inventoryOpen = false;
+    const inventory = {};
+    const ALL_BLOCKS = [B.GRASS, B.DIRT, B.STONE, B.WOOD, B.LEAVES, B.SAND, B.SNOW, B.BRICK, B.GLASS, B.GRAVEL, B.DOOR_BOTTOM, B.JUNGLE_WOOD, B.MUD, B.MOSS, B.ICE, B.MOUNTAIN_STONE, B.WATER];
+    ALL_BLOCKS.forEach(b => inventory[b] = 64);
+
+    const canvas = document.getElementById('game');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(1);
+    renderer.setClearColor(0x87CEEB);
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(0x87CEEB, 40, 100);
+
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 150);
+    camera.position.set(0, 20, 0);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    const sun = new THREE.DirectionalLight(0xffffff, 0.7);
+    sun.position.set(50, 100, 50);
+    scene.add(sun);
+
+    const player = { velocity: new THREE.Vector3(), onGround: false, height: 1.7, speed: 0.14, sprintSpeed: 0.26, jumpForce: 0.26 };
+    const keys = {};
+    let isLocked = false, pitch = 0, yaw = 0;
+
+    const getBlockKey = (x, y, z) => `${x},${y},${z}`;
+    const getBlock = (x, y, z) => world.get(getBlockKey(x, y, z)) || B.AIR;
+    const setBlock = (x, y, z, type) => { if (type === B.AIR) world.delete(getBlockKey(x, y, z)); else world.set(getBlockKey(x, y, z), type); };
+    const getChunkKey = (cx, cz) => `${cx},${cz}`;
+    const seededRandom = (x, z, seed = 54321) => { const n = Math.sin(x * 12.9898 + z * 78.233 + seed) * 43758.5453; return n - Math.floor(n); };
+
+    function generateTree(x, y, z, type) {
+        if (type === 'none') return;
+        if (type === 'oak') {
+            const th = 4 + (seededRandom(x, z, 999) * 3 | 0);
+            for (let ty = 1; ty <= th; ty++) setBlock(x, y + ty, z, B.WOOD);
+            for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) for (let dy = th - 1; dy <= th + 2; dy++) {
+                if (Math.abs(dx) + Math.abs(dz) <= 3 && (dx !== 0 || dz !== 0 || dy > th)) {
+                    if (getBlock(x + dx, y + dy, z + dz) === B.AIR) setBlock(x + dx, y + dy, z + dz, B.LEAVES);
+                }
+            }
+        } else if (type === 'jungle') {
+            const th = 8 + (seededRandom(x, z, 999) * 5 | 0);
+            for (let ty = 1; ty <= th; ty++) setBlock(x, y + ty, z, B.JUNGLE_WOOD);
+            for (let dx = -3; dx <= 3; dx++) for (let dz = -3; dz <= 3; dz++) for (let dy = th - 2; dy <= th + 3; dy++) {
+                if (Math.abs(dx) + Math.abs(dz) <= 4 && (dx !== 0 || dz !== 0 || dy > th)) {
+                    if (getBlock(x + dx, y + dy, z + dz) === B.AIR) setBlock(x + dx, y + dy, z + dz, B.JUNGLE_LEAVES);
+                }
+            }
+        } else if (type === 'spruce') {
+            const th = 6 + (seededRandom(x, z, 999) * 3 | 0);
+            for (let ty = 1; ty <= th; ty++) setBlock(x, y + ty, z, B.WOOD);
+            for (let layer = 0; layer < 4; layer++) {
+                const ly = y + th - layer * 2, radius = layer + 1;
+                for (let dx = -radius; dx <= radius; dx++) for (let dz = -radius; dz <= radius; dz++) {
+                    if (Math.abs(dx) + Math.abs(dz) <= radius + 1 && (dx !== 0 || dz !== 0)) {
+                        if (getBlock(x + dx, ly, z + dz) === B.AIR) setBlock(x + dx, ly, z + dz, B.LEAVES);
+                    }
+                }
+            }
+            setBlock(x, y + th + 1, z, B.LEAVES);
+        } else if (type === 'swamp') {
+            const th = 3 + (seededRandom(x, z, 999) * 2 | 0);
+            for (let ty = 1; ty <= th; ty++) setBlock(x, y + ty, z, B.WOOD);
+            for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
+                if (Math.abs(dx) + Math.abs(dz) <= 2 && (dx !== 0 || dz !== 0)) {
+                    if (getBlock(x + dx, y + th, z + dz) === B.AIR) setBlock(x + dx, y + th, z + dz, B.MOSS);
+                }
+            }
+        }
+    }
+
+    function generateChunk(cx, cz) {
+        const key = getChunkKey(cx, cz);
+        if (chunks.has(key)) return;
+        chunks.set(key, true);
+        
+        // NAR: Get all chunk data in ONE forward pass
+        const chunkData = worldNN.generateChunk(cx, cz);
+        
+        for (let i = 0; i < chunkData.results.length; i++) {
+            const lx = Math.floor(i / 16), lz = i % 16;
+            const x = chunkData.startX + lx, z = chunkData.startZ + lz;
+            const { height, biome } = chunkData.results[i];
+            const bc = BIOMES[biome];
+            const isOcean = biome === 4;
+            const groundH = isOcean ? Math.min(height, SEA_LEVEL - 2) : height;
+            
+            for (let y = 0; y <= groundH; y++) {
+                let block;
+                if (y === groundH) block = bc.surface;
+                else if (y > groundH - 3) block = isOcean ? B.SAND : (biome === 6 ? B.MUD : B.DIRT);
+                else block = biome === 7 ? B.MOUNTAIN_STONE : B.STONE;
+                setBlock(x, y, z, block);
+            }
+            
+            if (isOcean || biome === 6) {
+                for (let y = groundH + 1; y <= SEA_LEVEL; y++) {
+                    setBlock(x, y, z, biome === 3 ? B.ICE : B.WATER);
+                }
+            }
+            
+            if (!isOcean && seededRandom(x, z) < bc.treeChance && height > SEA_LEVEL + 1) {
+                generateTree(x, height, z, bc.treeType);
+            }
+        }
+        
+        document.getElementById('gen-time').textContent = worldNN.lastGenTime.toFixed(1);
+    }
+
+    function buildChunkMesh(cx, cz) {
+        const key = getChunkKey(cx, cz);
+        if (chunkMeshes.has(key)) chunkMeshes.get(key).forEach(m => scene.remove(m));
+        
+        const geometries = new Map();
+        const startX = cx * CHUNK_SIZE, startZ = cz * CHUNK_SIZE;
+        
+        for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+            for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+                const x = startX + lx, z = startZ + lz;
+                for (let y = 0; y < 45; y++) {
+                    const bt = getBlock(x, y, z);
+                    if (bt === B.AIR || bt === B.DOOR_TOP) continue;
+                    
+                    const faces = [];
+                    const above = getBlock(x, y + 1, z);
+                    const isDoor = bt === B.DOOR_BOTTOM;
+                    const doorOpen = isDoor && doorStates.get(getBlockKey(x, y, z));
+                    
+                    if (above === B.AIR || (bt !== B.WATER && above === B.WATER) || above === B.DOOR_TOP) faces.push('top');
+                    if (getBlock(x, y - 1, z) === B.AIR) faces.push('bottom');
+                    if (getBlock(x + 1, y, z) === B.AIR) faces.push('right');
+                    if (getBlock(x - 1, y, z) === B.AIR) faces.push('left');
+                    if (getBlock(x, y, z + 1) === B.AIR) faces.push('front');
+                    if (getBlock(x, y, z - 1) === B.AIR) faces.push('back');
+                    
+                    if (faces.length === 0) continue;
+                    
+                    faces.forEach(face => {
+                        const ck = face === 'top' ? 'top' : face === 'bottom' ? 'bottom' : 'side';
+                        const gk = `${bt}-${ck}`;
+                        if (!geometries.has(gk)) geometries.set(gk, { pos: [], norm: [], color: BLOCK_COLORS[bt][ck], bt });
+                        if (isDoor) addDoorFace(geometries.get(gk).pos, geometries.get(gk).norm, x, y, z, face, doorOpen);
+                        else addFace(geometries.get(gk).pos, geometries.get(gk).norm, x, y, z, face);
+                    });
+                    
+                    if (isDoor) {
+                        const gkTop = `${B.DOOR_TOP}-side`;
+                        if (!geometries.has(gkTop)) geometries.set(gkTop, { pos: [], norm: [], color: BLOCK_COLORS[B.DOOR_TOP].side, bt: B.DOOR_TOP });
+                        ['front', 'back', 'left', 'right', 'top'].forEach(face => {
+                            addDoorFace(geometries.get(gkTop).pos, geometries.get(gkTop).norm, x, y + 1, z, face, doorOpen);
+                        });
+                    }
+                }
+            }
+        }
+        
+        const meshes = [];
+        geometries.forEach((g) => {
+            if (g.pos.length === 0) return;
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.Float32BufferAttribute(g.pos, 3));
+            geo.setAttribute('normal', new THREE.Float32BufferAttribute(g.norm, 3));
+            const isT = g.bt === B.WATER || g.bt === B.GLASS || g.bt === B.ICE;
+            const mat = new THREE.MeshLambertMaterial({
+                color: g.color, transparent: isT,
+                opacity: g.bt === B.WATER ? 0.6 : g.bt === B.GLASS ? 0.4 : g.bt === B.ICE ? 0.8 : 1,
+                side: isT ? THREE.DoubleSide : THREE.FrontSide
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            scene.add(mesh);
+            meshes.push(mesh);
+        });
+        
+        chunkMeshes.set(key, meshes);
+    }
+
+    function addFace(pos, norm, x, y, z, face) {
+        const s = 0.5;
+        const fd = {
+            top: { v: [[x-s,y+s,z+s], [x+s,y+s,z+s], [x+s,y+s,z-s], [x-s,y+s,z-s]], n: [0, 1, 0] },
+            bottom: { v: [[x-s,y-s,z-s], [x+s,y-s,z-s], [x+s,y-s,z+s], [x-s,y-s,z+s]], n: [0, -1, 0] },
+            front: { v: [[x-s,y-s,z+s], [x+s,y-s,z+s], [x+s,y+s,z+s], [x-s,y+s,z+s]], n: [0, 0, 1] },
+            back: { v: [[x+s,y-s,z-s], [x-s,y-s,z-s], [x-s,y+s,z-s], [x+s,y+s,z-s]], n: [0, 0, -1] },
+            right: { v: [[x+s,y-s,z+s], [x+s,y-s,z-s], [x+s,y+s,z-s], [x+s,y+s,z+s]], n: [1, 0, 0] },
+            left: { v: [[x-s,y-s,z-s], [x-s,y-s,z+s], [x-s,y+s,z+s], [x-s,y+s,z-s]], n: [-1, 0, 0] }
+        };
+        const f = fd[face];
+        [0, 1, 2, 0, 2, 3].forEach(i => { pos.push(...f.v[i]); norm.push(...f.n); });
+    }
+    
+    function addDoorFace(pos, norm, x, y, z, face, isOpen) {
+        const s = 0.5, t = 0.1;
+        const ox = isOpen ? 0.4 : 0, oz = isOpen ? -0.4 : 0;
+        const fd = {
+            top: { v: [[x-s+ox,y+s,z+t+oz], [x+s+ox,y+s,z+t+oz], [x+s+ox,y+s,z-t+oz], [x-s+ox,y+s,z-t+oz]], n: [0, 1, 0] },
+            bottom: { v: [[x-s+ox,y-s,z-t+oz], [x+s+ox,y-s,z-t+oz], [x+s+ox,y-s,z+t+oz], [x-s+ox,y-s,z+t+oz]], n: [0, -1, 0] },
+            front: { v: [[x-s+ox,y-s,z+t+oz], [x+s+ox,y-s,z+t+oz], [x+s+ox,y+s,z+t+oz], [x-s+ox,y+s,z+t+oz]], n: [0, 0, 1] },
+            back: { v: [[x+s+ox,y-s,z-t+oz], [x-s+ox,y-s,z-t+oz], [x-s+ox,y+s,z-t+oz], [x+s+ox,y+s,z-t+oz]], n: [0, 0, -1] },
+            right: { v: [[x+s+ox,y-s,z+t+oz], [x+s+ox,y-s,z-t+oz], [x+s+ox,y+s,z-t+oz], [x+s+ox,y+s,z+t+oz]], n: [1, 0, 0] },
+            left: { v: [[x-s+ox,y-s,z-t+oz], [x-s+ox,y-s,z+t+oz], [x-s+ox,y+s,z+t+oz], [x-s+ox,y+s,z-t+oz]], n: [-1, 0, 0] }
+        };
+        const f = fd[face];
+        [0, 1, 2, 0, 2, 3].forEach(i => { pos.push(...f.v[i]); norm.push(...f.n); });
+    }
+
+    function updateChunks() {
+        const pcx = Math.floor(camera.position.x / CHUNK_SIZE);
+        const pcz = Math.floor(camera.position.z / CHUNK_SIZE);
+        
+        let generated = 0;
+        for (let dx = -RENDER_DISTANCE; dx <= RENDER_DISTANCE; dx++) {
+            for (let dz = -RENDER_DISTANCE; dz <= RENDER_DISTANCE; dz++) {
+                if (dx*dx + dz*dz > RENDER_DISTANCE * RENDER_DISTANCE) continue;
+                const cx = pcx + dx, cz = pcz + dz;
+                const key = getChunkKey(cx, cz);
+                if (!chunks.has(key)) {
+                    generateChunk(cx, cz);
+                    buildChunkMesh(cx, cz);
+                    generated++;
+                    if (generated >= 3) return; // Can do more with NAR!
+                } else if (!chunkMeshes.has(key)) {
+                    buildChunkMesh(cx, cz);
+                    generated++;
+                    if (generated >= 3) return;
+                }
+            }
+        }
+        
+        chunkMeshes.forEach((meshes, key) => {
+            const [cx, cz] = key.split(',').map(Number);
+            if ((cx - pcx) ** 2 + (cz - pcz) ** 2 > (RENDER_DISTANCE + 2) ** 2) {
+                meshes.forEach(m => scene.remove(m));
+                chunkMeshes.delete(key);
+            }
+        });
+        
+        document.getElementById('chunk-count').textContent = chunks.size;
+        document.getElementById('block-count').textContent = world.size;
+    }
+
+    function rebuildNearbyChunks(wx, wz) {
+        const cx = Math.floor(wx / CHUNK_SIZE), cz = Math.floor(wz / CHUNK_SIZE);
+        for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+            if (chunks.has(getChunkKey(cx + dx, cz + dz))) buildChunkMesh(cx + dx, cz + dz);
+        }
+    }
+
+    function getTargetBlock() {
+        const dir = new THREE.Vector3();
+        camera.getWorldDirection(dir);
+        
+        let x = camera.position.x, y = camera.position.y, z = camera.position.z;
+        let vx = Math.floor(x), vy = Math.floor(y), vz = Math.floor(z);
+        
+        const stepX = dir.x >= 0 ? 1 : -1, stepY = dir.y >= 0 ? 1 : -1, stepZ = dir.z >= 0 ? 1 : -1;
+        const tDeltaX = dir.x !== 0 ? Math.abs(1 / dir.x) : 1e10;
+        const tDeltaY = dir.y !== 0 ? Math.abs(1 / dir.y) : 1e10;
+        const tDeltaZ = dir.z !== 0 ? Math.abs(1 / dir.z) : 1e10;
+        
+        let tMaxX = dir.x !== 0 ? ((stepX > 0 ? vx + 1 - x : x - vx) / Math.abs(dir.x)) : 1e10;
+        let tMaxY = dir.y !== 0 ? ((stepY > 0 ? vy + 1 - y : y - vy) / Math.abs(dir.y)) : 1e10;
+        let tMaxZ = dir.z !== 0 ? ((stepZ > 0 ? vz + 1 - z : z - vz) / Math.abs(dir.z)) : 1e10;
+        
+        let lastVx = vx, lastVy = vy, lastVz = vz;
+        
+        for (let i = 0; i < 50; i++) {
+            const b = getBlock(vx, vy, vz);
+            if (b !== B.AIR && b !== B.WATER && b !== B.DOOR_TOP) {
+                const dist = Math.sqrt((vx - camera.position.x) ** 2 + (vy - camera.position.y) ** 2 + (vz - camera.position.z) ** 2);
+                if (dist > 5) return { hit: null, place: null };
+                return { hit: { x: vx, y: vy, z: vz }, place: { x: lastVx, y: lastVy, z: lastVz } };
+            }
+            lastVx = vx; lastVy = vy; lastVz = vz;
+            if (tMaxX < tMaxY) {
+                if (tMaxX < tMaxZ) { vx += stepX; tMaxX += tDeltaX; }
+                else { vz += stepZ; tMaxZ += tDeltaZ; }
+            } else {
+                if (tMaxY < tMaxZ) { vy += stepY; tMaxY += tDeltaY; }
+                else { vz += stepZ; tMaxZ += tDeltaZ; }
+            }
+            if (Math.sqrt((vx - camera.position.x) ** 2 + (vy - camera.position.y) ** 2 + (vz - camera.position.z) ** 2) > 5.5) break;
+        }
+        return { hit: null, place: null };
+    }
+
+    const highlight = new THREE.Mesh(new THREE.BoxGeometry(1.02, 1.02, 1.02), new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.5 }));
+    highlight.visible = false;
+    scene.add(highlight);
+
+    function checkCollision(x, y, z) {
+        for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) for (let dy = 0; dy <= 2; dy++) {
+            const bx = Math.floor(x + dx * 0.3), by = Math.floor(y + dy), bz = Math.floor(z + dz * 0.3);
+            const b = getBlock(bx, by, bz);
+            if (b !== B.AIR && b !== B.WATER && b !== B.DOOR_TOP) {
+                if (b === B.DOOR_BOTTOM && doorStates.get(getBlockKey(bx, by, bz))) continue;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function updatePlayer() {
+        if (inventoryOpen) return 0;
+        camera.quaternion.setFromEuler(new THREE.Euler(pitch, yaw, 0, 'YXZ'));
+        const forward = new THREE.Vector3(); camera.getWorldDirection(forward); forward.y = 0; forward.normalize();
+        const right = new THREE.Vector3(); right.crossVectors(forward, new THREE.Vector3(0, 1, 0));
+        const speed = keys['ShiftLeft'] ? player.sprintSpeed : player.speed;
+        const move = new THREE.Vector3();
+        if (keys['KeyW']) move.add(forward); if (keys['KeyS']) move.sub(forward);
+        if (keys['KeyD']) move.add(right); if (keys['KeyA']) move.sub(right);
+        if (move.length() > 0) move.normalize().multiplyScalar(speed);
+        
+        const newX = camera.position.x + move.x, newZ = camera.position.z + move.z;
+        if (!checkCollision(newX, camera.position.y - player.height + 0.1, camera.position.z)) camera.position.x = newX;
+        if (!checkCollision(camera.position.x, camera.position.y - player.height + 0.1, newZ)) camera.position.z = newZ;
+        
+        const inWater = getBlock(Math.floor(camera.position.x), Math.floor(camera.position.y), Math.floor(camera.position.z)) === B.WATER;
+        player.velocity.y -= inWater ? 0.004 : 0.015;
+        if (keys['Space']) {
+            if (inWater) player.velocity.y = 0.07;
+            else if (player.onGround) { player.velocity.y = player.jumpForce; player.onGround = false; }
+        }
+        
+        const newY = camera.position.y + player.velocity.y, feetY = newY - player.height;
+        if (player.velocity.y < 0) {
+            if (checkCollision(camera.position.x, feetY, camera.position.z)) {
+                camera.position.y = Math.floor(feetY) + 1 + player.height;
+                player.velocity.y = 0; player.onGround = true;
+            } else { camera.position.y = newY; player.onGround = false; }
+        } else {
+            if (checkCollision(camera.position.x, newY + 0.1, camera.position.z)) player.velocity.y = 0;
+            else camera.position.y = newY;
+        }
+        
+        if (camera.position.y < -20) { camera.position.y = 30; player.velocity.y = 0; }
+        
+        const { biome } = worldNN.generate(camera.position.x, camera.position.z);
+        document.getElementById('biome').textContent = BIOMES[biome].name;
+        document.getElementById('pos').textContent = `${camera.position.x.toFixed(0)}, ${camera.position.y.toFixed(1)}, ${camera.position.z.toFixed(0)}`;
+        document.getElementById('chunk').textContent = `${Math.floor(camera.position.x / CHUNK_SIZE)}, ${Math.floor(camera.position.z / CHUNK_SIZE)}`;
+        
+        return biome;
+    }
+
+    function setupMusicViz() {
+        const viz = document.getElementById('music-viz');
+        for (let i = 0; i < 10; i++) {
+            const bar = document.createElement('div');
+            bar.className = 'viz-bar';
+            bar.style.height = '3px';
+            viz.appendChild(bar);
+            musicNN.vizBars.push(bar);
+        }
+    }
+
+    function setupInventory() {
+        const invBlocks = document.getElementById('inv-blocks');
+        ALL_BLOCKS.forEach(bt => {
+            const slot = document.createElement('div'); slot.className = 'inv-slot';
+            const icon = document.createElement('div'); icon.className = 'block-icon';
+            icon.style.background = `#${BLOCK_COLORS[bt].top.toString(16).padStart(6, '0')}`;
+            const count = document.createElement('span'); count.className = 'item-count'; count.textContent = inventory[bt];
+            slot.appendChild(icon); slot.appendChild(count);
+            slot.onclick = () => { selectedBlock = bt; updateHotbar(); };
+            invBlocks.appendChild(slot);
+        });
+    }
+
+    function setupHotbar() {
+        const hotbar = document.getElementById('hotbar');
+        const hbBlocks = [B.GRASS, B.DIRT, B.STONE, B.WOOD, B.BRICK, B.GLASS, B.DOOR_BOTTOM, B.SAND, B.SNOW];
+        hbBlocks.forEach((bt, i) => {
+            const slot = document.createElement('div');
+            slot.className = 'hotbar-slot' + (bt === selectedBlock ? ' selected' : '');
+            slot.innerHTML = `<div class="block-preview" style="background: #${BLOCK_COLORS[bt].top.toString(16).padStart(6, '0')}"></div><span class="key-hint">${i + 1}</span><span class="count">${inventory[bt]}</span>`;
+            slot.onclick = () => { selectedBlock = bt; updateHotbar(); };
+            hotbar.appendChild(slot);
+        });
+    }
+
+    function updateHotbar() {
+        const hbBlocks = [B.GRASS, B.DIRT, B.STONE, B.WOOD, B.BRICK, B.GLASS, B.DOOR_BOTTOM, B.SAND, B.SNOW];
+        document.querySelectorAll('#hotbar .hotbar-slot').forEach((slot, i) => {
+            slot.classList.toggle('selected', hbBlocks[i] === selectedBlock);
+            slot.querySelector('.count').textContent = inventory[hbBlocks[i]];
+        });
+    }
+
+    function toggleInventory() {
+        inventoryOpen = !inventoryOpen;
+        document.getElementById('inventory-overlay').classList.toggle('open', inventoryOpen);
+        if (inventoryOpen) document.exitPointerLock(); else canvas.requestPointerLock();
+    }
+
+    document.addEventListener('keydown', e => {
+        keys[e.code] = true;
+        if (e.code === 'KeyE') { toggleInventory(); return; }
+        if (e.code === 'Escape' && inventoryOpen) { toggleInventory(); return; }
+        if (e.code === 'KeyM') {
+            initAudio();
+            musicEnabled = !musicEnabled;
+            document.getElementById('music-status').textContent = musicEnabled ? 'Playing' : 'Off [M]';
+        }
+        const n = parseInt(e.key);
+        if (n >= 1 && n <= 9) {
+            const hbBlocks = [B.GRASS, B.DIRT, B.STONE, B.WOOD, B.BRICK, B.GLASS, B.DOOR_BOTTOM, B.SAND, B.SNOW];
+            selectedBlock = hbBlocks[n - 1]; updateHotbar();
+        }
+    });
+    document.addEventListener('keyup', e => keys[e.code] = false);
+    document.addEventListener('mousemove', e => {
+        if (!isLocked || inventoryOpen) return;
+        yaw -= e.movementX * 0.002; pitch -= e.movementY * 0.002;
+        pitch = Math.max(-1.5, Math.min(1.5, pitch));
+    });
+
+    canvas.addEventListener('mousedown', e => {
+        if (!isLocked || inventoryOpen) return;
+        const target = getTargetBlock();
+        
+        if (e.button === 0 && target.hit) {
+            const bt = getBlock(target.hit.x, target.hit.y, target.hit.z);
+            if (bt !== B.AIR) inventory[bt] = (inventory[bt] || 0) + 1;
+            setBlock(target.hit.x, target.hit.y, target.hit.z, B.AIR);
+            if (bt === B.DOOR_BOTTOM) {
+                setBlock(target.hit.x, target.hit.y + 1, target.hit.z, B.AIR);
+                doorStates.delete(getBlockKey(target.hit.x, target.hit.y, target.hit.z));
+            }
+            rebuildNearbyChunks(target.hit.x, target.hit.z);
+            updateHotbar();
+        } else if (e.button === 2 && target.hit) {
+            const hitBlock = getBlock(target.hit.x, target.hit.y, target.hit.z);
+            if (hitBlock === B.DOOR_BOTTOM) {
+                const doorKey = getBlockKey(target.hit.x, target.hit.y, target.hit.z);
+                doorStates.set(doorKey, !doorStates.get(doorKey));
+                rebuildNearbyChunks(target.hit.x, target.hit.z);
+                return;
+            }
+            if (target.place && (inventory[selectedBlock] || 0) > 0) {
+                const px = Math.floor(camera.position.x), py = Math.floor(camera.position.y), pz = Math.floor(camera.position.z);
+                const { x, y, z } = target.place;
+                if (!(x === px && z === pz && (y === py || y === py - 1 || y === py - 2))) {
+                    setBlock(x, y, z, selectedBlock);
+                    inventory[selectedBlock]--;
+                    if (selectedBlock === B.DOOR_BOTTOM) {
+                        setBlock(x, y + 1, z, B.DOOR_TOP);
+                        doorStates.set(getBlockKey(x, y, z), false);
+                    }
+                    rebuildNearbyChunks(x, z);
+                    updateHotbar();
+                }
+            }
+        }
+    });
+    
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+    canvas.addEventListener('wheel', e => {
+        if (inventoryOpen) return;
+        const hbBlocks = [B.GRASS, B.DIRT, B.STONE, B.WOOD, B.BRICK, B.GLASS, B.DOOR_BOTTOM, B.SAND, B.SNOW];
+        let idx = hbBlocks.indexOf(selectedBlock);
+        idx = (idx + Math.sign(e.deltaY) + hbBlocks.length) % hbBlocks.length;
+        selectedBlock = hbBlocks[idx]; updateHotbar();
+    });
+    document.addEventListener('pointerlockchange', () => { isLocked = document.pointerLockElement === canvas; });
+    document.getElementById('start-btn').addEventListener('click', () => {
+        document.getElementById('start-screen').style.display = 'none';
+        canvas.requestPointerLock();
+        initAudio();
+    });
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    async function initialTraining() {
+        const loadingText = document.getElementById('loading-text');
+        const progressFill = document.getElementById('progress-fill');
+        const lossDisplay = document.getElementById('loss-display');
+        
+        for (let epoch = 0; epoch < 200; epoch++) {
+            const samples = [];
+            for (let i = 0; i < 64; i++) samples.push([(worldNN.rng() - 0.5) * 300, (worldNN.rng() - 0.5) * 300]);
+            const loss = worldNN.train(samples);
+            
+            progressFill.style.width = (epoch / 200 * 70) + '%';
+            loadingText.textContent = `Training NAR transformer: ${epoch + 1}/200`;
+            lossDisplay.textContent = `Loss: ${loss.toFixed(4)}`;
+            document.getElementById('epochs-done').textContent = worldNN.totalEpochs;
+            
+            if (epoch % 10 === 0) await new Promise(r => setTimeout(r, 0));
+        }
+        
+        loadingText.textContent = 'Generating initial chunks (NAR parallel)...';
+        for (let cx = -2; cx <= 2; cx++) {
+            for (let cz = -2; cz <= 2; cz++) {
+                generateChunk(cx, cz);
+                buildChunkMesh(cx, cz);
+            }
+            progressFill.style.width = (70 + (cx + 2) / 5 * 30) + '%';
+            await new Promise(r => setTimeout(r, 0));
+        }
+    }
+
+    let frames = 0, lastTime = performance.now(), learnCounter = 0, musicCounter = 0;
+    let currentBiome = 0;
+
+    function animate() {
+        requestAnimationFrame(animate);
+        frames++;
+        const now = performance.now();
+        if (now - lastTime >= 1000) {
+            document.getElementById('fps').textContent = frames;
+            frames = 0; lastTime = now;
+        }
+        
+        if (isLocked && !inventoryOpen) {
+            currentBiome = updatePlayer();
+            updateChunks();
+            
+            learnCounter++;
+            if (learnCounter >= 90) {
+                learnCounter = 0;
+                worldNN.backgroundLearn(camera.position.x, camera.position.z);
+                document.getElementById('epochs-done').textContent = worldNN.totalEpochs;
+            }
+            
+            musicCounter++;
+            if (musicCounter >= 12 && musicEnabled) {
+                musicCounter = 0;
+                const { freq, duration, velocity, noteIdx } = musicNN.generate(currentBiome);
+                musicNN.playNote(freq, duration, velocity);
+                musicNN.advance();
+                musicNN.vizBars.forEach((bar, i) => {
+                    bar.style.height = (i === noteIdx ? velocity * 28 : Math.max(3, parseFloat(bar.style.height) * 0.7)) + 'px';
+                });
+            }
+            
+            const target = getTargetBlock();
+            if (target.hit) {
+                highlight.position.set(target.hit.x, target.hit.y, target.hit.z);
+                highlight.visible = true;
+            } else highlight.visible = false;
+        }
+        
+        renderer.render(scene, camera);
+    }
+
+    async function init() {
+        document.getElementById('loading-text').textContent = 'Initializing NAR transformer...';
+        worldNN = new NARLogUnaryTransformer(Date.now() % 100000);
+        musicNN = new MusicNN(Date.now() % 100000 + 1);
+        setupHotbar();
+        setupInventory();
+        setupMusicViz();
+        await initialTraining();
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('start-screen').style.display = 'flex';
+        animate();
+    }
+
+    init();
+    </script>
+</body>
+</html>

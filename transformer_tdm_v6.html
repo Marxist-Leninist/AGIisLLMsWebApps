@@ -1,0 +1,1914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transformer TDM - Neural Network Warfare</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500;700&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #0a0a0f;
+            font-family: 'Rajdhani', sans-serif;
+            overflow: hidden;
+            color: #e0e0e0;
+        }
+        
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #gameCanvas {
+            display: block;
+        }
+        
+        /* HUD Overlay */
+        #hud {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        /* Minimal Team Scores - top center */
+        #scoreBar {
+            position: absolute;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 30px;
+            align-items: center;
+        }
+        
+        .team-score {
+            padding: 8px 20px;
+            font-family: 'Orbitron', monospace;
+            font-size: 20px;
+            font-weight: 900;
+            border-radius: 4px;
+            backdrop-filter: blur(10px);
+            letter-spacing: 2px;
+        }
+        
+        #blueScore {
+            background: rgba(30,90,200,0.7);
+            border: 1px solid rgba(100,160,255,0.5);
+            color: #8cf;
+        }
+        
+        #redScore {
+            background: rgba(200,40,40,0.7);
+            border: 1px solid rgba(255,100,100,0.5);
+            color: #faa;
+        }
+        
+        #scoreBar .vs {
+            font-family: 'Orbitron', monospace;
+            font-size: 14px;
+            color: #666;
+        }
+        
+        /* Crosshair */
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+        
+        .crosshair-dot {
+            width: 4px;
+            height: 4px;
+            background: #fff;
+            border-radius: 50%;
+            box-shadow: 0 0 8px #fff;
+        }
+        
+        .crosshair-line {
+            position: absolute;
+            background: rgba(255,255,255,0.8);
+        }
+        
+        .crosshair-line.top { width: 2px; height: 12px; left: 1px; top: -18px; }
+        .crosshair-line.bottom { width: 2px; height: 12px; left: 1px; bottom: -18px; }
+        .crosshair-line.left { width: 12px; height: 2px; top: 1px; left: -18px; }
+        .crosshair-line.right { width: 12px; height: 2px; top: 1px; right: -18px; }
+        
+        /* Minimal Health Bar - bottom center */
+        #playerHealth {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 200px;
+            text-align: center;
+        }
+        
+        #playerHealth .label {
+            font-size: 11px;
+            color: #666;
+            margin-bottom: 4px;
+            font-family: 'Orbitron', monospace;
+            letter-spacing: 2px;
+        }
+        
+        #healthBarOuter {
+            width: 100%;
+            height: 6px;
+            background: rgba(0,0,0,0.5);
+            border-radius: 3px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        #healthBarInner {
+            height: 100%;
+            background: linear-gradient(90deg, #2f5, #0c0);
+            transition: width 0.2s;
+            box-shadow: 0 0 10px rgba(50,255,50,0.5);
+        }
+        
+        #healthBarInner.low {
+            background: linear-gradient(90deg, #f55, #a00);
+            box-shadow: 0 0 10px rgba(255,50,50,0.5);
+        }
+        
+        /* Ammo counter */
+        #ammoCounter {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            font-family: 'Orbitron', monospace;
+            font-size: 24px;
+            color: #fff;
+            text-shadow: 0 0 10px rgba(100,200,255,0.5);
+        }
+        
+        #ammoCounter span {
+            color: #6af;
+        }
+        
+        /* Shared Learning Stats */
+        #learningStats {
+            position: absolute;
+            top: 60px;
+            left: 15px;
+            font-size: 10px;
+            color: #666;
+            font-family: 'Orbitron', monospace;
+            line-height: 1.6;
+        }
+        
+        #learningStats span {
+            color: #8af;
+        }
+        
+        /* Kill Feed - smaller, top right */
+        #killFeed {
+            position: absolute;
+            top: 60px;
+            right: 15px;
+            width: 220px;
+            max-height: 150px;
+            overflow: hidden;
+        }
+        
+        .kill-entry {
+            padding: 4px 10px;
+            margin: 3px 0;
+            background: rgba(0,0,0,0.5);
+            border-radius: 3px;
+            font-size: 11px;
+            animation: fadeIn 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        
+        .kill-entry .killer { font-weight: 700; }
+        .kill-entry .killer.blue { color: #6af; }
+        .kill-entry .killer.red { color: #f66; }
+        .kill-entry .victim.blue { color: #6af; }
+        .kill-entry .victim.red { color: #f66; }
+        
+        /* Collapsible Stats Panel - press TAB */
+        #statsPanel {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(10,10,20,0.95);
+            border: 1px solid rgba(100,150,255,0.3);
+            border-radius: 8px;
+            padding: 20px 30px;
+            display: none;
+            min-width: 500px;
+        }
+        
+        #statsPanel.visible {
+            display: block;
+        }
+        
+        #statsPanel h2 {
+            font-family: 'Orbitron', monospace;
+            font-size: 16px;
+            color: #6af;
+            margin-bottom: 15px;
+            text-align: center;
+            letter-spacing: 3px;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .team-column h3 {
+            font-family: 'Orbitron', monospace;
+            font-size: 12px;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .team-column.blue h3 { color: #6af; }
+        .team-column.red h3 { color: #f66; }
+        
+        .agent-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            font-size: 12px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        
+        .agent-row .name { color: #aaa; }
+        .agent-row .kd { font-family: 'Orbitron', monospace; }
+        
+        #statsPanel .hint {
+            text-align: center;
+            margin-top: 15px;
+            font-size: 10px;
+            color: #555;
+        }
+        
+        /* Minimap - small, top left */
+        #minimap {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            width: 120px;
+            height: 120px;
+            background: rgba(0,0,0,0.6);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        
+        #minimapCanvas {
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* Controls hint - bottom left, subtle */
+        #controlsHint {
+            position: absolute;
+            bottom: 15px;
+            left: 15px;
+            font-size: 10px;
+            color: #444;
+        }
+        
+        /* Hit marker */
+        #hitMarker {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 30px;
+            height: 30px;
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        #hitMarker.show {
+            animation: hitFlash 0.15s ease-out;
+        }
+        
+        @keyframes hitFlash {
+            0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+            100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5); }
+        }
+        
+        #hitMarker svg { width: 100%; height: 100%; }
+        
+        /* Damage indicator */
+        #damageOverlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            background: radial-gradient(ellipse at center, transparent 50%, rgba(255,0,0,0.3) 100%);
+            opacity: 0;
+            transition: opacity 0.1s;
+        }
+        
+        #damageOverlay.show {
+            opacity: 1;
+        }
+        
+        /* Loading Screen */
+        #loadingScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #0a0a15 0%, #101020 50%, #0a0a15 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            transition: opacity 0.5s;
+        }
+        
+        #loadingScreen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        #loadingScreen h1 {
+            font-family: 'Orbitron', monospace;
+            font-size: 42px;
+            font-weight: 900;
+            background: linear-gradient(90deg, #4af, #a6f, #f6a);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: 6px;
+            margin-bottom: 20px;
+        }
+        
+        #loadingScreen .subtitle {
+            font-size: 14px;
+            color: #666;
+            letter-spacing: 4px;
+            margin-bottom: 30px;
+        }
+        
+        .team-info {
+            display: flex;
+            gap: 60px;
+            margin-bottom: 40px;
+        }
+        
+        .team-box {
+            text-align: center;
+            padding: 20px 30px;
+            border-radius: 8px;
+        }
+        
+        .team-box.blue {
+            background: rgba(30,90,200,0.2);
+            border: 1px solid rgba(100,160,255,0.3);
+        }
+        
+        .team-box.red {
+            background: rgba(200,40,40,0.2);
+            border: 1px solid rgba(255,100,100,0.3);
+        }
+        
+        .team-box h3 {
+            font-family: 'Orbitron', monospace;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        
+        .team-box.blue h3 { color: #6af; }
+        .team-box.red h3 { color: #f66; }
+        
+        .team-box p {
+            font-size: 12px;
+            color: #888;
+            line-height: 1.6;
+        }
+        
+        #startBtn {
+            padding: 15px 50px;
+            font-family: 'Orbitron', monospace;
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 4px;
+            background: linear-gradient(135deg, #2a5acc, #1a3a8c);
+            border: 2px solid #4af;
+            color: #fff;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+        }
+        
+        #startBtn:hover {
+            background: linear-gradient(135deg, #3a6adc, #2a4a9c);
+            box-shadow: 0 0 30px rgba(50,120,255,0.6);
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        
+        <div id="hud">
+            <!-- Minimal Score Bar -->
+            <div id="scoreBar">
+                <div id="blueScore" class="team-score">BLUE <span id="blueScoreVal">0</span></div>
+                <span class="vs">VS</span>
+                <div id="redScore" class="team-score">RED <span id="redScoreVal">0</span></div>
+            </div>
+            
+            <!-- Crosshair -->
+            <div id="crosshair">
+                <div class="crosshair-dot"></div>
+                <div class="crosshair-line top"></div>
+                <div class="crosshair-line bottom"></div>
+                <div class="crosshair-line left"></div>
+                <div class="crosshair-line right"></div>
+            </div>
+            
+            <!-- Hit Marker -->
+            <div id="hitMarker">
+                <svg viewBox="0 0 30 30">
+                    <line x1="8" y1="8" x2="12" y2="12" stroke="white" stroke-width="2"/>
+                    <line x1="22" y1="8" x2="18" y2="12" stroke="white" stroke-width="2"/>
+                    <line x1="8" y1="22" x2="12" y2="18" stroke="white" stroke-width="2"/>
+                    <line x1="22" y1="22" x2="18" y2="18" stroke="white" stroke-width="2"/>
+                </svg>
+            </div>
+            
+            <!-- Damage Overlay -->
+            <div id="damageOverlay"></div>
+            
+            <!-- Minimap -->
+            <div id="minimap">
+                <canvas id="minimapCanvas"></canvas>
+            </div>
+            
+            <!-- Kill Feed -->
+            <div id="killFeed"></div>
+            
+            <!-- Player Health -->
+            <div id="playerHealth">
+                <div class="label">HEALTH</div>
+                <div id="healthBarOuter">
+                    <div id="healthBarInner" style="width: 100%"></div>
+                </div>
+            </div>
+            
+            <!-- Ammo -->
+            <div id="ammoCounter"><span>∞</span> AUTO</div>
+            
+            <!-- Shared Learning Stats -->
+            <div id="learningStats">
+                <div>SHARED: <span id="poolSize">0</span>/<span id="totalExp">0</span></div>
+                <div>YOUR INPUT: <span id="playerActions">0</span></div>
+            </div>
+            
+            <!-- Controls Hint -->
+            <div id="controlsHint">WASD Move | MOUSE Aim | HOLD CLICK Fire | TAB Stats</div>
+            
+            <!-- Stats Panel (TAB) -->
+            <div id="statsPanel">
+                <h2>SCOREBOARD</h2>
+                <div class="stats-grid">
+                    <div class="team-column blue">
+                        <h3>BLUE TEAM (YOUR TEAM)</h3>
+                        <div class="agent-row">
+                            <span class="name">YOU</span>
+                            <span class="kd" id="playerKD">0/0</span>
+                        </div>
+                        <div id="blueTeamStats"></div>
+                    </div>
+                    <div class="team-column red">
+                        <h3>RED TEAM (ENEMY)</h3>
+                        <div id="redTeamStats"></div>
+                    </div>
+                </div>
+                <div class="hint">Release TAB to close</div>
+            </div>
+        </div>
+        
+        <div id="loadingScreen">
+            <h1>TRANSFORMER TDM</h1>
+            <p class="subtitle">NEURAL NETWORK WARFARE</p>
+            
+            <div class="team-info">
+                <div class="team-box blue">
+                    <h3>⚡ YOUR TEAM - BLUE</h3>
+                    <p>You + 3 Transformer NNs<br>Everyone learns from YOU<br>and shares knowledge</p>
+                </div>
+                <div class="team-box red">
+                    <h3>💀 ENEMY TEAM - RED</h3>
+                    <p>4 Transformer NNs<br>They also learn from you<br>OUTNUMBERED - FIGHT SMART</p>
+                </div>
+            </div>
+            
+            <button id="startBtn">START MATCH</button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // ============================================
+        // SHARED EXPERIENCE POOL - All agents learn from everyone
+        // ============================================
+        
+        class SharedExperiencePool {
+            constructor(maxSize = 8000) {
+                this.buffer = [];
+                this.maxSize = maxSize;
+                this.playerActions = [];
+                this.maxPlayerActions = 1000;
+                this.totalAdded = 0; // Track total experiences ever added
+            }
+            
+            // Add experience from any agent - circular buffer, never stops
+            addExperience(exp, sourceId) {
+                this.buffer.push({ ...exp, source: sourceId, timestamp: Date.now() });
+                this.totalAdded++;
+                // Circular buffer - remove oldest when full
+                while (this.buffer.length > this.maxSize) {
+                    this.buffer.shift();
+                }
+            }
+            
+            // Track player actions for imitation learning - circular buffer
+            addPlayerAction(state, action, reward) {
+                this.playerActions.push({ state, action, reward, timestamp: Date.now() });
+                // Circular buffer - remove oldest when full
+                while (this.playerActions.length > this.maxPlayerActions) {
+                    this.playerActions.shift();
+                }
+            }
+            
+            // Sample experiences for learning - always returns something if buffer has data
+            sampleBatch(batchSize, excludeSource = null) {
+                const available = excludeSource 
+                    ? this.buffer.filter(e => e.source !== excludeSource)
+                    : this.buffer;
+                    
+                if (available.length === 0) return [];
+                
+                const batch = [];
+                const actualSize = Math.min(batchSize, available.length);
+                for (let i = 0; i < actualSize; i++) {
+                    batch.push(available[Math.floor(Math.random() * available.length)]);
+                }
+                return batch;
+            }
+            
+            // Get player actions for imitation - always returns something if available
+            samplePlayerActions(n) {
+                if (this.playerActions.length === 0) return [];
+                const actualSize = Math.min(n, this.playerActions.length);
+                const batch = [];
+                for (let i = 0; i < actualSize; i++) {
+                    batch.push(this.playerActions[Math.floor(Math.random() * this.playerActions.length)]);
+                }
+                return batch;
+            }
+            
+            // Get recent high-reward experiences for priority learning
+            getHighRewardExperiences(n, minReward = 1.0) {
+                const highReward = this.buffer.filter(e => e.reward >= minReward);
+                if (highReward.length === 0) return [];
+                const batch = [];
+                const actualSize = Math.min(n, highReward.length);
+                for (let i = 0; i < actualSize; i++) {
+                    batch.push(highReward[Math.floor(Math.random() * highReward.length)]);
+                }
+                return batch;
+            }
+        }
+        
+        // Global shared pool
+        const sharedPool = new SharedExperiencePool();
+        
+        // ============================================
+        // TRANSFORMER NEURAL NETWORK
+        // ============================================
+        
+        class TransformerAgent {
+            constructor(id, team, config = {}) {
+                this.id = id;
+                this.team = team;
+                this.dModel = config.dModel || 64;
+                this.nHeads = config.nHeads || 4;
+                this.headDim = this.dModel / this.nHeads;
+                this.seqLen = config.seqLen || 16;
+                this.learningRate = config.learningRate || 0.01;
+                
+                this.Wq = this.initWeights(this.dModel, this.dModel);
+                this.Wk = this.initWeights(this.dModel, this.dModel);
+                this.Wv = this.initWeights(this.dModel, this.dModel);
+                this.Wo = this.initWeights(this.dModel, this.dModel);
+                this.W1 = this.initWeights(this.dModel, this.dModel * 4);
+                this.W2 = this.initWeights(this.dModel * 4, this.dModel);
+                this.policyW = this.initWeights(this.dModel, 8);
+                
+                this.experienceBuffer = [];
+                this.maxBufferSize = 1000;
+                this.kills = 0;
+                this.deaths = 0;
+                this.updateCount = 0;
+                this.totalReward = 0;
+                this.rewardHistory = [];
+                this.lastAttention = null;
+            }
+            
+            initWeights(inDim, outDim) {
+                const weights = [];
+                const scale = Math.sqrt(2.0 / (inDim + outDim));
+                for (let i = 0; i < inDim; i++) {
+                    weights[i] = [];
+                    for (let j = 0; j < outDim; j++) {
+                        weights[i][j] = (Math.random() * 2 - 1) * scale;
+                    }
+                }
+                return weights;
+            }
+            
+            vecMatmul(vec, mat) {
+                const result = [];
+                for (let j = 0; j < mat[0].length; j++) {
+                    let sum = 0;
+                    for (let i = 0; i < vec.length; i++) {
+                        sum += vec[i] * mat[i][j];
+                    }
+                    result[j] = sum;
+                }
+                return result;
+            }
+            
+            softmax(arr) {
+                const max = Math.max(...arr);
+                const exp = arr.map(x => Math.exp(x - max));
+                const sum = exp.reduce((a, b) => a + b, 0);
+                return exp.map(x => x / sum);
+            }
+            
+            relu(x) { return Math.max(0, x); }
+            
+            attention(query, keys, values) {
+                const scores = [];
+                for (let i = 0; i < keys.length; i++) {
+                    let score = 0;
+                    for (let j = 0; j < query.length; j++) {
+                        score += query[j] * keys[i][j];
+                    }
+                    scores.push(score / Math.sqrt(this.headDim));
+                }
+                const attnWeights = this.softmax(scores);
+                this.lastAttention = attnWeights;
+                const output = new Array(values[0].length).fill(0);
+                for (let i = 0; i < values.length; i++) {
+                    for (let j = 0; j < values[i].length; j++) {
+                        output[j] += attnWeights[i] * values[i][j];
+                    }
+                }
+                return output;
+            }
+            
+            forward(state) {
+                const paddedState = new Array(this.dModel).fill(0);
+                for (let i = 0; i < Math.min(state.length, this.dModel); i++) {
+                    paddedState[i] = state[i];
+                }
+                
+                const Q = this.vecMatmul(paddedState, this.Wq);
+                const K = [this.vecMatmul(paddedState, this.Wk)];
+                const V = [this.vecMatmul(paddedState, this.Wv)];
+                
+                const historyLen = Math.min(this.experienceBuffer.length, this.seqLen - 1);
+                for (let i = 0; i < historyLen; i++) {
+                    const idx = this.experienceBuffer.length - historyLen + i;
+                    const histState = new Array(this.dModel).fill(0);
+                    for (let j = 0; j < Math.min(this.experienceBuffer[idx].state.length, this.dModel); j++) {
+                        histState[j] = this.experienceBuffer[idx].state[j];
+                    }
+                    K.push(this.vecMatmul(histState, this.Wk));
+                    V.push(this.vecMatmul(histState, this.Wv));
+                }
+                
+                const attnOut = this.attention(Q, K, V);
+                const projected = this.vecMatmul(attnOut, this.Wo);
+                const residual = projected.map((v, i) => v + paddedState[i]);
+                const hidden = this.vecMatmul(residual, this.W1).map(x => this.relu(x));
+                const ffnOut = this.vecMatmul(hidden, this.W2);
+                const output = ffnOut.map((v, i) => v + residual[i]);
+                const logits = this.vecMatmul(output, this.policyW);
+                const probs = this.softmax(logits);
+                return { probs, features: output };
+            }
+            
+            selectAction(state, epsilon = 0.1) {
+                const { probs } = this.forward(state);
+                if (Math.random() < epsilon) {
+                    return Math.floor(Math.random() * probs.length);
+                }
+                const rand = Math.random();
+                let cumulative = 0;
+                for (let i = 0; i < probs.length; i++) {
+                    cumulative += probs[i];
+                    if (rand < cumulative) return i;
+                }
+                return probs.length - 1;
+            }
+            
+            storeExperience(state, action, reward, nextState, done) {
+                const exp = { state, action, reward, nextState, done };
+                this.experienceBuffer.push(exp);
+                // Circular buffer - always keep learning
+                while (this.experienceBuffer.length > this.maxBufferSize) {
+                    this.experienceBuffer.shift();
+                }
+                this.totalReward += reward;
+                this.rewardHistory.push(reward);
+                if (this.rewardHistory.length > 100) this.rewardHistory.shift();
+                
+                // Share with global pool
+                sharedPool.addExperience(exp, this.id);
+            }
+            
+            // CONTINUOUS LEARNING - never stops, always adapts
+            learn(batchSize = 32) {
+                // Always try to learn, even with small buffer
+                if (this.experienceBuffer.length < 5) return;
+                
+                // Different learning mix for blue vs red
+                // Red team learns more aggressively from high-reward experiences
+                let ownBatch, sharedBatch, playerBatch, priorityBatch;
+                
+                if (this.team === 'red') {
+                    // Red team: more aggressive, learns from successful actions
+                    ownBatch = Math.floor(batchSize * 0.35);
+                    sharedBatch = Math.floor(batchSize * 0.30);
+                    playerBatch = Math.floor(batchSize * 0.15); // Still learn from player
+                    priorityBatch = Math.floor(batchSize * 0.20); // High-reward priority
+                } else {
+                    // Blue team: balanced learning with player imitation
+                    ownBatch = Math.floor(batchSize * 0.35);
+                    sharedBatch = Math.floor(batchSize * 0.30);
+                    playerBatch = Math.floor(batchSize * 0.25);
+                    priorityBatch = Math.floor(batchSize * 0.10);
+                }
+                
+                // 1. Learn from own experience
+                const ownCount = Math.min(ownBatch, this.experienceBuffer.length);
+                for (let b = 0; b < ownCount; b++) {
+                    const idx = Math.floor(Math.random() * this.experienceBuffer.length);
+                    this.updateFromExperience(this.experienceBuffer[idx], 1.0);
+                }
+                
+                // 2. Learn from shared pool (other agents' experiences)
+                const sharedExps = sharedPool.sampleBatch(sharedBatch, this.id);
+                for (const exp of sharedExps) {
+                    // Learn more from same team, less from enemy team
+                    const sameTeam = (this.team === 'blue' && exp.source.startsWith('B')) ||
+                                     (this.team === 'red' && exp.source.startsWith('R'));
+                    const weight = sameTeam ? 0.9 : 0.6;
+                    this.updateFromExperience(exp, weight);
+                }
+                
+                // 3. Imitate player actions
+                const playerExps = sharedPool.samplePlayerActions(playerBatch);
+                for (const exp of playerExps) {
+                    // Red team learns what player does to counter it
+                    // Blue team learns to copy player
+                    const weight = this.team === 'blue' ? 1.3 : 0.8;
+                    this.updateFromExperience({ ...exp, reward: exp.reward * weight }, weight);
+                }
+                
+                // 4. Priority learning from high-reward experiences (kills, hits)
+                const highRewardExps = sharedPool.getHighRewardExperiences(priorityBatch, 2.0);
+                for (const exp of highRewardExps) {
+                    this.updateFromExperience(exp, 1.5); // Boost successful actions
+                }
+                
+                this.updateCount++;
+            }
+            
+            updateFromExperience(exp, weightMod = 1.0) {
+                if (!exp || !exp.state) return;
+                const { probs } = this.forward(exp.state);
+                const advantage = exp.reward * weightMod;
+                
+                // Gradient update with momentum-like smoothing
+                for (let i = 0; i < this.policyW.length; i++) {
+                    for (let j = 0; j < this.policyW[i].length; j++) {
+                        const grad = (j === exp.action ? 1 - probs[j] : -probs[j]) * advantage;
+                        this.policyW[i][j] += this.learningRate * grad * 0.012;
+                    }
+                }
+            }
+            
+            getAverageReward() {
+                if (this.rewardHistory.length === 0) return 0;
+                return this.rewardHistory.reduce((a, b) => a + b, 0) / this.rewardHistory.length;
+            }
+        }
+        
+        // ============================================
+        // GAME ENGINE
+        // ============================================
+        
+        class Game {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.scene = new THREE.Scene();
+                this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+                this.renderer.toneMappingExposure = 1.2;
+                
+                this.blueScore = 0;
+                this.redScore = 0;
+                this.isRunning = false;
+                
+                this.player = {
+                    position: new THREE.Vector3(0, 1.6, 0),
+                    velocity: new THREE.Vector3(),
+                    rotation: { x: 0, y: 0 },
+                    health: 150, // More health than bots
+                    maxHealth: 150,
+                    isGrounded: true,
+                    kills: 0,
+                    deaths: 0
+                };
+                
+                this.blueAgents = [];
+                this.redAgents = [];
+                this.projectiles = [];
+                this.particles = [];
+                
+                this.keys = {};
+                this.mouseDown = false;
+                this.isPointerLocked = false;
+                this.lastPlayerShot = 0;
+                this.fireRate = 100; // ms between shots (automatic fire)
+                
+                this.setupScene();
+                this.setupLighting();
+                this.createArena();
+                this.createAgents();
+                this.setupInput();
+                this.setupMinimap();
+                
+                document.getElementById('startBtn').addEventListener('click', () => this.start());
+            }
+            
+            setupScene() {
+                this.scene.fog = new THREE.FogExp2(0x0a0a15, 0.008); // Less dense for bigger map
+                this.scene.background = new THREE.Color(0x0a0a15);
+            }
+            
+            setupLighting() {
+                const ambient = new THREE.AmbientLight(0x404060, 0.5);
+                this.scene.add(ambient);
+                
+                const sun = new THREE.DirectionalLight(0xffeedd, 1.0);
+                sun.position.set(80, 100, 50);
+                sun.castShadow = true;
+                sun.shadow.mapSize.width = 2048;
+                sun.shadow.mapSize.height = 2048;
+                sun.shadow.camera.near = 0.5;
+                sun.shadow.camera.far = 300;
+                sun.shadow.camera.left = -90;
+                sun.shadow.camera.right = 90;
+                sun.shadow.camera.top = 90;
+                sun.shadow.camera.bottom = -90;
+                this.scene.add(sun);
+                
+                // Team lights - positioned for bigger map
+                const blueLight = new THREE.PointLight(0x3366ff, 2, 60);
+                blueLight.position.set(-55, 10, 0);
+                this.scene.add(blueLight);
+                
+                const redLight = new THREE.PointLight(0xff3333, 2, 60);
+                redLight.position.set(55, 10, 0);
+                this.scene.add(redLight);
+                
+                // Center light
+                const centerLight = new THREE.PointLight(0xffffff, 1, 50);
+                centerLight.position.set(0, 15, 0);
+                this.scene.add(centerLight);
+            }
+            
+            createArena() {
+                // Floor - BIGGER MAP 150x150
+                const floorGeo = new THREE.PlaneGeometry(150, 150, 75, 75);
+                const floorMat = new THREE.MeshStandardMaterial({
+                    color: 0x1a1a25,
+                    roughness: 0.8,
+                    metalness: 0.2
+                });
+                const floor = new THREE.Mesh(floorGeo, floorMat);
+                floor.rotation.x = -Math.PI / 2;
+                floor.receiveShadow = true;
+                this.scene.add(floor);
+                
+                // Grid
+                const gridHelper = new THREE.GridHelper(150, 75, 0x333355, 0x222244);
+                gridHelper.position.y = 0.01;
+                this.scene.add(gridHelper);
+                
+                // Walls - bigger arena
+                const wallMat = new THREE.MeshStandardMaterial({ color: 0x252535, roughness: 0.6, metalness: 0.3 });
+                const walls = [
+                    { pos: [0, 4, -75], size: [150, 8, 1] },
+                    { pos: [0, 4, 75], size: [150, 8, 1] },
+                    { pos: [-75, 4, 0], size: [1, 8, 150] },
+                    { pos: [75, 4, 0], size: [1, 8, 150] }
+                ];
+                walls.forEach(w => {
+                    const geo = new THREE.BoxGeometry(...w.size);
+                    const mesh = new THREE.Mesh(geo, wallMat);
+                    mesh.position.set(...w.pos);
+                    mesh.castShadow = true;
+                    mesh.receiveShadow = true;
+                    this.scene.add(mesh);
+                });
+                
+                // Cover objects - more cover for bigger map
+                this.coverObjects = [];
+                const coverMat = new THREE.MeshStandardMaterial({ color: 0x333344, roughness: 0.5, metalness: 0.4 });
+                const coverPositions = [
+                    // Center area
+                    { pos: [0, 3, 0], size: [6, 6, 6] },
+                    // Inner ring
+                    { pos: [-20, 1.5, 0], size: [4, 3, 8] },
+                    { pos: [20, 1.5, 0], size: [4, 3, 8] },
+                    { pos: [0, 1.5, -20], size: [8, 3, 4] },
+                    { pos: [0, 1.5, 20], size: [8, 3, 4] },
+                    // Diagonal cover
+                    { pos: [-15, 1, -15], size: [3, 2, 3] },
+                    { pos: [15, 1, 15], size: [3, 2, 3] },
+                    { pos: [-15, 1, 15], size: [3, 2, 3] },
+                    { pos: [15, 1, -15], size: [3, 2, 3] },
+                    // Middle ring
+                    { pos: [-35, 2, 0], size: [5, 4, 10] },
+                    { pos: [35, 2, 0], size: [5, 4, 10] },
+                    { pos: [0, 2, -35], size: [10, 4, 5] },
+                    { pos: [0, 2, 35], size: [10, 4, 5] },
+                    // Outer diagonal
+                    { pos: [-30, 1.5, -30], size: [4, 3, 4] },
+                    { pos: [30, 1.5, 30], size: [4, 3, 4] },
+                    { pos: [-30, 1.5, 30], size: [4, 3, 4] },
+                    { pos: [30, 1.5, -30], size: [4, 3, 4] },
+                    // Spawn area cover - Blue side
+                    { pos: [-55, 1.5, -15], size: [3, 3, 6] },
+                    { pos: [-55, 1.5, 15], size: [3, 3, 6] },
+                    { pos: [-60, 1.5, 0], size: [6, 3, 4] },
+                    // Spawn area cover - Red side
+                    { pos: [55, 1.5, -15], size: [3, 3, 6] },
+                    { pos: [55, 1.5, 15], size: [3, 3, 6] },
+                    { pos: [60, 1.5, 0], size: [6, 3, 4] },
+                    // Extra flanking routes
+                    { pos: [-45, 1.5, -40], size: [4, 3, 4] },
+                    { pos: [45, 1.5, -40], size: [4, 3, 4] },
+                    { pos: [-45, 1.5, 40], size: [4, 3, 4] },
+                    { pos: [45, 1.5, 40], size: [4, 3, 4] },
+                    // Long corridors
+                    { pos: [-25, 2, -50], size: [3, 4, 8] },
+                    { pos: [25, 2, -50], size: [3, 4, 8] },
+                    { pos: [-25, 2, 50], size: [3, 4, 8] },
+                    { pos: [25, 2, 50], size: [3, 4, 8] }
+                ];
+                
+                coverPositions.forEach(c => {
+                    const geo = new THREE.BoxGeometry(...c.size);
+                    const mesh = new THREE.Mesh(geo, coverMat);
+                    mesh.position.set(...c.pos);
+                    mesh.castShadow = true;
+                    mesh.receiveShadow = true;
+                    this.scene.add(mesh);
+                    this.coverObjects.push({
+                        mesh,
+                        bounds: {
+                            min: new THREE.Vector3(c.pos[0] - c.size[0]/2, 0, c.pos[2] - c.size[2]/2),
+                            max: new THREE.Vector3(c.pos[0] + c.size[0]/2, c.pos[1] + c.size[1], c.pos[2] + c.size[2]/2)
+                        }
+                    });
+                });
+                
+                // Team spawn areas - further apart on bigger map
+                const blueSpawnGeo = new THREE.RingGeometry(6, 8, 32);
+                const blueSpawnMat = new THREE.MeshBasicMaterial({ color: 0x3366ff, side: THREE.DoubleSide, transparent: true, opacity: 0.3 });
+                const blueSpawn = new THREE.Mesh(blueSpawnGeo, blueSpawnMat);
+                blueSpawn.rotation.x = -Math.PI / 2;
+                blueSpawn.position.set(-60, 0.1, 0);
+                this.scene.add(blueSpawn);
+                
+                const redSpawnGeo = new THREE.RingGeometry(6, 8, 32);
+                const redSpawnMat = new THREE.MeshBasicMaterial({ color: 0xff3333, side: THREE.DoubleSide, transparent: true, opacity: 0.3 });
+                const redSpawn = new THREE.Mesh(redSpawnGeo, redSpawnMat);
+                redSpawn.rotation.x = -Math.PI / 2;
+                redSpawn.position.set(60, 0.1, 0);
+                this.scene.add(redSpawn);
+            }
+            
+            createAgentMesh(team) {
+                const group = new THREE.Group();
+                
+                // Larger body for easier targeting
+                const bodyGeo = new THREE.CylinderGeometry(0.5, 0.6, 1.8, 8);
+                const bodyMat = new THREE.MeshStandardMaterial({
+                    color: team === 'blue' ? 0x2255cc : 0xcc2222,
+                    roughness: 0.3,
+                    metalness: 0.7,
+                    emissive: team === 'blue' ? 0x112266 : 0x661111,
+                    emissiveIntensity: 0.4
+                });
+                const body = new THREE.Mesh(bodyGeo, bodyMat);
+                body.position.y = 0.9;
+                body.castShadow = true;
+                group.add(body);
+                
+                // Larger head
+                const headGeo = new THREE.SphereGeometry(0.4, 16, 16);
+                const headMat = new THREE.MeshStandardMaterial({
+                    color: team === 'blue' ? 0x4488ff : 0xff4444,
+                    roughness: 0.2,
+                    metalness: 0.8,
+                    emissive: team === 'blue' ? 0x224488 : 0x882222,
+                    emissiveIntensity: 0.6
+                });
+                const head = new THREE.Mesh(headGeo, headMat);
+                head.position.y = 2.0;
+                head.castShadow = true;
+                group.add(head);
+                
+                // Bright visor - very visible
+                const visorGeo = new THREE.BoxGeometry(0.6, 0.15, 0.12);
+                const visorMat = new THREE.MeshBasicMaterial({ color: team === 'blue' ? 0x00ffff : 0xff6600 });
+                const visor = new THREE.Mesh(visorGeo, visorMat);
+                visor.position.set(0, 2.05, 0.35);
+                group.add(visor);
+                
+                // Glowing team indicator ring
+                const ringGeo = new THREE.RingGeometry(0.7, 0.9, 16);
+                const ringMat = new THREE.MeshBasicMaterial({ 
+                    color: team === 'blue' ? 0x4488ff : 0xff4444, 
+                    side: THREE.DoubleSide,
+                    transparent: true,
+                    opacity: 0.8
+                });
+                const ring = new THREE.Mesh(ringGeo, ringMat);
+                ring.rotation.x = -Math.PI / 2;
+                ring.position.y = 0.05;
+                group.add(ring);
+                
+                // Floating health bar above head for enemies
+                if (team === 'red') {
+                    const hpBgGeo = new THREE.PlaneGeometry(1.2, 0.15);
+                    const hpBgMat = new THREE.MeshBasicMaterial({ color: 0x330000, side: THREE.DoubleSide });
+                    const hpBg = new THREE.Mesh(hpBgGeo, hpBgMat);
+                    hpBg.position.y = 2.7;
+                    hpBg.name = 'hpBg';
+                    group.add(hpBg);
+                    
+                    const hpGeo = new THREE.PlaneGeometry(1.1, 0.1);
+                    const hpMat = new THREE.MeshBasicMaterial({ color: 0xff3333, side: THREE.DoubleSide });
+                    const hp = new THREE.Mesh(hpGeo, hpMat);
+                    hp.position.y = 2.7;
+                    hp.position.z = 0.01;
+                    hp.name = 'hpBar';
+                    group.add(hp);
+                }
+                
+                return group;
+            }
+            
+            createAgents() {
+                // 3 Blue team Transformers (allies)
+                for (let i = 0; i < 3; i++) {
+                    const nn = new TransformerAgent(`B${i+1}`, 'blue');
+                    const mesh = this.createAgentMesh('blue');
+                    mesh.position.set(-60 + Math.random() * 8, 0, -10 + i * 10);
+                    this.scene.add(mesh);
+                    this.blueAgents.push({
+                        nn, mesh,
+                        health: 100,
+                        position: mesh.position.clone(),
+                        velocity: new THREE.Vector3(),
+                        lastShot: 0
+                    });
+                }
+                
+                // 4 Red team Transformers (enemies) - one more than blue!
+                for (let i = 0; i < 4; i++) {
+                    const nn = new TransformerAgent(`R${i+1}`, 'red', { learningRate: 0.015 }); // Higher LR
+                    const mesh = this.createAgentMesh('red');
+                    mesh.position.set(60 - Math.random() * 8, 0, -15 + i * 10);
+                    this.scene.add(mesh);
+                    this.redAgents.push({
+                        nn, mesh,
+                        health: 100,
+                        position: mesh.position.clone(),
+                        velocity: new THREE.Vector3(),
+                        lastShot: 0
+                    });
+                }
+            }
+            
+            setupInput() {
+                document.addEventListener('keydown', (e) => {
+                    this.keys[e.code] = true;
+                    if (e.code === 'Tab') {
+                        e.preventDefault();
+                        document.getElementById('statsPanel').classList.add('visible');
+                        this.updateStatsPanel();
+                    }
+                });
+                
+                document.addEventListener('keyup', (e) => {
+                    this.keys[e.code] = false;
+                    if (e.code === 'Tab') {
+                        document.getElementById('statsPanel').classList.remove('visible');
+                    }
+                });
+                
+                document.addEventListener('mousemove', (e) => {
+                    if (this.isPointerLocked) {
+                        this.player.rotation.y -= e.movementX * 0.002;
+                        this.player.rotation.x -= e.movementY * 0.002;
+                        this.player.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, this.player.rotation.x));
+                    }
+                });
+                
+                document.addEventListener('mousedown', (e) => {
+                    if (e.button === 0) {
+                        if (!this.isPointerLocked && this.isRunning) {
+                            this.canvas.requestPointerLock();
+                        }
+                        this.mouseDown = true;
+                    }
+                });
+                
+                document.addEventListener('mouseup', (e) => {
+                    if (e.button === 0) this.mouseDown = false;
+                });
+                
+                document.addEventListener('pointerlockchange', () => {
+                    this.isPointerLocked = document.pointerLockElement === this.canvas;
+                });
+                
+                window.addEventListener('resize', () => {
+                    this.camera.aspect = window.innerWidth / window.innerHeight;
+                    this.camera.updateProjectionMatrix();
+                    this.renderer.setSize(window.innerWidth, window.innerHeight);
+                });
+            }
+            
+            setupMinimap() {
+                this.minimapCanvas = document.getElementById('minimapCanvas');
+                this.minimapCtx = this.minimapCanvas.getContext('2d');
+                this.minimapCanvas.width = 120;
+                this.minimapCanvas.height = 120;
+            }
+            
+            start() {
+                document.getElementById('loadingScreen').classList.add('hidden');
+                this.isRunning = true;
+                this.player.position.set(-55, 1.6, 0); // Blue spawn area
+                this.animate();
+            }
+            
+            getAgentState(agent, team) {
+                const state = [];
+                state.push(agent.position.x / 75, agent.position.z / 75); // Normalized for bigger map
+                state.push(agent.health / 100);
+                state.push(agent.velocity.x, agent.velocity.z);
+                
+                const enemies = team === 'blue' ? this.redAgents : this.blueAgents;
+                let nearestDist = Infinity, nearestEnemy = null;
+                for (const e of enemies) {
+                    if (e.health <= 0) continue;
+                    const d = agent.position.distanceTo(e.position);
+                    if (d < nearestDist) { nearestDist = d; nearestEnemy = e; }
+                }
+                
+                if (nearestEnemy) {
+                    state.push((nearestEnemy.position.x - agent.position.x) / 75);
+                    state.push((nearestEnemy.position.z - agent.position.z) / 75);
+                    state.push(nearestDist / 75);
+                    state.push(nearestEnemy.health / 100);
+                } else {
+                    state.push(0, 0, 1, 0);
+                }
+                
+                if (team === 'blue') {
+                    const pd = agent.position.distanceTo(this.player.position);
+                    state.push((this.player.position.x - agent.position.x) / 75);
+                    state.push((this.player.position.z - agent.position.z) / 75);
+                    state.push(pd / 75);
+                } else {
+                    state.push(0, 0, 1);
+                }
+                
+                const allies = team === 'blue' ? this.blueAgents : this.redAgents;
+                state.push(allies.filter(a => a.health > 0).length / (team === 'blue' ? 3 : 4));
+                state.push(enemies.filter(a => a.health > 0).length / (team === 'blue' ? 4 : 3));
+                
+                return state;
+            }
+            
+            executeAction(agent, action) {
+                const speed = 0.11; // Faster movement
+                const actions = [
+                    () => { agent.velocity.z -= speed; },
+                    () => { agent.velocity.z += speed; },
+                    () => { agent.velocity.x -= speed; },
+                    () => { agent.velocity.x += speed; },
+                    () => { this.agentShoot(agent); },
+                    () => { agent.velocity.x -= speed * 0.6; this.agentShoot(agent); },
+                    () => { agent.velocity.x += speed * 0.6; this.agentShoot(agent); },
+                    () => { }
+                ];
+                if (actions[action]) actions[action]();
+            }
+            
+            // Update enemy health bars above their heads
+            updateEnemyHealthBars() {
+                for (const agent of this.redAgents) {
+                    const hpBar = agent.mesh.getObjectByName('hpBar');
+                    if (hpBar) {
+                        const pct = Math.max(0, agent.health) / 100;
+                        hpBar.scale.x = pct;
+                        hpBar.position.x = -(1 - pct) * 0.55;
+                        
+                        // Face camera
+                        const hpBg = agent.mesh.getObjectByName('hpBg');
+                        if (hpBg) {
+                            hpBg.lookAt(this.camera.position);
+                            hpBar.lookAt(this.camera.position);
+                        }
+                    }
+                }
+            }
+            
+            updateAgents(delta) {
+                const allAgents = [...this.blueAgents, ...this.redAgents];
+                
+                for (const agent of allAgents) {
+                    if (agent.health <= 0) continue;
+                    
+                    const team = agent.nn.team;
+                    const state = this.getAgentState(agent, team);
+                    const action = agent.nn.selectAction(state, 0.12);
+                    this.executeAction(agent, action);
+                    
+                    agent.position.add(agent.velocity);
+                    agent.velocity.multiplyScalar(0.9);
+                    
+                    // Boundaries
+                    agent.position.x = Math.max(-73, Math.min(73, agent.position.x));
+                    agent.position.z = Math.max(-73, Math.min(73, agent.position.z));
+                    
+                    agent.mesh.position.copy(agent.position);
+                    
+                    // Face nearest enemy
+                    const enemies = team === 'blue' ? this.redAgents : [...this.blueAgents, { position: this.player.position, health: this.player.health }];
+                    const alive = enemies.filter(e => e.health > 0);
+                    if (alive.length > 0) {
+                        let nearest = alive[0];
+                        let nd = agent.position.distanceTo(nearest.position);
+                        for (const e of alive) {
+                            const d = agent.position.distanceTo(e.position);
+                            if (d < nd) { nd = d; nearest = e; }
+                        }
+                        const angle = Math.atan2(nearest.position.x - agent.position.x, nearest.position.z - agent.position.z);
+                        agent.mesh.rotation.y = angle;
+                    }
+                    
+                    // Reward
+                    let reward = 0;
+                    const nearestEnemy = (team === 'blue' ? this.redAgents : this.blueAgents)
+                        .filter(e => e.health > 0)
+                        .sort((a, b) => agent.position.distanceTo(a.position) - agent.position.distanceTo(b.position))[0];
+                    if (nearestEnemy) {
+                        const d = agent.position.distanceTo(nearestEnemy.position);
+                        if (d > 8 && d < 25) reward += 0.1;
+                    }
+                    
+                    const nextState = this.getAgentState(agent, team);
+                    agent.nn.storeExperience(state, action, reward, nextState, false);
+                    
+                    // More frequent learning - continuous adaptation
+                    if (Math.random() < 0.15) agent.nn.learn(24);
+                }
+            }
+            
+            agentShoot(agent) {
+                const now = Date.now();
+                if (now - agent.lastShot < 400) return; // Faster fire rate
+                agent.lastShot = now;
+                
+                // Find target
+                const team = agent.nn.team;
+                let targets;
+                if (team === 'blue') {
+                    targets = this.redAgents.filter(e => e.health > 0);
+                } else {
+                    // Red team targets blue agents AND player
+                    targets = [
+                        ...this.blueAgents.filter(e => e.health > 0),
+                        { position: this.player.position.clone(), health: this.player.health }
+                    ].filter(t => t.health > 0);
+                }
+                
+                if (targets.length === 0) return;
+                
+                // Find nearest target
+                let nearest = targets[0];
+                let nearestDist = agent.position.distanceTo(nearest.position);
+                for (const t of targets) {
+                    const d = agent.position.distanceTo(t.position);
+                    if (d < nearestDist) {
+                        nearestDist = d;
+                        nearest = t;
+                    }
+                }
+                
+                // Calculate 3D direction to target
+                const targetPos = nearest.position.clone();
+                targetPos.y = 1.5; // Aim at body height
+                
+                const shootPos = agent.position.clone();
+                shootPos.y = 1.5; // Shoot from body height
+                
+                // Direction vector in 3D
+                const direction = new THREE.Vector3();
+                direction.subVectors(targetPos, shootPos);
+                
+                const dist = direction.length();
+                direction.normalize();
+                
+                // Accuracy improves with experience - continuous improvement
+                const experience = agent.nn.experienceBuffer.length + (agent.nn.updateCount * 10);
+                const accuracyBonus = Math.min(experience / 1500, 0.4); // Max 40% reduction, scales better
+                
+                // Base spread values - start inaccurate but improve
+                // Red team gets slightly better base accuracy since they're enemies
+                const teamBonus = team === 'red' ? 0.05 : 0;
+                const baseHorizSpread = 0.30 - teamBonus;
+                const baseVertSpread = 0.50 - teamBonus;
+                
+                // Horizontal spread - increases with distance but accuracy helps
+                const horizSpread = (Math.random() - 0.5) * Math.max(0.1, baseHorizSpread - accuracyBonus) * (1 + dist / 30);
+                
+                // Vertical spread - harder but also improves
+                const vertSpread = (Math.random() - 0.5) * Math.max(0.15, baseVertSpread - accuracyBonus) * (1 + dist / 20);
+                
+                // Apply spread
+                direction.x += horizSpread;
+                direction.y += vertSpread;
+                direction.z += horizSpread;
+                direction.normalize();
+                
+                // Create projectile
+                const projGeo = new THREE.SphereGeometry(0.12);
+                const projMat = new THREE.MeshBasicMaterial({
+                    color: team === 'blue' ? 0x00ffff : 0xff6600
+                });
+                const proj = new THREE.Mesh(projGeo, projMat);
+                proj.position.copy(shootPos);
+                proj.position.add(direction.clone().multiplyScalar(0.8));
+                this.scene.add(proj);
+                
+                // Add tracer for visibility
+                const tracerGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.8, 4);
+                tracerGeo.rotateX(Math.PI / 2);
+                const tracerMat = new THREE.MeshBasicMaterial({ 
+                    color: team === 'blue' ? 0x00ffff : 0xff6600, 
+                    transparent: true, 
+                    opacity: 0.6 
+                });
+                const tracer = new THREE.Mesh(tracerGeo, tracerMat);
+                proj.add(tracer);
+                
+                // Orient tracer along direction
+                proj.lookAt(proj.position.clone().add(direction));
+                
+                this.projectiles.push({
+                    mesh: proj,
+                    velocity: direction.clone().multiplyScalar(1.8), // Faster projectiles
+                    team: team,
+                    shooter: agent,
+                    lifetime: 0
+                });
+            }
+            
+            playerShoot() {
+                const now = Date.now();
+                if (now - this.lastPlayerShot < this.fireRate) return;
+                this.lastPlayerShot = now;
+                
+                const direction = new THREE.Vector3(0, 0, -1);
+                direction.applyEuler(new THREE.Euler(this.player.rotation.x, this.player.rotation.y, 0, 'YXZ'));
+                
+                // Bigger, brighter projectile
+                const projGeo = new THREE.SphereGeometry(0.15);
+                const projMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+                const proj = new THREE.Mesh(projGeo, projMat);
+                proj.position.copy(this.player.position);
+                proj.position.add(direction.clone().multiplyScalar(0.5));
+                this.scene.add(proj);
+                
+                // Add tracer line
+                const tracerGeo = new THREE.CylinderGeometry(0.03, 0.03, 1.5, 4);
+                tracerGeo.rotateX(Math.PI / 2);
+                const tracerMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.7 });
+                const tracer = new THREE.Mesh(tracerGeo, tracerMat);
+                proj.add(tracer);
+                
+                this.projectiles.push({
+                    mesh: proj,
+                    velocity: direction.clone().multiplyScalar(3.5), // Much faster!
+                    team: 'blue',
+                    shooter: 'player',
+                    lifetime: 0
+                });
+                
+                // Muzzle flash
+                this.createMuzzleFlash(proj.position.clone(), 'blue');
+            }
+            
+            createMuzzleFlash(position, team) {
+                const flashGeo = new THREE.SphereGeometry(0.2);
+                const flashMat = new THREE.MeshBasicMaterial({
+                    color: team === 'blue' ? 0x88ffff : 0xffaa00,
+                    transparent: true, opacity: 1
+                });
+                const flash = new THREE.Mesh(flashGeo, flashMat);
+                flash.position.copy(position);
+                this.scene.add(flash);
+                this.particles.push({ mesh: flash, lifetime: 0, maxLife: 4, type: 'flash' });
+            }
+            
+            createHitEffect(position) {
+                for (let i = 0; i < 6; i++) {
+                    const geo = new THREE.SphereGeometry(0.04);
+                    const mat = new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 1 });
+                    const p = new THREE.Mesh(geo, mat);
+                    p.position.copy(position);
+                    this.scene.add(p);
+                    this.particles.push({
+                        mesh: p,
+                        velocity: new THREE.Vector3((Math.random()-0.5)*0.3, Math.random()*0.2, (Math.random()-0.5)*0.3),
+                        lifetime: 0, maxLife: 25, type: 'spark'
+                    });
+                }
+            }
+            
+            showHitMarker() {
+                const hm = document.getElementById('hitMarker');
+                hm.classList.remove('show');
+                void hm.offsetWidth;
+                hm.classList.add('show');
+            }
+            
+            showDamageOverlay() {
+                const overlay = document.getElementById('damageOverlay');
+                overlay.classList.add('show');
+                setTimeout(() => overlay.classList.remove('show'), 150);
+            }
+            
+            // Helper for horizontal distance (ignoring Y)
+            horizontalDist(a, b) {
+                const dx = a.x - b.x;
+                const dz = a.z - b.z;
+                return Math.sqrt(dx * dx + dz * dz);
+            }
+            
+            updateProjectiles() {
+                for (let i = this.projectiles.length - 1; i >= 0; i--) {
+                    const proj = this.projectiles[i];
+                    proj.mesh.position.add(proj.velocity);
+                    proj.lifetime++;
+                    
+                    // Blue projectiles ONLY hit red agents (no friendly fire on player)
+                    // Red projectiles hit blue agents AND player
+                    let targets;
+                    if (proj.team === 'blue') {
+                        targets = this.redAgents; // Blue only hits red
+                    } else {
+                        targets = [...this.blueAgents]; // Red hits blue agents
+                    }
+                    
+                    let hit = false;
+                    
+                    // Check agent hits - use HORIZONTAL distance + STRICT height check
+                    for (const target of targets) {
+                        if (target.health <= 0) continue;
+                        
+                        // Horizontal distance check
+                        const hDist = this.horizontalDist(proj.mesh.position, target.position);
+                        // Strict vertical check - projectile must be at body/head height
+                        const projY = proj.mesh.position.y;
+                        const targetY = target.position.y || 0;
+                        const inHeight = projY > (targetY + 0.3) && projY < (targetY + 2.3);
+                        
+                        if (hDist < 1.0 && inHeight) {
+                            target.health -= 34; // 3 shots to kill
+                            this.createHitEffect(proj.mesh.position.clone());
+                            
+                            if (proj.shooter === 'player') {
+                                this.showHitMarker();
+                            }
+                            
+                            if (proj.shooter !== 'player' && proj.shooter.nn) {
+                                proj.shooter.nn.storeExperience(
+                                    this.getAgentState(proj.shooter, proj.shooter.nn.team),
+                                    4, 3.0,
+                                    this.getAgentState(proj.shooter, proj.shooter.nn.team),
+                                    false
+                                );
+                            }
+                            
+                            if (target.health <= 0) {
+                                this.handleKill(proj.shooter, target, proj.team);
+                            }
+                            
+                            hit = true;
+                            break;
+                        }
+                    }
+                    
+                    // Check if RED projectile hits player (blue projectiles NEVER hit player)
+                    if (!hit && proj.team === 'red') {
+                        const hDist = this.horizontalDist(proj.mesh.position, this.player.position);
+                        const projY = proj.mesh.position.y;
+                        const inHeight = projY > 0.5 && projY < 2.5;
+                        
+                        if (hDist < 1.0 && inHeight) {
+                            this.player.health -= 20;
+                            this.showDamageOverlay();
+                            this.updateHealthBar();
+                            this.createHitEffect(proj.mesh.position.clone());
+                            
+                            if (this.player.health <= 0) {
+                                this.handlePlayerDeath(proj.shooter);
+                            }
+                            
+                            hit = true;
+                        }
+                    }
+                    
+                    // Also check if projectile hits ground or goes too high
+                    if (proj.mesh.position.y < 0 || proj.mesh.position.y > 20) {
+                        hit = true;
+                    }
+                    
+                    if (hit || proj.lifetime > 200 || Math.abs(proj.mesh.position.x) > 80 || Math.abs(proj.mesh.position.z) > 80) {
+                        this.scene.remove(proj.mesh);
+                        this.projectiles.splice(i, 1);
+                    }
+                }
+            }
+            
+            updateParticles() {
+                for (let i = this.particles.length - 1; i >= 0; i--) {
+                    const p = this.particles[i];
+                    p.lifetime++;
+                    if (p.type === 'spark') {
+                        p.mesh.position.add(p.velocity);
+                        p.velocity.y -= 0.01;
+                        p.mesh.material.opacity = 1 - (p.lifetime / p.maxLife);
+                    } else if (p.type === 'flash') {
+                        p.mesh.scale.multiplyScalar(0.75);
+                        p.mesh.material.opacity *= 0.6;
+                    }
+                    if (p.lifetime >= p.maxLife) {
+                        this.scene.remove(p.mesh);
+                        this.particles.splice(i, 1);
+                    }
+                }
+            }
+            
+            handleKill(killer, victim, killerTeam) {
+                if (killerTeam === 'blue') {
+                    this.blueScore++;
+                    document.getElementById('blueScoreVal').textContent = this.blueScore;
+                } else {
+                    this.redScore++;
+                    document.getElementById('redScoreVal').textContent = this.redScore;
+                }
+                
+                if (killer === 'player') {
+                    this.player.kills++;
+                } else if (killer.nn) {
+                    killer.nn.kills++;
+                    killer.nn.storeExperience(
+                        this.getAgentState(killer, killer.nn.team),
+                        4, 10.0,
+                        this.getAgentState(killer, killer.nn.team),
+                        false
+                    );
+                }
+                
+                if (victim.nn) {
+                    victim.nn.deaths++;
+                    victim.nn.storeExperience(
+                        this.getAgentState(victim, victim.nn.team),
+                        0, -5.0,
+                        this.getAgentState(victim, victim.nn.team),
+                        true
+                    );
+                }
+                
+                this.addKillFeed(killer, victim, killerTeam);
+                victim.mesh.visible = false;
+                
+                setTimeout(() => {
+                    victim.health = 100;
+                    victim.mesh.visible = true;
+                    if (victim.nn.team === 'blue') {
+                        victim.position.set(-60 + Math.random() * 8, 0, -15 + Math.random() * 30);
+                    } else {
+                        victim.position.set(60 - Math.random() * 8, 0, -15 + Math.random() * 30);
+                    }
+                    victim.mesh.position.copy(victim.position);
+                }, 3000);
+            }
+            
+            handlePlayerDeath(killer) {
+                this.player.deaths++;
+                this.redScore++;
+                document.getElementById('redScoreVal').textContent = this.redScore;
+                
+                if (killer && killer.nn) {
+                    killer.nn.kills++;
+                }
+                
+                this.addKillFeed(killer, { nn: { id: 'YOU', team: 'blue' } }, 'red');
+                
+                // Respawn player
+                setTimeout(() => {
+                    this.player.health = this.player.maxHealth;
+                    this.player.position.set(-55 + Math.random() * 8, 1.6, -10 + Math.random() * 20);
+                    this.updateHealthBar();
+                }, 2000);
+            }
+            
+            addKillFeed(killer, victim, killerTeam) {
+                const feed = document.getElementById('killFeed');
+                const entry = document.createElement('div');
+                entry.className = 'kill-entry';
+                
+                const killerName = killer === 'player' ? 'YOU' : (killer.nn ? killer.nn.id : '???');
+                const victimName = victim.nn ? victim.nn.id : 'YOU';
+                const victimTeam = victim.nn ? victim.nn.team : 'blue';
+                
+                entry.innerHTML = `
+                    <span class="killer ${killerTeam}">${killerName}</span>
+                    <span>→</span>
+                    <span class="victim ${victimTeam}">${victimName}</span>
+                `;
+                
+                feed.insertBefore(entry, feed.firstChild);
+                if (feed.children.length > 5) feed.removeChild(feed.lastChild);
+            }
+            
+            updateHealthBar() {
+                const bar = document.getElementById('healthBarInner');
+                const pct = Math.max(0, (this.player.health / this.player.maxHealth) * 100);
+                bar.style.width = pct + '%';
+                if (pct < 30) {
+                    bar.classList.add('low');
+                } else {
+                    bar.classList.remove('low');
+                }
+            }
+            
+            updatePlayer(delta) {
+                // Auto-fire when holding mouse button
+                if (this.mouseDown && this.isPointerLocked) {
+                    this.playerShoot();
+                }
+                
+                const moveSpeed = 0.28; // Faster than bots
+                const direction = new THREE.Vector3();
+                
+                if (this.keys['KeyW']) direction.z -= 1;
+                if (this.keys['KeyS']) direction.z += 1;
+                if (this.keys['KeyA']) direction.x -= 1;
+                if (this.keys['KeyD']) direction.x += 1;
+                
+                // Track player action for NN imitation learning
+                let playerAction = 7; // Default: hold
+                if (this.keys['KeyW']) playerAction = 0;
+                else if (this.keys['KeyS']) playerAction = 1;
+                else if (this.keys['KeyA']) playerAction = 2;
+                else if (this.keys['KeyD']) playerAction = 3;
+                if (this.mouseDown) {
+                    if (playerAction === 2) playerAction = 5; // strafe left + shoot
+                    else if (playerAction === 3) playerAction = 6; // strafe right + shoot
+                    else playerAction = 4; // shoot
+                }
+                
+                // Create player state observation for NNs to learn from
+                if (Math.random() < 0.1) { // Sample 10% of frames
+                    const playerState = this.getPlayerStateForLearning();
+                    const reward = this.mouseDown ? 0.5 : 0.1; // Higher reward for engaging
+                    sharedPool.addPlayerAction(playerState, playerAction, reward);
+                }
+                
+                direction.normalize();
+                direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.player.rotation.y);
+                
+                this.player.velocity.x = direction.x * moveSpeed;
+                this.player.velocity.z = direction.z * moveSpeed;
+                
+                if (this.keys['Space'] && this.player.isGrounded) {
+                    this.player.velocity.y = 0.2;
+                    this.player.isGrounded = false;
+                }
+                
+                this.player.velocity.y -= 0.01;
+                this.player.position.add(this.player.velocity);
+                
+                if (this.player.position.y < 1.6) {
+                    this.player.position.y = 1.6;
+                    this.player.velocity.y = 0;
+                    this.player.isGrounded = true;
+                }
+                
+                // Bigger map boundaries
+                this.player.position.x = Math.max(-73, Math.min(73, this.player.position.x));
+                this.player.position.z = Math.max(-73, Math.min(73, this.player.position.z));
+                
+                this.camera.position.copy(this.player.position);
+                this.camera.rotation.order = 'YXZ';
+                this.camera.rotation.y = this.player.rotation.y;
+                this.camera.rotation.x = this.player.rotation.x;
+            }
+            
+            // Generate state from player's perspective for NN learning
+            getPlayerStateForLearning() {
+                const state = [];
+                state.push(this.player.position.x / 75, this.player.position.z / 75);
+                state.push(this.player.health / this.player.maxHealth);
+                state.push(this.player.velocity.x, this.player.velocity.z);
+                
+                // Nearest enemy info
+                let nearestDist = Infinity, nearestEnemy = null;
+                for (const e of this.redAgents) {
+                    if (e.health <= 0) continue;
+                    const d = this.player.position.distanceTo(e.position);
+                    if (d < nearestDist) { nearestDist = d; nearestEnemy = e; }
+                }
+                
+                if (nearestEnemy) {
+                    state.push((nearestEnemy.position.x - this.player.position.x) / 75);
+                    state.push((nearestEnemy.position.z - this.player.position.z) / 75);
+                    state.push(nearestDist / 75);
+                    state.push(nearestEnemy.health / 100);
+                } else {
+                    state.push(0, 0, 1, 0);
+                }
+                
+                state.push(0, 0, 1); // Placeholder for ally info
+                state.push(this.blueAgents.filter(a => a.health > 0).length / 3);
+                state.push(this.redAgents.filter(a => a.health > 0).length / 4);
+                
+                return state;
+            }
+            
+            updateStatsPanel() {
+                document.getElementById('playerKD').textContent = `${this.player.kills}/${this.player.deaths}`;
+                
+                const blueStats = document.getElementById('blueTeamStats');
+                blueStats.innerHTML = '';
+                for (const a of this.blueAgents) {
+                    const row = document.createElement('div');
+                    row.className = 'agent-row';
+                    row.innerHTML = `<span class="name">${a.nn.id} (TF)</span><span class="kd">${a.nn.kills}/${a.nn.deaths}</span>`;
+                    blueStats.appendChild(row);
+                }
+                
+                const redStats = document.getElementById('redTeamStats');
+                redStats.innerHTML = '';
+                for (const a of this.redAgents) {
+                    const row = document.createElement('div');
+                    row.className = 'agent-row';
+                    row.innerHTML = `<span class="name">${a.nn.id} (TF)</span><span class="kd">${a.nn.kills}/${a.nn.deaths}</span>`;
+                    redStats.appendChild(row);
+                }
+            }
+            
+            updateMinimap() {
+                const ctx = this.minimapCtx;
+                const w = 120, h = 120;
+                const scale = w / 150; // Bigger map scale
+                
+                ctx.fillStyle = 'rgba(0,0,0,0.8)';
+                ctx.fillRect(0, 0, w, h);
+                
+                // Cover
+                ctx.fillStyle = '#333';
+                for (const c of this.coverObjects) {
+                    const x = (c.mesh.position.x + 75) * scale;
+                    const z = (c.mesh.position.z + 75) * scale;
+                    ctx.fillRect(x - 2, z - 2, 4, 4);
+                }
+                
+                // Blue agents
+                ctx.fillStyle = '#4af';
+                for (const a of this.blueAgents) {
+                    if (a.health <= 0) continue;
+                    const x = (a.position.x + 75) * scale;
+                    const z = (a.position.z + 75) * scale;
+                    ctx.beginPath();
+                    ctx.arc(x, z, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                
+                // Red agents
+                ctx.fillStyle = '#f44';
+                for (const a of this.redAgents) {
+                    if (a.health <= 0) continue;
+                    const x = (a.position.x + 75) * scale;
+                    const z = (a.position.z + 75) * scale;
+                    ctx.beginPath();
+                    ctx.arc(x, z, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                
+                // Player
+                const px = (this.player.position.x + 75) * scale;
+                const pz = (this.player.position.z + 75) * scale;
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(px, pz, 4, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Player direction
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(px, pz);
+                ctx.lineTo(px - Math.sin(this.player.rotation.y) * 8, pz - Math.cos(this.player.rotation.y) * 8);
+                ctx.stroke();
+            }
+            
+            animate() {
+                if (!this.isRunning) return;
+                requestAnimationFrame(() => this.animate());
+                
+                this.updatePlayer(1/60);
+                this.updateAgents(1/60);
+                this.updateProjectiles();
+                this.updateParticles();
+                this.updateMinimap();
+                this.updateEnemyHealthBars();
+                
+                // Update shared learning stats display - shows continuous learning
+                if (Math.random() < 0.1) {
+                    document.getElementById('poolSize').textContent = sharedPool.buffer.length;
+                    document.getElementById('totalExp').textContent = sharedPool.totalAdded;
+                    document.getElementById('playerActions').textContent = sharedPool.playerActions.length;
+                }
+                
+                this.renderer.render(this.scene, this.camera);
+            }
+        }
+        
+        const game = new Game();
+    </script>
+</body>
+</html>
