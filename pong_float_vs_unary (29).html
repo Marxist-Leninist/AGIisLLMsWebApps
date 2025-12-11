@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PONG: 8-bit Float vs NVFP4 (Blackwell) Perceptron</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=VT323&family=Orbitron:wght@400;700&display=swap');
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            background: #020208;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: 'VT323', monospace;
+            color: #00ff00;
+            padding: 15px;
+        }
+        
+        .title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 18px;
+            text-align: center;
+            margin-bottom: 5px;
+        }
+        
+        .title .float { color: #00ffff; text-shadow: 0 0 10px #00ffff; }
+        .title .vs { color: #ffff00; }
+        .title .unary { color: #ff00ff; text-shadow: 0 0 10px #ff00ff; }
+        
+        .subtitle {
+            font-size: 13px;
+            color: #888;
+            margin-bottom: 15px;
+        }
+        
+        .main-container {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        .game-container {
+            padding: 15px;
+            background: #111;
+            border-radius: 10px;
+            border: 1px solid #333;
+        }
+        
+        canvas { display: block; background: #000; border-radius: 4px; }
+        
+        .stats-row {
+            display: flex;
+            gap: 15px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        .nn-panel {
+            background: #0a0a0a;
+            padding: 12px;
+            border-radius: 8px;
+            width: 300px;
+        }
+        
+        .nn-panel.float-perc {
+            border: 1px solid #00ffff;
+        }
+        
+        .nn-panel.unary-perc {
+            border: 1px solid #ff00ff;
+        }
+        
+        .panel-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 11px;
+            margin-bottom: 8px;
+        }
+        
+        .float-perc .panel-title {
+            color: #00ffff;
+            text-shadow: 0 0 8px #00ffff;
+        }
+        
+        .unary-perc .panel-title {
+            color: #ff00ff;
+            text-shadow: 0 0 8px #ff00ff;
+        }
+        
+        .stat { margin: 5px 0; font-size: 13px; color: #aaa; }
+        .stat .val { font-weight: bold; }
+        .float-perc .stat .val { color: #00ffff; }
+        .unary-perc .stat .val { color: #ff00ff; }
+        
+        .network-mini {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: #050505;
+            border-radius: 4px;
+            margin-top: 8px;
+        }
+        
+        .neuron-small {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            border: 2px solid;
+        }
+        
+        .float-perc .neuron-small { border-color: #00ffff; color: #00ffff; }
+        .unary-perc .neuron-small { border-color: #ff00ff; color: #ff00ff; }
+        
+        .neuron-small.active {
+            box-shadow: 0 0 10px currentColor;
+        }
+        
+        .weights-mini {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            font-size: 10px;
+            color: #666;
+            flex: 1;
+        }
+        
+        .weight-row {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .weight-bar-mini {
+            width: 50px;
+            height: 6px;
+            background: #222;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        
+        .weight-fill-mini {
+            height: 100%;
+            transition: width 0.1s;
+        }
+        
+        .float-perc .weight-fill-mini { background: #00ffff; }
+        .unary-perc .weight-fill-mini { background: #ff00ff; }
+        
+        .weight-val {
+            font-size: 9px;
+            width: 45px;
+            text-align: right;
+        }
+        
+        .outputs-mini {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        
+        .out-mini {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            border: 1px solid #444;
+            background: #111;
+        }
+        
+        .out-mini.selected {
+            border-color: currentColor;
+            box-shadow: 0 0 8px currentColor;
+        }
+        
+        .float-perc .out-mini.selected { color: #00ffff; background: rgba(0,255,255,0.2); }
+        .unary-perc .out-mini.selected { color: #ff00ff; background: rgba(255,0,255,0.2); }
+        
+        .algo-desc {
+            font-size: 10px;
+            color: #666;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #222;
+            line-height: 1.4;
+        }
+        
+        .algo-desc code {
+            color: #888;
+            background: #111;
+            padding: 1px 4px;
+            border-radius: 2px;
+        }
+        
+        .unary-display {
+            display: flex;
+            gap: 1px;
+            margin-top: 5px;
+            flex-wrap: wrap;
+        }
+        
+        .tally {
+            width: 4px;
+            height: 10px;
+            border-radius: 1px;
+        }
+        
+        .tally.on { background: #ff00ff; }
+        .tally.off { background: #220022; }
+        
+        .controls {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            font-family: 'VT323', monospace;
+            font-size: 14px;
+            padding: 6px 15px;
+            background: transparent;
+            border: 2px solid #ffff00;
+            color: #ffff00;
+            cursor: pointer;
+        }
+        
+        button:hover { background: #ffff00; color: #000; }
+        
+        .speed-ctrl {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #aaaa44;
+        }
+        
+        input[type="range"] {
+            -webkit-appearance: none;
+            background: #333300;
+            height: 6px;
+            border-radius: 3px;
+            width: 80px;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            background: #ffff00;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        
+        .win-tracker {
+            text-align: center;
+            margin-top: 10px;
+            padding: 10px;
+            background: #0a0a0a;
+            border-radius: 6px;
+            border: 1px solid #444;
+        }
+        
+        .win-tracker .label { font-size: 11px; color: #666; margin-bottom: 5px; }
+        
+        .win-bar {
+            height: 20px;
+            background: #111;
+            border-radius: 10px;
+            overflow: hidden;
+            display: flex;
+        }
+        
+        .win-fill-left {
+            background: linear-gradient(90deg, #00ffff, #008888);
+            transition: width 0.3s;
+        }
+        
+        .win-fill-right {
+            background: linear-gradient(90deg, #880088, #ff00ff);
+            transition: width 0.3s;
+        }
+        
+        .win-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+        
+        .win-labels .left { color: #00ffff; }
+        .win-labels .right { color: #ff00ff; }
+    </style>
+</head>
+<body>
+    <div class="title">
+        <span class="float">8-BIT FLOAT</span>
+        <span class="vs">vs</span>
+        <span class="unary">NVFP4 (Blackwell)</span>
+    </div>
+    <div class="subtitle">FP8 (uniform) vs NVFP4 (E2M1 + E4M3 block scaling) • NVIDIA's 4-bit format</div>
+    
+    <div class="main-container">
+        <div class="game-container">
+            <canvas id="game" width="550" height="380"></canvas>
+            
+            <div class="win-tracker">
+                <div class="label">WIN RATIO</div>
+                <div class="win-bar">
+                    <div class="win-fill-left" id="win-left" style="width: 50%"></div>
+                    <div class="win-fill-right" id="win-right" style="width: 50%"></div>
+                </div>
+                <div class="win-labels">
+                    <span class="left">8-bit: <span id="float-wins">0</span></span>
+                    <span class="right">NVFP4: <span id="unary-wins">0</span></span>
+                </div>
+            </div>
+            
+            <div class="win-tracker" style="margin-top: 5px;">
+                <div class="label">OVERALL LEAD (cumulative points)</div>
+                <div class="win-bar">
+                    <div class="win-fill-left" id="overall-left" style="width: 50%"></div>
+                    <div class="win-fill-right" id="overall-right" style="width: 50%"></div>
+                </div>
+                <div class="win-labels">
+                    <span class="left">Total: <span id="total-float">0</span></span>
+                    <span class="right">Total: <span id="total-unary">0</span></span>
+                </div>
+                <div style="text-align: center; font-size: 12px; color: #888; margin-top: 3px;">
+                    Lead: <span id="lead-indicator" style="font-weight: bold;">EVEN</span> 
+                    (<span id="lead-pct">0.00</span>% advantage over <span id="total-games">0</span> games)
+                </div>
+            </div>
+            
+            <div class="win-tracker" style="margin-top: 5px;">
+                <div class="label">LEAD TIME (% of game each side was ahead)</div>
+                <div class="win-bar">
+                    <div class="win-fill-left" id="leadtime-left" style="width: 50%"></div>
+                    <div class="win-fill-right" id="leadtime-right" style="width: 50%"></div>
+                </div>
+                <div class="win-labels">
+                    <span class="left"><span id="leadtime-float">0.0</span>%</span>
+                    <span class="right"><span id="leadtime-unary">0.0</span>%</span>
+                </div>
+                <div style="text-align: center; font-size: 12px; color: #888; margin-top: 3px;">
+                    <span id="leadtime-winner" style="font-weight: bold;">-</span> has led more often
+                </div>
+            </div>
+            
+            <div class="win-tracker" style="margin-top: 5px;">
+                <div class="label">MOMENTUM (% of time each side's lead was GROWING)</div>
+                <div class="win-bar">
+                    <div class="win-fill-left" id="momentum-left" style="width: 50%"></div>
+                    <div class="win-fill-right" id="momentum-right" style="width: 50%"></div>
+                </div>
+                <div class="win-labels">
+                    <span class="left"><span id="momentum-float">0.0</span>%</span>
+                    <span class="right"><span id="momentum-unary">0.0</span>%</span>
+                </div>
+                <div style="text-align: center; font-size: 12px; color: #888; margin-top: 3px;">
+                    <span id="momentum-winner" style="font-weight: bold;">-</span> is gaining ground more often
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="stats-row">
+        <div class="nn-panel float-perc">
+            <div class="panel-title">◀ 8-BIT FLOAT (FP8)</div>
+            <div class="stat">Score: <span class="val" id="float-score">0</span></div>
+            <div class="stat">Accuracy: <span class="val" id="float-acc">0%</span></div>
+            <div class="stat" style="font-size: 11px; color: #556;">Precision: ~1 decimal digit</div>
+            
+            <div class="network-mini">
+                <div class="neuron-small" id="float-input">IN</div>
+                <div class="weights-mini">
+                    <div class="weight-row">
+                        <span>w₀</span>
+                        <div class="weight-bar-mini"><div class="weight-fill-mini" id="float-w0"></div></div>
+                        <span class="weight-val" id="float-w0-val">0.000</span>
+                    </div>
+                    <div class="weight-row">
+                        <span>w₁</span>
+                        <div class="weight-bar-mini"><div class="weight-fill-mini" id="float-w1"></div></div>
+                        <span class="weight-val" id="float-w1-val">0.000</span>
+                    </div>
+                    <div class="weight-row">
+                        <span>w₂</span>
+                        <div class="weight-bar-mini"><div class="weight-fill-mini" id="float-w2"></div></div>
+                        <span class="weight-val" id="float-w2-val">0.000</span>
+                    </div>
+                </div>
+                <div class="outputs-mini">
+                    <div class="out-mini" id="float-up">↑</div>
+                    <div class="out-mini" id="float-stay">●</div>
+                    <div class="out-mini" id="float-down">↓</div>
+                </div>
+            </div>
+            
+            <div class="algo-desc">
+                <b>FP8 (E4M3):</b><br>
+                1 sign + 4 exp + 3 mantissa<br>
+                Range: ±240<br>
+                8 levels per power of 2
+            </div>
+        </div>
+        
+        <div class="nn-panel unary-perc">
+            <div class="panel-title">NVFP4 (Blackwell) ▶</div>
+            <div class="stat">Score: <span class="val" id="unary-score">0</span></div>
+            <div class="stat">Accuracy: <span class="val" id="unary-acc">0%</span></div>
+            <div class="stat" style="font-size: 11px; color: #556;">E2M1 + E4M3 block scale</div>
+            
+            <div class="network-mini">
+                <div class="neuron-small" id="unary-input">IN</div>
+                <div class="weights-mini">
+                    <div class="weight-row">
+                        <span>w₀</span>
+                        <div class="weight-bar-mini"><div class="weight-fill-mini" id="unary-w0"></div></div>
+                        <span class="weight-val" id="unary-w0-val">0</span>
+                    </div>
+                    <div class="weight-row">
+                        <span>w₁</span>
+                        <div class="weight-bar-mini"><div class="weight-fill-mini" id="unary-w1"></div></div>
+                        <span class="weight-val" id="unary-w1-val">0</span>
+                    </div>
+                    <div class="weight-row">
+                        <span>w₂</span>
+                        <div class="weight-bar-mini"><div class="weight-fill-mini" id="unary-w2"></div></div>
+                        <span class="weight-val" id="unary-w2-val">0</span>
+                    </div>
+                </div>
+                <div class="outputs-mini">
+                    <div class="out-mini" id="unary-up">↑</div>
+                    <div class="out-mini" id="unary-stay">●</div>
+                    <div class="out-mini" id="unary-down">↓</div>
+                </div>
+            </div>
+            
+            <div style="margin-top: 8px;">
+                <div style="font-size: 9px; color: #666;">NVFP4 quantization error:</div>
+                <div class="unary-display" id="unary-tally"></div>
+            </div>
+            
+            <div class="algo-desc">
+                <b>NVFP4 (NVIDIA):</b><br>
+                E2M1: ±0,0.5,1,1.5,2,3,4,6<br>
+                E4M3 block scale (per 16)<br>
+                FP32 master weights
+            </div>
+        </div>
+    </div>
+    
+    <div class="controls">
+        <button id="reset-game">Reset Game</button>
+        <button id="reset-nets">Reset Networks</button>
+        <div class="speed-ctrl">
+            <span>Speed:</span>
+            <input type="range" id="speed" min="1" max="10000" value="1000">
+            <span id="speed-val">1000x</span>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // FLOAT PERCEPTRON - Standard floating point
+        // ============================================
+        
+        // 8-bit float perceptron (LEFT SIDE)
+        class FloatPerceptron {
+            constructor() {
+                this.weights = [this.toFloat8(0.5), this.toFloat8(0.5), this.toFloat8(0.5)];
+                this.bias = [this.toFloat8(0), this.toFloat8(0), this.toFloat8(0)];
+                this.lr = this.toFloat8(0.125); // Quantized LR
+                this.lastInput = 0;
+                this.lastOutput = 1;
+                this.correct = 0;
+                this.total = 0;
+            }
+            
+            toFloat8(val) {
+                if (val === 0) return 0;
+                const sign = val < 0 ? -1 : 1;
+                const abs = Math.abs(val);
+                if (abs > 240) return sign * 240;
+                if (abs < 0.001953125) return 0;
+                const exp = Math.floor(Math.log2(abs));
+                const mantissa = abs / Math.pow(2, exp);
+                const quantizedMantissa = Math.round(mantissa * 8) / 8;
+                return sign * quantizedMantissa * Math.pow(2, exp);
+            }
+            
+            forward(input) {
+                this.lastInput = this.toFloat8(input);
+                
+                const scores = [
+                    this.toFloat8(-this.lastInput * this.weights[0]) + this.bias[0],
+                    this.toFloat8((1 - Math.abs(this.lastInput)) * this.weights[1]) + this.bias[1],
+                    this.toFloat8(this.lastInput * this.weights[2]) + this.bias[2]
+                ];
+                
+                if (Math.random() < 0.02) {
+                    this.lastOutput = Math.floor(Math.random() * 3);
+                } else {
+                    this.lastOutput = scores.indexOf(Math.max(...scores));
+                }
+                
+                return this.lastOutput;
+            }
+            
+            learn(targetAction) {
+                this.total++;
+                if (this.lastOutput === targetAction) this.correct++;
+                
+                const input = this.toFloat8(Math.abs(this.lastInput));
+                
+                for (let i = 0; i < 3; i++) {
+                    const target = (i === targetAction) ? 1 : 0;
+                    const predicted = (i === this.lastOutput) ? 1 : 0;
+                    const error = this.toFloat8(target - predicted);
+                    
+                    this.weights[i] = this.toFloat8(this.weights[i] + this.toFloat8(this.toFloat8(this.lr * error) * input));
+                    this.bias[i] = this.toFloat8(this.bias[i] + this.toFloat8(this.toFloat8(this.lr * error) * 0.5));
+                }
+                
+                this.weights = this.weights.map(w => this.toFloat8(Math.max(-2, Math.min(2, w))));
+                this.bias = this.bias.map(b => this.toFloat8(Math.max(-1, Math.min(1, b))));
+            }
+            
+            getAccuracy() { return this.total > 0 ? this.correct / this.total : 0; }
+            
+            reset() {
+                this.weights = [this.toFloat8(0.5), this.toFloat8(0.5), this.toFloat8(0.5)];
+                this.bias = [this.toFloat8(0), this.toFloat8(0), this.toFloat8(0)];
+                this.correct = 0;
+                this.total = 0;
+            }
+        }
+        
+        // ============================================
+        // UNARY LOG PERCEPTRON - Integer arithmetic with log compression
+        // ============================================
+        
+        // NVFP4 (NVIDIA Blackwell format) - E2M1 with dual-level scaling
+        // Base: 16 values (±0, ±0.5, ±1, ±1.5, ±2, ±3, ±4, ±6)
+        // Block scale: E4M3 (per 16 elements)
+        // Tensor scale: FP32 (per tensor)
+        class NVFP4Perceptron {
+            constructor() {
+                // E2M1 representable values (the 16 levels)
+                this.e2m1_values = [0, 0.5, 1, 1.5, 2, 3, 4, 6];
+                
+                // Store weights in full precision, quantize on use
+                this.weights_fp32 = [0.5, 0.5, 0.5];
+                this.bias_fp32 = [0, 0, 0];
+                
+                // Per-tensor scale (FP32)
+                this.tensor_scale = 1.0;
+                // Per-block scale (E4M3) - we treat all weights as one "block"
+                this.block_scale = 1.0;
+                
+                this.lr = 0.1;
+                this.lastInput = 0;
+                this.lastOutput = 1;
+                this.correct = 0;
+                this.total = 0;
+                
+                // For display
+                this.weights = [0.5, 0.5, 0.5];
+                this.bias = [0, 0, 0];
+                
+                this.updateScalesAndQuantize();
+            }
+            
+            // Quantize to E4M3 (for scale factors)
+            toE4M3(val) {
+                if (val === 0) return 0;
+                const sign = val < 0 ? -1 : 1;
+                const abs = Math.abs(val);
+                if (abs > 448) return sign * 448; // E4M3 max
+                if (abs < 0.001953125) return 0;
+                const exp = Math.floor(Math.log2(abs));
+                const mantissa = abs / Math.pow(2, exp);
+                const quantizedMantissa = Math.round(mantissa * 8) / 8; // 3 mantissa bits
+                return sign * quantizedMantissa * Math.pow(2, exp);
+            }
+            
+            // Quantize to nearest E2M1 value
+            toE2M1(val) {
+                const sign = val < 0 ? -1 : 1;
+                const abs = Math.abs(val);
+                
+                // Find nearest E2M1 value
+                let nearest = 0;
+                let minDist = abs;
+                
+                for (const level of this.e2m1_values) {
+                    const dist = Math.abs(abs - level);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        nearest = level;
+                    }
+                }
+                return sign * nearest;
+            }
+            
+            // Update scales and get quantized weights
+            updateScalesAndQuantize() {
+                // Compute amax of all weights and biases
+                const allVals = [...this.weights_fp32, ...this.bias_fp32];
+                const amax = Math.max(...allVals.map(Math.abs), 0.001);
+                
+                // Per-tensor scale: bring values into E4M3 scale range
+                this.tensor_scale = amax;
+                
+                // Per-block scale: E4M3 quantized (amax / 6, where 6 is max E2M1)
+                this.block_scale = this.toE4M3(amax / 6);
+                if (this.block_scale === 0) this.block_scale = 0.001;
+                
+                // Quantize weights: divide by scales, snap to E2M1, multiply back
+                for (let i = 0; i < 3; i++) {
+                    const scaled = this.weights_fp32[i] / this.block_scale;
+                    const quantized = this.toE2M1(scaled);
+                    this.weights[i] = quantized * this.block_scale;
+                    
+                    const scaledB = this.bias_fp32[i] / this.block_scale;
+                    const quantizedB = this.toE2M1(scaledB);
+                    this.bias[i] = quantizedB * this.block_scale;
+                }
+            }
+            
+            forward(input) {
+                this.lastInput = Math.max(-1, Math.min(1, input));
+                
+                // Use quantized weights for inference
+                const scores = [
+                    -this.lastInput * this.weights[0] + this.bias[0],
+                    (1 - Math.abs(this.lastInput)) * this.weights[1] + this.bias[1],
+                    this.lastInput * this.weights[2] + this.bias[2]
+                ];
+                
+                if (Math.random() < 0.02) {
+                    this.lastOutput = Math.floor(Math.random() * 3);
+                } else {
+                    this.lastOutput = scores.indexOf(Math.max(...scores));
+                }
+                
+                return this.lastOutput;
+            }
+            
+            learn(targetAction) {
+                this.total++;
+                if (this.lastOutput === targetAction) this.correct++;
+                
+                const input = Math.abs(this.lastInput);
+                
+                // Update in FP32, then re-quantize
+                for (let i = 0; i < 3; i++) {
+                    const target = (i === targetAction) ? 1 : 0;
+                    const predicted = (i === this.lastOutput) ? 1 : 0;
+                    const error = target - predicted;
+                    
+                    this.weights_fp32[i] += this.lr * error * input;
+                    this.bias_fp32[i] += this.lr * error * 0.5;
+                }
+                
+                // Clamp FP32 master weights
+                this.weights_fp32 = this.weights_fp32.map(w => Math.max(-10, Math.min(10, w)));
+                this.bias_fp32 = this.bias_fp32.map(b => Math.max(-10, Math.min(10, b)));
+                
+                // Re-quantize to NVFP4
+                this.updateScalesAndQuantize();
+            }
+            
+            getAccuracy() { return this.total > 0 ? this.correct / this.total : 0; }
+            
+            reset() {
+                this.weights_fp32 = [0.5, 0.5, 0.5];
+                this.bias_fp32 = [0, 0, 0];
+                this.weights = [0.5, 0.5, 0.5];
+                this.bias = [0, 0, 0];
+                this.tensor_scale = 1.0;
+                this.block_scale = 1.0;
+                this.correct = 0;
+                this.total = 0;
+                this.updateScalesAndQuantize();
+            }
+        }
+        
+        // ============================================
+        // GAME
+        // ============================================
+        
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+        
+        const floatPerc = new FloatPerceptron();
+        const nvfp4Perc = new NVFP4Perceptron();
+        
+        let gameSpeed = 1000;
+        const paddleH = 65, paddleW = 10, ballR = 6;
+        
+        let ball = { x: 275, y: 190, vx: 4, vy: 2.5 };
+        let leftP = { y: 155, score: 0 };
+        let rightP = { y: 155, score: 0 };
+        
+        let floatWins = 0, unaryWins = 0;
+        let frameCount = 0;
+        
+        // Cumulative tracking for overall performance
+        let totalFloatPoints = 0, totalUnaryPoints = 0;
+        let totalGames = 0;
+        
+        // Lead time tracking - how often each side has been ahead
+        let floatLeadCount = 0, unaryLeadCount = 0, tiedCount = 0;
+        
+        // Lead momentum - how often each side's lead time % is INCREASING
+        let lastFloatLeadPct = 50;
+        let floatMomentumCount = 0, unaryMomentumCount = 0, flatMomentumCount = 0;
+        
+        function resetBall(dir) {
+            ball.x = 275; ball.y = 190;
+            ball.vx = 4 * dir * (0.8 + Math.random() * 0.4);
+            ball.vy = (Math.random() - 0.5) * 5;
+        }
+        
+        function getInputLeft() {
+            const pc = leftP.y + paddleH / 2;
+            let predY = ball.y;
+            
+            if (ball.vx < 0) {
+                const t = (ball.x - 20) / -ball.vx;
+                predY = ball.y + ball.vy * t;
+                while (predY < 0 || predY > canvas.height) {
+                    if (predY < 0) predY = -predY;
+                    if (predY > canvas.height) predY = 2 * canvas.height - predY;
+                }
+            }
+            
+            return Math.max(-1, Math.min(1, (predY - pc) / (canvas.height / 2)));
+        }
+        
+        function getInputRight() {
+            const pc = rightP.y + paddleH / 2;
+            let predY = ball.y;
+            
+            if (ball.vx > 0) {
+                const t = (canvas.width - 20 - ball.x) / ball.vx;
+                predY = ball.y + ball.vy * t;
+                while (predY < 0 || predY > canvas.height) {
+                    if (predY < 0) predY = -predY;
+                    if (predY > canvas.height) predY = 2 * canvas.height - predY;
+                }
+            }
+            
+            return Math.max(-1, Math.min(1, (predY - pc) / (canvas.height / 2)));
+        }
+        
+        function getIdealAction(input) {
+            if (input > 0.15) return 2;
+            if (input < -0.15) return 0;
+            return 1;
+        }
+        
+        function floatAI() {
+            const input = getInputLeft();
+            const action = floatPerc.forward(input);
+            const ideal = getIdealAction(input);
+            floatPerc.learn(ideal);
+            
+            const speed = 4 * gameSpeed;
+            if (action === 0) leftP.y -= speed;
+            else if (action === 2) leftP.y += speed;
+            leftP.y = Math.max(0, Math.min(canvas.height - paddleH, leftP.y));
+        }
+        
+        function unaryAI() {
+            const input = getInputRight();
+            const action = nvfp4Perc.forward(input);
+            const ideal = getIdealAction(input);
+            nvfp4Perc.learn(ideal);
+            
+            const speed = 4 * gameSpeed;
+            if (action === 0) rightP.y -= speed;
+            else if (action === 2) rightP.y += speed;
+            rightP.y = Math.max(0, Math.min(canvas.height - paddleH, rightP.y));
+        }
+        
+        function collisions() {
+            if (ball.y <= ballR || ball.y >= canvas.height - ballR) {
+                ball.vy *= -1;
+                ball.y = Math.max(ballR, Math.min(canvas.height - ballR, ball.y));
+            }
+            
+            if (ball.x <= 18 + paddleW && ball.x >= 12 &&
+                ball.y >= leftP.y && ball.y <= leftP.y + paddleH) {
+                ball.vx = Math.abs(ball.vx) * 1.02;
+                ball.vy += (ball.y - leftP.y - paddleH/2) * 0.08;
+            }
+            
+            if (ball.x >= canvas.width - 18 - paddleW && ball.x <= canvas.width - 12 &&
+                ball.y >= rightP.y && ball.y <= rightP.y + paddleH) {
+                ball.vx = -Math.abs(ball.vx) * 1.02;
+                ball.vy += (ball.y - rightP.y - paddleH/2) * 0.08;
+            }
+            
+            if (ball.x < 0) {
+                rightP.score++;
+                unaryWins++;
+                totalUnaryPoints++;
+                totalGames++;
+                // Track who's leading after this point
+                if (totalFloatPoints > totalUnaryPoints) floatLeadCount++;
+                else if (totalUnaryPoints > totalFloatPoints) unaryLeadCount++;
+                else tiedCount++;
+                
+                // Track momentum - is lead time % shifting?
+                const totalLeadSamples = floatLeadCount + unaryLeadCount + tiedCount || 1;
+                const currentFloatLeadPct = (floatLeadCount / totalLeadSamples) * 100;
+                if (currentFloatLeadPct > lastFloatLeadPct) floatMomentumCount++;
+                else if (currentFloatLeadPct < lastFloatLeadPct) unaryMomentumCount++;
+                else flatMomentumCount++;
+                lastFloatLeadPct = currentFloatLeadPct;
+                
+                resetBall(1);
+            }
+            if (ball.x > canvas.width) {
+                leftP.score++;
+                floatWins++;
+                totalFloatPoints++;
+                totalGames++;
+                // Track who's leading after this point
+                if (totalFloatPoints > totalUnaryPoints) floatLeadCount++;
+                else if (totalUnaryPoints > totalFloatPoints) unaryLeadCount++;
+                else tiedCount++;
+                
+                // Track momentum - is lead time % shifting?
+                const totalLeadSamples = floatLeadCount + unaryLeadCount + tiedCount || 1;
+                const currentFloatLeadPct = (floatLeadCount / totalLeadSamples) * 100;
+                if (currentFloatLeadPct > lastFloatLeadPct) floatMomentumCount++;
+                else if (currentFloatLeadPct < lastFloatLeadPct) unaryMomentumCount++;
+                else flatMomentumCount++;
+                lastFloatLeadPct = currentFloatLeadPct;
+                
+                resetBall(-1);
+            }
+            
+            ball.vx = Math.max(-12, Math.min(12, ball.vx));
+            ball.vy = Math.max(-12, Math.min(12, ball.vy));
+        }
+        
+        function draw() {
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.strokeStyle = '#333';
+            ctx.setLineDash([6, 6]);
+            ctx.beginPath();
+            ctx.moveTo(canvas.width/2, 0);
+            ctx.lineTo(canvas.width/2, canvas.height);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            ctx.shadowBlur = 10;
+            ctx.fillStyle = '#00ffff';
+            ctx.shadowColor = '#00ffff';
+            ctx.fillRect(8, leftP.y, paddleW, paddleH);
+            
+            ctx.fillStyle = '#ff00ff';
+            ctx.shadowColor = '#ff00ff';
+            ctx.fillRect(canvas.width - 8 - paddleW, rightP.y, paddleW, paddleH);
+            
+            ctx.fillStyle = '#ffff00';
+            ctx.shadowColor = '#ffff00';
+            ctx.shadowBlur = 12;
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ballR, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            
+            ctx.font = '32px Orbitron';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#00ffff';
+            ctx.fillText(leftP.score, canvas.width/4, 40);
+            ctx.fillStyle = '#ff00ff';
+            ctx.fillText(rightP.score, 3*canvas.width/4, 40);
+            
+            ctx.font = '11px VT323';
+            ctx.fillStyle = '#00ffff';
+            ctx.fillText('8-BIT', canvas.width/4, 56);
+            ctx.fillStyle = '#ff00ff';
+            ctx.fillText('NVFP4', 3*canvas.width/4, 56);
+        }
+        
+        function updateUI() {
+            document.getElementById('float-score').textContent = leftP.score;
+            document.getElementById('unary-score').textContent = rightP.score;
+            document.getElementById('float-acc').textContent = Math.round(floatPerc.getAccuracy() * 100) + '%';
+            document.getElementById('unary-acc').textContent = Math.round(nvfp4Perc.getAccuracy() * 100) + '%';
+            
+            // Win tracker
+            const total = floatWins + unaryWins || 1;
+            document.getElementById('win-left').style.width = (floatWins / total * 100) + '%';
+            document.getElementById('win-right').style.width = (unaryWins / total * 100) + '%';
+            document.getElementById('float-wins').textContent = floatWins;
+            document.getElementById('unary-wins').textContent = unaryWins;
+            
+            // Overall cumulative stats
+            const totalPts = totalFloatPoints + totalUnaryPoints || 1;
+            document.getElementById('overall-left').style.width = (totalFloatPoints / totalPts * 100) + '%';
+            document.getElementById('overall-right').style.width = (totalUnaryPoints / totalPts * 100) + '%';
+            document.getElementById('total-float').textContent = totalFloatPoints;
+            document.getElementById('total-unary').textContent = totalUnaryPoints;
+            document.getElementById('total-games').textContent = totalGames;
+            
+            // Lead indicator
+            const leadPct = totalPts > 1 ? Math.abs(totalFloatPoints - totalUnaryPoints) / totalPts * 100 : 0;
+            let leadText, leadColor;
+            if (totalFloatPoints > totalUnaryPoints) {
+                leadText = '8-BIT LEADS';
+                leadColor = '#00ffff';
+            } else if (totalUnaryPoints > totalFloatPoints) {
+                leadText = 'NVFP4 LEADS';
+                leadColor = '#ff00ff';
+            } else {
+                leadText = 'TIED';
+                leadColor = '#888';
+            }
+            document.getElementById('lead-indicator').textContent = leadText;
+            document.getElementById('lead-indicator').style.color = leadColor;
+            document.getElementById('lead-pct').textContent = leadPct.toFixed(2);
+            
+            // Lead time tracking - what % of time each side has been ahead
+            const totalLeadSamples = floatLeadCount + unaryLeadCount + tiedCount || 1;
+            const floatLeadPct = (floatLeadCount / totalLeadSamples) * 100;
+            const unaryLeadPct = (unaryLeadCount / totalLeadSamples) * 100;
+            
+            document.getElementById('leadtime-left').style.width = floatLeadPct + '%';
+            document.getElementById('leadtime-right').style.width = unaryLeadPct + '%';
+            document.getElementById('leadtime-float').textContent = floatLeadPct.toFixed(1);
+            document.getElementById('leadtime-unary').textContent = unaryLeadPct.toFixed(1);
+            
+            let leadTimeWinner;
+            if (floatLeadCount > unaryLeadCount) {
+                leadTimeWinner = '8-BIT';
+                document.getElementById('leadtime-winner').style.color = '#00ffff';
+            } else if (unaryLeadCount > floatLeadCount) {
+                leadTimeWinner = 'NVFP4';
+                document.getElementById('leadtime-winner').style.color = '#ff00ff';
+            } else {
+                leadTimeWinner = 'NEITHER';
+                document.getElementById('leadtime-winner').style.color = '#888';
+            }
+            document.getElementById('leadtime-winner').textContent = leadTimeWinner;
+            
+            // Momentum tracking - how often each side's lead time is growing
+            const totalMomentum = floatMomentumCount + unaryMomentumCount + flatMomentumCount || 1;
+            const floatMomPct = (floatMomentumCount / totalMomentum) * 100;
+            const unaryMomPct = (unaryMomentumCount / totalMomentum) * 100;
+            
+            document.getElementById('momentum-left').style.width = floatMomPct + '%';
+            document.getElementById('momentum-right').style.width = unaryMomPct + '%';
+            document.getElementById('momentum-float').textContent = floatMomPct.toFixed(1);
+            document.getElementById('momentum-unary').textContent = unaryMomPct.toFixed(1);
+            
+            let momentumWinner;
+            if (floatMomentumCount > unaryMomentumCount) {
+                momentumWinner = '8-BIT';
+                document.getElementById('momentum-winner').style.color = '#00ffff';
+            } else if (unaryMomentumCount > floatMomentumCount) {
+                momentumWinner = 'NVFP4';
+                document.getElementById('momentum-winner').style.color = '#ff00ff';
+            } else {
+                momentumWinner = 'NEITHER';
+                document.getElementById('momentum-winner').style.color = '#888';
+            }
+            document.getElementById('momentum-winner').textContent = momentumWinner;
+            
+            // Float weights
+            const maxF = Math.max(0.01, ...floatPerc.weights.map(Math.abs));
+            for (let i = 0; i < 3; i++) {
+                document.getElementById(`float-w${i}`).style.width = (Math.abs(floatPerc.weights[i]) / maxF * 100) + '%';
+                document.getElementById(`float-w${i}-val`).textContent = floatPerc.weights[i].toFixed(3);
+            }
+            
+            // NVFP4 perceptron weights
+            const maxNVFP4 = Math.max(0.01, ...nvfp4Perc.weights.map(Math.abs));
+            for (let i = 0; i < 3; i++) {
+                document.getElementById(`unary-w${i}`).style.width = (Math.abs(nvfp4Perc.weights[i]) / maxNVFP4 * 100) + '%';
+                document.getElementById(`unary-w${i}-val`).textContent = nvfp4Perc.weights[i].toFixed(3);
+            }
+            
+            // Show quantization error: difference between FP8 and NVFP4 representation
+            let errHtml = '';
+            for (let i = 0; i < 3; i++) {
+                const w8 = floatPerc.weights[i];
+                const wNVFP4 = nvfp4Perc.weights[i];
+                const diff = Math.abs(w8 - wNVFP4);
+                const mag = Math.min(100, diff * 50); // Scale for visibility
+                errHtml += `<div style="display:inline-block; width:30px; height:10px; background:#111; margin:1px; border-radius:2px; overflow:hidden;">
+                    <div style="width:${mag}%; height:100%; background:#ff00ff;"></div>
+                </div>`;
+            }
+            document.getElementById('unary-tally').innerHTML = errHtml;
+            
+            // Output indicators
+            ['up', 'stay', 'down'].forEach((s, i) => {
+                document.getElementById(`float-${s}`).classList.toggle('selected', floatPerc.lastOutput === i);
+                document.getElementById(`unary-${s}`).classList.toggle('selected', nvfp4Perc.lastOutput === i);
+            });
+            
+            // Input indicators
+            document.getElementById('float-input').classList.toggle('active', Math.abs(floatPerc.lastInput) > 0.2);
+            document.getElementById('unary-input').classList.toggle('active', Math.abs(nvfp4Perc.lastInput) > 0.2);
+        }
+        
+        function loop() {
+            for (let i = 0; i < gameSpeed; i++) {
+                ball.x += ball.vx;
+                ball.y += ball.vy;
+                floatAI();
+                unaryAI();
+                collisions();
+            }
+            frameCount++;
+            // Only update visuals every few frames at high speeds
+            const skipFrames = gameSpeed > 5000 ? 20 : (gameSpeed > 2000 ? 10 : (gameSpeed > 500 ? 5 : (gameSpeed > 100 ? 3 : 1)));
+            if (frameCount % skipFrames === 0) {
+                draw();
+                updateUI();
+            }
+            requestAnimationFrame(loop);
+        }
+        
+        document.getElementById('reset-game').onclick = () => {
+            leftP = { y: 155, score: 0 };
+            rightP = { y: 155, score: 0 };
+            floatWins = 0;
+            unaryWins = 0;
+            totalFloatPoints = 0;
+            totalUnaryPoints = 0;
+            totalGames = 0;
+            floatLeadCount = 0;
+            unaryLeadCount = 0;
+            tiedCount = 0;
+            lastFloatLeadPct = 50;
+            floatMomentumCount = 0;
+            unaryMomentumCount = 0;
+            flatMomentumCount = 0;
+            resetBall(Math.random() < 0.5 ? 1 : -1);
+        };
+        
+        document.getElementById('reset-nets').onclick = () => {
+            floatPerc.reset();
+            nvfp4Perc.reset();
+            leftP.score = 0;
+            rightP.score = 0;
+            floatWins = 0;
+            unaryWins = 0;
+            totalFloatPoints = 0;
+            totalUnaryPoints = 0;
+            totalGames = 0;
+            floatLeadCount = 0;
+            unaryLeadCount = 0;
+            tiedCount = 0;
+            lastFloatLeadPct = 50;
+            floatMomentumCount = 0;
+            unaryMomentumCount = 0;
+            flatMomentumCount = 0;
+        };
+        
+        document.getElementById('speed').oninput = (e) => {
+            gameSpeed = +e.target.value;
+            document.getElementById('speed-val').textContent = gameSpeed + 'x';
+        };
+        
+        resetBall(Math.random() < 0.5 ? 1 : -1);
+        loop();
+    </script>
+</body>
+</html>
