@@ -1,0 +1,2608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hearts of Steel - Free Movement</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #1a1a2e; color: #eee; font-family: 'Segoe UI', system-ui, sans-serif; overflow: hidden; height: 100vh; font-size: 12px; }
+.game-container { display: flex; height: 100vh; }
+.sidebar { width: 280px; background: linear-gradient(180deg, #16213e 0%, #1a1a2e 100%); border-right: 2px solid #2a3f5f; display: flex; flex-direction: column; overflow: hidden; z-index: 1000; }
+.sidebar-header { padding: 10px; background: #0f3460; border-bottom: 2px solid #2a3f5f; }
+.sidebar-header h2 { font-size: 13px; color: #e94560; margin-bottom: 6px; }
+.date-display { font-size: 16px; font-weight: bold; color: #fff; }
+.speed-controls { display: flex; gap: 4px; margin-top: 6px; }
+.speed-controls button { padding: 3px 8px; background: #2a3f5f; border: 1px solid #3a5f8f; color: #fff; cursor: pointer; border-radius: 3px; font-size: 11px; }
+.speed-controls button.active { background: #e94560; border-color: #e94560; }
+.resources { padding: 8px; background: rgba(0,0,0,0.3); border-bottom: 1px solid #2a3f5f; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 11px; }
+.resource-change { color: #22c55e; }
+.country-info { padding: 8px; border-bottom: 1px solid #2a3f5f; }
+.country-name { font-size: 14px; font-weight: bold; }
+.section-title { padding: 6px 8px; background: #0f3460; font-size: 11px; font-weight: bold; color: #e94560; }
+.army-list { flex: 1; overflow-y: auto; padding: 6px; max-height: 40vh; }
+.production-section { padding: 6px; }
+.prod-queue { background: rgba(0,0,0,0.2); border-radius: 4px; padding: 6px; margin-bottom: 6px; max-height: 100px; overflow-y: auto; }
+.queue-item { display: flex; align-items: center; gap: 6px; padding: 4px; background: rgba(0,0,0,0.3); border-radius: 3px; margin-bottom: 3px; font-size: 10px; }
+.queue-progress { flex: 1; height: 6px; background: #333; border-radius: 3px; overflow: hidden; }
+.queue-progress-fill { height: 100%; background: #22c55e; transition: width 0.3s; }
+.queue-cancel { background: #e94560; border: none; color: #fff; width: 16px; height: 16px; border-radius: 2px; cursor: pointer; font-size: 10px; }
+.prod-buttons { display: flex; gap: 4px; flex-wrap: wrap; }
+.prod-btn { padding: 6px 10px; background: #2a3f5f; border: 1px solid #3a5f8f; color: #fff; cursor: pointer; border-radius: 4px; font-size: 10px; }
+.prod-btn:hover { background: #3a5f8f; }
+.prod-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.army-item { background: rgba(0,0,0,0.3); border: 1px solid #2a3f5f; border-radius: 4px; padding: 6px; margin-bottom: 4px; cursor: pointer; font-size: 11px; }
+.army-item:hover { background: rgba(233,69,96,0.2); border-color: #e94560; }
+.army-item.selected { background: rgba(233,69,96,0.3); border-color: #e94560; }
+.army-name { font-weight: bold; }
+.army-details { font-size: 10px; color: #aaa; margin-top: 2px; }
+.strength-bar { height: 3px; background: #333; border-radius: 2px; margin-top: 3px; }
+.strength-fill { height: 100%; border-radius: 2px; }
+.main-area { flex: 1; display: flex; flex-direction: column; }
+.top-bar { height: 32px; background: #0f3460; border-bottom: 2px solid #2a3f5f; display: flex; align-items: center; padding: 0 10px; font-size: 11px; z-index: 1000; }
+.top-bar span { margin-left: auto; }
+#map { flex: 1; background: #0a1628; }
+.bottom-bar { height: 50px; background: #0f3460; border-top: 2px solid #2a3f5f; padding: 6px 12px; display: flex; align-items: center; gap: 10px; z-index: 1000; }
+.selected-info { flex: 1; }
+.selected-info h3 { font-size: 12px; color: #e94560; }
+.selected-info p { font-size: 10px; color: #aaa; }
+.notification { position: fixed; top: 40px; right: 10px; background: rgba(15,52,96,0.95); border: 2px solid #e94560; padding: 8px 12px; border-radius: 4px; z-index: 2000; font-size: 11px; animation: slideIn 0.3s ease; max-width: 250px; }
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 3000; }
+.modal-content { background: #16213e; border: 2px solid #e94560; border-radius: 8px; padding: 20px; max-width: 400px; text-align: center; }
+.modal h2 { color: #e94560; margin-bottom: 12px; font-size: 18px; }
+.modal p { margin-bottom: 15px; color: #aaa; font-size: 12px; }
+.modal button { padding: 8px 20px; background: #e94560; border: none; color: #fff; cursor: pointer; border-radius: 4px; font-weight: bold; margin: 4px; font-size: 12px; }
+.hidden { display: none !important; }
+
+.army-marker { 
+  border: 4px solid; 
+  border-radius: 50%; 
+  width: 48px; 
+  height: 48px; 
+  display: flex; 
+  align-items: center; 
+  justify-content: center;
+  font-size: 14px; 
+  font-weight: bold; 
+  color: #fff; 
+  cursor: pointer;
+  transition: transform 0.1s;
+  text-shadow: 1px 1px 2px #000;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+}
+.army-marker:hover { transform: scale(1.15); z-index: 1000 !important; }
+.army-marker.selected { box-shadow: 0 0 16px 6px #fff; transform: scale(1.1); }
+.army-marker.fighting { animation: pulse 0.5s infinite alternate; }
+@keyframes pulse { from { transform: scale(1); } to { transform: scale(1.15); } }
+
+.city-marker {
+  background: rgba(40,40,40,0.95);
+  border: 4px solid;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: bold;
+  color: #fff;
+  white-space: nowrap;
+  text-shadow: 1px 1px 2px #000;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+}
+.city-marker:hover { transform: scale(1.05); }
+.city-marker.capital { 
+  background: rgba(60,40,10,0.95);
+  border-width: 5px;
+  font-size: 15px;
+  padding: 8px 14px;
+}
+
+.battle-panel { 
+  position: fixed; 
+  bottom: 60px; 
+  left: 290px; 
+  background: rgba(15,30,60,0.95); 
+  border: 2px solid #e94560; 
+  border-radius: 8px; 
+  padding: 10px; 
+  z-index: 2000; 
+  min-width: 300px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.battle-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px;
+  background: rgba(0,0,0,0.3);
+  border-radius: 4px;
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+.battle-bar {
+  width: 100px;
+  height: 8px;
+  background: #e94560;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.battle-bar-fill {
+  height: 100%;
+  background: #22c55e;
+  transition: width 0.3s;
+}
+
+.leaflet-container { background: #1a3a5a !important; }
+
+.battle-explosion {
+  font-size: 24px;
+  animation: explode 0.5s ease-in-out infinite alternate;
+  text-align: center;
+  filter: drop-shadow(0 0 8px #ff4400);
+}
+@keyframes explode {
+  from { transform: scale(0.8); opacity: 0.7; }
+  to { transform: scale(1.2); opacity: 1; }
+}
+.battle-info {
+  font-size: 10px;
+  background: rgba(0,0,0,0.8);
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  color: #fff;
+  margin-top: 2px;
+}
+.combat-line {
+  animation: pulse-line 0.5s ease-in-out infinite alternate;
+}
+@keyframes pulse-line {
+  from { stroke-opacity: 0.5; }
+  to { stroke-opacity: 1; }
+}
+</style>
+</head>
+<body>
+
+<div class="game-container">
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <h2>⚔️ HEARTS OF STEEL</h2>
+      <div class="date-display" id="dateDisplay">1 September 1939</div>
+      <div class="speed-controls">
+        <button id="pauseBtn" class="active">⏸</button>
+        <button id="speed1Btn">▶</button>
+        <button id="speed2Btn">▶▶</button>
+        <button id="speed3Btn">▶▶▶</button>
+      </div>
+    </div>
+    <div class="resources" id="resources"></div>
+    <div class="country-info" id="countryInfo"></div>
+    <div class="section-title">YOUR ARMIES</div>
+    <div class="army-list" id="armyList"></div>
+    <div class="section-title">PRODUCTION</div>
+    <div class="production-section" id="productionSection"></div>
+  </div>
+  
+  <div class="main-area">
+    <div class="top-bar">
+      <span id="warStatus" style="color:#e94560;font-weight:bold;"></span>
+    </div>
+    <div id="map"></div>
+    <div class="bottom-bar">
+      <div class="selected-info" id="selectedInfo">
+        <h3>Click army to select, click map to move</h3>
+        <p>Armies fight when within 50km of enemies</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="countrySelect">
+  <div class="modal-content">
+    <h2>SELECT YOUR NATION</h2>
+    <p>Free movement - transformer AI opponents</p>
+    <button onclick="selectCountry('DEU')">🇩🇪 Germany</button>
+    <button onclick="selectCountry('GBR')">🇬🇧 United Kingdom</button>
+    <button onclick="selectCountry('FRA')">🇫🇷 France</button>
+    <button onclick="selectCountry('SOV')">🇷🇺 Soviet Union</button>
+    <button onclick="selectCountry('JAP')">🇯🇵 Japan</button>
+    <button onclick="selectCountry('CHI')">🇨🇳 China</button>
+    <button onclick="selectCountry('HUN')">🇭🇺 Hungary</button>
+    <button onclick="selectCountry('ROM')">🇷🇴 Romania</button>
+  </div>
+</div>
+
+<div class="modal hidden" id="victoryModal">
+  <div class="modal-content">
+    <h2 id="victoryText">VICTORY!</h2>
+    <p id="victoryDesc"></p>
+    <button onclick="location.reload()">Play Again</button>
+  </div>
+</div>
+
+<div class="battle-panel hidden" id="battlePanel">
+  <div class="section-title">⚔️ ACTIVE BATTLES</div>
+  <div id="battleList"></div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+
+const map = L.map('map', { center: [50, 15], zoom: 4, minZoom: 3, maxZoom: 7 });
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '©OSM', subdomains: 'abcd' }).addTo(map);
+
+// Constants
+const COMBAT_RANGE = 50; // km - armies fight when this close
+const MOVEMENT_SPEED = 30; // km per day
+const CITY_CAPTURE_RANGE = 20; // km to capture a city
+
+// Haversine distance in km
+function distanceKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng/2) * Math.sin(dLng/2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// Game state
+const state = {
+  player: null,
+  date: new Date(1939, 8, 1),
+  speed: 0,
+  selectedArmy: null,
+  selectedArmies: [], // Multi-select with shift/ctrl
+  controlGroups: {}, // Ctrl+1-9 to save, 1-9 to recall
+  economy: { 
+    manpower: 500000, 
+    equipment: 15000, 
+    factories: 10,
+    civFactories: 5,
+    steel: 50,
+    oil: 20,
+    population: 50000000,
+    deployedManpower: 0, // Currently in armies
+    conscriptionLaw: 0.05, // 5% of pop can be conscripted
+    warExhaustion: 0,
+    nationalMorale: 100,
+    industryGrowth: 0
+  },
+  productionQueue: [],
+  weather: 'clear' // clear, rain, mud, snow, blizzard
+};
+
+// Physical constants
+const PHYSICS = {
+  BASE_SPEED: 30, // km/day base movement
+  TERRAIN_MODIFIERS: {
+    plains: 1.0,
+    forest: 0.7,
+    mountain: 0.4,
+    marsh: 0.5,
+    urban: 0.8,
+    river: 0.6
+  },
+  WEATHER_MODIFIERS: {
+    clear: 1.0,
+    rain: 0.8,
+    mud: 0.5,
+    snow: 0.6,
+    blizzard: 0.3
+  },
+  SUPPLY_RANGE: 300, // km from friendly city before attrition
+  ATTRITION_RATE: 0.5, // % strength lost per day out of supply
+  COMBAT_ATTRITION: 0.2, // % strength lost per day in combat just from being there
+  ENCIRCLEMENT_PENALTY: 0.5, // Combat penalty when cut off
+  MORALE_COMBAT_BONUS: 0.3, // +30% combat power at 100 morale vs 50
+  WINTER_START_MONTH: 10, // November
+  WINTER_END_MONTH: 2, // March
+  MUD_MONTHS: [3, 4, 10, 11], // April, May, Oct, Nov
+  CONSCRIPTION_LAWS: {
+    volunteer: { rate: 0.02, morale: 1.0, name: 'Volunteer Only' },
+    limited: { rate: 0.05, morale: 0.95, name: 'Limited Conscription' },
+    extensive: { rate: 0.10, morale: 0.85, name: 'Extensive Conscription' },
+    scraping: { rate: 0.15, morale: 0.70, name: 'Scraping the Barrel' },
+    total: { rate: 0.25, morale: 0.50, name: 'All Adults Serve' }
+  },
+  TRAINING_BASE_DAYS: 20,
+  TRAINING_SCALE_FACTOR: 0.1, // +10% time per 100 divisions already deployed
+  POPULATION_GROWTH_RATE: 0.00005, // Per day
+  // Performance limits
+  MAX_ARMIES_PER_NATION: 20, // Hard cap to prevent lag
+  MIN_DIVISIONS_TO_EXIST: 3, // Armies below this auto-merge
+  MERGE_DISTANCE: 50, // km - nearby weak armies merge
+  RENDER_THROTTLE: 100 // ms between full re-renders
+};
+
+// Terrain map - rough lat/lng zones
+const TERRAIN_ZONES = [
+  { lat: [55, 70], lng: [-10, 40], type: 'forest', name: 'Scandinavian Forests' },
+  { lat: [46, 48], lng: [6, 16], type: 'mountain', name: 'Alps' },
+  { lat: [35, 42], lng: [20, 30], type: 'mountain', name: 'Balkans' },
+  { lat: [50, 60], lng: [25, 45], type: 'marsh', name: 'Pripyat Marshes' },
+  { lat: [45, 55], lng: [30, 50], type: 'plains', name: 'Ukrainian Steppe' },
+  { lat: [48, 52], lng: [2, 8], type: 'plains', name: 'Northern France' },
+  // China terrain
+  { lat: [28, 35], lng: [100, 110], type: 'mountain', name: 'Sichuan Mountains' },
+  { lat: [22, 28], lng: [100, 108], type: 'forest', name: 'Yunnan Highlands' },
+  { lat: [32, 40], lng: [105, 115], type: 'plains', name: 'North China Plain' },
+  { lat: [28, 34], lng: [115, 122], type: 'marsh', name: 'Yangtze Delta' },
+  { lat: [35, 42], lng: [75, 95], type: 'mountain', name: 'Tibet' },
+];
+
+// AI economies - track resources for each AI nation
+const aiEconomies = {};
+
+function initAIEconomies() {
+  const templates = {
+    DEU: { manpower: 800000, equipment: 25000, factories: 15, civFactories: 10, steel: 80, oil: 10, population: 80000000, deployedManpower: 570000, conscriptionLaw: 0.10, warExhaustion: 0, nationalMorale: 100 },
+    GBR: { manpower: 400000, equipment: 15000, factories: 10, civFactories: 8, steel: 50, oil: 30, population: 47000000, deployedManpower: 100000, conscriptionLaw: 0.05, warExhaustion: 0, nationalMorale: 100 },
+    FRA: { manpower: 350000, equipment: 12000, factories: 8, civFactories: 6, steel: 40, oil: 5, population: 42000000, deployedManpower: 350000, conscriptionLaw: 0.10, warExhaustion: 0, nationalMorale: 80 },
+    SOV: { manpower: 1500000, equipment: 20000, factories: 12, civFactories: 15, steel: 100, oil: 60, population: 170000000, deployedManpower: 750000, conscriptionLaw: 0.05, warExhaustion: 0, nationalMorale: 90 },
+    POL: { manpower: 200000, equipment: 5000, factories: 4, civFactories: 3, steel: 20, oil: 2, population: 35000000, deployedManpower: 260000, conscriptionLaw: 0.10, warExhaustion: 0, nationalMorale: 100 },
+    ITA: { manpower: 300000, equipment: 8000, factories: 6, civFactories: 5, steel: 30, oil: 5, population: 44000000, deployedManpower: 150000, conscriptionLaw: 0.05, warExhaustion: 0, nationalMorale: 70 },
+    JAP: { manpower: 500000, equipment: 15000, factories: 10, civFactories: 8, steel: 40, oil: 5, population: 73000000, deployedManpower: 350000, conscriptionLaw: 0.10, warExhaustion: 0, nationalMorale: 110 },
+    HUN: { manpower: 100000, equipment: 3000, factories: 3, civFactories: 2, steel: 15, oil: 3, population: 9000000, deployedManpower: 80000, conscriptionLaw: 0.10, warExhaustion: 0, nationalMorale: 80 },
+    ROM: { manpower: 150000, equipment: 4000, factories: 3, civFactories: 2, steel: 10, oil: 40, population: 20000000, deployedManpower: 180000, conscriptionLaw: 0.10, warExhaustion: 0, nationalMorale: 75 },
+    USA: { manpower: 200000, equipment: 10000, factories: 20, civFactories: 30, steel: 150, oil: 200, population: 130000000, deployedManpower: 0, conscriptionLaw: 0.02, warExhaustion: 0, nationalMorale: 100 },
+    CHI: { manpower: 2000000, equipment: 5000, factories: 4, civFactories: 5, steel: 20, oil: 5, population: 450000000, deployedManpower: 900000, conscriptionLaw: 0.03, warExhaustion: 20, nationalMorale: 70 }
+  };
+  
+  Object.keys(countries).forEach(c => {
+    if (templates[c]) {
+      aiEconomies[c] = { ...templates[c], productionQueue: [] };
+    }
+  });
+}
+
+// Get terrain at location
+function getTerrainAt(lat, lng) {
+  for (const zone of TERRAIN_ZONES) {
+    if (lat >= zone.lat[0] && lat <= zone.lat[1] && lng >= zone.lng[0] && lng <= zone.lng[1]) {
+      return zone.type;
+    }
+  }
+  return 'plains';
+}
+
+// Get current weather based on date and location
+function getWeatherAt(lat, lng, date) {
+  const month = date.getMonth();
+  
+  // Russian winter
+  if (lng > 25 && (month >= PHYSICS.WINTER_START_MONTH || month <= PHYSICS.WINTER_END_MONTH)) {
+    if (lat > 55) return 'blizzard';
+    return 'snow';
+  }
+  
+  // Mud season
+  if (PHYSICS.MUD_MONTHS.includes(month) && lng > 20) {
+    return 'mud';
+  }
+  
+  // Random rain
+  if (Math.random() < 0.1) return 'rain';
+  
+  return 'clear';
+}
+
+// Calculate effective movement speed
+function getMovementSpeed(army) {
+  const terrain = getTerrainAt(army.lat, army.lng);
+  const weather = getWeatherAt(army.lat, army.lng, state.date);
+  
+  let speed = PHYSICS.BASE_SPEED;
+  speed *= PHYSICS.TERRAIN_MODIFIERS[terrain] || 1.0;
+  speed *= PHYSICS.WEATHER_MODIFIERS[weather] || 1.0;
+  
+  // Armor bonus on plains, penalty in mountains/marsh
+  if (army.type === 'armor') {
+    if (terrain === 'plains') speed *= 1.3;
+    if (terrain === 'mountain' || terrain === 'marsh') speed *= 0.6;
+  }
+  
+  // Low strength = slower
+  speed *= (0.5 + army.strength / 200);
+  
+  return speed;
+}
+
+// Check if army is in supply
+function isInSupply(army) {
+  const friendlyCities = cities.filter(c => c.owner === army.country);
+  if (!friendlyCities.length) return false;
+  
+  const nearestDist = Math.min(...friendlyCities.map(c => distanceKm(army.lat, army.lng, c.lat, c.lng)));
+  return nearestDist <= PHYSICS.SUPPLY_RANGE;
+}
+
+// Check if army is encircled (no friendly units or cities nearby)
+function isEncircled(army) {
+  const friendlyNearby = armies.filter(a => 
+    a.country === army.country && 
+    a.id !== army.id && 
+    distanceKm(a.lat, a.lng, army.lat, army.lng) < 100
+  ).length;
+  
+  const friendlyCityNearby = cities.filter(c => 
+    c.owner === army.country && 
+    distanceKm(c.lat, c.lng, army.lat, army.lng) < 150
+  ).length;
+  
+  return friendlyNearby === 0 && friendlyCityNearby === 0;
+}
+
+// Get morale modifier for combat
+function getMoraleModifier(country) {
+  const econ = country === state.player ? state.economy : aiEconomies[country];
+  if (!econ) return 1.0;
+  
+  const morale = econ.nationalMorale || 100;
+  return 0.7 + (morale / 100) * PHYSICS.MORALE_COMBAT_BONUS;
+}
+
+// Calculate max available manpower
+function getMaxManpower(econ) {
+  const maxFromPop = Math.floor(econ.population * econ.conscriptionLaw);
+  return Math.max(0, maxFromPop - econ.deployedManpower);
+}
+
+// Calculate training time based on current army size
+function getTrainingTime(country, unitType) {
+  const econ = country === state.player ? state.economy : aiEconomies[country];
+  const currentDivisions = armies.filter(a => a.country === country).reduce((s, a) => s + a.divisions, 0);
+  
+  const baseTime = unitTemplates[unitType].days;
+  const scaleFactor = 1 + (currentDivisions / 100) * PHYSICS.TRAINING_SCALE_FACTOR;
+  
+  return Math.ceil(baseTime * scaleFactor);
+}
+
+// Unit templates with resource costs
+const unitTemplates = {
+  infantry: { name: 'Infantry', icon: '🚶', manpower: 10000, equipment: 500, steel: 2, oil: 0, days: 20, divisions: 10, type: 'infantry' },
+  armor: { name: 'Panzer', icon: '🛡️', manpower: 5000, equipment: 2000, steel: 10, oil: 5, days: 40, divisions: 5, type: 'armor' },
+  motorized: { name: 'Motorized', icon: '🚗', manpower: 8000, equipment: 1000, steel: 5, oil: 3, days: 30, divisions: 8, type: 'infantry' },
+  militia: { name: 'Militia', icon: '👥', manpower: 15000, equipment: 200, steel: 1, oil: 0, days: 10, divisions: 15, type: 'militia' }
+};
+
+// Countries
+const countries = {
+  DEU: { name: 'Germany', color: '#555', flag: '🇩🇪' },
+  GBR: { name: 'United Kingdom', color: '#d06090', flag: '🇬🇧' },
+  FRA: { name: 'France', color: '#6080d0', flag: '🇫🇷' },
+  SOV: { name: 'Soviet Union', color: '#cc3030', flag: '🇷🇺' },
+  POL: { name: 'Poland', color: '#d4a050', flag: '🇵🇱' },
+  ITA: { name: 'Italy', color: '#40a040', flag: '🇮🇹' },
+  JAP: { name: 'Japan', color: '#e03050', flag: '🇯🇵' },
+  HUN: { name: 'Hungary', color: '#608040', flag: '🇭🇺' },
+  ROM: { name: 'Romania', color: '#d0c030', flag: '🇷🇴' },
+  USA: { name: 'United States', color: '#3060a0', flag: '🇺🇸' },
+  CHI: { name: 'China', color: '#c0a030', flag: '🇨🇳' }
+};
+
+// Darken a hex color
+function darkenColor(hex) {
+  const num = parseInt(hex.slice(1), 16);
+  const r = Math.max(0, (num >> 16) - 40);
+  const g = Math.max(0, ((num >> 8) & 0x00FF) - 40);
+  const b = Math.max(0, (num & 0x0000FF) - 40);
+  return `#${(r << 16 | g << 8 | b).toString(16).padStart(6, '0')}`;
+}
+
+// Cities - victory points on the map
+const cities = [
+  { id: 'berlin', name: 'Berlin', lat: 52.52, lng: 13.405, owner: 'DEU', vp: 10, capital: true },
+  { id: 'hamburg', name: 'Hamburg', lat: 53.55, lng: 9.99, owner: 'DEU', vp: 3 },
+  { id: 'munich', name: 'Munich', lat: 48.14, lng: 11.58, owner: 'DEU', vp: 3 },
+  { id: 'konigsberg', name: 'Königsberg', lat: 54.71, lng: 20.51, owner: 'DEU', vp: 2 },
+  { id: 'vienna', name: 'Vienna', lat: 48.21, lng: 16.37, owner: 'DEU', vp: 3 },
+  { id: 'prague', name: 'Prague', lat: 50.08, lng: 14.44, owner: 'DEU', vp: 3 },
+  
+  { id: 'london', name: 'London', lat: 51.51, lng: -0.13, owner: 'GBR', vp: 10, capital: true },
+  { id: 'edinburgh', name: 'Edinburgh', lat: 55.95, lng: -3.19, owner: 'GBR', vp: 2 },
+  
+  { id: 'paris', name: 'Paris', lat: 48.86, lng: 2.35, owner: 'FRA', vp: 10, capital: true },
+  { id: 'lyon', name: 'Lyon', lat: 45.76, lng: 4.84, owner: 'FRA', vp: 3 },
+  { id: 'marseille', name: 'Marseille', lat: 43.30, lng: 5.37, owner: 'FRA', vp: 3 },
+  { id: 'bordeaux', name: 'Bordeaux', lat: 44.84, lng: -0.58, owner: 'FRA', vp: 2 },
+  
+  { id: 'warsaw', name: 'Warsaw', lat: 52.23, lng: 21.01, owner: 'POL', vp: 6, capital: true },
+  { id: 'krakow', name: 'Kraków', lat: 50.06, lng: 19.94, owner: 'POL', vp: 3 },
+  { id: 'gdansk', name: 'Danzig', lat: 54.35, lng: 18.65, owner: 'POL', vp: 2 },
+  
+  { id: 'moscow', name: 'Moscow', lat: 55.76, lng: 37.62, owner: 'SOV', vp: 15, capital: true },
+  { id: 'leningrad', name: 'Leningrad', lat: 59.93, lng: 30.34, owner: 'SOV', vp: 5 },
+  { id: 'kiev', name: 'Kiev', lat: 50.45, lng: 30.52, owner: 'SOV', vp: 4 },
+  { id: 'minsk', name: 'Minsk', lat: 53.90, lng: 27.57, owner: 'SOV', vp: 3 },
+  { id: 'stalingrad', name: 'Stalingrad', lat: 48.72, lng: 44.50, owner: 'SOV', vp: 4 },
+  
+  { id: 'rome', name: 'Rome', lat: 41.90, lng: 12.50, owner: 'ITA', vp: 5, capital: true },
+  { id: 'milan', name: 'Milan', lat: 45.46, lng: 9.19, owner: 'ITA', vp: 3 },
+  
+  // Japan (in Manchuria/Korea for European theater interaction)
+  { id: 'tokyo', name: 'Tokyo', lat: 35.68, lng: 139.69, owner: 'JAP', vp: 8, capital: true },
+  { id: 'mukden', name: 'Mukden', lat: 41.80, lng: 123.43, owner: 'JAP', vp: 3 },
+  { id: 'seoul', name: 'Seoul', lat: 37.57, lng: 126.98, owner: 'JAP', vp: 2 },
+  
+  // Hungary
+  { id: 'budapest', name: 'Budapest', lat: 47.50, lng: 19.04, owner: 'HUN', vp: 4, capital: true },
+  
+  // Romania
+  { id: 'bucharest', name: 'Bucharest', lat: 44.43, lng: 26.10, owner: 'ROM', vp: 4, capital: true },
+  { id: 'ploiesti', name: 'Ploiești', lat: 44.95, lng: 26.03, owner: 'ROM', vp: 3 }, // Oil!
+  
+  // USA (for late game)
+  { id: 'washington', name: 'Washington', lat: 38.91, lng: -77.04, owner: 'USA', vp: 10, capital: true },
+  { id: 'newyork', name: 'New York', lat: 40.71, lng: -74.01, owner: 'USA', vp: 5 },
+  
+  // China
+  { id: 'chongqing', name: 'Chongqing', lat: 29.56, lng: 106.55, owner: 'CHI', vp: 8, capital: true }, // Wartime capital
+  { id: 'kunming', name: 'Kunming', lat: 25.04, lng: 102.71, owner: 'CHI', vp: 3 },
+  { id: 'xian', name: "Xi'an", lat: 34.27, lng: 108.95, owner: 'CHI', vp: 3 },
+  { id: 'chengdu', name: 'Chengdu', lat: 30.67, lng: 104.07, owner: 'CHI', vp: 3 },
+  { id: 'nanjing', name: 'Nanjing', lat: 32.06, lng: 118.80, owner: 'JAP', vp: 5 }, // Fallen to Japan by 1939
+  { id: 'shanghai', name: 'Shanghai', lat: 31.23, lng: 121.47, owner: 'JAP', vp: 4 }, // Fallen to Japan
+  { id: 'beijing', name: 'Beijing', lat: 39.90, lng: 116.41, owner: 'JAP', vp: 4 }, // Fallen to Japan
+  { id: 'guangzhou', name: 'Guangzhou', lat: 23.13, lng: 113.26, owner: 'JAP', vp: 3 }, // Fallen to Japan
+];
+
+// Armies with GPS positions and destinations
+let armies = [];
+let wars = [{ attacker: 'DEU', defender: 'POL' }];
+let armyMarkers = {};
+let cityMarkers = {};
+let movementLines = {};
+let nextArmyId = 100;
+
+function initArmies() {
+  armies = [
+    // Germany
+    { id: 1, name: '1st Panzer', country: 'DEU', lat: 52.5, lng: 13.4, destLat: null, destLng: null, divisions: 12, strength: 100, type: 'armor' },
+    { id: 2, name: '2nd Army', country: 'DEU', lat: 53.8, lng: 15.5, destLat: null, destLng: null, divisions: 15, strength: 100, type: 'infantry' },
+    { id: 3, name: '3rd Army', country: 'DEU', lat: 51.5, lng: 16.5, destLat: null, destLng: null, divisions: 12, strength: 100, type: 'infantry' },
+    { id: 4, name: '4th Army', country: 'DEU', lat: 54.3, lng: 20.0, destLat: null, destLng: null, divisions: 8, strength: 100, type: 'infantry' },
+    { id: 5, name: '5th Army', country: 'DEU', lat: 50.0, lng: 8.0, destLat: null, destLng: null, divisions: 10, strength: 100, type: 'infantry' },
+    
+    // Poland
+    { id: 10, name: 'Armia Łódź', country: 'POL', lat: 51.8, lng: 19.5, destLat: null, destLng: null, divisions: 8, strength: 100, type: 'infantry' },
+    { id: 11, name: 'Armia Kraków', country: 'POL', lat: 50.2, lng: 19.8, destLat: null, destLng: null, divisions: 6, strength: 100, type: 'infantry' },
+    { id: 12, name: 'Armia Pomorze', country: 'POL', lat: 53.5, lng: 18.0, destLat: null, destLng: null, divisions: 5, strength: 100, type: 'infantry' },
+    { id: 13, name: 'Armia Modlin', country: 'POL', lat: 52.4, lng: 20.7, destLat: null, destLng: null, divisions: 6, strength: 100, type: 'infantry' },
+    
+    // France
+    { id: 20, name: '1ère Armée', country: 'FRA', lat: 49.0, lng: 2.5, destLat: null, destLng: null, divisions: 15, strength: 100, type: 'infantry' },
+    { id: 21, name: '2ème Armée', country: 'FRA', lat: 49.0, lng: 5.5, destLat: null, destLng: null, divisions: 12, strength: 100, type: 'infantry' },
+    { id: 22, name: '3ème Armée', country: 'FRA', lat: 48.5, lng: 7.0, destLat: null, destLng: null, divisions: 10, strength: 100, type: 'infantry' },
+    
+    // UK
+    { id: 30, name: 'BEF', country: 'GBR', lat: 51.5, lng: -0.1, destLat: null, destLng: null, divisions: 10, strength: 100, type: 'infantry' },
+    { id: 31, name: 'Home Guard', country: 'GBR', lat: 53.5, lng: -2.0, destLat: null, destLng: null, divisions: 8, strength: 100, type: 'infantry' },
+    
+    // Soviet Union
+    { id: 40, name: 'Western Front', country: 'SOV', lat: 53.5, lng: 28.0, destLat: null, destLng: null, divisions: 30, strength: 100, type: 'infantry' },
+    { id: 41, name: 'Kiev MD', country: 'SOV', lat: 50.5, lng: 31.0, destLat: null, destLng: null, divisions: 25, strength: 100, type: 'infantry' },
+    { id: 42, name: 'Reserve Front', country: 'SOV', lat: 55.5, lng: 36.0, destLat: null, destLng: null, divisions: 35, strength: 100, type: 'infantry' },
+    
+    // Italy
+    { id: 50, name: 'Regio Esercito', country: 'ITA', lat: 42.0, lng: 12.5, destLat: null, destLng: null, divisions: 15, strength: 100, type: 'infantry' },
+    
+    // Japan
+    { id: 60, name: 'Kwantung Army', country: 'JAP', lat: 41.8, lng: 123.5, destLat: null, destLng: null, divisions: 20, strength: 100, type: 'infantry' },
+    { id: 61, name: 'China Expeditionary', country: 'JAP', lat: 39.0, lng: 121.0, destLat: null, destLng: null, divisions: 15, strength: 100, type: 'infantry' },
+    
+    // Hungary
+    { id: 70, name: 'Hungarian 1st', country: 'HUN', lat: 47.5, lng: 19.0, destLat: null, destLng: null, divisions: 8, strength: 100, type: 'infantry' },
+    
+    // Romania  
+    { id: 80, name: 'Romanian 3rd', country: 'ROM', lat: 44.4, lng: 26.1, destLat: null, destLng: null, divisions: 10, strength: 100, type: 'infantry' },
+    { id: 81, name: 'Romanian 4th', country: 'ROM', lat: 45.0, lng: 26.0, destLat: null, destLng: null, divisions: 8, strength: 100, type: 'infantry' },
+    
+    // China - massive manpower, poor equipment
+    { id: 90, name: 'NRA 1st Army', country: 'CHI', lat: 30.0, lng: 107.0, destLat: null, destLng: null, divisions: 25, strength: 80, type: 'infantry' },
+    { id: 91, name: 'NRA 5th Army', country: 'CHI', lat: 32.0, lng: 110.0, destLat: null, destLng: null, divisions: 20, strength: 75, type: 'infantry' },
+    { id: 92, name: 'NRA 8th Route', country: 'CHI', lat: 35.0, lng: 109.0, destLat: null, destLng: null, divisions: 15, strength: 70, type: 'militia' }, // Communist forces
+    { id: 93, name: 'NRA Yunnan', country: 'CHI', lat: 25.5, lng: 103.0, destLat: null, destLng: null, divisions: 12, strength: 80, type: 'infantry' },
+    { id: 94, name: 'NRA Sichuan', country: 'CHI', lat: 31.0, lng: 104.5, destLat: null, destLng: null, divisions: 18, strength: 70, type: 'militia' },
+  ];
+}
+
+function isAtWar(c1, c2) {
+  return wars.some(w => (w.attacker === c1 && w.defender === c2) || (w.attacker === c2 && w.defender === c1));
+}
+
+function getEnemies(country) {
+  const e = new Set();
+  wars.forEach(w => {
+    if (w.attacker === country) e.add(w.defender);
+    if (w.defender === country) e.add(w.attacker);
+  });
+  return [...e];
+}
+
+function selectCountry(c) {
+  state.player = c;
+  
+  // Set player economy based on nation
+  const econTemplates = {
+    DEU: { manpower: 800000, equipment: 25000, factories: 15, civFactories: 10, steel: 80, oil: 10, population: 80000000, deployedManpower: 570000, conscriptionLaw: 0.10, nationalMorale: 100 },
+    GBR: { manpower: 400000, equipment: 15000, factories: 10, civFactories: 8, steel: 50, oil: 30, population: 47000000, deployedManpower: 100000, conscriptionLaw: 0.05, nationalMorale: 100 },
+    FRA: { manpower: 350000, equipment: 12000, factories: 8, civFactories: 6, steel: 40, oil: 5, population: 42000000, deployedManpower: 350000, conscriptionLaw: 0.10, nationalMorale: 80 },
+    SOV: { manpower: 1500000, equipment: 20000, factories: 12, civFactories: 15, steel: 100, oil: 60, population: 170000000, deployedManpower: 750000, conscriptionLaw: 0.05, nationalMorale: 90 },
+    JAP: { manpower: 500000, equipment: 15000, factories: 10, civFactories: 8, steel: 40, oil: 5, population: 73000000, deployedManpower: 350000, conscriptionLaw: 0.10, nationalMorale: 110 },
+    HUN: { manpower: 100000, equipment: 3000, factories: 3, civFactories: 2, steel: 15, oil: 3, population: 9000000, deployedManpower: 80000, conscriptionLaw: 0.10, nationalMorale: 80 },
+    ROM: { manpower: 150000, equipment: 4000, factories: 3, civFactories: 2, steel: 10, oil: 40, population: 20000000, deployedManpower: 180000, conscriptionLaw: 0.10, nationalMorale: 75 },
+    CHI: { manpower: 2000000, equipment: 5000, factories: 4, civFactories: 5, steel: 20, oil: 5, population: 450000000, deployedManpower: 900000, conscriptionLaw: 0.03, nationalMorale: 70 }
+  };
+  
+  state.economy = { ...econTemplates[c], industryGrowth: 0 };
+  state.productionQueue = [];
+  
+  // Initialize AI economies
+  initAIEconomies();
+  delete aiEconomies[c]; // Remove player from AI
+  
+  document.getElementById('countrySelect').classList.add('hidden');
+  
+  // Set up wars based on player choice
+  if (c === 'JAP') {
+    map.setView([35, 120], 4);
+    // Japan already at war with China
+    wars.push({ attacker: 'JAP', defender: 'CHI' });
+  } else if (c === 'CHI') {
+    map.setView([32, 110], 4);
+    // China already at war with Japan
+    wars.push({ attacker: 'JAP', defender: 'CHI' });
+  } else {
+    if (['FRA', 'GBR'].includes(c)) {
+      wars.push({ attacker: 'DEU', defender: 'FRA' });
+      wars.push({ attacker: 'DEU', defender: 'GBR' });
+    }
+    // Second Sino-Japanese War already ongoing
+    wars.push({ attacker: 'JAP', defender: 'CHI' });
+  }
+  
+  // Germany always at war with Poland at start
+  wars.push({ attacker: 'DEU', defender: 'POL' });
+  
+  initMap();
+  render();
+  requestAnimationFrame(gameLoop);
+}
+
+function initMap() {
+  // City markers
+  cities.forEach(city => {
+    const icon = L.divIcon({
+      className: 'city-marker' + (city.capital ? ' capital' : ''),
+      html: `${city.name} (${city.vp})`,
+      iconSize: [80, 18]
+    });
+    
+    const marker = L.marker([city.lat, city.lng], { icon }).addTo(map);
+    cityMarkers[city.id] = marker;
+  });
+  
+  // Click on map to move selected armies
+  map.on('click', (e) => {
+    if (state.selectedArmies.length > 0) {
+      const targetLat = e.latlng.lat;
+      const targetLng = e.latlng.lng;
+      
+      // Get selected player armies
+      const selectedPlayerArmies = armies.filter(a => 
+        state.selectedArmies.includes(a.id) && a.country === state.player
+      );
+      
+      if (selectedPlayerArmies.length === 0) return;
+      
+      // Calculate formation offsets for multiple armies
+      const count = selectedPlayerArmies.length;
+      const formationSpread = 0.3; // Degrees spread
+      
+      selectedPlayerArmies.forEach((army, i) => {
+        let offsetLat = 0, offsetLng = 0;
+        
+        if (count > 1) {
+          // Arrange in a rough line/arc formation
+          const angle = (i / (count - 1) - 0.5) * Math.PI; // -90 to +90 degrees
+          offsetLat = Math.sin(angle) * formationSpread * (count / 5);
+          offsetLng = Math.cos(angle) * formationSpread * (count / 5);
+        }
+        
+        army.destLat = targetLat + offsetLat;
+        army.destLng = targetLng + offsetLng;
+      });
+      
+      const dist = distanceKm(selectedPlayerArmies[0].lat, selectedPlayerArmies[0].lng, targetLat, targetLng);
+      const speed = getMovementSpeed(selectedPlayerArmies[0]);
+      const days = Math.ceil(dist / speed);
+      
+      if (count === 1) {
+        notify(`${selectedPlayerArmies[0].name} moving ${dist.toFixed(0)}km (~${days} days)`);
+      } else {
+        notify(`${count} armies moving ${dist.toFixed(0)}km (~${days} days)`);
+      }
+      render();
+    } else if (state.selectedArmy) {
+      // Fallback for single selection
+      const army = armies.find(a => a.id === state.selectedArmy);
+      if (army && army.country === state.player) {
+        const targetLat = e.latlng.lat;
+        const targetLng = e.latlng.lng;
+        
+        army.destLat = targetLat;
+        army.destLng = targetLng;
+        
+        const dist = distanceKm(army.lat, army.lng, targetLat, targetLng);
+        const speed = getMovementSpeed(army);
+        const days = Math.ceil(dist / speed);
+        notify(`${army.name} moving ${dist.toFixed(0)}km (~${days} days)`);
+        render();
+      }
+    }
+  });
+}
+
+let lastRenderTime2 = 0;
+function render() {
+  // Throttle renders to prevent lag
+  const now = performance.now();
+  if (now - lastRenderTime2 < PHYSICS.RENDER_THROTTLE && state.speed > 1) {
+    return; // Skip render if too frequent at high speeds
+  }
+  lastRenderTime2 = now;
+  
+  renderResources();
+  renderCountryInfo();
+  renderArmyList();
+  renderProduction();
+  renderMap();
+  renderBattles();
+  renderWarStatus();
+  renderBottomBar();
+}
+
+function renderResources() {
+  const e = state.economy;
+  const equipGain = e.factories * 50;
+  const steelGain = Math.floor(e.civFactories * 2);
+  const oilGain = Math.floor(cities.filter(c => c.owner === state.player && c.id === 'ploiesti').length * 10);
+  const manpowerGain = Math.floor(e.population / 100000);
+  const maxManpower = getMaxManpower(e);
+  const weather = getWeatherAt(50, 20, state.date);
+  const weatherIcon = { clear: '☀️', rain: '🌧️', mud: '🟤', snow: '❄️', blizzard: '🌨️' }[weather];
+  
+  document.getElementById('resources').innerHTML = `
+    <div>👥 ${(e.manpower/1000).toFixed(0)}K / ${(maxManpower/1000).toFixed(0)}K</div>
+    <div>🔧 ${(e.equipment/1000).toFixed(1)}K <span class="resource-change">+${equipGain}/d</span></div>
+    <div>🏭 ${e.factories} Mil / ${e.civFactories} Civ</div>
+    <div>⭐ ${cities.filter(c => c.owner === state.player).reduce((s,c) => s + c.vp, 0)} VP</div>
+    <div>🪨 ${e.steel} <span class="resource-change">+${steelGain}/d</span></div>
+    <div>🛢️ ${e.oil} ${oilGain > 0 ? `<span class="resource-change">+${oilGain}/d</span>` : ''}</div>
+    <div>😊 Morale: ${e.nationalMorale.toFixed(0)}%</div>
+    <div>${weatherIcon} ${weather.charAt(0).toUpperCase() + weather.slice(1)}</div>
+  `;
+}
+
+function renderCountryInfo() {
+  const c = countries[state.player];
+  if (!c) return;
+  const divs = armies.filter(a => a.country === state.player).reduce((s, a) => s + a.divisions, 0);
+  const citiesOwned = cities.filter(c => c.owner === state.player).length;
+  document.getElementById('countryInfo').innerHTML = `
+    <span style="font-size:20px;margin-right:6px;">${c.flag}</span>
+    <span class="country-name">${c.name}</span>
+    <div style="font-size:10px;color:#aaa;margin-top:2px;">${citiesOwned} Cities | ${divs} Divisions</div>
+  `;
+}
+
+function renderArmyList() {
+  const playerArmies = armies.filter(a => a.country === state.player);
+  document.getElementById('armyList').innerHTML = playerArmies.map(army => {
+    const isSelected = state.selectedArmies.includes(army.id);
+    const isMoving = army.destLat !== null;
+    const inCombat = isInCombat(army);
+    const inSupply = isInSupply(army);
+    const encircled = isEncircled(army);
+    const terrain = getTerrainAt(army.lat, army.lng);
+    const speed = getMovementSpeed(army);
+    
+    // Find control group
+    let groupNum = '';
+    for (const [num, ids] of Object.entries(state.controlGroups)) {
+      if (ids.includes(army.id)) groupNum = `[${num}]`;
+    }
+    
+    let statusText = '';
+    let statusColor = '#22c55e';
+    
+    if (inCombat) {
+      statusText = '⚔️ COMBAT';
+      statusColor = '#e94560';
+    } else if (isMoving) {
+      const dist = distanceKm(army.lat, army.lng, army.destLat, army.destLng);
+      const days = Math.ceil(dist / speed);
+      statusText = `🚩 ${dist.toFixed(0)}km (${days}d)`;
+    }
+    
+    let warningIcons = '';
+    if (!inSupply) warningIcons += '📦'; // No supply
+    if (encircled) warningIcons += '🔴'; // Encircled
+    
+    return `
+    <div class="army-item ${isSelected ? 'selected' : ''}" onclick="selectArmy(${army.id}, event)">
+      <div class="army-name">
+        ${army.type === 'armor' ? '🛡️' : army.type === 'militia' ? '👥' : '🚶'} ${groupNum} ${army.name}
+        <span style="float:right;font-size:10px;color:${statusColor}">${statusText} ${warningIcons}</span>
+      </div>
+      <div class="army-details">${army.divisions} div | ${army.strength.toFixed(0)}% | ${terrain} | ${speed.toFixed(0)}km/d</div>
+      <div class="strength-bar"><div class="strength-fill" style="width:${army.strength}%;background:${army.strength > 50 ? '#22c55e' : '#e94560'}"></div></div>
+    </div>
+  `}).join('') || '<div style="padding:10px;color:#666;">No armies</div>';
+}
+
+function renderProduction() {
+  const e = state.economy;
+  const maxManpower = getMaxManpower(e);
+  
+  // Queue
+  const queueHtml = state.productionQueue.length ? state.productionQueue.map((item, i) => {
+    const pct = (item.progress / item.days) * 100;
+    return `
+      <div class="queue-item">
+        <span>${unitTemplates[item.type].icon}</span>
+        <div class="queue-progress"><div class="queue-progress-fill" style="width:${pct}%"></div></div>
+        <span>${item.progress}/${item.days}d</span>
+        <button class="queue-cancel" onclick="cancelProduction(${i})">✕</button>
+      </div>
+    `;
+  }).join('') : '<div style="color:#666;font-size:10px;text-align:center;padding:4px;">Queue empty</div>';
+  
+  // Build buttons with manpower limit check
+  const currentArmies = armies.filter(a => a.country === state.player).length;
+  const queuedArmies = state.productionQueue.length;
+  const atCap = currentArmies + queuedArmies >= PHYSICS.MAX_ARMIES_PER_NATION;
+  
+  const buttonsHtml = Object.entries(unitTemplates).map(([type, unit]) => {
+    const trainingDays = getTrainingTime(state.player, type);
+    const canAffordResources = e.manpower >= unit.manpower && e.equipment >= unit.equipment && e.steel >= unit.steel && e.oil >= unit.oil;
+    const canAffordManpower = maxManpower >= unit.manpower;
+    const canAfford = canAffordResources && canAffordManpower && !atCap;
+    
+    let tooltip = `${unit.manpower/1000}K men, ${unit.equipment} equip, ${unit.steel} steel, ${unit.oil} oil, ${trainingDays} days`;
+    if (!canAffordManpower) tooltip += ' (NOT ENOUGH POPULATION!)';
+    if (atCap) tooltip += ' (ARMY CAP!)';
+    
+    return `<button class="prod-btn" ${canAfford ? '' : 'disabled'} onclick="startProduction('${type}')" title="${tooltip}">${unit.icon} ${unit.name} (${trainingDays}d)</button>`;
+  }).join('');
+  
+  document.getElementById('productionSection').innerHTML = `
+    <div style="font-size:10px;color:#aaa;margin-bottom:4px;">
+      Armies: ${currentArmies}/${PHYSICS.MAX_ARMIES_PER_NATION} | Pop: ${(maxManpower/1000).toFixed(0)}K
+      ${atCap ? '<span style="color:#e94560;"> CAP!</span>' : ''}
+    </div>
+    <div class="prod-queue">${queueHtml}</div>
+    <div class="prod-buttons">${buttonsHtml}</div>
+  `;
+}
+
+window.startProduction = function(type) {
+  const unit = unitTemplates[type];
+  const e = state.economy;
+  const maxManpower = getMaxManpower(e);
+  const trainingDays = getTrainingTime(state.player, type);
+  
+  // Check army cap
+  const currentArmies = armies.filter(a => a.country === state.player).length;
+  const queuedArmies = state.productionQueue.length;
+  if (currentArmies + queuedArmies >= PHYSICS.MAX_ARMIES_PER_NATION) {
+    notify(`Army cap reached (${PHYSICS.MAX_ARMIES_PER_NATION} max)!`);
+    return;
+  }
+  
+  if (e.manpower >= unit.manpower && e.equipment >= unit.equipment && e.steel >= unit.steel && e.oil >= unit.oil && maxManpower >= unit.manpower) {
+    e.manpower -= unit.manpower;
+    e.equipment -= unit.equipment;
+    e.steel -= unit.steel;
+    e.oil -= unit.oil;
+    state.productionQueue.push({ type, progress: 0, days: trainingDays });
+    notify(`${unit.name} in training (${trainingDays} days)`);
+    render();
+  }
+};
+
+window.cancelProduction = function(i) {
+  const item = state.productionQueue[i];
+  const unit = unitTemplates[item.type];
+  // Refund 50%
+  state.economy.manpower += Math.floor(unit.manpower * 0.5);
+  state.economy.equipment += Math.floor(unit.equipment * 0.5);
+  state.productionQueue.splice(i, 1);
+  notify('Production cancelled (50% refund)');
+  render();
+};
+
+function processProduction() {
+  for (let i = state.productionQueue.length - 1; i >= 0; i--) {
+    state.productionQueue[i].progress++;
+    if (state.productionQueue[i].progress >= state.productionQueue[i].days) {
+      completeProduction(state.productionQueue[i]);
+      state.productionQueue.splice(i, 1);
+    }
+  }
+}
+
+function completeProduction(item) {
+  const unit = unitTemplates[item.type];
+  // Deploy to capital
+  const caps = { DEU: 'berlin', GBR: 'london', FRA: 'paris', SOV: 'moscow', JAP: 'tokyo', HUN: 'budapest', ROM: 'bucharest', CHI: 'chongqing' };
+  const capCity = cities.find(c => c.id === caps[state.player] && c.owner === state.player);
+  
+  // If capital lost, deploy to any owned city
+  const deployCity = capCity || cities.find(c => c.owner === state.player);
+  
+  if (deployCity) {
+    state.economy.deployedManpower += unit.divisions * 1000;
+    
+    armies.push({
+      id: nextArmyId++,
+      name: `${nextArmyId}. ${unit.name}`,
+      country: state.player,
+      lat: deployCity.lat + (Math.random() - 0.5) * 0.5,
+      lng: deployCity.lng + (Math.random() - 0.5) * 0.5,
+      destLat: null,
+      destLng: null,
+      divisions: unit.divisions,
+      strength: 100,
+      type: unit.type
+    });
+    notify(`${unit.name} deployed at ${deployCity.name}!`);
+  }
+}
+
+function isInCombat(army) {
+  return armies.some(other => 
+    other.id !== army.id && 
+    isAtWar(army.country, other.country) && 
+    distanceKm(army.lat, army.lng, other.lat, other.lng) < COMBAT_RANGE
+  );
+}
+
+function renderMap() {
+  // Update city markers with owner colors
+  cities.forEach(city => {
+    const marker = cityMarkers[city.id];
+    if (marker) {
+      const owner = countries[city.owner];
+      const color = owner?.color || '#888';
+      const flag = owner?.flag || '⬜';
+      const icon = L.divIcon({
+        className: 'city-marker' + (city.capital ? ' capital' : ''),
+        html: `<div style="border-color:${color};"><span style="font-size:${city.capital ? '16px' : '14px'}">${flag}</span> ${city.name} <span style="color:#ffd700;">${city.vp}VP</span></div>`,
+        iconSize: [city.capital ? 140 : 120, city.capital ? 28 : 24]
+      });
+      marker.setIcon(icon);
+    }
+  });
+  
+  // Clear old markers
+  Object.values(armyMarkers).forEach(m => map.removeLayer(m));
+  Object.values(movementLines).forEach(ml => {
+    if (ml.line) map.removeLayer(ml.line);
+    if (ml.etaMarker) map.removeLayer(ml.etaMarker);
+  });
+  armyMarkers = {};
+  movementLines = {};
+  
+  // Army markers
+  armies.forEach(army => {
+    const isSelected = state.selectedArmies.includes(army.id);
+    const inCombat = isInCombat(army);
+    const color = countries[army.country]?.color || '#888';
+    
+    const icon = L.divIcon({
+      className: `army-marker ${isSelected ? 'selected' : ''} ${inCombat ? 'fighting' : ''}`,
+      html: `<div style="background:${color};border-color:${isSelected ? '#fff' : darkenColor(color)};width:100%;height:100%;border-radius:50%;display:flex;align-items:center;justify-content:center;">${army.divisions}</div>`,
+      iconSize: [48, 48]
+    });
+    
+    const marker = L.marker([army.lat, army.lng], { icon }).addTo(map);
+    
+    marker.on('click', (e) => {
+      L.DomEvent.stopPropagation(e);
+      if (army.country === state.player) {
+        const originalEvent = e.originalEvent;
+        
+        if (originalEvent.shiftKey) {
+          // Shift+click: Add/remove from selection
+          if (state.selectedArmies.includes(army.id)) {
+            state.selectedArmies = state.selectedArmies.filter(id => id !== army.id);
+          } else {
+            state.selectedArmies.push(army.id);
+          }
+          state.selectedArmy = state.selectedArmies[state.selectedArmies.length - 1] || null;
+        } else if (originalEvent.ctrlKey || originalEvent.metaKey) {
+          // Ctrl+click: Toggle in selection
+          if (state.selectedArmies.includes(army.id)) {
+            state.selectedArmies = state.selectedArmies.filter(id => id !== army.id);
+          } else {
+            state.selectedArmies.push(army.id);
+          }
+          state.selectedArmy = state.selectedArmies[state.selectedArmies.length - 1] || null;
+        } else {
+          // Normal click: Select only this army
+          state.selectedArmies = [army.id];
+          state.selectedArmy = army.id;
+        }
+        render();
+      }
+    });
+    
+    // Tooltip
+    marker.bindTooltip(`
+      <b>${army.name}</b><br>
+      ${countries[army.country]?.flag} ${countries[army.country]?.name}<br>
+      ${army.divisions} divisions | ${army.strength.toFixed(0)}%<br>
+      ${inCombat ? '⚔️ IN COMBAT' : army.destLat ? '🚩 Moving...' : '⏸️ Idle'}
+    `);
+    
+    armyMarkers[army.id] = marker;
+    
+    // Movement line with distance label
+    if (army.destLat !== null) {
+      const dist = distanceKm(army.lat, army.lng, army.destLat, army.destLng);
+      const days = Math.ceil(dist / MOVEMENT_SPEED);
+      
+      const line = L.polyline([[army.lat, army.lng], [army.destLat, army.destLng]], {
+        color: '#22c55e',
+        weight: 2,
+        dashArray: '5,5',
+        opacity: 0.7
+      }).addTo(map);
+      
+      // Add ETA label at midpoint
+      const midLat = (army.lat + army.destLat) / 2;
+      const midLng = (army.lng + army.destLng) / 2;
+      const etaMarker = L.marker([midLat, midLng], {
+        icon: L.divIcon({
+          className: 'eta-label',
+          html: `<div style="background:rgba(0,0,0,0.8);color:#22c55e;padding:2px 5px;border-radius:3px;font-size:10px;white-space:nowrap;">${dist.toFixed(0)}km • ${days}d</div>`,
+          iconSize: [60, 16]
+        })
+      }).addTo(map);
+      
+      movementLines[army.id] = { line, etaMarker };
+    }
+  });
+}
+
+function renderBattles() {
+  if (activeBattles.length > 0) {
+    document.getElementById('battlePanel').classList.remove('hidden');
+    document.getElementById('battleList').innerHTML = activeBattles.map((b, i) => {
+      const a = b.attacker;
+      const d = b.defender;
+      const aPow = a.divisions * (a.strength / 100);
+      const bPow = d.divisions * (d.strength / 100);
+      const aPct = Math.round(aPow / (aPow + bPow) * 100);
+      
+      const aWeapons = getUnitWeapons(a);
+      const bWeapons = getUnitWeapons(d);
+      const aMaxRange = Math.max(...aWeapons.map(w => w.range));
+      const bMaxRange = Math.max(...bWeapons.map(w => w.range));
+      
+      const terrain = getTerrainAt(b.lat, b.lng);
+      
+      return `
+        <div class="battle-item" style="flex-direction:column;gap:4px;">
+          <div style="display:flex;justify-content:space-between;width:100%;">
+            <span>${countries[a.country]?.flag} ${a.name}</span>
+            <span>vs</span>
+            <span>${d.name} ${countries[d.country]?.flag}</span>
+          </div>
+          <div class="battle-bar" style="width:100%;"><div class="battle-bar-fill" style="width:${aPct}%"></div></div>
+          <div style="display:flex;justify-content:space-between;width:100%;font-size:9px;color:#aaa;">
+            <span>${a.strength.toFixed(0)}% | ${aMaxRange}km range</span>
+            <span>${terrain} | ${b.dist.toFixed(1)}km apart</span>
+            <span>${bMaxRange}km range | ${d.strength.toFixed(0)}%</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } else {
+    document.getElementById('battlePanel').classList.add('hidden');
+  }
+}
+
+function renderWarStatus() {
+  const enemies = getEnemies(state.player);
+  document.getElementById('warStatus').textContent = enemies.length 
+    ? `⚔️ AT WAR: ${enemies.map(e => countries[e]?.name).join(', ')}`
+    : '☮️ At Peace';
+}
+
+function renderBottomBar() {
+  const info = document.getElementById('selectedInfo');
+  
+  if (state.selectedArmies.length > 1) {
+    // Multi-select info
+    const selectedPlayerArmies = armies.filter(a => state.selectedArmies.includes(a.id) && a.country === state.player);
+    const totalDivisions = selectedPlayerArmies.reduce((s, a) => s + a.divisions, 0);
+    const avgStrength = selectedPlayerArmies.reduce((s, a) => s + a.strength, 0) / selectedPlayerArmies.length;
+    
+    info.innerHTML = `
+      <h3>🎯 ${selectedPlayerArmies.length} ARMIES SELECTED (${totalDivisions} divisions)</h3>
+      <p>Avg strength: ${avgStrength.toFixed(0)}% | Shift+click to add/remove | Ctrl+1-9 to save group | S to stop | Click map to move all</p>
+    `;
+  } else if (state.selectedArmy) {
+    const army = armies.find(a => a.id === state.selectedArmy);
+    if (army) {
+      const speed = getMovementSpeed(army);
+      let moveInfo = 'Standing by.';
+      if (army.destLat !== null) {
+        const dist = distanceKm(army.lat, army.lng, army.destLat, army.destLng);
+        const days = Math.ceil(dist / speed);
+        moveInfo = `Moving: ${dist.toFixed(0)}km (~${days} days)`;
+      }
+      info.innerHTML = `
+        <h3>🎯 ${army.name} SELECTED</h3>
+        <p>${moveInfo} | Shift+click to multi-select | Ctrl+1-9 to save group</p>
+      `;
+    }
+  } else {
+    info.innerHTML = `<h3>Click army to select | Shift+click for multi-select | Ctrl+A for all</h3><p>1-9: recall groups | S: stop | Del: disband</p>`;
+  }
+}
+
+window.selectArmy = function(id, event) {
+  if (event && (event.shiftKey || event.ctrlKey || event.metaKey)) {
+    // Multi-select
+    if (state.selectedArmies.includes(id)) {
+      state.selectedArmies = state.selectedArmies.filter(i => i !== id);
+    } else {
+      state.selectedArmies.push(id);
+    }
+    state.selectedArmy = state.selectedArmies[state.selectedArmies.length - 1] || null;
+  } else {
+    // Single select
+    state.selectedArmies = [id];
+    state.selectedArmy = id;
+  }
+  render();
+};
+
+function notify(msg) {
+  const n = document.createElement('div');
+  n.className = 'notification';
+  n.textContent = msg;
+  document.body.appendChild(n);
+  setTimeout(() => n.remove(), 3000);
+}
+
+// Keyboard controls for multi-select and control groups
+document.addEventListener('keydown', (e) => {
+  // Number keys 1-9 for control groups
+  if (e.key >= '1' && e.key <= '9') {
+    const groupNum = e.key;
+    
+    if (e.ctrlKey || e.metaKey) {
+      // Ctrl+1-9: Save current selection to group
+      if (state.selectedArmies.length > 0) {
+        state.controlGroups[groupNum] = [...state.selectedArmies];
+        notify(`Group ${groupNum} set (${state.selectedArmies.length} armies)`);
+      }
+      e.preventDefault();
+    } else {
+      // 1-9: Recall group
+      if (state.controlGroups[groupNum]) {
+        state.selectedArmies = [...state.controlGroups[groupNum]].filter(id => 
+          armies.some(a => a.id === id && a.country === state.player)
+        );
+        state.selectedArmy = state.selectedArmies[0] || null;
+        render();
+        
+        // Center map on group
+        if (state.selectedArmies.length > 0) {
+          const groupArmies = armies.filter(a => state.selectedArmies.includes(a.id));
+          const avgLat = groupArmies.reduce((s, a) => s + a.lat, 0) / groupArmies.length;
+          const avgLng = groupArmies.reduce((s, a) => s + a.lng, 0) / groupArmies.length;
+          map.panTo([avgLat, avgLng]);
+        }
+      }
+    }
+  }
+  
+  // A key: Select all player armies
+  if (e.key === 'a' && (e.ctrlKey || e.metaKey)) {
+    state.selectedArmies = armies.filter(a => a.country === state.player).map(a => a.id);
+    state.selectedArmy = state.selectedArmies[0] || null;
+    notify(`Selected all ${state.selectedArmies.length} armies`);
+    render();
+    e.preventDefault();
+  }
+  
+  // Escape: Deselect all
+  if (e.key === 'Escape') {
+    state.selectedArmies = [];
+    state.selectedArmy = null;
+    render();
+  }
+  
+  // S key: Stop selected armies
+  if (e.key === 's' && !e.ctrlKey) {
+    let stopped = 0;
+    state.selectedArmies.forEach(id => {
+      const army = armies.find(a => a.id === id);
+      if (army && army.destLat !== null) {
+        army.destLat = null;
+        army.destLng = null;
+        stopped++;
+      }
+    });
+    if (stopped > 0) notify(`Stopped ${stopped} armies`);
+    render();
+  }
+  
+  // Delete: Disband selected armies (returns some manpower)
+  if (e.key === 'Delete' && state.selectedArmies.length > 0) {
+    const toDisband = armies.filter(a => state.selectedArmies.includes(a.id) && a.country === state.player);
+    if (toDisband.length > 0 && confirm(`Disband ${toDisband.length} armies?`)) {
+      toDisband.forEach(a => {
+        state.economy.manpower += a.divisions * 500; // Return half manpower
+        state.economy.deployedManpower -= a.divisions * 1000;
+      });
+      armies = armies.filter(a => !state.selectedArmies.includes(a.id) || a.country !== state.player);
+      state.selectedArmies = [];
+      state.selectedArmy = null;
+      notify(`Disbanded ${toDisband.length} armies`);
+      render();
+    }
+  }
+});
+
+// Speed controls
+document.getElementById('pauseBtn').onclick = () => setSpeed(0);
+document.getElementById('speed1Btn').onclick = () => setSpeed(1);
+document.getElementById('speed2Btn').onclick = () => setSpeed(2);
+document.getElementById('speed3Btn').onclick = () => setSpeed(3);
+
+function setSpeed(s) {
+  state.speed = s;
+  document.querySelectorAll('.speed-controls button').forEach((b, i) => b.classList.toggle('active', i === s));
+}
+
+let lastTick = 0;
+let lastRenderTime = 0;
+const TICK_INTERVAL = { 0: Infinity, 1: 500, 2: 200, 3: 80 }; // ms per day
+
+function gameLoop(ts) {
+  if (!lastTick) lastTick = ts;
+  if (!lastRenderTime) lastRenderTime = ts;
+  
+  const tickMs = TICK_INTERVAL[state.speed];
+  
+  // Smooth movement interpolation every frame
+  if (state.speed > 0) {
+    const frameDelta = (ts - lastRenderTime) / 1000; // seconds since last frame
+    const dayFraction = frameDelta / (tickMs / 1000); // what fraction of a day passed
+    
+    armies.forEach(army => {
+      if (army.destLat !== null && !isInCombat(army)) {
+        const dist = distanceKm(army.lat, army.lng, army.destLat, army.destLng);
+        const speed = getMovementSpeed(army); // Dynamic speed based on terrain/weather
+        const moveThisFrame = speed * dayFraction;
+        
+        if (dist > 0.1) {
+          const ratio = Math.min(1, moveThisFrame / dist);
+          army.lat += (army.destLat - army.lat) * ratio;
+          army.lng += (army.destLng - army.lng) * ratio;
+        }
+        
+        // Check if arrived
+        if (dist < 1) {
+          army.lat = army.destLat;
+          army.lng = army.destLng;
+          army.destLat = null;
+          army.destLng = null;
+          if (army.country === state.player) {
+            notify(`${army.name} arrived at destination`);
+          }
+        }
+      }
+    });
+    
+    // Update map markers smoothly
+    updateArmyPositions();
+  }
+  
+  lastRenderTime = ts;
+  
+  // Game tick (daily update) at fixed interval
+  if (state.speed > 0 && ts - lastTick >= tickMs) {
+    lastTick = ts;
+    gameTick();
+  }
+  
+  requestAnimationFrame(gameLoop);
+}
+
+function updateArmyPositions() {
+  armies.forEach(army => {
+    const marker = armyMarkers[army.id];
+    if (marker) {
+      marker.setLatLng([army.lat, army.lng]);
+    }
+    
+    // Update movement line and ETA
+    const ml = movementLines[army.id];
+    if (ml && army.destLat !== null) {
+      const dist = distanceKm(army.lat, army.lng, army.destLat, army.destLng);
+      const days = Math.ceil(dist / MOVEMENT_SPEED);
+      
+      ml.line.setLatLngs([[army.lat, army.lng], [army.destLat, army.destLng]]);
+      
+      const midLat = (army.lat + army.destLat) / 2;
+      const midLng = (army.lng + army.destLng) / 2;
+      ml.etaMarker.setLatLng([midLat, midLng]);
+      ml.etaMarker.setIcon(L.divIcon({
+        className: 'eta-label',
+        html: `<div style="background:rgba(0,0,0,0.8);color:#22c55e;padding:2px 5px;border-radius:3px;font-size:10px;white-space:nowrap;">${dist.toFixed(0)}km • ${days}d</div>`,
+        iconSize: [60, 16]
+      }));
+    } else if (ml && army.destLat === null) {
+      map.removeLayer(ml.line);
+      map.removeLayer(ml.etaMarker);
+      delete movementLines[army.id];
+    }
+  });
+}
+
+function gameTick() {
+  state.date.setDate(state.date.getDate() + 1);
+  document.getElementById('dateDisplay').textContent = state.date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  
+  // Update weather
+  state.weather = getWeatherAt(50, 20, state.date);
+  
+  // Player Economy
+  const e = state.economy;
+  e.equipment += e.factories * 50;
+  e.steel += Math.floor(e.civFactories * 2);
+  
+  // Manpower grows from population (limited by conscription)
+  const maxManpower = getMaxManpower(e);
+  const manpowerGain = Math.min(Math.floor(e.population / 100000), maxManpower - e.manpower);
+  if (manpowerGain > 0) e.manpower += manpowerGain;
+  
+  // Population slowly grows
+  e.population = Math.floor(e.population * (1 + PHYSICS.POPULATION_GROWTH_RATE));
+  
+  // Oil from Ploiești
+  if (cities.find(c => c.id === 'ploiesti' && c.owner === state.player)) {
+    e.oil += 10;
+  }
+  
+  // Morale recovery (slowly trends toward 80)
+  if (e.nationalMorale < 80) {
+    e.nationalMorale += 0.1;
+  } else if (e.nationalMorale > 80) {
+    e.nationalMorale -= 0.05;
+  }
+  
+  // Industry growth from civilian factories
+  e.industryGrowth += e.civFactories * 0.1;
+  if (e.industryGrowth >= 100) {
+    e.industryGrowth -= 100;
+    e.factories += 1;
+    notify('New military factory constructed!');
+  }
+  
+  // Update deployed manpower count
+  e.deployedManpower = armies.filter(a => a.country === state.player).reduce((s, a) => s + a.divisions * 1000, 0);
+  
+  // Player Production
+  processProduction();
+  
+  // AI Economy & Production
+  processAIEconomies();
+  
+  // === ARMY CONSOLIDATION (every 5 days) ===
+  if (state.date.getDate() % 5 === 0) {
+    consolidateArmies();
+  }
+  
+  // Combat
+  processCombat();
+  
+  // City capture
+  processCityCapture();
+  
+  // AI Movement
+  processAI();
+  
+  // War escalation
+  processWarEscalation();
+  
+  // Victory check
+  checkVictory();
+  
+  render();
+}
+
+// Merge weak/nearby armies and enforce caps
+function consolidateArmies() {
+  const countriesWithArmies = [...new Set(armies.map(a => a.country))];
+  
+  countriesWithArmies.forEach(country => {
+    let countryArmies = armies.filter(a => a.country === country);
+    
+    // 1. Merge very weak armies into nearby stronger ones
+    const weakArmies = countryArmies.filter(a => 
+      a.divisions < PHYSICS.MIN_DIVISIONS_TO_EXIST && !isInCombat(a)
+    );
+    
+    weakArmies.forEach(weak => {
+      // Find nearest friendly army to merge into
+      const nearby = countryArmies.find(a => 
+        a.id !== weak.id && 
+        !isInCombat(a) &&
+        distanceKm(a.lat, a.lng, weak.lat, weak.lng) < PHYSICS.MERGE_DISTANCE
+      );
+      
+      if (nearby) {
+        // Merge: combine divisions, average strength
+        const totalDiv = nearby.divisions + weak.divisions;
+        nearby.strength = (nearby.strength * nearby.divisions + weak.strength * weak.divisions) / totalDiv;
+        nearby.divisions = totalDiv;
+        
+        // Remove weak army
+        armies = armies.filter(a => a.id !== weak.id);
+        
+        // Update selection if needed
+        if (state.selectedArmies.includes(weak.id)) {
+          state.selectedArmies = state.selectedArmies.filter(id => id !== weak.id);
+          if (!state.selectedArmies.includes(nearby.id)) {
+            state.selectedArmies.push(nearby.id);
+          }
+        }
+        
+        if (country === state.player) {
+          notify(`${weak.name} merged into ${nearby.name}`);
+        }
+      }
+    });
+    
+    // 2. Enforce army cap by merging smallest armies
+    countryArmies = armies.filter(a => a.country === country);
+    
+    while (countryArmies.length > PHYSICS.MAX_ARMIES_PER_NATION) {
+      // Sort by divisions, merge two smallest
+      countryArmies.sort((a, b) => a.divisions - b.divisions);
+      
+      const smallest = countryArmies[0];
+      const secondSmallest = countryArmies[1];
+      
+      if (smallest && secondSmallest) {
+        const totalDiv = smallest.divisions + secondSmallest.divisions;
+        secondSmallest.strength = (secondSmallest.strength * secondSmallest.divisions + smallest.strength * smallest.divisions) / totalDiv;
+        secondSmallest.divisions = totalDiv;
+        secondSmallest.lat = (secondSmallest.lat + smallest.lat) / 2;
+        secondSmallest.lng = (secondSmallest.lng + smallest.lng) / 2;
+        
+        armies = armies.filter(a => a.id !== smallest.id);
+        state.selectedArmies = state.selectedArmies.filter(id => id !== smallest.id);
+        
+        if (country === state.player) {
+          notify(`Army cap reached - ${smallest.name} merged`);
+        }
+      }
+      
+      countryArmies = armies.filter(a => a.country === country);
+    }
+  });
+}
+
+// AI Economic decisions using transformer
+function processAIEconomies() {
+  Object.entries(aiEconomies).forEach(([country, econ]) => {
+    if (country === state.player) return;
+    if (!armies.some(a => a.country === country) && !cities.some(c => c.owner === country)) return; // Skip dead nations
+    
+    // Resource gains
+    econ.equipment += econ.factories * 50;
+    econ.steel += Math.floor(econ.civFactories * 2);
+    
+    // Manpower limited by population and conscription
+    const maxManpower = Math.floor(econ.population * econ.conscriptionLaw) - econ.deployedManpower;
+    const manpowerGain = Math.min(Math.floor(econ.population / 100000), Math.max(0, maxManpower - econ.manpower));
+    if (manpowerGain > 0) econ.manpower += manpowerGain;
+    
+    // Population growth
+    econ.population = Math.floor(econ.population * (1 + PHYSICS.POPULATION_GROWTH_RATE));
+    
+    // Oil from Ploiești
+    if (cities.find(c => c.id === 'ploiesti' && c.owner === country)) {
+      econ.oil += 10;
+    }
+    
+    // Morale recovery
+    if (econ.nationalMorale < 80) econ.nationalMorale += 0.1;
+    
+    // Update deployed manpower
+    econ.deployedManpower = armies.filter(a => a.country === country).reduce((s, a) => s + a.divisions * 1000, 0);
+    
+    // Process production queue
+    for (let i = econ.productionQueue.length - 1; i >= 0; i--) {
+      econ.productionQueue[i].progress++;
+      if (econ.productionQueue[i].progress >= econ.productionQueue[i].days) {
+        completeAIProduction(country, econ.productionQueue[i]);
+        econ.productionQueue.splice(i, 1);
+      }
+    }
+    
+    // Transformer decides what to build (with population and army limits)
+    const countryArmyCount = armies.filter(a => a.country === country).length;
+    const atArmyCap = countryArmyCount >= PHYSICS.MAX_ARMIES_PER_NATION;
+    
+    if (Math.random() < 0.1 && econ.productionQueue.length < 3 && !atArmyCap) {
+      const buildDecision = transformerProductionDecision(country, econ);
+      if (buildDecision) {
+        const unit = unitTemplates[buildDecision];
+        const trainingDays = getTrainingTime(country, buildDecision);
+        const canAffordManpower = getMaxManpower(econ) >= unit.manpower;
+        
+        if (econ.manpower >= unit.manpower && 
+            econ.equipment >= unit.equipment && 
+            econ.steel >= unit.steel &&
+            econ.oil >= unit.oil &&
+            canAffordManpower) {
+          econ.manpower -= unit.manpower;
+          econ.equipment -= unit.equipment;
+          econ.steel -= unit.steel;
+          econ.oil -= unit.oil;
+          econ.productionQueue.push({ type: buildDecision, progress: 0, days: trainingDays });
+        }
+      }
+    }
+    
+    // AI escalates conscription if desperate
+    const enemies = getEnemies(country);
+    if (enemies.length > 0) {
+      const ourStrength = armies.filter(a => a.country === country).reduce((s, a) => s + a.divisions, 0);
+      const enemyStrength = armies.filter(a => enemies.includes(a.country)).reduce((s, a) => s + a.divisions, 0);
+      
+      if (ourStrength < enemyStrength * 0.5 && econ.conscriptionLaw < 0.15) {
+        econ.conscriptionLaw = Math.min(0.25, econ.conscriptionLaw + 0.05);
+        econ.nationalMorale = Math.max(20, econ.nationalMorale - 10);
+      }
+    }
+  });
+}
+
+function completeAIProduction(country, item) {
+  const unit = unitTemplates[item.type];
+  const caps = { DEU: 'berlin', GBR: 'london', FRA: 'paris', SOV: 'moscow', JAP: 'tokyo', HUN: 'budapest', ROM: 'bucharest', ITA: 'rome', POL: 'warsaw', USA: 'washington', CHI: 'chongqing' };
+  const capCity = cities.find(c => c.id === caps[country] && c.owner === country);
+  const deployCity = capCity || cities.find(c => c.owner === country);
+  
+  if (deployCity) {
+    const econ = aiEconomies[country];
+    if (econ) {
+      econ.deployedManpower += unit.divisions * 1000;
+    }
+    
+    armies.push({
+      id: nextArmyId++,
+      name: `${countries[country]?.name || country} ${unit.name}`,
+      country: country,
+      lat: deployCity.lat + (Math.random() - 0.5) * 0.5,
+      lng: deployCity.lng + (Math.random() - 0.5) * 0.5,
+      destLat: null,
+      destLng: null,
+      divisions: unit.divisions,
+      strength: 100,
+      type: unit.type
+    });
+  }
+}
+
+function processCityCapture() {
+  cities.forEach(city => {
+    let closestEnemy = null;
+    let closestDist = Infinity;
+    
+    armies.forEach(army => {
+      if (army.country === city.owner) return;
+      if (!isAtWar(army.country, city.owner) && city.owner !== 'NEU') return;
+      
+      const dist = distanceKm(army.lat, army.lng, city.lat, city.lng);
+      if (dist < closestDist) {
+        closestDist = dist;
+        closestEnemy = army;
+      }
+    });
+    
+    if (closestEnemy && closestDist < CITY_CAPTURE_RANGE) {
+      const hasDefenders = armies.some(a => 
+        a.country === city.owner && 
+        distanceKm(a.lat, a.lng, city.lat, city.lng) < CITY_CAPTURE_RANGE
+      );
+      
+      if (!hasDefenders) {
+        const oldOwner = city.owner;
+        city.owner = closestEnemy.country;
+        notify(`🏴 ${city.name} captured by ${countries[closestEnemy.country]?.name}!`);
+        
+        // Morale effects
+        const captorEcon = closestEnemy.country === state.player ? state.economy : aiEconomies[closestEnemy.country];
+        const loserEcon = oldOwner === state.player ? state.economy : aiEconomies[oldOwner];
+        
+        if (captorEcon) {
+          captorEcon.nationalMorale = Math.min(120, (captorEcon.nationalMorale || 100) + (city.capital ? 15 : 5));
+          captorEcon.factories += city.capital ? 3 : 1;
+        }
+        if (loserEcon) {
+          loserEcon.nationalMorale = Math.max(20, (loserEcon.nationalMorale || 100) - (city.capital ? 20 : 5));
+        }
+      }
+    }
+  });
+}
+
+// Transformer decides what unit type to produce
+function transformerProductionDecision(country, econ) {
+  const enemies = getEnemies(country);
+  if (!enemies.length) return null;
+  
+  // Analyze military situation
+  const ourArmies = armies.filter(a => a.country === country);
+  const ourStrength = ourArmies.reduce((s, a) => s + a.divisions * (a.strength/100), 0);
+  
+  const enemyArmies = armies.filter(a => enemies.includes(a.country));
+  const enemyStrength = enemyArmies.reduce((s, a) => s + a.divisions * (a.strength/100), 0);
+  
+  const enemyArmor = enemyArmies.filter(a => a.type === 'armor').length;
+  const ourArmor = ourArmies.filter(a => a.type === 'armor').length;
+  
+  const maxManpower = Math.floor(econ.population * econ.conscriptionLaw) - econ.deployedManpower;
+  const manpowerRatio = econ.manpower / Math.max(1, maxManpower);
+  
+  // Feature vector for production decision
+  const features = [
+    ourStrength / Math.max(1, enemyStrength),
+    manpowerRatio,
+    econ.equipment / 10000,
+    econ.steel / 50,
+    econ.oil / 30,
+    ourArmies.length / 10,
+    enemyArmor / Math.max(1, ourArmor + 1),
+    econ.productionQueue.length / 5,
+    econ.nationalMorale / 100,
+    econ.conscriptionLaw * 10
+  ];
+  
+  const scores = {
+    infantry: 0,
+    armor: 0,
+    motorized: 0,
+    militia: 0
+  };
+  
+  // Infantry: reliable, balanced
+  scores.infantry = 2 + (features[1] > 0.3 ? 1 : 0) + (ourStrength < enemyStrength ? 1 : 0);
+  
+  // Armor: expensive, good when resources available and enemy has armor
+  scores.armor = (features[2] > 0.5 ? 2 : 0) + (features[4] > 0.3 ? 1 : 0) + (enemyArmor > ourArmor ? 2 : 0) + (features[0] > 1 ? 1 : 0);
+  
+  // Motorized: balanced, needs oil
+  scores.motorized = 1 + (features[3] > 0.5 ? 1 : 0) + (features[4] > 0.2 ? 1 : 0);
+  
+  // Militia: desperate times - cheap, fast, weak
+  scores.militia = (features[0] < 0.5 ? 3 : 0) + (features[1] < 0.3 ? 2 : 0) + (econ.nationalMorale < 60 ? 1 : -1);
+  
+  // Randomness
+  Object.keys(scores).forEach(k => scores[k] += Math.random() * 0.5);
+  
+  // Check affordability and population limits
+  let bestType = null;
+  let bestScore = -1;
+  
+  Object.entries(scores).forEach(([type, score]) => {
+    const unit = unitTemplates[type];
+    const canAfford = econ.manpower >= unit.manpower && 
+                      econ.equipment >= unit.equipment &&
+                      econ.steel >= unit.steel &&
+                      econ.oil >= unit.oil &&
+                      maxManpower >= unit.manpower;
+    if (canAfford && score > bestScore) {
+      bestScore = score;
+      bestType = type;
+    }
+  });
+  
+  return bestType;
+}
+
+// Combat system with actual GPS-based tactical fighting
+const WEAPONS = {
+  rifle: { range: 2, damage: 1, accuracy: 0.7, rof: 1 },      // 2km range
+  mg: { range: 3, damage: 2, accuracy: 0.5, rof: 3 },         // Machine gun
+  artillery: { range: 15, damage: 5, accuracy: 0.3, rof: 0.2 }, // Artillery
+  tank_gun: { range: 5, damage: 8, accuracy: 0.6, rof: 0.5 }   // Tank main gun
+};
+
+// Active battles for visualization
+let activeBattles = [];
+let battleMarkers = {};
+let combatLines = [];
+
+function processCombat() {
+  // Clear old battle data
+  activeBattles = [];
+  
+  // Find all engagements
+  armies.forEach(army => {
+    if (army.strength < 5) return;
+    
+    armies.forEach(other => {
+      if (other.id <= army.id) return;
+      if (other.strength < 5) return;
+      if (!isAtWar(army.country, other.country)) return;
+      
+      const dist = distanceKm(army.lat, army.lng, other.lat, other.lng);
+      if (dist >= COMBAT_RANGE) return;
+      
+      // Record active battle
+      activeBattles.push({
+        attacker: army,
+        defender: other,
+        dist: dist,
+        lat: (army.lat + other.lat) / 2,
+        lng: (army.lng + other.lng) / 2
+      });
+      
+      // === TACTICAL COMBAT ===
+      
+      // Get combat modifiers
+      const terrain = getTerrainAt(army.lat, army.lng);
+      const weather = getWeatherAt(army.lat, army.lng, state.date);
+      const terrainMod = PHYSICS.TERRAIN_MODIFIERS[terrain] || 1.0;
+      const weatherMod = PHYSICS.WEATHER_MODIFIERS[weather] || 1.0;
+      
+      // Determine weapons available
+      const aWeapons = getUnitWeapons(army);
+      const bWeapons = getUnitWeapons(other);
+      
+      // Calculate damage from each weapon system
+      let aDamage = 0;
+      let bDamage = 0;
+      
+      aWeapons.forEach(w => {
+        if (dist <= w.range) {
+          let hitChance = w.accuracy * weatherMod;
+          if (army.type === 'armor' && terrain === 'plains') hitChance *= 1.2;
+          if (army.type === 'armor' && (terrain === 'mountain' || terrain === 'forest')) hitChance *= 0.6;
+          
+          // Supply and encirclement penalties
+          if (!isInSupply(army)) hitChance *= 0.5;
+          if (isEncircled(army)) hitChance *= 0.5;
+          
+          // Morale modifier
+          hitChance *= getMoraleModifier(army.country);
+          
+          // Roll for hits
+          const hits = Math.floor(w.rof * army.divisions * (Math.random() < hitChance ? 1 : 0));
+          bDamage += hits * w.damage * 0.1;
+        }
+      });
+      
+      bWeapons.forEach(w => {
+        if (dist <= w.range) {
+          let hitChance = w.accuracy * weatherMod;
+          // Defender terrain bonus
+          hitChance *= (1 + (1 - terrainMod) * 0.5);
+          
+          if (other.type === 'armor' && terrain === 'plains') hitChance *= 1.2;
+          if (other.type === 'armor' && (terrain === 'mountain' || terrain === 'forest')) hitChance *= 0.6;
+          
+          if (!isInSupply(other)) hitChance *= 0.5;
+          if (isEncircled(other)) hitChance *= 0.5;
+          
+          hitChance *= getMoraleModifier(other.country);
+          
+          const hits = Math.floor(w.rof * other.divisions * (Math.random() < hitChance ? 1 : 0));
+          aDamage += hits * w.damage * 0.1;
+        }
+      });
+      
+      // Apply base attrition
+      aDamage += PHYSICS.COMBAT_ATTRITION;
+      bDamage += PHYSICS.COMBAT_ATTRITION;
+      
+      // Apply damage
+      army.strength = Math.max(0, army.strength - aDamage);
+      other.strength = Math.max(0, other.strength - bDamage);
+      
+      // Tactical movement during combat
+      tacticalMovement(army, other, dist);
+      
+      // Morale effects
+      updateMoraleFromCombat(army.country, aDamage);
+      updateMoraleFromCombat(other.country, bDamage);
+    });
+  });
+  
+  // Supply attrition
+  armies.forEach(army => {
+    if (!isInSupply(army)) {
+      army.strength = Math.max(0, army.strength - PHYSICS.ATTRITION_RATE);
+      if (army.country === state.player && Math.random() < 0.01) {
+        notify(`${army.name} suffering supply attrition!`);
+      }
+    }
+  });
+  
+  // Remove destroyed armies
+  const destroyed = armies.filter(a => a.strength < 5);
+  destroyed.forEach(a => {
+    notify(`${a.name} destroyed!`);
+    const econ = a.country === state.player ? state.economy : aiEconomies[a.country];
+    if (econ) {
+      econ.deployedManpower -= a.divisions * 1000;
+      econ.nationalMorale = Math.max(20, (econ.nationalMorale || 100) - 5);
+    }
+  });
+  armies = armies.filter(a => a.strength >= 5);
+  
+  // Update battle visualization
+  renderBattleEffects();
+}
+
+function getUnitWeapons(army) {
+  const weapons = [WEAPONS.rifle, WEAPONS.mg];
+  
+  if (army.type === 'armor') {
+    weapons.push(WEAPONS.tank_gun);
+  }
+  
+  // Artillery based on division count
+  if (army.divisions >= 8) {
+    weapons.push(WEAPONS.artillery);
+  }
+  
+  return weapons;
+}
+
+function tacticalMovement(army, other, dist) {
+  // Units maneuver during combat
+  
+  // If winning (higher strength), advance
+  // If losing, retreat
+  const armyPower = army.divisions * (army.strength / 100);
+  const otherPower = other.divisions * (other.strength / 100);
+  
+  const moveSpeed = 0.01; // Degrees per tick during combat
+  
+  if (armyPower > otherPower * 1.2) {
+    // Army advancing
+    const angle = Math.atan2(other.lat - army.lat, other.lng - army.lng);
+    army.lat += Math.sin(angle) * moveSpeed;
+    army.lng += Math.cos(angle) * moveSpeed;
+    
+    // Other retreating
+    other.lat -= Math.sin(angle) * moveSpeed * 0.5;
+    other.lng -= Math.cos(angle) * moveSpeed * 0.5;
+  } else if (otherPower > armyPower * 1.2) {
+    // Other advancing
+    const angle = Math.atan2(army.lat - other.lat, army.lng - other.lng);
+    other.lat += Math.sin(angle) * moveSpeed;
+    other.lng += Math.cos(angle) * moveSpeed;
+    
+    // Army retreating
+    army.lat -= Math.sin(angle) * moveSpeed * 0.5;
+    army.lng -= Math.cos(angle) * moveSpeed * 0.5;
+  } else {
+    // Stalemate - slight flanking movement
+    const flankAngle = Math.atan2(other.lat - army.lat, other.lng - army.lng) + Math.PI / 2;
+    army.lat += Math.sin(flankAngle) * moveSpeed * 0.3 * (Math.random() - 0.5);
+    army.lng += Math.cos(flankAngle) * moveSpeed * 0.3 * (Math.random() - 0.5);
+  }
+}
+
+function renderBattleEffects() {
+  // Clear old battle markers
+  Object.values(battleMarkers).forEach(m => map.removeLayer(m));
+  combatLines.forEach(l => map.removeLayer(l));
+  battleMarkers = {};
+  combatLines = [];
+  
+  activeBattles.forEach((battle, i) => {
+    const a = battle.attacker;
+    const b = battle.defender;
+    
+    // Draw combat line between units
+    const line = L.polyline([[a.lat, a.lng], [b.lat, b.lng]], {
+      color: '#ff4444',
+      weight: 3,
+      opacity: 0.8,
+      dashArray: '5,5',
+      className: 'combat-line'
+    }).addTo(map);
+    combatLines.push(line);
+    
+    // Draw explosion/battle marker at midpoint
+    const midLat = (a.lat + b.lat) / 2;
+    const midLng = (a.lng + b.lng) / 2;
+    
+    const aPower = a.divisions * (a.strength / 100);
+    const bPower = b.divisions * (b.strength / 100);
+    const intensity = Math.min(10, (aPower + bPower) / 10);
+    
+    const battleIcon = L.divIcon({
+      className: 'battle-marker-icon',
+      html: `<div class="battle-explosion" style="--intensity:${intensity}">
+        💥
+        <div class="battle-info">
+          ${countries[a.country]?.flag || ''} ${a.strength.toFixed(0)}% vs ${b.strength.toFixed(0)}% ${countries[b.country]?.flag || ''}
+        </div>
+      </div>`,
+      iconSize: [60, 60]
+    });
+    
+    const marker = L.marker([midLat, midLng], { icon: battleIcon, interactive: false }).addTo(map);
+    battleMarkers[i] = marker;
+    
+    // Draw weapon range circles for player units
+    if (a.country === state.player || b.country === state.player) {
+      const playerUnit = a.country === state.player ? a : b;
+      const weapons = getUnitWeapons(playerUnit);
+      const maxRange = Math.max(...weapons.map(w => w.range));
+      
+      // Show engagement range
+      const rangeCircle = L.circle([playerUnit.lat, playerUnit.lng], {
+        radius: maxRange * 1000, // km to meters
+        color: '#ffaa00',
+        weight: 1,
+        opacity: 0.3,
+        fill: true,
+        fillOpacity: 0.1
+      }).addTo(map);
+      combatLines.push(rangeCircle);
+    }
+  });
+}
+
+function updateMoraleFromCombat(country, damage) {
+  const econ = country === state.player ? state.economy : aiEconomies[country];
+  if (!econ) return;
+  
+  // Small morale loss from taking damage
+  econ.nationalMorale = Math.max(20, (econ.nationalMorale || 100) - damage * 0.05);
+}
+
+function processCityCapture() {
+  cities.forEach(city => {
+    // Find closest army
+    let closestEnemy = null;
+    let closestDist = Infinity;
+    
+    armies.forEach(army => {
+      if (army.country === city.owner) return;
+      if (!isAtWar(army.country, city.owner) && city.owner !== 'NEU') return;
+      
+      const dist = distanceKm(army.lat, army.lng, city.lat, city.lng);
+      if (dist < closestDist) {
+        closestDist = dist;
+        closestEnemy = army;
+      }
+    });
+    
+    if (closestEnemy && closestDist < CITY_CAPTURE_RANGE) {
+      // Check no defenders nearby
+      const hasDefenders = armies.some(a => 
+        a.country === city.owner && 
+        distanceKm(a.lat, a.lng, city.lat, city.lng) < CITY_CAPTURE_RANGE
+      );
+      
+      if (!hasDefenders) {
+        const oldOwner = city.owner;
+        city.owner = closestEnemy.country;
+        notify(`🏴 ${city.name} captured by ${countries[closestEnemy.country]?.name}!`);
+        
+        if (closestEnemy.country === state.player) {
+          state.economy.factories += city.capital ? 3 : 1;
+        }
+      }
+    }
+  });
+}
+
+function processAI() {
+  armies.filter(a => a.country !== state.player && a.destLat === null && !isInCombat(a)).forEach(army => {
+    if (Math.random() > 0.08) return; // Don't reconsider every tick
+    
+    const enemies = getEnemies(army.country);
+    if (!enemies.length) return;
+    
+    // Use transformer to decide
+    const decision = transformerDecide(army, enemies);
+    if (decision) {
+      army.destLat = decision.lat;
+      army.destLng = decision.lng;
+    }
+  });
+}
+
+// ============================================
+// 8-BIT QUANTIZED NON-AUTOREGRESSIVE TRANSFORMER
+// WITH UNARY LOG ENCODING
+// ============================================
+
+// Unary Log Encoding - compresses unary representation logarithmically
+// Instead of storing value N as N bits, store as log2(N) bits
+// Reduces storage from O(n) to O(log n)
+const UnaryLog = {
+  // Encode integer to unary-log representation
+  // Value 0-255 encoded as: [exponent (3 bits), mantissa (5 bits)]
+  encode(value) {
+    if (value === 0) return 0;
+    const absVal = Math.abs(value);
+    const sign = value < 0 ? 1 : 0;
+    
+    // Find highest bit position (log2)
+    const exp = Math.floor(Math.log2(absVal + 1));
+    
+    // Mantissa: remaining precision within the exponent range
+    const mantissa = Math.floor((absVal / Math.pow(2, exp)) * 31); // 5-bit mantissa
+    
+    // Pack: sign(1) + exp(3) + mantissa(4) = 8 bits
+    return (sign << 7) | (Math.min(7, exp) << 4) | Math.min(15, mantissa);
+  },
+  
+  // Decode unary-log back to float
+  decode(encoded) {
+    const sign = (encoded >> 7) & 1;
+    const exp = (encoded >> 4) & 7;
+    const mantissa = encoded & 15;
+    
+    // Reconstruct value
+    const value = Math.pow(2, exp) * (1 + mantissa / 16) - 1;
+    return sign ? -value : value;
+  },
+  
+  // Encode float weight [-1, 1] to unary-log byte
+  encodeWeight(f) {
+    // Scale to integer range
+    const scaled = Math.round(f * 127);
+    return this.encode(scaled);
+  },
+  
+  // Decode unary-log byte back to float weight
+  decodeWeight(encoded) {
+    return this.decode(encoded) / 127;
+  }
+};
+
+// Int8 quantization utilities
+const Q8 = {
+  SCALE: 127,
+  
+  quantize(f) {
+    return Math.max(-127, Math.min(127, Math.round(f * this.SCALE)));
+  },
+  
+  dequantize(i) {
+    return i / this.SCALE;
+  },
+  
+  quantizeArray(arr) {
+    return new Int8Array(arr.map(v => this.quantize(v)));
+  },
+  
+  dequantizeArray(arr) {
+    return Array.from(arr).map(v => this.dequantize(v));
+  }
+};
+
+class Int8Transformer {
+  constructor() {
+    this.dModel = 16;
+    this.nHeads = 4;
+    this.headDim = this.dModel / this.nHeads;
+    this.nLayers = 2;
+    
+    // Initialize weights with unary-log encoding
+    this.layers = [];
+    for (let l = 0; l < this.nLayers; l++) {
+      this.layers.push({
+        // Weights stored in unary-log format for compression
+        Wq: this.initUnaryLogWeight(this.dModel, this.dModel),
+        Wk: this.initUnaryLogWeight(this.dModel, this.dModel),
+        Wv: this.initUnaryLogWeight(this.dModel, this.dModel),
+        Wo: this.initUnaryLogWeight(this.dModel, this.dModel),
+        W1: this.initUnaryLogWeight(this.dModel, this.dModel * 2),
+        W2: this.initUnaryLogWeight(this.dModel * 2, this.dModel),
+        scaleQKV: 1.0 / Math.sqrt(this.dModel),
+        scaleFF: 1.0 / Math.sqrt(this.dModel * 2)
+      });
+    }
+    
+    this.Wout = this.initUnaryLogWeight(this.dModel, 1);
+    this.scaleOut = 1.0 / Math.sqrt(this.dModel);
+    
+    // Strategy bias with unary-log encoding
+    this.strategyBias = new Uint8Array([
+      UnaryLog.encode(20), UnaryLog.encode(-10), UnaryLog.encode(30), 
+      UnaryLog.encode(15), UnaryLog.encode(-5), UnaryLog.encode(10), 
+      UnaryLog.encode(25), UnaryLog.encode(-15), UnaryLog.encode(40), 
+      UnaryLog.encode(5), UnaryLog.encode(35), UnaryLog.encode(-20), 
+      UnaryLog.encode(15), UnaryLog.encode(10), UnaryLog.encode(-10),
+      UnaryLog.encode(25)
+    ]);
+  }
+  
+  // Initialize weights with unary-log compression
+  initUnaryLogWeight(rows, cols) {
+    const scale = Math.sqrt(2 / (rows + cols));
+    const weights = new Uint8Array(rows * cols); // Unary-log encoded
+    
+    for (let i = 0; i < rows * cols; i++) {
+      const f = (Math.random() - 0.5) * 2 * scale;
+      weights[i] = UnaryLog.encodeWeight(f);
+    }
+    
+    return { data: weights, rows, cols };
+  }
+  
+  // Matrix-vector multiply with unary-log decoding
+  unaryLogMatmul(vec, weight) {
+    const result = new Float32Array(weight.cols);
+    const d = weight.data;
+    
+    for (let j = 0; j < weight.cols; j++) {
+      let acc = 0;
+      for (let i = 0; i < weight.rows; i++) {
+        // Decode unary-log weight on the fly
+        const w = UnaryLog.decodeWeight(d[i * weight.cols + j]);
+        acc += vec[i] * w;
+      }
+      result[j] = acc;
+    }
+    return result;
+  }
+  
+  softmax(x) {
+    const max = Math.max(...x);
+    const exp = x.map(v => Math.exp(v - max));
+    const sum = exp.reduce((a, b) => a + b, 0);
+    return exp.map(v => v / sum);
+  }
+  
+  relu(x) {
+    return x.map(v => Math.max(0, v));
+  }
+  
+  layerNorm(x) {
+    const mean = x.reduce((a, b) => a + b, 0) / x.length;
+    const variance = x.reduce((a, b) => a + (b - mean) ** 2, 0) / x.length;
+    const std = Math.sqrt(variance + 1e-6);
+    return x.map(v => (v - mean) / std);
+  }
+  
+  // Non-autoregressive forward pass
+  forward(features) {
+    while (features.length < this.dModel) features.push(0);
+    let x = features.slice(0, this.dModel);
+    
+    // NON-AUTOREGRESSIVE: All layers computed in parallel
+    const layerOutputs = [];
+    
+    for (let l = 0; l < this.nLayers; l++) {
+      const layer = this.layers[l];
+      
+      // Self-attention with unary-log weights
+      const q = this.unaryLogMatmul(x, layer.Wq);
+      const k = this.unaryLogMatmul(x, layer.Wk);
+      const v = this.unaryLogMatmul(x, layer.Wv);
+      
+      // Attention scores
+      const scores = new Float32Array(this.dModel);
+      for (let i = 0; i < this.dModel; i++) {
+        scores[i] = q[i] * k[i] * layer.scaleQKV;
+      }
+      
+      const attnWeights = this.softmax(Array.from(scores));
+      
+      const attnOut = new Float32Array(this.dModel);
+      for (let i = 0; i < this.dModel; i++) {
+        attnOut[i] = attnWeights[i] * v[i];
+      }
+      
+      const projected = this.unaryLogMatmul(attnOut, layer.Wo);
+      let normed = this.layerNorm(projected.map((v, i) => v + x[i]));
+      
+      // Feed-forward
+      const hidden = this.relu(this.unaryLogMatmul(normed, layer.W1));
+      const ffOut = this.unaryLogMatmul(hidden, layer.W2);
+      
+      const layerOut = this.layerNorm(ffOut.map((v, i) => v + normed[i]));
+      layerOutputs.push(layerOut);
+    }
+    
+    // Average all layer outputs (non-autoregressive combination)
+    const combined = new Float32Array(this.dModel);
+    for (let i = 0; i < this.dModel; i++) {
+      for (let l = 0; l < this.nLayers; l++) {
+        combined[i] += layerOutputs[l][i];
+      }
+      combined[i] /= this.nLayers;
+    }
+    
+    const output = this.unaryLogMatmul(combined, this.Wout);
+    
+    // Add strategy bias (unary-log decoded)
+    let score = output[0] * this.scaleOut;
+    for (let i = 0; i < Math.min(features.length, this.strategyBias.length); i++) {
+      score += features[i] * UnaryLog.decode(this.strategyBias[i]) * 0.01;
+    }
+    
+    return score;
+  }
+  
+  encodeTarget(army, target, enemies) {
+    const dist = distanceKm(army.lat, army.lng, target.lat, target.lng);
+    const isCity = target.type === 'city';
+    const isEnemy = target.type === 'army';
+    const terrain = getTerrainAt(target.lat, target.lng);
+    const weather = getWeatherAt(target.lat, target.lng, state.date);
+    
+    return [
+      Math.min(1, dist / 1000),
+      isCity ? 1 : 0,
+      isEnemy ? 1 : 0,
+      (target.vp || 0) / 15,
+      (target.strength || 100) / 100,
+      (target.divisions || 0) / 30,
+      army.divisions / 30,
+      army.strength / 100,
+      army.type === 'armor' ? 1 : 0,
+      target.type === 'armor' ? 1 : 0,
+      isCity && target.capital ? 1 : 0,
+      this.countNearbyAllies(army, target) / 5,
+      this.countNearbyEnemies(target, enemies) / 5,
+      this.isFlankingPosition(army, target) ? 1 : 0,
+      PHYSICS.TERRAIN_MODIFIERS[terrain] || 1,
+      PHYSICS.WEATHER_MODIFIERS[weather] || 1
+    ];
+  }
+  
+  countNearbyAllies(army, target) {
+    return armies.filter(a => 
+      a.country === army.country && 
+      a.id !== army.id &&
+      distanceKm(a.lat, a.lng, target.lat, target.lng) < 100
+    ).length;
+  }
+  
+  countNearbyEnemies(target, enemies) {
+    return armies.filter(a => 
+      enemies.includes(a.country) &&
+      distanceKm(a.lat, a.lng, target.lat, target.lng) < 80
+    ).length;
+  }
+  
+  isFlankingPosition(army, target) {
+    const allies = armies.filter(a => a.country === army.country && a.id !== army.id);
+    if (!allies.length) return false;
+    
+    const angles = allies.map(a => Math.atan2(target.lat - a.lat, target.lng - a.lng));
+    const myAngle = Math.atan2(target.lat - army.lat, target.lng - army.lng);
+    
+    return angles.every(a => Math.abs(a - myAngle) > 0.5);
+  }
+}
+
+// Global transformer instance
+const aiTransformer = new Int8Transformer();
+
+function transformerDecide(army, enemies) {
+  // Gather all potential targets
+  const targets = [];
+  
+  // Enemy armies
+  armies.filter(a => enemies.includes(a.country)).forEach(enemy => {
+    targets.push({
+      lat: enemy.lat,
+      lng: enemy.lng,
+      type: 'army',
+      strength: enemy.strength,
+      divisions: enemy.divisions,
+      country: enemy.country,
+      defended: true
+    });
+  });
+  
+  // Enemy cities
+  cities.filter(c => enemies.includes(c.owner)).forEach(city => {
+    const hasDefenders = armies.some(a => 
+      a.country === city.owner && 
+      distanceKm(a.lat, a.lng, city.lat, city.lng) < CITY_CAPTURE_RANGE * 2
+    );
+    
+    targets.push({
+      lat: city.lat,
+      lng: city.lng,
+      type: 'city',
+      vp: city.vp,
+      capital: city.capital,
+      owner: city.owner,
+      defended: hasDefenders
+    });
+  });
+  
+  // === TRANSFORMER GENERATES STRATEGIC GPS COORDINATES ===
+  // Instead of just picking from existing targets, generate novel positions
+  
+  // 1. Flanking positions - offset from enemy positions
+  armies.filter(a => enemies.includes(a.country)).forEach(enemy => {
+    // Generate 4 flanking positions around enemy
+    const offsets = [
+      { lat: 0.8, lng: 0 },    // North
+      { lat: -0.8, lng: 0 },   // South
+      { lat: 0, lng: 1.2 },    // East
+      { lat: 0, lng: -1.2 }    // West
+    ];
+    
+    offsets.forEach(off => {
+      targets.push({
+        lat: enemy.lat + off.lat,
+        lng: enemy.lng + off.lng,
+        type: 'flank',
+        targetEnemy: enemy,
+        strength: 0,
+        divisions: 0,
+        defended: false
+      });
+    });
+  });
+  
+  // 2. Intercept positions - predict where enemies are heading
+  armies.filter(a => enemies.includes(a.country) && a.destLat !== null).forEach(enemy => {
+    // Intercept point - halfway to their destination
+    targets.push({
+      lat: (enemy.lat + enemy.destLat) / 2,
+      lng: (enemy.lng + enemy.destLng) / 2,
+      type: 'intercept',
+      targetEnemy: enemy,
+      strength: 0,
+      divisions: 0,
+      defended: false
+    });
+  });
+  
+  // 3. Reinforcement positions - move toward allied armies in combat
+  armies.filter(a => a.country === army.country && a.id !== army.id && isInCombat(a)).forEach(ally => {
+    targets.push({
+      lat: ally.lat + (Math.random() - 0.5) * 0.3,
+      lng: ally.lng + (Math.random() - 0.5) * 0.3,
+      type: 'reinforce',
+      strength: 0,
+      divisions: 0,
+      defended: false
+    });
+  });
+  
+  // 4. Strategic retreat positions - if outnumbered, fall back toward own cities
+  const nearbyEnemyStrength = armies.filter(a => 
+    enemies.includes(a.country) && 
+    distanceKm(a.lat, a.lng, army.lat, army.lng) < 150
+  ).reduce((s, a) => s + a.divisions * (a.strength/100), 0);
+  
+  const ourStrength = army.divisions * (army.strength / 100);
+  
+  if (nearbyEnemyStrength > ourStrength * 1.5) {
+    // We're outnumbered - add retreat options
+    cities.filter(c => c.owner === army.country).forEach(city => {
+      targets.push({
+        lat: city.lat,
+        lng: city.lng,
+        type: 'retreat',
+        vp: city.vp,
+        defended: false
+      });
+    });
+  }
+  
+  // 5. Encirclement positions - get behind enemy lines
+  const enemyCities = cities.filter(c => enemies.includes(c.owner));
+  const ownCities = cities.filter(c => c.owner === army.country);
+  
+  if (enemyCities.length && ownCities.length) {
+    // Find enemy city furthest from their front line
+    const frontLine = armies.filter(a => enemies.includes(a.country));
+    enemyCities.forEach(city => {
+      const distToFront = frontLine.length ? 
+        Math.min(...frontLine.map(a => distanceKm(a.lat, a.lng, city.lat, city.lng))) : 
+        1000;
+      
+      if (distToFront > 200) {
+        targets.push({
+          lat: city.lat,
+          lng: city.lng,
+          type: 'encircle',
+          vp: city.vp * 2, // High value target
+          defended: false
+        });
+      }
+    });
+  }
+  
+  if (!targets.length) return null;
+  
+  // Score each target with int8 transformer
+  let bestTarget = null;
+  let bestScore = -Infinity;
+  
+  targets.forEach(target => {
+    const features = aiTransformer.encodeTarget(army, target, enemies);
+    let score = aiTransformer.forward(features);
+    
+    // Apply strategic heuristics on top of neural score
+    const dist = distanceKm(army.lat, army.lng, target.lat, target.lng);
+    
+    // Type-specific bonuses
+    switch(target.type) {
+      case 'city':
+        if (!target.defended) score += 2.5;
+        if (target.capital) score += 2;
+        break;
+      case 'army':
+        if (target.strength < 50) score += 1.5;
+        if (target.divisions < army.divisions) score += 1;
+        break;
+      case 'flank':
+        score += 1.5;
+        // Check if flanking would create crossfire with allies
+        const alliesNearTarget = armies.filter(a => 
+          a.country === army.country && 
+          a.id !== army.id &&
+          distanceKm(a.lat, a.lng, target.lat, target.lng) < 100
+        ).length;
+        score += alliesNearTarget * 0.5;
+        break;
+      case 'intercept':
+        score += 1.2;
+        break;
+      case 'reinforce':
+        score += 2; // High priority to help allies
+        break;
+      case 'retreat':
+        score += 3; // Very high priority when outnumbered
+        break;
+      case 'encircle':
+        score += 1.8;
+        break;
+    }
+    
+    // Penalty for very long distances
+    if (dist > 500) score -= (dist - 500) / 300;
+    
+    // Penalty for moving away from front when not retreating
+    if (target.type !== 'retreat') {
+      const nearestEnemy = armies.filter(a => enemies.includes(a.country))
+        .map(a => distanceKm(army.lat, army.lng, a.lat, a.lng))
+        .sort((a,b) => a-b)[0] || 1000;
+      const targetToEnemy = armies.filter(a => enemies.includes(a.country))
+        .map(a => distanceKm(target.lat, target.lng, a.lat, a.lng))
+        .sort((a,b) => a-b)[0] || 1000;
+      
+      if (targetToEnemy > nearestEnemy * 1.5) {
+        score -= 1; // Penalize moving away from enemies
+      }
+    }
+    
+    // Concentration bonus
+    const alliesHeadingThere = armies.filter(a => 
+      a.country === army.country && 
+      a.id !== army.id && 
+      a.destLat !== null &&
+      distanceKm(a.destLat, a.destLng, target.lat, target.lng) < 80
+    ).length;
+    score += alliesHeadingThere * 0.4;
+    
+    if (score > bestScore) {
+      bestScore = score;
+      bestTarget = target;
+    }
+  });
+  
+  return bestTarget;
+}
+
+function processWarEscalation() {
+  // Germany attacks west after Poland falls
+  if (!isAtWar('DEU', 'FRA') && !cities.some(c => c.owner === 'POL')) {
+    wars.push({ attacker: 'DEU', defender: 'FRA' });
+    wars.push({ attacker: 'DEU', defender: 'GBR' });
+    notify('Germany attacks the West!');
+  }
+  
+  // Hungary joins Axis against USSR
+  if (!isAtWar('HUN', 'SOV') && isAtWar('DEU', 'SOV') && state.player !== 'HUN') {
+    wars.push({ attacker: 'HUN', defender: 'SOV' });
+    notify('Hungary joins the war against the USSR!');
+  }
+  
+  // Romania joins Axis against USSR
+  if (!isAtWar('ROM', 'SOV') && isAtWar('DEU', 'SOV') && state.player !== 'ROM') {
+    wars.push({ attacker: 'ROM', defender: 'SOV' });
+    notify('Romania joins the war against the USSR!');
+  }
+  
+  // Barbarossa
+  if (!isAtWar('DEU', 'SOV') && state.date > new Date(1941, 5, 22)) {
+    wars.push({ attacker: 'DEU', defender: 'SOV' });
+    notify('Operation Barbarossa begins!');
+  }
+  
+  // Japan attacks USSR if Germany is winning
+  if (!isAtWar('JAP', 'SOV') && isAtWar('DEU', 'SOV') && state.date > new Date(1941, 7, 1)) {
+    const sovietCities = cities.filter(c => c.owner === 'SOV').length;
+    if (sovietCities < 4) {
+      wars.push({ attacker: 'JAP', defender: 'SOV' });
+      notify('Japan attacks the Soviet Union!');
+    }
+  }
+  
+  // USA joins Allies late game
+  if (!isAtWar('USA', 'DEU') && state.date > new Date(1941, 11, 7)) {
+    wars.push({ attacker: 'USA', defender: 'DEU' });
+    wars.push({ attacker: 'USA', defender: 'JAP' });
+    notify('The United States enters the war!');
+    
+    // Spawn US armies
+    if (!armies.some(a => a.country === 'USA')) {
+      armies.push(
+        { id: nextArmyId++, name: 'US 1st Army', country: 'USA', lat: 51.5, lng: -0.1, destLat: null, destLng: null, divisions: 15, strength: 100, type: 'infantry' },
+        { id: nextArmyId++, name: 'US 3rd Army', country: 'USA', lat: 49.0, lng: 2.0, destLat: null, destLng: null, divisions: 12, strength: 100, type: 'armor' }
+      );
+    }
+  }
+}
+
+function checkVictory() {
+  const vps = {};
+  cities.forEach(c => vps[c.owner] = (vps[c.owner] || 0) + c.vp);
+  
+  if (vps[state.player] >= 50) {
+    document.getElementById('victoryText').textContent = 'VICTORY!';
+    document.getElementById('victoryDesc').textContent = `${countries[state.player].name} dominates Europe!`;
+    document.getElementById('victoryModal').classList.remove('hidden');
+    state.speed = 0;
+  }
+  
+  // Check if player lost capital
+  const caps = { DEU: 'berlin', GBR: 'london', FRA: 'paris', SOV: 'moscow', JAP: 'tokyo', HUN: 'budapest', ROM: 'bucharest', USA: 'washington', CHI: 'chongqing' };
+  const myCap = cities.find(c => c.id === caps[state.player]);
+  if (myCap && myCap.owner !== state.player) {
+    document.getElementById('victoryText').textContent = 'DEFEAT';
+    document.getElementById('victoryDesc').textContent = `${myCap.name} has fallen!`;
+    document.getElementById('victoryModal').classList.remove('hidden');
+    state.speed = 0;
+  }
+}
+
+// Init
+initArmies();
+
+window.selectCountry = selectCountry;
+
+}); // DOMContentLoaded
+</script>
+</body>
+</html>

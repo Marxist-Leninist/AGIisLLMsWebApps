@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hearts of Steel - WW2 Grand Strategy</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #1a1a2e;
+  color: #eee;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  overflow: hidden;
+  height: 100vh;
+}
+.game-container {
+  display: flex;
+  height: 100vh;
+}
+.sidebar {
+  width: 280px;
+  background: linear-gradient(180deg, #16213e 0%, #1a1a2e 100%);
+  border-right: 2px solid #2a3f5f;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.sidebar-header {
+  padding: 12px;
+  background: #0f3460;
+  border-bottom: 2px solid #2a3f5f;
+}
+.sidebar-header h2 {
+  font-size: 14px;
+  color: #e94560;
+  margin-bottom: 8px;
+}
+.date-display {
+  font-size: 18px;
+  font-weight: bold;
+  color: #fff;
+}
+.speed-controls {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+}
+.speed-controls button {
+  padding: 4px 10px;
+  background: #2a3f5f;
+  border: 1px solid #3a5f8f;
+  color: #fff;
+  cursor: pointer;
+  border-radius: 3px;
+  font-size: 12px;
+}
+.speed-controls button:hover { background: #3a5f8f; }
+.speed-controls button.active { background: #e94560; border-color: #e94560; }
+.resources {
+  padding: 10px;
+  background: rgba(0,0,0,0.2);
+  border-bottom: 1px solid #2a3f5f;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  font-size: 12px;
+}
+.resource {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.resource-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+}
+.country-info {
+  padding: 10px;
+  border-bottom: 1px solid #2a3f5f;
+}
+.country-flag {
+  display: inline-block;
+  width: 40px;
+  height: 26px;
+  margin-right: 8px;
+  vertical-align: middle;
+  border: 1px solid #444;
+}
+.country-name {
+  font-size: 16px;
+  font-weight: bold;
+}
+.section-title {
+  padding: 8px 10px;
+  background: #0f3460;
+  font-size: 12px;
+  font-weight: bold;
+  color: #e94560;
+  border-bottom: 1px solid #2a3f5f;
+}
+.army-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+.army-item {
+  background: rgba(0,0,0,0.3);
+  border: 1px solid #2a3f5f;
+  border-radius: 4px;
+  padding: 8px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.army-item:hover { background: rgba(233,69,96,0.2); border-color: #e94560; }
+.army-item.selected { background: rgba(233,69,96,0.3); border-color: #e94560; }
+.army-name { font-weight: bold; font-size: 13px; }
+.army-details { font-size: 11px; color: #aaa; margin-top: 4px; }
+.army-strength {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 5px;
+}
+.strength-bar {
+  flex: 1;
+  height: 6px;
+  background: #333;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.strength-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #e94560, #22c55e);
+  transition: width 0.3s;
+}
+.main-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.top-bar {
+  height: 40px;
+  background: #0f3460;
+  border-bottom: 2px solid #2a3f5f;
+  display: flex;
+  align-items: center;
+  padding: 0 15px;
+  gap: 15px;
+}
+.top-bar button {
+  padding: 6px 12px;
+  background: #2a3f5f;
+  border: 1px solid #3a5f8f;
+  color: #fff;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.top-bar button:hover { background: #3a5f8f; }
+.map-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: #0a1628;
+}
+#map {
+  position: absolute;
+  cursor: grab;
+}
+#map:active { cursor: grabbing; }
+.province {
+  position: absolute;
+  border: 1px solid rgba(0,0,0,0.5);
+  cursor: pointer;
+  transition: filter 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: bold;
+  color: rgba(255,255,255,0.8);
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+}
+.province:hover { filter: brightness(1.3); z-index: 10; }
+.province.selected { 
+  filter: brightness(1.4); 
+  box-shadow: 0 0 0 3px #e94560;
+  z-index: 20;
+}
+.province.valid-move {
+  box-shadow: 0 0 0 3px #22c55e;
+  z-index: 15;
+}
+.army-marker {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  background: #111;
+  border: 2px solid;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: bold;
+  pointer-events: none;
+  z-index: 30;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+.battle-indicator {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23e94560"><path d="M12 2L4 7v10l8 5 8-5V7l-8-5zm0 2.5L18 8v8l-6 3.5L6 16V8l6-3.5z"/></svg>') center/contain no-repeat;
+  animation: pulse 0.5s infinite alternate;
+  z-index: 40;
+  pointer-events: none;
+}
+@keyframes pulse {
+  from { transform: scale(1); opacity: 1; }
+  to { transform: scale(1.3); opacity: 0.7; }
+}
+.tooltip {
+  position: fixed;
+  background: rgba(15,52,96,0.95);
+  border: 1px solid #3a5f8f;
+  padding: 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  pointer-events: none;
+  z-index: 1000;
+  max-width: 200px;
+  display: none;
+}
+.tooltip-title {
+  font-weight: bold;
+  margin-bottom: 5px;
+  color: #e94560;
+}
+.bottom-bar {
+  height: 80px;
+  background: linear-gradient(0deg, #0f3460 0%, #16213e 100%);
+  border-top: 2px solid #2a3f5f;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+.selected-info {
+  flex: 1;
+}
+.selected-info h3 {
+  font-size: 14px;
+  color: #e94560;
+}
+.selected-info p {
+  font-size: 12px;
+  color: #aaa;
+}
+.action-buttons {
+  display: flex;
+  gap: 8px;
+}
+.action-buttons button {
+  padding: 10px 20px;
+  background: #e94560;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  border-radius: 4px;
+  font-weight: bold;
+}
+.action-buttons button:hover { background: #ff6b8a; }
+.action-buttons button:disabled { background: #444; cursor: not-allowed; }
+.notification {
+  position: fixed;
+  top: 50px;
+  right: 10px;
+  background: rgba(15,52,96,0.95);
+  border: 2px solid #e94560;
+  padding: 12px 20px;
+  border-radius: 4px;
+  z-index: 1000;
+  animation: slideIn 0.3s ease;
+}
+@keyframes slideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+.modal-content {
+  background: #16213e;
+  border: 2px solid #e94560;
+  border-radius: 8px;
+  padding: 20px;
+  max-width: 400px;
+  text-align: center;
+}
+.modal h2 { color: #e94560; margin-bottom: 15px; }
+.modal button {
+  padding: 10px 30px;
+  background: #e94560;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  border-radius: 4px;
+  font-weight: bold;
+  margin: 5px;
+}
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="game-container">
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <h2>HEARTS OF STEEL</h2>
+      <div class="date-display" id="dateDisplay">1 September 1939</div>
+      <div class="speed-controls">
+        <button id="pauseBtn" class="active">⏸</button>
+        <button id="speed1Btn">▶</button>
+        <button id="speed2Btn">▶▶</button>
+        <button id="speed3Btn">▶▶▶</button>
+      </div>
+    </div>
+    <div class="resources" id="resources"></div>
+    <div class="country-info" id="countryInfo"></div>
+    <div class="section-title">YOUR ARMIES</div>
+    <div class="army-list" id="armyList"></div>
+  </div>
+  
+  <div class="main-area">
+    <div class="top-bar">
+      <button id="productionBtn">🏭 Production</button>
+      <button id="researchBtn">🔬 Research</button>
+      <button id="diplomacyBtn">🤝 Diplomacy</button>
+      <span style="flex:1"></span>
+      <span id="warStatus" style="color:#e94560;font-weight:bold;"></span>
+    </div>
+    
+    <div class="map-container" id="mapContainer">
+      <div id="map"></div>
+    </div>
+    
+    <div class="bottom-bar">
+      <div class="selected-info" id="selectedInfo">
+        <h3>Select a province or army</h3>
+        <p>Click on the map to interact</p>
+      </div>
+      <div class="action-buttons" id="actionButtons"></div>
+    </div>
+  </div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<div class="modal hidden" id="countrySelect">
+  <div class="modal-content">
+    <h2>SELECT YOUR NATION</h2>
+    <p style="margin-bottom:20px;color:#aaa;">Choose a major power to lead in World War II</p>
+    <button onclick="selectCountry('germany')">🇩🇪 Germany</button>
+    <button onclick="selectCountry('uk')">🇬🇧 United Kingdom</button>
+    <button onclick="selectCountry('ussr')">🇷🇺 Soviet Union</button>
+  </div>
+</div>
+
+<div class="modal hidden" id="victoryModal">
+  <div class="modal-content">
+    <h2 id="victoryText">VICTORY!</h2>
+    <p id="victoryDesc" style="margin-bottom:20px;color:#aaa;"></p>
+    <button onclick="location.reload()">Play Again</button>
+  </div>
+</div>
+
+<script>
+// Game State
+const state = {
+  player: null,
+  date: new Date(1939, 8, 1),
+  speed: 0,
+  selectedArmy: null,
+  selectedProvince: null,
+  mapOffset: { x: 0, y: 0 },
+  dragging: false,
+  lastMouse: { x: 0, y: 0 }
+};
+
+// Countries
+const countries = {
+  germany: { name: 'Germany', color: '#4a4a4a', flag: '🇩🇪', manpower: 8000000, industry: 150, resources: { steel: 80, oil: 20 } },
+  uk: { name: 'United Kingdom', color: '#c45c5c', flag: '🇬🇧', manpower: 4000000, industry: 120, resources: { steel: 60, oil: 40 } },
+  france: { name: 'France', color: '#5c5cc4', flag: '🇫🇷', manpower: 3000000, industry: 80, resources: { steel: 40, oil: 20 }, ai: true },
+  ussr: { name: 'Soviet Union', color: '#c44040', flag: '🇷🇺', manpower: 12000000, industry: 100, resources: { steel: 100, oil: 80 } },
+  poland: { name: 'Poland', color: '#c4a05c', flag: '🇵🇱', manpower: 1500000, industry: 30, resources: { steel: 20, oil: 5 }, ai: true },
+  neutral: { name: 'Neutral', color: '#6a6a5a', flag: '⬜', manpower: 0, industry: 0, resources: { steel: 0, oil: 0 }, ai: true }
+};
+
+// Provinces - simplified Europe
+const provinces = [
+  // Germany
+  { id: 'berlin', name: 'Berlin', x: 380, y: 180, w: 60, h: 50, owner: 'germany', capital: true, vp: 10, industry: 30 },
+  { id: 'munich', name: 'Munich', x: 350, y: 240, w: 55, h: 45, owner: 'germany', vp: 3, industry: 15 },
+  { id: 'hamburg', name: 'Hamburg', x: 340, y: 140, w: 50, h: 40, owner: 'germany', vp: 2, industry: 10 },
+  { id: 'rhineland', name: 'Rhineland', x: 290, y: 200, w: 55, h: 50, owner: 'germany', vp: 3, industry: 20 },
+  { id: 'prussia', name: 'East Prussia', x: 450, y: 150, w: 60, h: 45, owner: 'germany', vp: 2, industry: 5 },
+  
+  // Poland
+  { id: 'warsaw', name: 'Warsaw', x: 480, y: 200, w: 60, h: 50, owner: 'poland', capital: true, vp: 8, industry: 15 },
+  { id: 'krakow', name: 'Krakow', x: 460, y: 260, w: 50, h: 40, owner: 'poland', vp: 3, industry: 8 },
+  { id: 'danzig', name: 'Danzig', x: 440, y: 150, w: 40, h: 35, owner: 'poland', vp: 2, industry: 5 },
+  
+  // France
+  { id: 'paris', name: 'Paris', x: 200, y: 220, w: 60, h: 50, owner: 'france', capital: true, vp: 10, industry: 25 },
+  { id: 'normandy', name: 'Normandy', x: 160, y: 180, w: 55, h: 45, owner: 'france', vp: 2, industry: 8 },
+  { id: 'marseille', name: 'Marseille', x: 230, y: 300, w: 50, h: 45, owner: 'france', vp: 2, industry: 10 },
+  { id: 'alsace', name: 'Alsace', x: 260, y: 240, w: 40, h: 40, owner: 'france', vp: 2, industry: 8 },
+  
+  // UK
+  { id: 'london', name: 'London', x: 180, y: 120, w: 55, h: 45, owner: 'uk', capital: true, vp: 10, industry: 30 },
+  { id: 'scotland', name: 'Scotland', x: 160, y: 60, w: 50, h: 50, owner: 'uk', vp: 2, industry: 8 },
+  { id: 'wales', name: 'Wales', x: 140, y: 120, w: 35, h: 40, owner: 'uk', vp: 1, industry: 5 },
+  
+  // USSR
+  { id: 'moscow', name: 'Moscow', x: 620, y: 160, w: 70, h: 60, owner: 'ussr', capital: true, vp: 15, industry: 40 },
+  { id: 'leningrad', name: 'Leningrad', x: 560, y: 100, w: 55, h: 50, owner: 'ussr', vp: 5, industry: 20 },
+  { id: 'stalingrad', name: 'Stalingrad', x: 680, y: 240, w: 60, h: 55, owner: 'ussr', vp: 5, industry: 15 },
+  { id: 'ukraine', name: 'Ukraine', x: 560, y: 240, w: 70, h: 55, owner: 'ussr', vp: 4, industry: 15 },
+  { id: 'belarus', name: 'Belarus', x: 530, y: 180, w: 55, h: 45, owner: 'ussr', vp: 2, industry: 8 },
+  
+  // Neutrals
+  { id: 'belgium', name: 'Belgium', x: 250, y: 175, w: 35, h: 30, owner: 'neutral', vp: 1, industry: 5 },
+  { id: 'netherlands', name: 'Netherlands', x: 275, y: 145, w: 40, h: 30, owner: 'neutral', vp: 1, industry: 5 },
+  { id: 'denmark', name: 'Denmark', x: 350, y: 110, w: 40, h: 30, owner: 'neutral', vp: 1, industry: 3 },
+  { id: 'norway', name: 'Norway', x: 340, y: 50, w: 45, h: 55, owner: 'neutral', vp: 1, industry: 3 },
+  { id: 'sweden', name: 'Sweden', x: 400, y: 60, w: 50, h: 70, owner: 'neutral', vp: 1, industry: 5 },
+  { id: 'italy', name: 'Italy', x: 320, y: 300, w: 50, h: 70, owner: 'neutral', vp: 3, industry: 15 },
+  { id: 'spain', name: 'Spain', x: 120, y: 300, w: 80, h: 60, owner: 'neutral', vp: 2, industry: 8 },
+  { id: 'austria', name: 'Austria', x: 380, y: 260, w: 50, h: 35, owner: 'germany', vp: 2, industry: 8 },
+  { id: 'czechoslovakia', name: 'Czechoslovakia', x: 400, y: 230, w: 55, h: 30, owner: 'germany', vp: 2, industry: 10 },
+];
+
+// Adjacency map
+const adjacency = {
+  berlin: ['hamburg', 'rhineland', 'munich', 'prussia', 'warsaw', 'czechoslovakia'],
+  munich: ['berlin', 'rhineland', 'austria', 'czechoslovakia', 'alsace', 'italy'],
+  hamburg: ['berlin', 'rhineland', 'netherlands', 'denmark'],
+  rhineland: ['berlin', 'hamburg', 'munich', 'alsace', 'belgium', 'netherlands'],
+  prussia: ['berlin', 'danzig', 'warsaw', 'belarus'],
+  warsaw: ['berlin', 'prussia', 'krakow', 'danzig', 'belarus', 'ukraine'],
+  krakow: ['warsaw', 'czechoslovakia', 'ukraine', 'austria'],
+  danzig: ['prussia', 'warsaw'],
+  paris: ['normandy', 'marseille', 'alsace', 'belgium'],
+  normandy: ['paris', 'belgium', 'london'],
+  marseille: ['paris', 'alsace', 'spain', 'italy'],
+  alsace: ['paris', 'marseille', 'rhineland', 'munich', 'belgium'],
+  london: ['scotland', 'wales', 'normandy'],
+  scotland: ['london', 'wales', 'norway'],
+  wales: ['london', 'scotland'],
+  moscow: ['leningrad', 'stalingrad', 'ukraine', 'belarus'],
+  leningrad: ['moscow', 'belarus', 'sweden', 'norway'],
+  stalingrad: ['moscow', 'ukraine'],
+  ukraine: ['moscow', 'stalingrad', 'belarus', 'warsaw', 'krakow'],
+  belarus: ['moscow', 'leningrad', 'ukraine', 'warsaw', 'prussia'],
+  belgium: ['paris', 'normandy', 'alsace', 'rhineland', 'netherlands'],
+  netherlands: ['belgium', 'rhineland', 'hamburg'],
+  denmark: ['hamburg', 'sweden', 'norway'],
+  norway: ['denmark', 'sweden', 'scotland', 'leningrad'],
+  sweden: ['norway', 'denmark', 'leningrad'],
+  italy: ['munich', 'marseille', 'austria'],
+  spain: ['marseille'],
+  austria: ['munich', 'italy', 'krakow', 'czechoslovakia'],
+  czechoslovakia: ['berlin', 'munich', 'austria', 'krakow', 'warsaw']
+};
+
+// Armies
+let armies = [];
+let battles = [];
+let notifications = [];
+
+function initArmies() {
+  armies = [
+    // Germany
+    { id: 1, name: '1st Panzer Army', country: 'germany', province: 'berlin', divisions: 12, strength: 100, type: 'armor' },
+    { id: 2, name: '2nd Infantry Army', country: 'germany', province: 'rhineland', divisions: 18, strength: 100, type: 'infantry' },
+    { id: 3, name: '3rd Infantry Army', country: 'germany', province: 'prussia', divisions: 15, strength: 100, type: 'infantry' },
+    // Poland
+    { id: 4, name: 'Polish 1st Army', country: 'poland', province: 'warsaw', divisions: 10, strength: 100, type: 'infantry' },
+    { id: 5, name: 'Polish 2nd Army', country: 'poland', province: 'krakow', divisions: 8, strength: 100, type: 'infantry' },
+    // France
+    { id: 6, name: 'French 1st Army', country: 'france', province: 'paris', divisions: 15, strength: 100, type: 'infantry' },
+    { id: 7, name: 'French 2nd Army', country: 'france', province: 'alsace', divisions: 12, strength: 100, type: 'infantry' },
+    // UK
+    { id: 8, name: 'British Expeditionary Force', country: 'uk', province: 'london', divisions: 10, strength: 100, type: 'infantry' },
+    // USSR
+    { id: 9, name: 'Red Army Group West', country: 'ussr', province: 'moscow', divisions: 25, strength: 100, type: 'infantry' },
+    { id: 10, name: 'Red Army Group South', country: 'ussr', province: 'ukraine', divisions: 20, strength: 100, type: 'infantry' },
+  ];
+}
+
+// War tracking
+let wars = [];
+
+function selectCountry(countryId) {
+  state.player = countryId;
+  document.getElementById('countrySelect').classList.add('hidden');
+  
+  // Set up wars based on player
+  if (countryId === 'germany') {
+    wars.push({ attacker: 'germany', defender: 'poland', started: new Date(state.date) });
+    notify('War with Poland has begun!');
+  } else if (countryId === 'uk') {
+    // UK starts at peace, Germany attacks Poland
+    wars.push({ attacker: 'germany', defender: 'poland', started: new Date(state.date) });
+    setTimeout(() => {
+      wars.push({ attacker: 'germany', defender: 'uk', started: new Date(state.date) });
+      wars.push({ attacker: 'germany', defender: 'france', started: new Date(state.date) });
+      notify('Germany has declared war on the Allies!');
+    }, 5000);
+  } else if (countryId === 'ussr') {
+    // USSR starts neutral, Germany attacks Poland
+    wars.push({ attacker: 'germany', defender: 'poland', started: new Date(state.date) });
+  }
+  
+  render();
+  gameLoop();
+}
+
+function isAtWar(country1, country2) {
+  return wars.some(w => 
+    (w.attacker === country1 && w.defender === country2) ||
+    (w.attacker === country2 && w.defender === country1) ||
+    (w.attacker === country1 && w.defender === country2) ||
+    (w.defender === country1 && w.attacker === country2)
+  );
+}
+
+function getEnemies(country) {
+  const enemies = [];
+  wars.forEach(w => {
+    if (w.attacker === country) enemies.push(w.defender);
+    if (w.defender === country) enemies.push(w.attacker);
+  });
+  return [...new Set(enemies)];
+}
+
+function render() {
+  renderResources();
+  renderCountryInfo();
+  renderArmyList();
+  renderMap();
+  renderWarStatus();
+  renderBottomBar();
+}
+
+function renderResources() {
+  const c = countries[state.player];
+  if (!c) return;
+  
+  // Calculate total industry
+  let totalIndustry = 0;
+  provinces.filter(p => p.owner === state.player).forEach(p => totalIndustry += p.industry);
+  
+  document.getElementById('resources').innerHTML = `
+    <div class="resource"><span class="resource-icon" style="background:#4a7">👥</span> ${(c.manpower/1000000).toFixed(1)}M</div>
+    <div class="resource"><span class="resource-icon" style="background:#777">🏭</span> ${totalIndustry}</div>
+    <div class="resource"><span class="resource-icon" style="background:#666">🔩</span> ${c.resources.steel}</div>
+    <div class="resource"><span class="resource-icon" style="background:#333">🛢️</span> ${c.resources.oil}</div>
+  `;
+}
+
+function renderCountryInfo() {
+  const c = countries[state.player];
+  if (!c) return;
+  
+  const ownedProvinces = provinces.filter(p => p.owner === state.player);
+  const totalVP = ownedProvinces.reduce((sum, p) => sum + p.vp, 0);
+  
+  document.getElementById('countryInfo').innerHTML = `
+    <span class="country-flag">${c.flag}</span>
+    <span class="country-name">${c.name}</span>
+    <div style="font-size:11px;color:#aaa;margin-top:5px;">
+      ${ownedProvinces.length} Provinces | ${totalVP} Victory Points
+    </div>
+  `;
+}
+
+function renderArmyList() {
+  const playerArmies = armies.filter(a => a.country === state.player);
+  
+  document.getElementById('armyList').innerHTML = playerArmies.map(army => `
+    <div class="army-item ${state.selectedArmy === army.id ? 'selected' : ''}" onclick="selectArmy(${army.id})">
+      <div class="army-name">${army.type === 'armor' ? '🛡️' : '🚶'} ${army.name}</div>
+      <div class="army-details">${army.divisions} divisions • ${provinces.find(p => p.id === army.province)?.name || 'Moving'}</div>
+      <div class="army-strength">
+        <div class="strength-bar"><div class="strength-fill" style="width:${army.strength}%;background:${army.strength > 50 ? '#22c55e' : army.strength > 25 ? '#eab308' : '#e94560'}"></div></div>
+        <span style="font-size:10px;">${army.strength}%</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderMap() {
+  const map = document.getElementById('map');
+  map.innerHTML = '';
+  map.style.transform = `translate(${state.mapOffset.x}px, ${state.mapOffset.y}px)`;
+  
+  // Render provinces
+  provinces.forEach(prov => {
+    const div = document.createElement('div');
+    div.className = 'province';
+    if (state.selectedProvince === prov.id) div.classList.add('selected');
+    if (state.selectedArmy) {
+      const army = armies.find(a => a.id === state.selectedArmy);
+      if (army && adjacency[army.province]?.includes(prov.id)) {
+        const provOwner = prov.owner;
+        if (provOwner === state.player || isAtWar(state.player, provOwner) || provOwner === 'neutral') {
+          div.classList.add('valid-move');
+        }
+      }
+    }
+    
+    div.style.left = prov.x + 'px';
+    div.style.top = prov.y + 'px';
+    div.style.width = prov.w + 'px';
+    div.style.height = prov.h + 'px';
+    div.style.background = countries[prov.owner]?.color || '#555';
+    div.textContent = prov.name.substring(0, 8);
+    div.onclick = (e) => { e.stopPropagation(); clickProvince(prov.id); };
+    div.onmouseenter = (e) => showTooltip(e, prov);
+    div.onmouseleave = hideTooltip;
+    map.appendChild(div);
+  });
+  
+  // Render armies
+  armies.forEach(army => {
+    const prov = provinces.find(p => p.id === army.province);
+    if (!prov) return;
+    
+    const marker = document.createElement('div');
+    marker.className = 'army-marker';
+    marker.style.left = (prov.x + prov.w/2 - 12) + 'px';
+    marker.style.top = (prov.y + prov.h/2 - 12) + 'px';
+    marker.style.borderColor = countries[army.country]?.color || '#fff';
+    marker.style.color = countries[army.country]?.color || '#fff';
+    marker.textContent = army.divisions;
+    map.appendChild(marker);
+  });
+  
+  // Render battles
+  battles.forEach(battle => {
+    const prov = provinces.find(p => p.id === battle.province);
+    if (!prov) return;
+    
+    const indicator = document.createElement('div');
+    indicator.className = 'battle-indicator';
+    indicator.style.left = (prov.x + prov.w/2 - 16) + 'px';
+    indicator.style.top = (prov.y - 20) + 'px';
+    map.appendChild(indicator);
+  });
+}
+
+function renderWarStatus() {
+  const enemies = getEnemies(state.player);
+  if (enemies.length > 0) {
+    document.getElementById('warStatus').textContent = `⚔️ AT WAR: ${enemies.map(e => countries[e]?.name).join(', ')}`;
+  } else {
+    document.getElementById('warStatus').textContent = '☮️ At Peace';
+  }
+}
+
+function renderBottomBar() {
+  const info = document.getElementById('selectedInfo');
+  const buttons = document.getElementById('actionButtons');
+  
+  if (state.selectedArmy) {
+    const army = armies.find(a => a.id === state.selectedArmy);
+    if (army) {
+      info.innerHTML = `
+        <h3>${army.name}</h3>
+        <p>${army.divisions} divisions | ${army.strength}% strength | ${provinces.find(p => p.id === army.province)?.name}</p>
+      `;
+      buttons.innerHTML = `<button onclick="deselectArmy()">Deselect</button>`;
+    }
+  } else if (state.selectedProvince) {
+    const prov = provinces.find(p => p.id === state.selectedProvince);
+    if (prov) {
+      const armiesHere = armies.filter(a => a.province === prov.id);
+      info.innerHTML = `
+        <h3>${prov.name} (${countries[prov.owner]?.name})</h3>
+        <p>VP: ${prov.vp} | Industry: ${prov.industry} | Armies: ${armiesHere.length}</p>
+      `;
+      
+      const playerArmiesHere = armiesHere.filter(a => a.country === state.player);
+      if (playerArmiesHere.length > 0) {
+        buttons.innerHTML = `<button onclick="selectArmy(${playerArmiesHere[0].id})">Select Army</button>`;
+      } else {
+        buttons.innerHTML = '';
+      }
+    }
+  } else {
+    info.innerHTML = `<h3>Select a province or army</h3><p>Click on the map to interact</p>`;
+    buttons.innerHTML = '';
+  }
+}
+
+function selectArmy(id) {
+  const army = armies.find(a => a.id === id);
+  if (army && army.country === state.player) {
+    state.selectedArmy = id;
+    state.selectedProvince = null;
+    render();
+  }
+}
+
+function deselectArmy() {
+  state.selectedArmy = null;
+  render();
+}
+
+function clickProvince(id) {
+  if (state.selectedArmy) {
+    const army = armies.find(a => a.id === state.selectedArmy);
+    if (army && adjacency[army.province]?.includes(id)) {
+      const targetProv = provinces.find(p => p.id === id);
+      
+      // Check if we can move there
+      if (targetProv.owner === state.player || isAtWar(state.player, targetProv.owner) || targetProv.owner === 'neutral') {
+        moveArmy(army, id);
+      }
+    }
+    state.selectedArmy = null;
+  } else {
+    state.selectedProvince = id;
+  }
+  render();
+}
+
+function moveArmy(army, targetId) {
+  const targetProv = provinces.find(p => p.id === targetId);
+  
+  // Check for enemy armies
+  const enemyArmies = armies.filter(a => a.province === targetId && a.country !== state.player && isAtWar(state.player, a.country));
+  
+  if (enemyArmies.length > 0 || (targetProv.owner !== state.player && isAtWar(state.player, targetProv.owner))) {
+    // Start battle
+    army.province = targetId;
+    if (!battles.find(b => b.province === targetId)) {
+      battles.push({
+        province: targetId,
+        attackers: [army],
+        defenders: enemyArmies.length > 0 ? enemyArmies : [],
+        started: new Date(state.date)
+      });
+      notify(`Battle started in ${targetProv.name}!`);
+    }
+  } else {
+    // Peaceful move
+    army.province = targetId;
+    
+    // Capture neutral territory
+    if (targetProv.owner === 'neutral') {
+      targetProv.owner = state.player;
+      notify(`${targetProv.name} captured!`);
+    }
+  }
+}
+
+function showTooltip(e, prov) {
+  const tooltip = document.getElementById('tooltip');
+  const armiesHere = armies.filter(a => a.province === prov.id);
+  
+  tooltip.innerHTML = `
+    <div class="tooltip-title">${prov.name}</div>
+    <div>Owner: ${countries[prov.owner]?.name}</div>
+    <div>Victory Points: ${prov.vp}</div>
+    <div>Industry: ${prov.industry}</div>
+    ${armiesHere.length > 0 ? `<div>Armies: ${armiesHere.map(a => a.name).join(', ')}</div>` : ''}
+  `;
+  tooltip.style.display = 'block';
+  tooltip.style.left = (e.clientX + 15) + 'px';
+  tooltip.style.top = (e.clientY + 15) + 'px';
+}
+
+function hideTooltip() {
+  document.getElementById('tooltip').style.display = 'none';
+}
+
+function notify(message) {
+  const notif = document.createElement('div');
+  notif.className = 'notification';
+  notif.textContent = message;
+  document.body.appendChild(notif);
+  setTimeout(() => notif.remove(), 3000);
+}
+
+// Map panning
+const mapContainer = document.getElementById('mapContainer');
+mapContainer.addEventListener('mousedown', (e) => {
+  if (e.target === mapContainer || e.target.id === 'map') {
+    state.dragging = true;
+    state.lastMouse = { x: e.clientX, y: e.clientY };
+  }
+});
+document.addEventListener('mousemove', (e) => {
+  if (state.dragging) {
+    state.mapOffset.x += e.clientX - state.lastMouse.x;
+    state.mapOffset.y += e.clientY - state.lastMouse.y;
+    state.lastMouse = { x: e.clientX, y: e.clientY };
+    document.getElementById('map').style.transform = `translate(${state.mapOffset.x}px, ${state.mapOffset.y}px)`;
+  }
+});
+document.addEventListener('mouseup', () => { state.dragging = false; });
+
+// Speed controls
+document.getElementById('pauseBtn').onclick = () => setSpeed(0);
+document.getElementById('speed1Btn').onclick = () => setSpeed(1);
+document.getElementById('speed2Btn').onclick = () => setSpeed(2);
+document.getElementById('speed3Btn').onclick = () => setSpeed(3);
+
+function setSpeed(speed) {
+  state.speed = speed;
+  document.querySelectorAll('.speed-controls button').forEach((btn, i) => {
+    btn.classList.toggle('active', i === speed);
+  });
+}
+
+// Game loop
+let lastTick = 0;
+function gameLoop(timestamp) {
+  if (!lastTick) lastTick = timestamp;
+  
+  const speeds = [0, 1, 3, 10];
+  const tickRate = 1000 / speeds[state.speed];
+  
+  if (state.speed > 0 && timestamp - lastTick >= tickRate) {
+    lastTick = timestamp;
+    gameTick();
+  }
+  
+  requestAnimationFrame(gameLoop);
+}
+
+function gameTick() {
+  // Advance date
+  state.date.setDate(state.date.getDate() + 1);
+  document.getElementById('dateDisplay').textContent = state.date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  
+  // Process battles
+  processBattles();
+  
+  // AI turns
+  processAI();
+  
+  // Check victory conditions
+  checkVictory();
+  
+  // Re-render
+  render();
+}
+
+function processBattles() {
+  battles = battles.filter(battle => {
+    const prov = provinces.find(p => p.id === battle.province);
+    const attackers = armies.filter(a => a.province === battle.province && isAtWar(prov.owner, a.country));
+    const defenders = armies.filter(a => a.province === battle.province && a.country === prov.owner);
+    
+    if (attackers.length === 0) {
+      return false; // Battle over, no attackers
+    }
+    
+    // Simple combat resolution
+    const attackPower = attackers.reduce((sum, a) => sum + a.divisions * (a.strength/100) * (a.type === 'armor' ? 1.5 : 1), 0);
+    const defendPower = defenders.reduce((sum, a) => sum + a.divisions * (a.strength/100) * 1.2, 0);
+    
+    // Damage
+    attackers.forEach(a => a.strength = Math.max(0, a.strength - Math.random() * 5 * (defendPower / Math.max(1, attackPower))));
+    defenders.forEach(a => a.strength = Math.max(0, a.strength - Math.random() * 6 * (attackPower / Math.max(1, defendPower))));
+    
+    // Remove destroyed armies
+    armies = armies.filter(a => a.strength > 5);
+    
+    // Check if battle is over
+    const remainingDefenders = armies.filter(a => a.province === battle.province && a.country === prov.owner);
+    const remainingAttackers = armies.filter(a => a.province === battle.province && isAtWar(prov.owner, a.country));
+    
+    if (remainingDefenders.length === 0 && remainingAttackers.length > 0) {
+      // Attackers win
+      const winner = remainingAttackers[0].country;
+      prov.owner = winner;
+      notify(`${prov.name} captured by ${countries[winner].name}!`);
+      return false;
+    }
+    
+    if (remainingAttackers.length === 0) {
+      return false;
+    }
+    
+    return true;
+  });
+}
+
+function processAI() {
+  // Simple AI: move armies towards enemy provinces
+  const aiCountries = Object.keys(countries).filter(c => countries[c].ai || (c !== state.player && !isAtWar(state.player, c)));
+  
+  armies.filter(a => a.country !== state.player).forEach(army => {
+    if (Math.random() > 0.3) return; // Don't always move
+    
+    const enemies = getEnemies(army.country);
+    if (enemies.length === 0) return;
+    
+    const adjacent = adjacency[army.province] || [];
+    const targets = adjacent.filter(p => {
+      const prov = provinces.find(pr => pr.id === p);
+      return prov && enemies.includes(prov.owner);
+    });
+    
+    if (targets.length > 0) {
+      const target = targets[Math.floor(Math.random() * targets.length)];
+      const targetProv = provinces.find(p => p.id === target);
+      
+      army.province = target;
+      
+      // Start battle if needed
+      if (!battles.find(b => b.province === target)) {
+        const enemyArmies = armies.filter(a => a.province === target && a.country !== army.country);
+        if (enemyArmies.length > 0 || targetProv.owner !== army.country) {
+          battles.push({
+            province: target,
+            attackers: [army],
+            defenders: enemyArmies,
+            started: new Date(state.date)
+          });
+        }
+      }
+    }
+  });
+  
+  // Germany AI: declare war on more countries
+  if (state.player !== 'germany' && !isAtWar('germany', 'france') && state.date > new Date(1939, 8, 15)) {
+    if (!provinces.find(p => p.owner === 'poland')) {
+      wars.push({ attacker: 'germany', defender: 'france' });
+      wars.push({ attacker: 'germany', defender: 'uk' });
+      notify('Germany declares war on France and the UK!');
+    }
+  }
+  
+  // Germany attacks USSR later
+  if (state.player !== 'germany' && !isAtWar('germany', 'ussr') && state.date > new Date(1941, 5, 22)) {
+    wars.push({ attacker: 'germany', defender: 'ussr' });
+    notify('Germany invades the Soviet Union!');
+  }
+}
+
+function checkVictory() {
+  // Count VPs
+  const vpCounts = {};
+  provinces.forEach(p => {
+    vpCounts[p.owner] = (vpCounts[p.owner] || 0) + p.vp;
+  });
+  
+  // Check for capital captures
+  const playerCapitals = provinces.filter(p => p.capital && p.owner === state.player);
+  const enemyCapitals = getEnemies(state.player).map(e => provinces.find(p => p.capital && p.owner === e)).filter(Boolean);
+  
+  // Victory: captured all enemy capitals
+  if (getEnemies(state.player).length > 0) {
+    const enemiesDefeated = getEnemies(state.player).every(enemy => {
+      const capital = provinces.find(p => p.capital && countries[enemy] && p.id === Object.keys(provinces).find(k => provinces[k]?.capital && provinces[k]?.owner === enemy));
+      return !provinces.some(p => p.owner === enemy && p.capital);
+    });
+    
+    if (vpCounts[state.player] > 50) {
+      document.getElementById('victoryText').textContent = 'VICTORY!';
+      document.getElementById('victoryDesc').textContent = `${countries[state.player].name} has achieved dominance with ${vpCounts[state.player]} victory points!`;
+      document.getElementById('victoryModal').classList.remove('hidden');
+      state.speed = 0;
+    }
+  }
+  
+  // Defeat: lost capital
+  const ownCapital = provinces.find(p => p.capital && p.id === (state.player === 'germany' ? 'berlin' : state.player === 'uk' ? 'london' : 'moscow'));
+  if (ownCapital && ownCapital.owner !== state.player) {
+    document.getElementById('victoryText').textContent = 'DEFEAT';
+    document.getElementById('victoryDesc').textContent = `${countries[state.player].name} has fallen. Your capital has been captured.`;
+    document.getElementById('victoryModal').classList.remove('hidden');
+    state.speed = 0;
+  }
+}
+
+// Initialize
+initArmies();
+document.getElementById('countrySelect').classList.remove('hidden');
+</script>
+</body>
+</html>
