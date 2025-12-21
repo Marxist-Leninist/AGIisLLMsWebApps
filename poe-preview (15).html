@@ -1,0 +1,624 @@
+<!DOCTYPE html><html lang="en"><head><meta name="x-poe-datastore-behavior" content="local_only"><meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://code.jquery.com https://unpkg.com https://d3js.org https://threejs.org https://cdn.plot.ly https://stackpath.bootstrapcdn.com https://maps.googleapis.com https://cdn.tailwindcss.com https://ajax.googleapis.com https://kit.fontawesome.com https://cdn.datatables.net https://maxcdn.bootstrapcdn.com https://code.highcharts.com https://tako-static-assets-production.s3.amazonaws.com https://www.youtube.com https://fonts.googleapis.com https://fonts.gstatic.com https://pfst.cf2.poecdn.net https://puc.poecdn.net https://i.imgur.com https://wikimedia.org https://*.icons8.com https://*.giphy.com https://picsum.photos https://images.unsplash.com; frame-src 'self' https://www.youtube.com https://trytako.com; child-src 'self'; manifest-src 'self'; worker-src 'self'; upgrade-insecure-requests; block-all-mixed-content;">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dodge the Squares — Semi-Autoregressive Duel</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: radial-gradient(circle at 20% 20%, #0f152a, #070a16 45%, #050712);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: #e8ecf1;
+    display: flex;
+    justify-content: center;
+    padding: 16px;
+  }
+  .shell {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    width: 100%;
+    max-width: 1100px;
+  }
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: 1fr; }
+  }
+  .card {
+    position: relative;
+    background: rgba(13,17,30,0.72);
+    border: 1px solid #1f2942;
+    border-radius: 12px;
+    padding: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+    backdrop-filter: blur(6px);
+    overflow: hidden;
+  }
+  .title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: 0.2px;
+  }
+  .tag {
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    font-size: 11px;
+    letter-spacing: 0.2px;
+  }
+  #world {
+    position: relative;
+    width: 420px;
+    height: 620px;
+    max-width: 100%;
+    aspect-ratio: 420 / 620;
+    border: 2px solid #2b354a;
+    background: radial-gradient(circle at 30% 30%, #162042, #0b0f1a 70%);
+    overflow: hidden;
+    box-shadow: 0 0 30px #0a0e1a, 0 20px 80px rgba(0,0,0,0.45);
+    border-radius: 12px;
+    margin: 0 auto;
+  }
+  .player {
+    position: absolute;
+    width: 22px; height: 22px;
+    border-radius: 6px;
+    box-shadow: 0 0 10px currentColor;
+  }
+  .enemy {
+    position: absolute;
+    width: 22px; height: 22px;
+    background: #ff4f6d;
+    border-radius: 3px;
+    box-shadow: 0 0 10px #ff4f6d;
+  }
+  #hud {
+    position: absolute;
+    top: 8px; left: 10px; right: 10px;
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    font-weight: 600; font-size: 14px; color: #cdd7e3;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.35);
+    flex-wrap: wrap;
+  }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  button {
+    background: #2d3b6a;
+    color: #e8ecf1;
+    border: 1px solid #3f4f80;
+    border-radius: 6px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.25);
+    transition: background 120ms ease, transform 120ms ease;
+  }
+  button:hover { background: #3a4a7a; transform: translateY(-1px); }
+  button:active { transform: translateY(0); }
+  .stat { font-size: 13px; color: #cdd7e3; }
+  .bar {
+    position: relative;
+    height: 10px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.06);
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.07);
+  }
+  .bar-fill {
+    position: absolute; left: 0; top: 0; bottom: 0;
+    background: linear-gradient(90deg, #5ef5ff, #7df7c5);
+  }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    font-size: 11px;
+    letter-spacing: 0.1px;
+  }
+  .mem {
+    flex: 1 1 60px;
+    height: 46px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.07);
+    position: relative;
+    overflow: hidden;
+    min-width: 60px;
+  }
+  .mem-fill {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: linear-gradient(180deg, #9fa8ff, #5ef5ff);
+  }
+  .mem-label {
+    position: absolute; top: 2px; left: 6px;
+    font-size: 11px; color: #cbd6ec;
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="card">
+    <div class="title">
+      <span>World</span>
+      <span class="tag">Same enemies; Two semi-autoregressive planners</span>
+    </div>
+    <div id="world">
+      <div id="hud">
+        <div>Time: <span id="time">0.0</span>s</div>
+        <div>A Best: <span id="bestA">0.0</span>s</div>
+        <div>B Best: <span id="bestB">0.0</span>s</div>
+      </div>
+      <div id="playerA" class="player" style="color:#5ef5ff;background:#5ef5ff;"></div>
+      <div id="playerB" class="player" style="color:#7df7c5;background:#7df7c5;"></div>
+    </div>
+    <div class="row" style="margin-top:10px;">
+      <button id="restartBtn">Restart</button>
+      <button id="resetStatsBtn">Reset Stats</button>
+      <span class="stat">A: Transformer-ish heuristic (block planner)</span>
+      <span class="stat">B: +Tiny memory (block planner)</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="title">
+      <span>Signals</span>
+      <span class="tag">Block planning (semi-AR)</span>
+    </div>
+    <div class="stat" style="margin-bottom:6px;">Current run: <strong id="timeA">0.0</strong>s (A), <strong id="timeB">0.0</strong>s (B)</div>
+    <h4 style="margin:6px 0 4px;">Enemy Attention (top 4)</h4>
+    <div id="attnA"></div>
+    <div id="attnB" style="margin-top:8px;"></div>
+    <h4 style="margin:10px 0 4px;">Memory Read (B)</h4>
+    <div id="memRead" class="chips"></div>
+    <h4 style="margin:10px 0 4px;">Memory Usage (B)</h4>
+    <div id="memBars" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // DOM references
+  const world = document.getElementById('world');
+  const playerA = document.getElementById('playerA');
+  const playerB = document.getElementById('playerB');
+  const timeEl = document.getElementById('time');
+  const bestAEl = document.getElementById('bestA');
+  const bestBEl = document.getElementById('bestB');
+  const timeAEl = document.getElementById('timeA');
+  const timeBEl = document.getElementById('timeB');
+  const restartBtn = document.getElementById('restartBtn');
+  const resetStatsBtn = document.getElementById('resetStatsBtn');
+  const attnAEl = document.getElementById('attnA');
+  const attnBEl = document.getElementById('attnB');
+  const memReadEl = document.getElementById('memRead');
+  const memBarsEl = document.getElementById('memBars');
+
+  // World constants
+  const W = 420, H = 620;
+  const pw = 22, ph = 22;
+  const baseSpeed = 3.2;
+  const aiSpeed = baseSpeed * 1.05;
+
+  // Enemies
+  let enemies = [];
+  let lastSpawn = 0;
+  let running = false;
+  let startTime = 0;
+
+  // Agents
+  const agentA = { x: W/2 - pw/2, y: H - 80, alive: true, best: 0, t:0 };
+  const agentB = { x: W/2 - pw/2, y: H - 80, alive: true, best: 0, t:0 };
+
+  // Memory for agent B
+  const memSlots = 12, memDim = 6;
+  let mem = Array.from({length: memSlots}, () => Array(memDim).fill(0));
+  let memUse = Array(memSlots).fill(0);
+  let prevMemW = Array(memSlots).fill(1/memSlots);
+
+  // Stats
+  let bestA = 0, bestB = 0;
+
+  // Planning settings (semi-autoregressive)
+  const PLAN_HORIZON = 14;     // frames to simulate per block
+  const PLAN_STEP = 14;        // recompute every N frames (blockwise)
+  const CAND_DIRS = 9;         // directions per candidate
+  const enemySimStep = 1.0;    // speed multiplier in sim
+  let planCountdownA = 0;
+  let planCountdownB = 0;
+  let plannedMoveA = {vx:0, vy:0};
+  let plannedMoveB = {vx:0, vy:0};
+
+  // Params
+  const params = {
+    distScale: 0.0014,
+    aboveBonus: 0.55,
+    belowPenalty: 0.12,
+    centerBias: 0.0016,
+    upperBias: 0.0013,
+    noiseScale: 0.03,
+    attnTemp: 1.2,
+    wallRepelX: 1.35,
+    wallRepelY: 1.45,
+    wallSoft: 0.70,
+    minUp: 0.18
+  };
+  const memP = {
+    memKeep: 0.86,
+    memGain: 0.35,
+    memWrite: 0.18,
+    memShiftBeta: 2.0
+  };
+  const mats = {
+    Wq: [[0.8,0.0,0.25,-0.1,0.05,0.0],[0,0.9,-0.1,0.2,0,0.05],[0.1,0.05,0.3,0,0.1,0],[0.05,0.05,0.0,0.1,0.05,0.1]],
+    Wk: [[1.0,0.2,0.1,0.05],[0.2,1.0,0.05,0.05],[0.1,0.0,0.8,0.0],[0.0,0.0,0.0,0.6]],
+    Wv: [[-0.7,-0.15],[ -0.15,-0.8],[ -0.05,-0.02],[ 0.0,0.0]],
+    WmQ: [[0.4,0,0.1,0,0,0],[0,0.45,-0.05,0.05,0.05,0],[0.1,0.1,0.4,0,0.05,0],[0,0.05,0,0.5,0,0.05],[0.05,0,0.05,0,0.45,0],[0.05,0.05,0,0.05,0,0.45]],
+    WmK: [[0.5,0,0,0,0,0],[0,0.5,0,0,0,0],[0,0,0.5,0,0,0],[0,0,0,0.5,0,0],[0,0,0,0,0.5,0],[0,0,0,0,0,0.5]],
+    WmV: [[0.6,0,0,0,0,0],[0,0.6,0,0,0,0],[0,0,0.6,0,0,0],[0,0,0,0.6,0,0],[0,0,0,0,0.6,0],[0,0,0,0,0,0.6]]
+  };
+
+  // Helpers
+  const clamp = (v,min,max)=>Math.min(max, Math.max(min,v));
+  const dot = (a,b)=>a.reduce((s,_,i)=>s+a[i]*b[i],0);
+  const softmax = (arr,temp=1)=>{
+    const m=Math.max(...arr);
+    const exps=arr.map(x=>Math.exp((x-m)/temp));
+    const s=exps.reduce((a,b)=>a+b,0)||1;
+    return exps.map(x=>x/s);
+  };
+  const matVec=(M,v)=>{
+    const out=new Array(M.length).fill(0);
+    for(let i=0;i<M.length;i++){
+      let s=0; for(let j=0;j<M[i].length;j++) s+=M[i][j]*v[j];
+      out[i]=s;
+    }
+    return out;
+  };
+  const norm = v => Math.hypot(...v);
+
+  function spawnEnemy() {
+    const e = document.createElement('div');
+    e.className = 'enemy';
+    const size = 18 + Math.random()*10;
+    e.style.width = `${size}px`;
+    e.style.height = `${size}px`;
+    const x = Math.random() * (W - size);
+    e.style.left = `${x}px`;
+    e.style.top = `-30px`;
+    e.dataset.vy = (1.4 + Math.random()*1.8).toFixed(2);
+    world.appendChild(e);
+    enemies.push(e);
+  }
+
+  function resetMem() {
+    mem = Array.from({length: memSlots}, () => Array(memDim).fill(0));
+    memUse = Array(memSlots).fill(0);
+    prevMemW = Array(memSlots).fill(1/memSlots);
+  }
+
+  function resetAll() {
+    enemies.forEach(e=>e.remove());
+    enemies=[];
+    agentA.x = W/2 - pw/2; agentA.y = H - 80; agentA.alive=true; agentA.t=0;
+    agentB.x = W/2 - pw/2; agentB.y = H - 80; agentB.alive=true; agentB.t=0;
+    planCountdownA=0; planCountdownB=0;
+    plannedMoveA={vx:0,vy:0};
+    plannedMoveB={vx:0,vy:0};
+    setPos();
+    resetMem();
+    timeEl.textContent='0.0';
+    timeAEl.textContent='0.0';
+    timeBEl.textContent='0.0';
+    lastSpawn = performance.now();
+  }
+
+  function setPos() {
+    playerA.style.transform = `translate(${agentA.x}px, ${agentA.y}px)`;
+    playerB.style.transform = `translate(${agentB.x}px, ${agentB.y}px)`;
+  }
+
+  function collide(ax, ay, aw, ah, bx, by, bw, bh) {
+    return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+  }
+
+  function memRead(stateVec) {
+    const q = matVec(mats.WmQ, stateVec);
+    const keys = mem.map(row => matVec(mats.WmK, row));
+    const scores = keys.map(k => dot(q,k) / Math.sqrt(memDim));
+    let w = softmax(scores, 1/params.attnTemp);
+    const beta = memP.memShiftBeta;
+    w = w.map((wi,i)=> (wi*beta + prevMemW[i])/(beta+1));
+    const sumW = w.reduce((s,x)=>s+x,0)||1;
+    w = w.map(x=>x/sumW);
+    prevMemW = w;
+    const r = new Array(memDim).fill(0);
+    for (let i=0;i<memSlots;i++) {
+      for (let d=0; d<memDim; d++) r[d] += w[i]*mem[i][d];
+    }
+    return {read:r, weights:w};
+  }
+
+  function memWrite(writeVec, wAttn) {
+    const erase = memP.memGain * 0.5;
+    for (let i=0;i<memSlots;i++) {
+      const w = wAttn[i]*memP.memWrite;
+      for (let d=0; d<memDim; d++) {
+        mem[i][d] = mem[i][d]*(1 - w*erase) + w*writeVec[d];
+      }
+      memUse[i] = clamp(memUse[i] + w*0.3, 0, 1);
+    }
+    memUse = memUse.map(u=>u*0.995);
+  }
+
+  // Attention display
+  function renderAttnBars(el, attnVis) {
+    el.innerHTML = '';
+    const top = [...attnVis].sort((a,b)=>b.weight-a.weight).slice(0,4);
+    top.forEach((a,i)=>{
+      const row=document.createElement('div');
+      row.style.display='grid';
+      row.style.gridTemplateColumns='24px 1fr 36px';
+      row.style.gap='6px';
+      row.style.alignItems='center';
+      const name=document.createElement('div'); name.textContent=`E${i}`;
+      const bar=document.createElement('div'); bar.className='bar';
+      const fill=document.createElement('div'); fill.className='bar-fill'; fill.style.width=`${(a.weight*100).toFixed(1)}%`;
+      bar.appendChild(fill);
+      const val=document.createElement('div'); val.style.textAlign='right'; val.textContent=a.weight.toFixed(2);
+      row.appendChild(name); row.appendChild(bar); row.appendChild(val);
+      el.appendChild(row);
+    });
+  }
+  function renderMemUsage() {
+    memBarsEl.innerHTML='';
+    memUse.forEach((u,i)=>{
+      const div=document.createElement('div'); div.className='mem';
+      const fill=document.createElement('div'); fill.className='mem-fill';
+      fill.style.height=`${(Math.max(0,Math.min(1,u))*100).toFixed(1)}%`;
+      const lbl=document.createElement('div'); lbl.className='mem-label'; lbl.textContent=`s${i}`;
+      div.appendChild(fill); div.appendChild(lbl);
+      memBarsEl.appendChild(div);
+    });
+  }
+  function renderMemRead(vec) {
+    memReadEl.innerHTML='';
+    vec.forEach((v,i)=>{
+      const span=document.createElement('span'); span.className='chip'; span.textContent=`m${i}: ${v.toFixed(2)}`;
+      memReadEl.appendChild(span);
+    });
+  }
+
+  // Simulate enemies forward for planning
+  function simulateEnemies(origEnemies, steps) {
+    // shallow copy positions
+    return origEnemies.map(e=>{
+      return {
+        x: parseFloat(e.style.left),
+        y: parseFloat(e.style.top),
+        w: e.offsetWidth,
+        h: e.offsetHeight,
+        vy: parseFloat(e.dataset.vy)
+      };
+    }).map(en=>({...en, yFuture: en.y + en.vy*steps*enemySimStep}));
+  }
+
+  function scorePlan(agent, vx, vy, steps) {
+    let ax = agent.x, ay = agent.y;
+    let minDist = 9999;
+    let deathStep = null;
+    for (let s=0; s<steps; s++) {
+      ax = clamp(ax + vx, 0, W-pw);
+      ay = clamp(ay + vy, 0, H-ph);
+      const simE = simulateEnemies(enemies, s);
+      for (const e of simE) {
+        const ey = e.y + e.vy*s*0; // already applied in yFuture
+        if (collide(ax, ay, pw, ph, e.x, e.y + e.vy*s*enemySimStep, e.w, e.h)) {
+          deathStep = s; break;
+        }
+        const dx = (ax+pw/2) - (e.x+e.w/2);
+        const dy = (ay+ph/2) - (e.y+e.h/2);
+        const d = Math.hypot(dx,dy);
+        if (d < minDist) minDist = d;
+      }
+      if (deathStep !== null) break;
+    }
+    return {minDist, deathStep};
+  }
+
+  // Planner A (heuristic) blockwise
+  function planA() {
+    const dirs = [];
+    const speed = aiSpeed;
+    const base = [
+      [0,0],[1,0],[-1,0],[0,1],[0,-1],
+      [0.7,0.7],[-0.7,0.7],[0.7,-0.7],[-0.7,-0.7]
+    ];
+    for (const d of base) {
+      const n = Math.hypot(d[0],d[1])||1;
+      dirs.push({vx: d[0]/n*speed, vy: d[1]/n*speed});
+    }
+    let bestScore = -1e9, bestMove = {vx:0,vy:0};
+    let bestAttn = [];
+    // compute attention for display from closest enemies
+    const attnScores = [];
+    const feats = [];
+    const pcx = agentA.x + pw/2, pcy = agentA.y + ph/2;
+    for (const e of enemies) {
+      const ex=parseFloat(e.style.left);
+      const ey=parseFloat(e.style.top);
+      const ew=e.offsetWidth;
+      const vyE=parseFloat(e.dataset.vy);
+      const ecx=ex+ew/2; const ecy=ey+ew/2;
+      const dx=ecx-pcx; const dy=ecy-pcy;
+      const dist2=dx*dx+dy*dy+1e-3;
+      let score = -params.distScale*dist2 + (dy<0 ? params.aboveBonus : -params.belowPenalty*Math.min(1,dy/H*1.2));
+      attnScores.push(score);
+      feats.push({dx,dy,dist2});
+    }
+    const attn = softmax(attnScores || [0], 1);
+    bestAttn = attn.map((w,i)=>({weight:w, dy: feats[i]?.dy||0, dist2: feats[i]?.dist2||0}));
+    dirs.forEach(d=>{
+      const sc = scorePlan(agentA, d.vx, d.vy, PLAN_HORIZON);
+      // reward survival (no death) and distance
+      let score = (sc.deathStep===null ? 1000 : -sc.deathStep*5) + sc.minDist*2;
+      // center/upper bias
+      score -= Math.abs((agentA.x - W/2))*0.02;
+      score -= Math.max(0, agentA.y - H*0.6)*0.03;
+      if (score > bestScore) { bestScore=score; bestMove=d; }
+    });
+    plannedMoveA = bestMove;
+    planCountdownA = PLAN_STEP;
+    renderAttnBars(attnAEl, bestAttn);
+  }
+
+  // Planner B (with memory influence) blockwise
+  function planB(t) {
+    const dirs = [];
+    const speed = aiSpeed;
+    const base = [
+      [0,0],[1,0],[-1,0],[0,1],[0,-1],
+      [0.7,0.7],[-0.7,0.7],[0.7,-0.7],[-0.7,-0.7]
+    ];
+    for (const d of base) {
+      const n = Math.hypot(d[0],d[1])||1;
+      dirs.push({vx: d[0]/n*speed, vy: d[1]/n*speed});
+    }
+    const pcx = agentB.x + pw/2;
+    const pcy = agentB.y + ph/2;
+    const nx = (pcx/W)*2 -1;
+    const ny = (pcy/H)*2 -1;
+    const stateVec=[nx, ny, mem[0][0]||0, mem[1][1]||0, mem[2][2]||0, mem[3][3]||0];
+    const memR = memRead(stateVec);
+    const memReadVec = memR.read;
+
+    const attnScores = [];
+    const feats = [];
+    for (const e of enemies) {
+      const ex=parseFloat(e.style.left);
+      const ey=parseFloat(e.style.top);
+      const ew=e.offsetWidth;
+      const vyE=parseFloat(e.dataset.vy);
+      const ecx=ex+ew/2; const ecy=ey+ew/2;
+      const dx=ecx-pcx; const dy=ecy-pcy;
+      const dist2=dx*dx+dy*dy+1e-3;
+      const dxn=dx/W; const dyn=dy/H; const vyn=vyE/4; const szn=ew/30;
+      const k=matVec(mats.Wk,[dxn,dyn,vyn,szn]);
+      const q=matVec(mats.Wq, stateVec);
+      let score = (dot(q,k)/Math.sqrt(q.length))*params.attnTemp - params.distScale*dist2;
+      if (dy<0) score+=params.aboveBonus; else score-=params.belowPenalty*Math.min(1,dy/H*1.2);
+      attnScores.push(score);
+      feats.push({dx,dy,dist2,dxn,dyn,vyn,szn});
+    }
+    const attn = softmax(attnScores || [0], 1);
+    const attnVis = attn.map((w,i)=>({weight:w, dy: feats[i]?.dy||0, dist2: feats[i]?.dist2||0}));
+
+    let bestScore=-1e9, bestMove={vx:0,vy:0};
+    dirs.forEach(d=>{
+      // memory influence bias
+      const vxM = d.vx + (memReadVec[0]||0)*0.25;
+      const vyM = d.vy + (memReadVec[1]||0)*0.25;
+      const n = Math.hypot(vxM,vyM)||1;
+      const mv = {vx: vxM/n*aiSpeed, vy: vyM/n*aiSpeed};
+      const sc = scorePlan(agentB, mv.vx, mv.vy, PLAN_HORIZON);
+      let score = (sc.deathStep===null ? 1000 : -sc.deathStep*5) + sc.minDist*2;
+      score -= Math.abs((agentB.x - W/2))*0.02;
+      score -= Math.max(0, agentB.y - H*0.6)*0.03;
+      if (score > bestScore){ bestScore=score; bestMove=mv; }
+    });
+
+    // write memory (threat summary)
+    const topAttn=Math.max(...attn);
+    const attnVar=attn.reduce((s,a)=>s+a*a,0)-topAttn*topAttn;
+    const mWrite=[nx, ny, topAttn, attnVar, Math.tanh(norm(memReadVec)), (pcy/H)];
+    memWrite(mWrite, memR.weights);
+
+    plannedMoveB = bestMove;
+    planCountdownB = PLAN_STEP;
+    renderAttnBars(attnBEl, attnVis);
+    renderMemRead(memReadVec);
+    renderMemUsage();
+  }
+
+  function loop(t) {
+    if (!running) return;
+    if (t - lastSpawn > 550) { spawnEnemy(); lastSpawn = t; }
+
+    // move enemies & collisions
+    for (let i=enemies.length-1;i>=0;i--){
+      const e=enemies[i];
+      const vyE=parseFloat(e.dataset.vy);
+      const ny=(parseFloat(e.style.top)+vyE);
+      e.style.top=`${ny}px`;
+      if (ny > H+40){ e.remove(); enemies.splice(i,1); continue; }
+      const ex=parseFloat(e.style.left), ew=e.offsetWidth, eh=e.offsetHeight;
+      if (agentA.alive && collide(agentA.x,agentA.y,pw,ph,ex,ny,ew,eh)) agentA.alive=false;
+      if (agentB.alive && collide(agentB.x,agentB.y,pw,ph,ex,ny,ew,eh)) agentB.alive=false;
+    }
+
+    // plan blockwise
+    if (agentA.alive) {
+      if (planCountdownA <= 0) planA();
+      planCountdownA--;
+      agentA.x = clamp(agentA.x + plannedMoveA.vx, 0, W-pw);
+      agentA.y = clamp(agentA.y + plannedMoveA.vy, 0, H-ph);
+    }
+    if (agentB.alive) {
+      if (planCountdownB <= 0) planB(t);
+      planCountdownB--;
+      agentB.x = clamp(agentB.x + plannedMoveB.vx, 0, W-pw);
+      agentB.y = clamp(agentB.y + plannedMoveB.vy, 0, H-ph);
+    }
+
+    setPos();
+
+    const elapsed=(t-startTime)/1000;
+    if (agentA.alive) agentA.t=elapsed;
+    if (agentB.alive) agentB.t=elapsed;
+    timeEl.textContent=elapsed.toFixed(1);
+    timeAEl.textContent=agentA.t.toFixed(1);
+    timeBEl.textContent=agentB.t.toFixed(1);
+
+    if (!agentA.alive && !agentB.alive) {
+      if (agentA.t > bestA) { bestA=agentA.t; bestAEl.textContent=bestA.toFixed(1); }
+      if (agentB.t > bestB) { bestB=agentB.t; bestBEl.textContent=bestB.toFixed(1); }
+      setTimeout(()=>start(), 500);
+      running=false;
+      return;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  function start() {
+    resetAll();
+    running=true;
+    startTime=performance.now();
+    requestAnimationFrame(loop);
+  }
+
+  restartBtn.onclick = start;
+  resetStatsBtn.onclick = ()=>{
+    bestA=0; bestB=0;
+    bestAEl.textContent='0.0';
+    bestBEl.textContent='0.0';
+  };
+
+  // Init
+  renderAttnBars(attnAEl, []);
+  renderAttnBars(attnBEl, []);
+  renderMemUsage();
+  renderMemRead(new Array(memDim).fill(0));
+  start();
+})();
+</script>
+
+
+</body></html>

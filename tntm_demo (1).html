@@ -1,0 +1,1280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TNTM: Transformer Neural Turing Machine - Interactive Demo</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 50%, #0f0f1a 100%);
+            color: #e0e0e0;
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            text-align: center;
+            font-size: 2rem;
+            margin-bottom: 5px;
+            background: linear-gradient(90deg, #00ffaa, #00aaff, #aa66ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: 2px;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #666;
+            font-size: 0.85rem;
+            margin-bottom: 25px;
+        }
+        
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        @media (max-width: 900px) {
+            .main-grid { grid-template-columns: 1fr; }
+        }
+        
+        .panel {
+            background: rgba(20, 20, 35, 0.8);
+            border: 1px solid #2a2a4a;
+            border-radius: 12px;
+            padding: 15px;
+        }
+        
+        .panel-title {
+            font-size: 0.9rem;
+            color: #00ffaa;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .panel-title .icon { font-size: 1.1rem; }
+        
+        /* Memory Bank Visualization */
+        .memory-grid {
+            display: grid;
+            grid-template-columns: repeat(16, 1fr);
+            gap: 3px;
+            margin-bottom: 15px;
+        }
+        
+        .memory-slot {
+            aspect-ratio: 1;
+            background: #1a1a2a;
+            border-radius: 3px;
+            position: relative;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+        
+        .memory-slot:hover {
+            transform: scale(1.2);
+            z-index: 10;
+        }
+        
+        .memory-slot .content-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(0deg, #00aaff, #00ffaa);
+            border-radius: 0 0 3px 3px;
+            transition: height 0.3s;
+        }
+        
+        .memory-slot .attention-glow {
+            position: absolute;
+            inset: -2px;
+            border-radius: 5px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+        
+        .memory-slot.read-focus .attention-glow {
+            background: #00ffaa;
+            opacity: 0.6;
+            box-shadow: 0 0 10px #00ffaa;
+        }
+        
+        .memory-slot.write-focus .attention-glow {
+            background: #ff6666;
+            opacity: 0.6;
+            box-shadow: 0 0 10px #ff6666;
+        }
+        
+        /* Attention Weights Bar */
+        .attention-bar {
+            display: flex;
+            height: 30px;
+            gap: 1px;
+            margin-bottom: 10px;
+            background: #0a0a15;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        
+        .attention-weight {
+            flex: 1;
+            background: linear-gradient(0deg, #00ffaa00, #00ffaa);
+            transition: all 0.3s;
+        }
+        
+        /* Controls */
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        button {
+            background: linear-gradient(145deg, #2a2a4e, #1a1a3e);
+            border: 1px solid #3a3a5e;
+            color: #aaa;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+        
+        button:hover {
+            border-color: #00ffaa;
+            color: #00ffaa;
+            transform: translateY(-1px);
+        }
+        
+        button.active {
+            background: rgba(0, 255, 170, 0.2);
+            border-color: #00ffaa;
+            color: #00ffaa;
+        }
+        
+        button.write-btn:hover, button.write-btn.active {
+            border-color: #ff6666;
+            color: #ff6666;
+        }
+        
+        /* Sliders */
+        .slider-group {
+            margin-bottom: 12px;
+        }
+        
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: #888;
+            margin-bottom: 4px;
+        }
+        
+        .slider-value {
+            color: #00ffaa;
+            font-weight: bold;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            background: #1a1a2a;
+            border-radius: 3px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            background: #00ffaa;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        
+        /* Query Input */
+        .query-section {
+            margin-bottom: 15px;
+        }
+        
+        .query-input {
+            width: 100%;
+            background: #0a0a15;
+            border: 1px solid #2a2a4a;
+            border-radius: 6px;
+            padding: 10px;
+            color: #fff;
+            font-family: inherit;
+            font-size: 0.9rem;
+            margin-bottom: 8px;
+        }
+        
+        .query-input:focus {
+            outline: none;
+            border-color: #00ffaa;
+        }
+        
+        /* Shift Kernel Visualization */
+        .shift-kernel {
+            display: flex;
+            justify-content: center;
+            gap: 5px;
+            margin: 15px 0;
+        }
+        
+        .shift-bar {
+            width: 30px;
+            height: 60px;
+            background: #1a1a2a;
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .shift-bar .fill {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(0deg, #aa66ff, #ff66aa);
+            transition: height 0.3s;
+        }
+        
+        .shift-bar .label {
+            position: absolute;
+            bottom: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.65rem;
+            color: #666;
+        }
+        
+        /* Operation Log */
+        .log {
+            background: #0a0a12;
+            border-radius: 6px;
+            padding: 10px;
+            height: 150px;
+            overflow-y: auto;
+            font-size: 0.75rem;
+            line-height: 1.6;
+        }
+        
+        .log-entry {
+            padding: 3px 0;
+            border-bottom: 1px solid #1a1a2a;
+        }
+        
+        .log-entry.read { color: #00ffaa; }
+        .log-entry.write { color: #ff6666; }
+        .log-entry.shift { color: #aa66ff; }
+        .log-entry.info { color: #888; }
+        
+        /* Equations Panel */
+        .equation {
+            background: #0a0a15;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 10px;
+            font-size: 0.8rem;
+            line-height: 1.8;
+        }
+        
+        .equation .label {
+            color: #00aaff;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .equation code {
+            color: #ffaa00;
+            background: rgba(255, 170, 0, 0.1);
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+        
+        /* Stats */
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .stat {
+            background: #0a0a15;
+            border-radius: 6px;
+            padding: 10px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 1.4rem;
+            color: #00ffaa;
+            font-weight: bold;
+        }
+        
+        .stat-label {
+            font-size: 0.65rem;
+            color: #666;
+            margin-top: 3px;
+        }
+        
+        /* Task Demo Section */
+        .task-section {
+            grid-column: 1 / -1;
+        }
+        
+        .task-display {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            align-items: center;
+            padding: 20px;
+            background: #0a0a15;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        
+        .sequence-box {
+            text-align: center;
+        }
+        
+        .sequence-box .label {
+            font-size: 0.7rem;
+            color: #666;
+            margin-bottom: 8px;
+        }
+        
+        .sequence {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .token {
+            width: 35px;
+            height: 35px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #2a2a4a;
+            border-radius: 5px;
+            font-size: 1rem;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        
+        .token.active {
+            background: #00ffaa;
+            color: #000;
+            transform: scale(1.1);
+        }
+        
+        .token.correct { background: #00aa77; color: #fff; }
+        .token.wrong { background: #aa3333; color: #fff; }
+        
+        .arrow {
+            font-size: 2rem;
+            color: #444;
+        }
+        
+        /* Tooltip */
+        .tooltip {
+            position: fixed;
+            background: #1a1a2e;
+            border: 1px solid #3a3a5e;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            pointer-events: none;
+            z-index: 100;
+            max-width: 200px;
+            display: none;
+        }
+        
+        .tooltip.visible { display: block; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧠 TNTM: Transformer Neural Turing Machine</h1>
+        <p class="subtitle">Interactive demonstration of content-based and location-based memory addressing</p>
+        
+        <div class="main-grid">
+            <!-- Memory Bank Panel -->
+            <div class="panel">
+                <div class="panel-title">
+                    <span class="icon">💾</span>
+                    External Memory Bank (64 slots × 8 dimensions)
+                </div>
+                
+                <div class="memory-grid" id="memory-grid"></div>
+                
+                <div style="display: flex; justify-content: center; gap: 20px; margin-bottom: 15px; font-size: 0.7rem;">
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        <div style="width: 12px; height: 12px; background: linear-gradient(0deg, #00aaff, #00ffaa); border-radius: 2px;"></div>
+                        <span style="color: #888;">Slots 0-31: Concepts</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        <div style="width: 12px; height: 12px; background: linear-gradient(0deg, #aa66ff, #ff66aa); border-radius: 2px;"></div>
+                        <span style="color: #888;">Slots 32-63: Task Memory</span>
+                    </div>
+                </div>
+                
+                <div class="panel-title" style="margin-top: 10px;">
+                    <span class="icon">👁️</span>
+                    Read Attention Weights
+                </div>
+                <div class="attention-bar" id="read-attention"></div>
+                
+                <div class="panel-title">
+                    <span class="icon">✏️</span>
+                    Write Attention Weights
+                </div>
+                <div class="attention-bar" id="write-attention"></div>
+                
+                <div class="stats">
+                    <div class="stat">
+                        <div class="stat-value" id="stat-reads">0</div>
+                        <div class="stat-label">READ OPS</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="stat-writes">0</div>
+                        <div class="stat-label">WRITE OPS</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="stat-usage">0%</div>
+                        <div class="stat-label">MEMORY USED</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Controls Panel -->
+            <div class="panel">
+                <div class="panel-title">
+                    <span class="icon">🎛️</span>
+                    Addressing Controls
+                </div>
+                
+                <div class="controls">
+                    <button onclick="performRead()" class="active">📖 Read</button>
+                    <button onclick="performWrite()" class="write-btn">✏️ Write</button>
+                    <button onclick="shiftLeft()">⬅️ Shift Left</button>
+                    <button onclick="shiftRight()">➡️ Shift Right</button>
+                    <button onclick="resetMemory()">🗑️ Reset</button>
+                </div>
+                
+                <div class="query-section">
+                    <input type="text" class="query-input" id="query-input" 
+                           placeholder="Enter query vector (e.g., 'cat', 'dog', '42')..."
+                           onkeypress="if(event.key==='Enter')performRead()">
+                </div>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Sharpness (β) - Content Addressing</span>
+                        <span class="slider-value" id="beta-value">5.0</span>
+                    </div>
+                    <input type="range" id="beta-slider" min="0.1" max="20" step="0.1" value="5"
+                           oninput="updateBeta()">
+                </div>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Interpolation Gate (g) - Content vs Location</span>
+                        <span class="slider-value" id="gate-value">0.8</span>
+                    </div>
+                    <input type="range" id="gate-slider" min="0" max="1" step="0.01" value="0.8"
+                           oninput="updateGate()">
+                </div>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Sharpen (γ) - Final Focus</span>
+                        <span class="slider-value" id="gamma-value">1.5</span>
+                    </div>
+                    <input type="range" id="gamma-slider" min="1" max="10" step="0.1" value="1.5"
+                           oninput="updateGamma()">
+                </div>
+                
+                <div class="panel-title" style="margin-top: 15px;">
+                    <span class="icon">↔️</span>
+                    Shift Kernel (Circular Convolution)
+                </div>
+                <div class="shift-kernel" id="shift-kernel"></div>
+                
+                <div class="panel-title" style="margin-top: 15px;">
+                    <span class="icon">📜</span>
+                    Operation Log
+                </div>
+                <div class="log" id="log"></div>
+            </div>
+            
+            <!-- Equations Panel -->
+            <div class="panel">
+                <div class="panel-title">
+                    <span class="icon">📐</span>
+                    Core Equations
+                </div>
+                
+                <div class="equation">
+                    <div class="label">Content Addressing</div>
+                    <code>w_c = softmax(β · cosine(query, memory))</code>
+                    <div style="color:#666; margin-top:5px; font-size:0.7rem;">
+                        Find memory slots by similarity. β controls sharpness.
+                    </div>
+                </div>
+                
+                <div class="equation">
+                    <div class="label">Location Interpolation</div>
+                    <code>w_g = g · w_c + (1-g) · w_prev</code>
+                    <div style="color:#666; margin-top:5px; font-size:0.7rem;">
+                        Blend content match with previous location. g=1 means pure content.
+                    </div>
+                </div>
+                
+                <div class="equation">
+                    <div class="label">Circular Convolution (Shift)</div>
+                    <code>w_s = w_g ⊛ shift_kernel</code>
+                    <div style="color:#666; margin-top:5px; font-size:0.7rem;">
+                        Shift attention left/right. Enables sequential traversal.
+                    </div>
+                </div>
+                
+                <div class="equation">
+                    <div class="label">Sharpening</div>
+                    <code>w_final = normalize(w_s ^ γ)</code>
+                    <div style="color:#666; margin-top:5px; font-size:0.7rem;">
+                        Prevent attention diffusion. γ>1 sharpens focus.
+                    </div>
+                </div>
+                
+                <div class="equation">
+                    <div class="label">Write Operation</div>
+                    <code>M' = M ⊙ (1 - w⊗e) + w⊗a</code>
+                    <div style="color:#666; margin-top:5px; font-size:0.7rem;">
+                        Erase (e), then add (a). Outer products with weights.
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Task Demo Panel -->
+            <div class="panel">
+                <div class="panel-title">
+                    <span class="icon">🎮</span>
+                    Demo: Copy Task (Watch TNTM Learn!)
+                </div>
+                
+                <div class="task-display">
+                    <div class="sequence-box">
+                        <div class="label">INPUT SEQUENCE</div>
+                        <div class="sequence" id="input-sequence"></div>
+                    </div>
+                    <div class="arrow">→</div>
+                    <div class="sequence-box">
+                        <div class="label">OUTPUT (TNTM)</div>
+                        <div class="sequence" id="output-sequence"></div>
+                    </div>
+                </div>
+                
+                <div class="controls" style="justify-content: center;">
+                    <button onclick="runCopyTask()">▶️ Run Copy Task</button>
+                    <button onclick="runReverseTask()">🔄 Run Reverse Task</button>
+                    <button onclick="stepTask()">⏭️ Step</button>
+                    <button onclick="autoRun()">🔁 Auto Run</button>
+                </div>
+                
+                <div style="text-align: center; margin-top: 10px; color: #666; font-size: 0.75rem;">
+                    Watch how TNTM writes input to memory, then reads it back in order (copy) or reverse order.
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="tooltip" id="tooltip"></div>
+
+<script>
+// =============================================
+// TNTM IMPLEMENTATION IN JAVASCRIPT
+// =============================================
+
+const N_SLOTS = 64;
+const D_MEMORY = 8;
+const SHIFT_RANGE = 3;
+
+// State
+let memory = [];
+let usage = [];
+let readWeights = [];
+let writeWeights = [];
+let prevReadWeights = [];
+let prevWriteWeights = [];
+let shiftKernel = [0, 0, 0, 1, 0, 0, 0]; // Center = no shift
+
+let beta = 5.0;
+let gate = 0.8;
+let gamma = 1.5;
+
+let stats = { reads: 0, writes: 0 };
+let logEntries = [];
+
+// Task state
+let taskInput = [];
+let taskOutput = [];
+let taskStep = 0;
+let taskMode = 'copy';
+let taskSlots = []; // Which slots were allocated for current task
+let autoRunInterval = null;
+
+// =============================================
+// INITIALIZATION
+// =============================================
+
+function initMemory() {
+    memory = [];
+    usage = [];
+    for (let i = 0; i < N_SLOTS; i++) {
+        // Initialize with small random values
+        const slot = [];
+        for (let j = 0; j < D_MEMORY; j++) {
+            slot.push((Math.random() - 0.5) * 0.1);
+        }
+        memory.push(slot);
+        usage.push(0);
+    }
+    
+    // Initialize weights uniformly
+    readWeights = new Array(N_SLOTS).fill(1 / N_SLOTS);
+    writeWeights = new Array(N_SLOTS).fill(1 / N_SLOTS);
+    prevReadWeights = [...readWeights];
+    prevWriteWeights = [...writeWeights];
+    
+    // Pre-populate FIRST HALF (slots 0-31) with "concepts"
+    // These represent long-term knowledge that persists
+    const concepts = [
+        'cat', 'dog', 'bird', 'fish', 
+        'tree', 'car', 'house', 'sun',
+        'moon', 'star', 'water', 'fire',
+        'earth', 'wind', 'love', 'hate'
+    ];
+    concepts.forEach((concept, i) => {
+        const slot = i * 2; // Spread across slots 0, 2, 4, 6, ...
+        memory[slot] = stringToVector(concept);
+        usage[slot] = 0.8; // Mark as used
+    });
+}
+
+function stringToVector(str) {
+    // Simple hash-based embedding
+    const vec = new Array(D_MEMORY).fill(0);
+    for (let i = 0; i < str.length; i++) {
+        const code = str.charCodeAt(i);
+        for (let j = 0; j < D_MEMORY; j++) {
+            vec[j] += Math.sin(code * (j + 1) * 0.1) * 0.5;
+        }
+    }
+    // Normalize
+    const norm = Math.sqrt(vec.reduce((a, b) => a + b * b, 0)) || 1;
+    return vec.map(v => v / norm);
+}
+
+function numberToVector(num) {
+    const vec = new Array(D_MEMORY).fill(0);
+    for (let j = 0; j < D_MEMORY; j++) {
+        vec[j] = Math.sin(num * (j + 1) * 0.3);
+    }
+    const norm = Math.sqrt(vec.reduce((a, b) => a + b * b, 0)) || 1;
+    return vec.map(v => v / norm);
+}
+
+// =============================================
+// CORE TNTM OPERATIONS
+// =============================================
+
+function cosineSimilarity(a, b) {
+    let dot = 0, normA = 0, normB = 0;
+    for (let i = 0; i < a.length; i++) {
+        dot += a[i] * b[i];
+        normA += a[i] * a[i];
+        normB += b[i] * b[i];
+    }
+    return dot / (Math.sqrt(normA) * Math.sqrt(normB) + 1e-8);
+}
+
+function softmax(arr, temperature = 1) {
+    const max = Math.max(...arr);
+    const exps = arr.map(x => Math.exp((x - max) * temperature));
+    const sum = exps.reduce((a, b) => a + b, 0);
+    return exps.map(x => x / sum);
+}
+
+function contentAddressing(query, strength) {
+    const similarities = memory.map(slot => cosineSimilarity(query, slot));
+    return softmax(similarities, strength);
+}
+
+function circularConvolve(weights, kernel) {
+    const n = weights.length;
+    const k = kernel.length;
+    const halfK = Math.floor(k / 2);
+    const result = new Array(n).fill(0);
+    
+    for (let i = 0; i < n; i++) {
+        for (let j = 0; j < k; j++) {
+            const idx = (i - halfK + j + n) % n;
+            result[i] += weights[idx] * kernel[j];
+        }
+    }
+    return result;
+}
+
+function sharpen(weights, gamma) {
+    const sharpened = weights.map(w => Math.pow(w, gamma));
+    const sum = sharpened.reduce((a, b) => a + b, 0);
+    return sharpened.map(w => w / sum);
+}
+
+function interpolate(contentWeights, prevWeights, g) {
+    return contentWeights.map((c, i) => g * c + (1 - g) * prevWeights[i]);
+}
+
+// =============================================
+// READ / WRITE OPERATIONS
+// =============================================
+
+function performRead() {
+    const queryStr = document.getElementById('query-input').value || 'random';
+    const query = queryStr === 'random' 
+        ? memory[Math.floor(Math.random() * N_SLOTS)]
+        : (isNaN(queryStr) ? stringToVector(queryStr) : numberToVector(parseFloat(queryStr)));
+    
+    // Step 1: Content addressing
+    const contentW = contentAddressing(query, beta);
+    
+    // Step 2: Interpolate with previous
+    const gatedW = interpolate(contentW, prevReadWeights, gate);
+    
+    // Step 3: Shift
+    const shiftedW = circularConvolve(gatedW, shiftKernel);
+    
+    // Step 4: Sharpen
+    readWeights = sharpen(shiftedW, gamma);
+    
+    // Update previous
+    prevReadWeights = [...readWeights];
+    
+    // Read value (weighted sum)
+    const readValue = new Array(D_MEMORY).fill(0);
+    for (let i = 0; i < N_SLOTS; i++) {
+        for (let j = 0; j < D_MEMORY; j++) {
+            readValue[j] += readWeights[i] * memory[i][j];
+        }
+    }
+    
+    stats.reads++;
+    addLog(`READ query="${queryStr}" → slot ${argmax(readWeights)} (w=${readWeights[argmax(readWeights)].toFixed(3)})`, 'read');
+    
+    updateUI();
+    return readValue;
+}
+
+function performWrite() {
+    const queryStr = document.getElementById('query-input').value || 'new_data';
+    const writeVector = isNaN(queryStr) ? stringToVector(queryStr) : numberToVector(parseFloat(queryStr));
+    
+    // Find where to write (content addressing to find similar or use allocation)
+    const contentW = contentAddressing(writeVector, beta);
+    
+    // Also consider allocation (write to least-used slots)
+    const allocW = softmax(usage.map(u => 1 - u), 5);
+    
+    // Blend: high gate = content addressing, low gate = allocation
+    const blendedW = contentW.map((c, i) => gate * c + (1 - gate) * allocW[i]);
+    
+    // Interpolate with previous
+    const gatedW = interpolate(blendedW, prevWriteWeights, 0.5);
+    
+    // Shift
+    const shiftedW = circularConvolve(gatedW, shiftKernel);
+    
+    // Sharpen
+    writeWeights = sharpen(shiftedW, gamma);
+    
+    // Write operation: erase then add
+    const targetSlot = argmax(writeWeights);
+    const eraseGate = 0.8; // How much to erase
+    
+    for (let i = 0; i < N_SLOTS; i++) {
+        const w = writeWeights[i];
+        for (let j = 0; j < D_MEMORY; j++) {
+            // M' = M * (1 - w*e) + w*a
+            memory[i][j] = memory[i][j] * (1 - w * eraseGate) + w * writeVector[j];
+        }
+        usage[i] = Math.min(1, usage[i] + w);
+    }
+    
+    prevWriteWeights = [...writeWeights];
+    
+    stats.writes++;
+    addLog(`WRITE "${queryStr}" → slot ${targetSlot} (w=${writeWeights[targetSlot].toFixed(3)})`, 'write');
+    
+    updateUI();
+}
+
+function shiftLeft() {
+    shiftKernel = [0, 0, 0.1, 0.2, 0.4, 0.2, 0.1];
+    
+    // Apply shift to current weights
+    readWeights = sharpen(circularConvolve(readWeights, shiftKernel), gamma);
+    prevReadWeights = [...readWeights];
+    
+    addLog(`SHIFT LEFT → focus moved to slot ${argmax(readWeights)}`, 'shift');
+    updateShiftKernelUI();
+    updateUI();
+}
+
+function shiftRight() {
+    shiftKernel = [0.1, 0.2, 0.4, 0.2, 0.1, 0, 0];
+    
+    readWeights = sharpen(circularConvolve(readWeights, shiftKernel), gamma);
+    prevReadWeights = [...readWeights];
+    
+    addLog(`SHIFT RIGHT → focus moved to slot ${argmax(readWeights)}`, 'shift');
+    updateShiftKernelUI();
+    updateUI();
+}
+
+function resetMemory() {
+    initMemory();
+    stats = { reads: 0, writes: 0 };
+    logEntries = [];
+    shiftKernel = [0, 0, 0, 1, 0, 0, 0];
+    taskOutput = [];
+    taskStep = 0;
+    taskSlots = [];
+    if (autoRunInterval) {
+        clearInterval(autoRunInterval);
+        autoRunInterval = null;
+    }
+    addLog('Memory reset to initial state', 'info');
+    addLog('Concepts in slots 0-31 | Task region: slots 32-63', 'info');
+    updateUI();
+}
+
+// =============================================
+// TASK DEMOS
+// =============================================
+
+// Task memory region (slots 32-63) to preserve concepts (slots 0-31)
+const TASK_REGION_START = 32;
+
+function findFreeSlot() {
+    // Allocation addressing: find least-used slot in task region
+    let minUsage = Infinity;
+    let bestSlot = TASK_REGION_START;
+    
+    for (let i = TASK_REGION_START; i < N_SLOTS; i++) {
+        if (usage[i] < minUsage) {
+            minUsage = usage[i];
+            bestSlot = i;
+        }
+    }
+    return bestSlot;
+}
+
+function runCopyTask() {
+    taskMode = 'copy';
+    taskInput = [1, 2, 3, 4, 5].map(() => Math.floor(Math.random() * 9) + 1);
+    taskOutput = [];
+    taskStep = 0;
+    taskSlots = [];
+    
+    // Clear task region only, preserve concepts
+    for (let i = TASK_REGION_START; i < N_SLOTS; i++) {
+        memory[i] = new Array(D_MEMORY).fill(0).map(() => (Math.random() - 0.5) * 0.1);
+        usage[i] = 0;
+    }
+    
+    addLog(`COPY TASK: Input = [${taskInput.join(', ')}]`, 'info');
+    addLog(`Using slots ${TASK_REGION_START}-${N_SLOTS-1} (concepts preserved in 0-${TASK_REGION_START-1})`, 'info');
+    updateTaskUI();
+    updateUI();
+}
+
+function runReverseTask() {
+    taskMode = 'reverse';
+    taskInput = [1, 2, 3, 4, 5].map(() => Math.floor(Math.random() * 9) + 1);
+    taskOutput = [];
+    taskStep = 0;
+    taskSlots = [];
+    
+    // Clear task region only
+    for (let i = TASK_REGION_START; i < N_SLOTS; i++) {
+        memory[i] = new Array(D_MEMORY).fill(0).map(() => (Math.random() - 0.5) * 0.1);
+        usage[i] = 0;
+    }
+    
+    addLog(`REVERSE TASK: Input = [${taskInput.join(', ')}]`, 'info');
+    addLog(`Using slots ${TASK_REGION_START}-${N_SLOTS-1} (concepts preserved in 0-${TASK_REGION_START-1})`, 'info');
+    updateTaskUI();
+    updateUI();
+}
+
+function stepTask() {
+    if (taskInput.length === 0) {
+        runCopyTask();
+        return;
+    }
+    
+    const writePhase = taskStep < taskInput.length;
+    
+    if (writePhase) {
+        // Writing phase: store each input using ALLOCATION ADDRESSING
+        const val = taskInput[taskStep];
+        const vec = numberToVector(val);
+        
+        // Find free slot via allocation addressing
+        const targetSlot = findFreeSlot();
+        taskSlots.push(targetSlot); // Remember where we wrote
+        
+        // Generate soft attention weights (sharp focus on allocated slot)
+        writeWeights = new Array(N_SLOTS).fill(0);
+        
+        // Show allocation addressing: softmax over (1 - usage)
+        for (let i = TASK_REGION_START; i < N_SLOTS; i++) {
+            writeWeights[i] = Math.exp((1 - usage[i]) * 10);
+        }
+        const sum = writeWeights.reduce((a, b) => a + b, 0);
+        writeWeights = writeWeights.map(w => w / sum);
+        
+        // Actually write to the best slot
+        for (let j = 0; j < D_MEMORY; j++) {
+            memory[targetSlot][j] = vec[j];
+        }
+        usage[targetSlot] = 1;
+        
+        // Sharpen for visualization
+        writeWeights = new Array(N_SLOTS).fill(0);
+        writeWeights[targetSlot] = 1;
+        
+        prevWriteWeights = [...writeWeights];
+        stats.writes++;
+        addLog(`WRITE ${val} → slot ${targetSlot} (allocated via usage)`, 'write');
+        
+    } else {
+        // Reading phase: retrieve from memory using LOCATION ADDRESSING
+        const readIdx = taskStep - taskInput.length;
+        let slotIdx;
+        
+        if (taskMode === 'copy') {
+            // Read in order: slot 0, 1, 2, 3, 4
+            slotIdx = readIdx;
+        } else {
+            // Read in reverse: slot 4, 3, 2, 1, 0
+            slotIdx = taskInput.length - 1 - readIdx;
+        }
+        
+        const targetSlot = taskSlots[slotIdx];
+        
+        // Focus on target slot (location-based addressing)
+        readWeights = new Array(N_SLOTS).fill(0);
+        readWeights[targetSlot] = 1;
+        
+        // Find closest number via content similarity
+        const readVec = memory[targetSlot];
+        let bestNum = 1;
+        let bestSim = -Infinity;
+        for (let n = 1; n <= 9; n++) {
+            const sim = cosineSimilarity(readVec, numberToVector(n));
+            if (sim > bestSim) {
+                bestSim = sim;
+                bestNum = n;
+            }
+        }
+        
+        taskOutput.push(bestNum);
+        prevReadWeights = [...readWeights];
+        stats.reads++;
+        addLog(`READ slot ${targetSlot} → ${bestNum} (location addressing, pos ${slotIdx})`, 'read');
+    }
+    
+    taskStep++;
+    updateTaskUI();
+    updateUI();
+    
+    // Check if done
+    if (taskOutput.length === taskInput.length) {
+        const expected = taskMode === 'copy' ? taskInput : [...taskInput].reverse();
+        const correct = taskOutput.every((v, i) => v === expected[i]);
+        addLog(`Task complete! ${correct ? '✅ SUCCESS' : '❌ FAILED'}`, 'info');
+        addLog(`Concepts still intact: try querying 'cat' or 'dog'`, 'info');
+        
+        if (autoRunInterval) {
+            clearInterval(autoRunInterval);
+            autoRunInterval = null;
+        }
+    }
+}
+
+function autoRun() {
+    if (autoRunInterval) {
+        clearInterval(autoRunInterval);
+        autoRunInterval = null;
+        return;
+    }
+    
+    if (taskInput.length === 0) {
+        runCopyTask();
+    }
+    
+    autoRunInterval = setInterval(() => {
+        if (taskOutput.length >= taskInput.length) {
+            clearInterval(autoRunInterval);
+            autoRunInterval = null;
+            return;
+        }
+        stepTask();
+    }, 500);
+}
+
+// =============================================
+// UI UPDATES
+// =============================================
+
+function updateUI() {
+    updateMemoryGrid();
+    updateAttentionBars();
+    updateStats();
+    updateLog();
+    updateShiftKernelUI();
+}
+
+function updateMemoryGrid() {
+    const grid = document.getElementById('memory-grid');
+    grid.innerHTML = '';
+    
+    for (let i = 0; i < N_SLOTS; i++) {
+        const slot = document.createElement('div');
+        slot.className = 'memory-slot';
+        
+        // Visual distinction: concept region (0-31) vs task region (32-63)
+        if (i < TASK_REGION_START) {
+            slot.style.borderBottom = '2px solid #00aaff33';
+        } else {
+            slot.style.borderBottom = '2px solid #aa66ff33';
+        }
+        
+        // Content magnitude
+        const magnitude = Math.sqrt(memory[i].reduce((a, b) => a + b * b, 0));
+        const height = Math.min(100, magnitude * 100);
+        
+        const contentBar = document.createElement('div');
+        contentBar.className = 'content-bar';
+        contentBar.style.height = `${height}%`;
+        
+        // Different colors for concept vs task regions
+        if (i < TASK_REGION_START) {
+            contentBar.style.background = 'linear-gradient(0deg, #00aaff, #00ffaa)';
+        } else {
+            contentBar.style.background = 'linear-gradient(0deg, #aa66ff, #ff66aa)';
+        }
+        
+        slot.appendChild(contentBar);
+        
+        // Attention glow
+        const glow = document.createElement('div');
+        glow.className = 'attention-glow';
+        slot.appendChild(glow);
+        
+        if (readWeights[i] > 0.1) {
+            slot.classList.add('read-focus');
+            glow.style.opacity = readWeights[i];
+        }
+        if (writeWeights[i] > 0.1) {
+            slot.classList.add('write-focus');
+        }
+        
+        // Tooltip
+        slot.addEventListener('mouseenter', (e) => showTooltip(e, i));
+        slot.addEventListener('mouseleave', hideTooltip);
+        
+        grid.appendChild(slot);
+    }
+}
+
+function updateAttentionBars() {
+    const readBar = document.getElementById('read-attention');
+    const writeBar = document.getElementById('write-attention');
+    
+    readBar.innerHTML = '';
+    writeBar.innerHTML = '';
+    
+    for (let i = 0; i < N_SLOTS; i++) {
+        const readW = document.createElement('div');
+        readW.className = 'attention-weight';
+        readW.style.opacity = readWeights[i];
+        readW.style.background = `linear-gradient(0deg, #00ffaa00, rgba(0, 255, 170, ${readWeights[i]}))`;
+        readBar.appendChild(readW);
+        
+        const writeW = document.createElement('div');
+        writeW.className = 'attention-weight';
+        writeW.style.background = `linear-gradient(0deg, #ff666600, rgba(255, 102, 102, ${writeWeights[i]}))`;
+        writeBar.appendChild(writeW);
+    }
+}
+
+function updateShiftKernelUI() {
+    const container = document.getElementById('shift-kernel');
+    container.innerHTML = '';
+    
+    const labels = ['-3', '-2', '-1', '0', '+1', '+2', '+3'];
+    
+    for (let i = 0; i < shiftKernel.length; i++) {
+        const bar = document.createElement('div');
+        bar.className = 'shift-bar';
+        
+        const fill = document.createElement('div');
+        fill.className = 'fill';
+        fill.style.height = `${shiftKernel[i] * 100}%`;
+        bar.appendChild(fill);
+        
+        const label = document.createElement('div');
+        label.className = 'label';
+        label.textContent = labels[i];
+        bar.appendChild(label);
+        
+        container.appendChild(bar);
+    }
+}
+
+function updateStats() {
+    document.getElementById('stat-reads').textContent = stats.reads;
+    document.getElementById('stat-writes').textContent = stats.writes;
+    
+    const usagePercent = (usage.filter(u => u > 0.1).length / N_SLOTS * 100).toFixed(0);
+    document.getElementById('stat-usage').textContent = `${usagePercent}%`;
+}
+
+function updateTaskUI() {
+    const inputDiv = document.getElementById('input-sequence');
+    const outputDiv = document.getElementById('output-sequence');
+    
+    inputDiv.innerHTML = '';
+    outputDiv.innerHTML = '';
+    
+    taskInput.forEach((val, i) => {
+        const token = document.createElement('div');
+        token.className = 'token';
+        if (taskStep === i || (taskStep > taskInput.length && taskStep - taskInput.length === i && taskMode === 'copy')) {
+            token.classList.add('active');
+        }
+        token.textContent = val;
+        inputDiv.appendChild(token);
+    });
+    
+    const expected = taskMode === 'copy' ? taskInput : [...taskInput].reverse();
+    
+    for (let i = 0; i < taskInput.length; i++) {
+        const token = document.createElement('div');
+        token.className = 'token';
+        
+        if (i < taskOutput.length) {
+            token.textContent = taskOutput[i];
+            token.classList.add(taskOutput[i] === expected[i] ? 'correct' : 'wrong');
+        } else {
+            token.textContent = '?';
+            if (taskStep - taskInput.length === i) {
+                token.classList.add('active');
+            }
+        }
+        outputDiv.appendChild(token);
+    }
+}
+
+function updateLog() {
+    const log = document.getElementById('log');
+    log.innerHTML = logEntries.slice(-20).map(e => 
+        `<div class="log-entry ${e.type}">${e.text}</div>`
+    ).join('');
+    log.scrollTop = log.scrollHeight;
+}
+
+function addLog(text, type) {
+    logEntries.push({ text, type, time: Date.now() });
+}
+
+// Concept names for tooltips
+const CONCEPT_NAMES = [
+    'cat', null, 'dog', null, 'bird', null, 'fish', null,
+    'tree', null, 'car', null, 'house', null, 'sun', null,
+    'moon', null, 'star', null, 'water', null, 'fire', null,
+    'earth', null, 'wind', null, 'love', null, 'hate', null
+];
+
+function showTooltip(e, slotIdx) {
+    const tooltip = document.getElementById('tooltip');
+    const vec = memory[slotIdx].map(v => v.toFixed(2)).join(', ');
+    const region = slotIdx < TASK_REGION_START ? '🧠 Concept Region' : '📝 Task Region';
+    const conceptName = CONCEPT_NAMES[slotIdx] ? `<br>Concept: <strong style="color:#00ffaa">${CONCEPT_NAMES[slotIdx]}</strong>` : '';
+    
+    tooltip.innerHTML = `
+        <strong>Slot ${slotIdx}</strong> <span style="color:#666">(${region})</span>${conceptName}<br>
+        Usage: ${(usage[slotIdx] * 100).toFixed(0)}%<br>
+        Read W: ${(readWeights[slotIdx] * 100).toFixed(1)}%<br>
+        Write W: ${(writeWeights[slotIdx] * 100).toFixed(1)}%<br>
+        <small style="color:#666">[${vec}]</small>
+    `;
+    tooltip.style.left = `${e.pageX + 10}px`;
+    tooltip.style.top = `${e.pageY + 10}px`;
+    tooltip.classList.add('visible');
+}
+
+function hideTooltip() {
+    document.getElementById('tooltip').classList.remove('visible');
+}
+
+// Slider updates
+function updateBeta() {
+    beta = parseFloat(document.getElementById('beta-slider').value);
+    document.getElementById('beta-value').textContent = beta.toFixed(1);
+}
+
+function updateGate() {
+    gate = parseFloat(document.getElementById('gate-slider').value);
+    document.getElementById('gate-value').textContent = gate.toFixed(2);
+}
+
+function updateGamma() {
+    gamma = parseFloat(document.getElementById('gamma-slider').value);
+    document.getElementById('gamma-value').textContent = gamma.toFixed(1);
+}
+
+function argmax(arr) {
+    return arr.indexOf(Math.max(...arr));
+}
+
+// Initialize
+initMemory();
+updateUI();
+addLog('TNTM initialized with 64 memory slots', 'info');
+addLog('Slots 0-31: Long-term concepts (cat, dog, tree, etc.)', 'info');
+addLog('Slots 32-63: Task working memory (allocation addressing)', 'info');
+</script>
+</body>
+</html>

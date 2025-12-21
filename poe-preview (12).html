@@ -1,0 +1,821 @@
+<!DOCTYPE html><html lang="en"><head><meta name="x-poe-datastore-behavior" content="local_only"><meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://code.jquery.com https://unpkg.com https://d3js.org https://threejs.org https://cdn.plot.ly https://stackpath.bootstrapcdn.com https://maps.googleapis.com https://cdn.tailwindcss.com https://ajax.googleapis.com https://kit.fontawesome.com https://cdn.datatables.net https://maxcdn.bootstrapcdn.com https://code.highcharts.com https://tako-static-assets-production.s3.amazonaws.com https://www.youtube.com https://fonts.googleapis.com https://fonts.gstatic.com https://pfst.cf2.poecdn.net https://puc.poecdn.net https://i.imgur.com https://wikimedia.org https://*.icons8.com https://*.giphy.com https://picsum.photos https://images.unsplash.com; frame-src 'self' https://www.youtube.com https://trytako.com; child-src 'self'; manifest-src 'self'; worker-src 'self'; upgrade-insecure-requests; block-all-mixed-content;">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dodge the Squares — Pseudo TNTM AI (Unstick v4)</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: radial-gradient(circle at 20% 20%, #0f152a, #070a16 45%, #050712);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: #e8ecf1;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 16px;
+  }
+  .shell {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    width: 100%;
+    max-width: 1100px;
+    justify-content: center;
+  }
+  #gameWrap {
+    position: relative;
+    width: 420px;
+    height: 620px;
+    transform-origin: top left;
+  }
+  #game {
+    position: absolute;
+    inset: 0;
+    border: 2px solid #2b354a;
+    background: radial-gradient(circle at 30% 30%, #162042, #0b0f1a 70%);
+    overflow: hidden;
+    box-shadow: 0 0 30px #0a0e1a, 0 20px 80px rgba(0,0,0,0.45);
+    border-radius: 12px;
+  }
+  #hud {
+    position: absolute;
+    top: 8px; left: 10px; right: 10px;
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    font-weight: 600; font-size: 14px; color: #cdd7e3;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.35);
+    flex-wrap: wrap;
+  }
+  #player {
+    position: absolute;
+    width: 22px; height: 22px;
+    background: #5ef5ff;
+    border-radius: 6px;
+    box-shadow: 0 0 10px #5ef5ff;
+  }
+  .enemy {
+    position: absolute;
+    width: 22px; height: 22px;
+    background: #ff4f6d;
+    border-radius: 3px;
+    box-shadow: 0 0 10px #ff4f6d;
+  }
+  .tag {
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    font-size: 11px;
+    letter-spacing: 0.2px;
+  }
+  #side {
+    min-width: 260px;
+    max-width: 380px;
+    flex: 1 1 280px;
+    background: rgba(13,17,30,0.72);
+    border: 1px solid #1f2942;
+    border-radius: 12px;
+    padding: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+    backdrop-filter: blur(6px);
+  }
+  #side h3 {
+    margin: 6px 0 4px 0;
+    font-size: 14px;
+    letter-spacing: 0.3px;
+    color: #e9edf5;
+  }
+  #side small { color: #9fb2d0; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  button {
+    background: #2d3b6a;
+    color: #e8ecf1;
+    border: 1px solid #3f4f80;
+    border-radius: 6px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.25);
+    transition: background 120ms ease, transform 120ms ease;
+  }
+  button:hover { background: #3a4a7a; transform: translateY(-1px); }
+  button:active { transform: translateY(0); }
+  label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; font-size: 13px; }
+  input[type="checkbox"] { accent-color: #5ef5ff; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    font-size: 11px;
+    letter-spacing: 0.1px;
+  }
+  #attnList { display: flex; flex-direction: column; gap: 6px; }
+  .attn-item {
+    display: grid;
+    grid-template-columns: 60px 1fr 44px;
+    gap: 6px;
+    align-items: center;
+    font-size: 12px;
+  }
+  .bar {
+    position: relative;
+    height: 10px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.06);
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.07);
+  }
+  .bar-fill {
+    position: absolute; left: 0; top: 0; bottom: 0;
+    background: linear-gradient(90deg, #5ef5ff, #7df7c5);
+  }
+  #memBars { display: flex; gap: 6px; flex-wrap: wrap; }
+  .mem {
+    flex: 1 1 60px;
+    height: 46px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.07);
+    position: relative;
+    overflow: hidden;
+    min-width: 60px;
+  }
+  .mem-fill {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: linear-gradient(180deg, #9fa8ff, #5ef5ff);
+  }
+  .mem-label {
+    position: absolute; top: 2px; left: 6px;
+    font-size: 11px; color: #cbd6ec;
+  }
+  #stats { font-size: 13px; color: #cdd7e3; display: flex; gap: 10px; flex-wrap: wrap; }
+  #statusLine { font-size: 12px; color: #9fb2d0; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div id="gameWrap">
+    <div id="game" aria-label="Dodge the Squares - Pseudo TNTM AI">
+      <div id="hud">
+        <div>Time: <span id="time">0.0</span>s</div>
+        <div>Best: <span id="best">0.0</span>s</div>
+        <div>Top: <span id="topScore">0.0</span>s</div>
+        <span class="tag">Auto</span>
+      </div>
+      <div id="player" aria-label="AI-controlled player"></div>
+    </div>
+  </div>
+
+  <div id="side">
+    <h3>Controller</h3>
+    <div class="row" style="margin-bottom:6px;">
+      <label><input type="checkbox" id="learnToggle" checked=""> Learning on</label>
+      <button id="resetLearnBtn" style="padding:6px 10px;">Reset Learning</button>
+      <button id="resetMemBtn" style="padding:6px 10px;">Reset Memory</button>
+    </div>
+    <div id="stats">
+      <span>Runs: <strong id="runs">0</strong></span>
+      <span>Last: <strong id="lastScore">0.0</strong>s</span>
+      <span>Best: <strong id="bestSide">0.0</strong>s</span>
+      <span>Top: <strong id="topSide">0.0</strong>s</span>
+    </div>
+    <div id="statusLine">Pseudo attention + tiny external memory + hill-climb. Continuous learning each run. Not a real Transformer/NTM.</div>
+
+    <h3 style="margin-top:10px;">Weights</h3>
+    <div id="weights" class="chips"></div>
+
+    <h3 style="margin-top:10px;">Enemy Attention</h3>
+    <div id="attnList"></div>
+
+    <h3 style="margin-top:10px;">Memory Usage</h3>
+    <div id="memBars"></div>
+
+    <h3 style="margin-top:10px;">Memory Read</h3>
+    <div id="memReadVals" class="chips"></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ---- DOM ----
+  const gameWrap = document.getElementById('gameWrap');
+  const game = document.getElementById('game');
+  const player = document.getElementById('player');
+  const timeEl = document.getElementById('time');
+  const bestEl = document.getElementById('best');
+  const topScoreEl = document.getElementById('topScore');
+  const runsEl = document.getElementById('runs');
+  const lastScoreEl = document.getElementById('lastScore');
+  const bestSideEl = document.getElementById('bestSide');
+  const topSideEl = document.getElementById('topSide');
+  const learnToggle = document.getElementById('learnToggle');
+  const resetLearnBtn = document.getElementById('resetLearnBtn');
+  const resetMemBtn = document.getElementById('resetMemBtn');
+  const weightsEl = document.getElementById('weights');
+  const attnList = document.getElementById('attnList');
+  const memBars = document.getElementById('memBars');
+  const memReadVals = document.getElementById('memReadVals');
+
+  // ---- Constants ----
+  const W = 420, H = 620;
+  const pw = 22, ph = 22;
+  const baseSpeed = 3.2;
+  const aiSpeed = baseSpeed * 1.05;
+  const STORAGE_KEY = 'dodge_pseudo_tntm_weights_v4';
+  const STORAGE_TOP = 'dodge_pseudo_tntm_top_v4';
+  const STORAGE_MEM = 'dodge_pseudo_tntm_mem_v4';
+  const STORAGE_USE = 'dodge_pseudo_tntm_use_v4';
+
+  // ---- State ----
+  let px = W/2 - pw/2, py = H - 80;
+  let enemies = [];
+  let running = false;
+  let startTime = 0;
+  let best = 0;
+  let topScore = 0;
+  let lastScore = 0;
+  let lastSpawn = 0;
+  let runCount = 0;
+  let restartTimer = null;
+  let frameCounter = 0;
+  let stuckFrames = 0;
+
+  // Memory bank
+  const memSlots = 24;
+  const memDim = 6;
+  let mem = Array.from({length: memSlots}, () => Array(memDim).fill(0));
+  let memUse = Array(memSlots).fill(0);
+  let prevMemW = Array(memSlots).fill(1/memSlots);
+
+  // Simple occupancy grid to discourage camping (3x4)
+  const gridW = 3, gridH = 4;
+  let occ = Array.from({length: gridH}, () => Array(gridW).fill(0));
+
+  // Rand
+  const randn = () => {
+    let u = 0, v = 0;
+    while(u === 0) u = Math.random();
+    while(v === 0) v = Math.random();
+    return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+  };
+
+  // Default params (stronger center pull, wall repulsion)
+  const defaultParams = () => ({
+    distScale: 0.0015,
+    aboveBonus: 0.55,
+    belowPenalty: 0.10,
+    centerBias: 0.00135,
+    upperBias: 0.0012,
+    noiseScale: 0.035,
+    attnTemp: 1.3,
+    memKeep: 0.86,
+    memGain: 0.35,
+    memWrite: 0.22,
+    memShiftBeta: 2.0,
+    wallRepelX: 1.15,
+    wallRepelY: 1.25,
+    wallSoft: 0.72,
+    occRepel: 0.45,
+    drift: 0.35
+  });
+
+  const defaultMats = () => ({
+    Wq: [[0.8,0.0,0.25,-0.1,0.05,0.0],[0,0.9,-0.1,0.2,0,0.05],[0.1,0.05,0.3,0,0.1,0],[0.05,0.05,0.0,0.1,0.05,0.1]],
+    Wk: [[1.0,0.2,0.1,0.05],[0.2,1.0,0.05,0.05],[0.1,0.0,0.8,0.0],[0.0,0.0,0.0,0.6]],
+    Wv: [[-0.7,-0.15],[ -0.15,-0.8],[ -0.05,-0.02],[ 0.0,0.0]],
+    WmQ: [[0.4,0,0.1,0,0,0],[0,0.45,-0.05,0.05,0.05,0],[0.1,0.1,0.4,0,0.05,0],[0,0.05,0,0.5,0,0.05],[0.05,0,0.05,0,0.45,0],[0.05,0.05,0,0.05,0,0.45]],
+    WmK: [[0.5,0,0,0,0,0],[0,0.5,0,0,0,0],[0,0,0.5,0,0,0],[0,0,0,0.5,0,0],[0,0,0,0,0.5,0],[0,0,0,0,0,0.5]],
+    WmV: [[0.6,0,0,0,0,0],[0,0.6,0,0,0,0],[0,0,0.6,0,0,0],[0,0,0,0.6,0,0],[0,0,0,0,0.6,0],[0,0,0,0,0,0.6]]
+  });
+
+  let params = defaultParams();
+  let mats = defaultMats();
+  let bestParams = JSON.parse(JSON.stringify(params));
+  let bestMats = JSON.parse(JSON.stringify(mats));
+  let bestScoreWeights = 0;
+
+  // Load persisted
+  (() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try {
+        const p = JSON.parse(saved);
+        params = {...params, ...p.params};
+        mats = {...mats, ...p.mats};
+        bestParams = JSON.parse(JSON.stringify(params));
+        bestMats = JSON.parse(JSON.stringify(mats));
+        bestScoreWeights = p.bestScore || 0;
+      } catch {}
+    }
+    const savedTop = localStorage.getItem(STORAGE_TOP);
+    if (savedTop) topScore = parseFloat(savedTop) || 0;
+    const savedMem = localStorage.getItem(STORAGE_MEM);
+    if (savedMem) {
+      try {
+        const m = JSON.parse(savedMem);
+        if (Array.isArray(m) && m.length === memSlots) {
+          mem = m.map(row => row.slice(0, memDim));
+        }
+      } catch {}
+    }
+    const savedUse = localStorage.getItem(STORAGE_USE);
+    if (savedUse) {
+      try {
+        const u = JSON.parse(savedUse);
+        if (Array.isArray(u) && u.length === memSlots) {
+          memUse = u.map(Number);
+        }
+      } catch {}
+    }
+  })();
+
+  // Render helpers
+  const renderWeights = () => {
+    weightsEl.innerHTML = '';
+    const entries = [
+      ['dist', params.distScale],
+      ['above', params.aboveBonus],
+      ['belowPen', params.belowPenalty],
+      ['center', params.centerBias],
+      ['upper', params.upperBias],
+      ['noise', params.noiseScale],
+      ['temp', params.attnTemp],
+      ['memKeep', params.memKeep],
+      ['memGain', params.memGain],
+      ['memWrite', params.memWrite],
+      ['shiftβ', params.memShiftBeta],
+      ['wallX', params.wallRepelX],
+      ['wallY', params.wallRepelY],
+      ['wallSoft', params.wallSoft],
+      ['occRepel', params.occRepel],
+      ['drift', params.drift],
+    ];
+    for (const [k,v] of entries) {
+      const span = document.createElement('span');
+      span.className = 'chip';
+      span.textContent = `${k}: ${v.toFixed(4)}`;
+      weightsEl.appendChild(span);
+    }
+  };
+  const renderMem = () => {
+    memBars.innerHTML = '';
+    memUse.forEach((u, i) => {
+      const div = document.createElement('div');
+      div.className = 'mem';
+      const fill = document.createElement('div');
+      fill.className = 'mem-fill';
+      const h = Math.max(0, Math.min(1, u)) * 100;
+      fill.style.height = `${h}%`;
+      const lbl = document.createElement('div');
+      lbl.className = 'mem-label';
+      lbl.textContent = `s${i}`;
+      div.appendChild(fill);
+      div.appendChild(lbl);
+      memBars.appendChild(div);
+    });
+  };
+  const renderAttn = (attnData) => {
+    attnList.innerHTML = '';
+    attnData.slice(0,8).forEach((a, idx) => {
+      const row = document.createElement('div');
+      row.className = 'attn-item';
+      const name = document.createElement('div');
+      name.textContent = `E${idx}`;
+      const bar = document.createElement('div');
+      bar.className = 'bar';
+      const fill = document.createElement('div');
+      fill.className = 'bar-fill';
+      fill.style.width = `${(a.weight*100).toFixed(1)}%`;
+      bar.appendChild(fill);
+      const info = document.createElement('div');
+      info.style.textAlign = 'right';
+      info.textContent = a.weight.toFixed(2);
+      row.appendChild(name);
+      row.appendChild(bar);
+      row.appendChild(info);
+      attnList.appendChild(row);
+    });
+  };
+  const renderMemRead = (vec) => {
+    memReadVals.innerHTML = '';
+    vec.forEach((v, i) => {
+      const span = document.createElement('span');
+      span.className = 'chip';
+      span.textContent = `m${i}: ${v.toFixed(2)}`;
+      memReadVals.appendChild(span);
+    });
+  };
+
+  const updateScales = () => {
+    const scale = Math.min(
+      1,
+      (window.innerWidth - 40) / 420,
+      (window.innerHeight - 40) / 620
+    );
+    gameWrap.style.transform = `scale(${scale})`;
+  };
+  window.addEventListener('resize', updateScales);
+  updateScales();
+
+  const setPos = () => { player.style.transform = `translate(${px}px, ${py}px)`; };
+
+  // Enemies
+  const spawnEnemy = () => {
+    const e = document.createElement('div');
+    e.className = 'enemy';
+    const size = 18 + Math.random()*10;
+    e.style.width = `${size}px`;
+    e.style.height = `${size}px`;
+    const x = Math.random() * (W - size);
+    e.style.left = `${x}px`;
+    e.style.top = `-30px`;
+    e.dataset.vy = (1.4 + Math.random()*1.8).toFixed(2);
+    enemies.push(e);
+    game.appendChild(e);
+  };
+
+  const reset = () => {
+    enemies.forEach(e => e.remove());
+    enemies = [];
+    px = W/2 - pw/2; py = H - 80;
+    setPos();
+    timeEl.textContent = '0.0';
+    lastSpawn = performance.now();
+    stuckFrames = 0;
+    // decay occupancy
+    occ = Array.from({length: gridH}, () => Array(gridW).fill(0));
+  };
+
+  const collide = (ax, ay, aw, ah, bx, by, bw, bh) =>
+    ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+
+  const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+
+  // Linear algebra helpers
+  const matVec = (M, v) => {
+    const out = new Array(M.length).fill(0);
+    for (let i = 0; i < M.length; i++) {
+      let s = 0;
+      for (let j = 0; j < M[i].length; j++) s += M[i][j] * v[j];
+      out[i] = s;
+    }
+    return out;
+  };
+  const dot = (a,b) => a.reduce((s,_,i)=>s+a[i]*b[i],0);
+  const softmax = (arr, temp=1) => {
+    const m = Math.max(...arr);
+    const exps = arr.map(x => Math.exp((x - m)/temp));
+    const sum = exps.reduce((s,x)=>s+x,0) || 1;
+    return exps.map(x => x/sum);
+  };
+  const norm = (v) => Math.hypot(...v);
+
+  // Memory read
+  const memRead = (stateVec) => {
+    const q = matVec(mats.WmQ, stateVec); // dim memDim
+    const keys = mem.map(row => matVec(mats.WmK, row));
+    const scores = keys.map(k => dot(q,k) / Math.sqrt(memDim));
+    let w = softmax(scores, 1/params.attnTemp);
+    const beta = params.memShiftBeta;
+    w = w.map((wi,i)=> (wi*beta + prevMemW[i])/(beta+1));
+    const sumW = w.reduce((s,x)=>s+x,0) || 1;
+    w = w.map(x=>x/sumW);
+    prevMemW = w;
+    const r = new Array(memDim).fill(0);
+    for (let i=0;i<memSlots;i++) {
+      for (let d=0; d<memDim; d++) r[d] += w[i]*mem[i][d];
+    }
+    return {read: r, weights: w};
+  };
+
+  // Memory write
+  const memWrite = (writeVec, wAttn) => {
+    const erase = params.memGain * 0.5;
+    for (let i=0;i<memSlots;i++) {
+      const w = wAttn[i]*params.memWrite;
+      for (let d=0; d<memDim; d++) {
+        mem[i][d] = mem[i][d]*(1 - w*erase) + w*writeVec[d];
+      }
+      memUse[i] = clamp(memUse[i] + w*0.3, 0, 1);
+    }
+    memUse = memUse.map(u => u*0.995);
+  };
+
+  // Mutation / learning
+  const mutateParams = (p) => {
+    const j = (v,f=0.08) => v * (1 + randn()*f);
+    return {
+      distScale: Math.max(0.0004, j(p.distScale)),
+      aboveBonus: j(p.aboveBonus),
+      belowPenalty: Math.max(0, j(p.belowPenalty)),
+      centerBias: Math.max(0.0001, j(p.centerBias)),
+      upperBias: Math.max(0.0001, j(p.upperBias)),
+      noiseScale: Math.max(0.0, j(p.noiseScale)),
+      attnTemp: Math.max(0.5, j(p.attnTemp)),
+      memKeep: Math.min(0.98, Math.max(0.6, j(p.memKeep))),
+      memGain: Math.min(0.8, Math.max(0.05, j(p.memGain))),
+      memWrite: Math.min(0.5, Math.max(0.02, j(p.memWrite))),
+      memShiftBeta: Math.min(4.0, Math.max(0.2, j(p.memShiftBeta))),
+      wallRepelX: Math.min(1.8, Math.max(0.2, j(p.wallRepelX))),
+      wallRepelY: Math.min(2.0, Math.max(0.2, j(p.wallRepelY))),
+      wallSoft: Math.min(0.9, Math.max(0.5, j(p.wallSoft))),
+      occRepel: Math.min(1.2, Math.max(0.05, j(p.occRepel))),
+      drift: Math.min(0.8, Math.max(0.05, j(p.drift))),
+    };
+  };
+  const mutateMat = (M, f=0.05) => M.map(row => row.map(x => x*(1+randn()*f)));
+  const mutateAll = () => {
+    params = mutateParams(params);
+    mats = {
+      Wq: mutateMat(mats.Wq),
+      Wk: mutateMat(mats.Wk),
+      Wv: mutateMat(mats.Wv),
+      WmQ: mutateMat(mats.WmQ),
+      WmK: mutateMat(mats.WmK),
+      WmV: mutateMat(mats.WmV),
+    };
+  };
+
+  // Enemy attention move with anti-wall and occupancy repel
+  const computeMove = () => {
+    const pcx = px + pw/2;
+    const pcy = py + ph/2;
+    const nx = (pcx / W) * 2 - 1;
+    const ny = (pcy / H) * 2 - 1;
+    const stateVec = [nx, ny, mem[0][0]||0, mem[1][1]||0, mem[2][2]||0, mem[3][3]||0];
+    const memR = memRead(stateVec);
+    const memReadVec = memR.read;
+
+    // Occupancy update & repel
+    const gx = Math.min(gridW-1, Math.max(0, Math.floor(pcx / (W / gridW))));
+    const gy = Math.min(gridH-1, Math.max(0, Math.floor(pcy / (H / gridH))));
+    for (let y=0;y<gridH;y++) for (let x=0;x<gridW;x++) occ[y][x] *= 0.995;
+    occ[gy][gx] += 0.05;
+    const occRepel = (() => {
+      // simple gradient from current cell values
+      const cx = gx, cy = gy;
+      const v = {x:0,y:0};
+      const val = occ[cy][cx];
+      const left = cx>0 ? occ[cy][cx-1] : val;
+      const right= cx<gridW-1?occ[cy][cx+1]:val;
+      const up   = cy>0 ? occ[cy-1][cx] : val;
+      const down = cy<gridH-1?occ[cy+1][cx]:val;
+      v.x = (val - right) - (val - left);
+      v.y = (val - down) - (val - up);
+      return v;
+    })();
+
+    if (enemies.length === 0) {
+      const targetY = H*0.45;
+      const dxC = (W/2 - pw/2) - px;
+      const dyT = targetY - py;
+      const len = Math.hypot(dxC, dyT) || 1;
+      return { vx: (dxC/len)*aiSpeed*0.6, vy: (dyT/len)*aiSpeed*0.6, attnVis: [], memReadVec, memW: memR.weights };
+    }
+
+    // Choose low-density horizontal band target to avoid hugging walls
+    const bands = 3;
+    const bandW = W / bands;
+    const bandCount = new Array(bands).fill(0);
+    enemies.forEach(e => {
+      const ex = parseFloat(e.style.left);
+      const w = e.offsetWidth;
+      const bx = Math.min(bands-1, Math.max(0, Math.floor((ex+w/2)/bandW)));
+      bandCount[bx] += 1;
+    });
+    const minBand = bandCount.indexOf(Math.min(...bandCount));
+    const targetX = (minBand + 0.5) * bandW;
+    const targetY = H * 0.48;
+
+    // Query for enemies
+    const q = matVec(mats.Wq, stateVec); // length 4
+    const attnScores = [];
+    const feats = [];
+    for (const e of enemies) {
+      const ex = parseFloat(e.style.left);
+      const ey = parseFloat(e.style.top);
+      const ew = e.offsetWidth;
+      const vyE = parseFloat(e.dataset.vy);
+      const ecx = ex + ew/2;
+      const ecy = ey + ew/2;
+      const dx = ecx - pcx;
+      const dy = ecy - pcy;
+      const dist2 = dx*dx + dy*dy + 1e-3;
+      const dxn = dx / W;
+      const dyn = dy / H;
+      const vyn = vyE / 4;
+      const szn = ew / 30;
+      const k = matVec(mats.Wk, [dxn,dyn,vyn,szn]);
+      let score = (dot(q,k)/Math.sqrt(q.length)) * params.attnTemp - params.distScale * dist2;
+      if (dy < 0) score += params.aboveBonus;
+      else score -= params.belowPenalty * Math.min(1, dy / H * 1.2);
+      attnScores.push(score);
+      feats.push({dx,dy,dist2,dxn,dyn,vyn,szn});
+    }
+    const attn = softmax(attnScores, 1);
+    let vx = 0, vy = 0;
+    attn.forEach((a, i) => {
+      const v = matVec(mats.Wv, [feats[i].dxn, feats[i].dyn, feats[i].vyn, feats[i].szn]);
+      vx += a * v[0];
+      vy += a * v[1];
+      if (feats[i].dy < 0) {
+        vx += (Math.random()*2 - 1) * params.noiseScale * a;
+      }
+    });
+
+    // Add memory influence (light)
+    vx += (memReadVec[0]||0)*0.3 + (memReadVec[2]||0)*0.2;
+    vy += (memReadVec[1]||0)*0.3 + (memReadVec[3]||0)*0.2;
+
+    // Move toward safe target (band)
+    const dxT = targetX - pcx;
+    const dyT = targetY - pcy;
+    vx += dxT * params.centerBias * 0.8;
+    vy += dyT * params.upperBias * 1.0;
+
+    // Bias toward center/upper
+    vx += ((W/2 - pw/2) - px) * params.centerBias;
+    vy += ((H*0.5) - py) * params.upperBias;
+
+    // Occupancy repel
+    vx += -occRepel.x * params.occRepel;
+    vy += -occRepel.y * params.occRepel;
+
+    // Wall repulsion to avoid sticking
+    const closR = Math.max(0, (px - params.wallSoft*W)/(W*(1-params.wallSoft)));
+    const closL = Math.max(0, (params.wallSoft*W - px)/(params.wallSoft*W));
+    const closB = Math.max(0, (py - params.wallSoft*H)/(H*(1-params.wallSoft)));
+    const closT = Math.max(0, (params.wallSoft*H - py)/(params.wallSoft*H));
+    const speedNow = Math.hypot(vx, vy);
+    const slowFactor = 1 + Math.max(0, 0.6 - speedNow);
+    vx -= params.wallRepelX * (closR - closL) * slowFactor;
+    vy -= params.wallRepelY * (closB - closT) * slowFactor;
+
+    // Gentle drift to avoid stagnation
+    vx += params.drift * (Math.random()*2 - 1) * 0.1;
+    vy += params.drift * (Math.random()*2 - 1) * 0.08;
+
+    // Normalize
+    const nrm = Math.hypot(vx, vy);
+    if (nrm > 1e-4) {
+      vx = vx / nrm * aiSpeed;
+      vy = vy / nrm * aiSpeed;
+    } else {
+      vx = 0; vy = 0;
+    }
+
+    // Stuck detection near right wall
+    if (px > W*0.7 && Math.hypot(vx,vy) < 0.3) {
+      stuckFrames++;
+      if (stuckFrames > 40) {
+        vx -= 1.15 * aiSpeed;
+        stuckFrames = 0;
+      }
+    } else {
+      stuckFrames = Math.max(0, stuckFrames-1);
+    }
+
+    // Write threat summary to memory
+    const topAttn = Math.max(...attn);
+    const attnVar = attn.reduce((s,a)=>s+a*a,0) - topAttn*topAttn;
+    const mWrite = [
+      nx, ny,
+      topAttn,
+      attnVar,
+      Math.tanh(norm(memReadVec)),
+      (pcy / H)
+    ];
+    memWrite(mWrite, memR.weights);
+
+    const attnVis = attn.map((w,i)=>({weight:w, dy:feats[i].dy, dist2:feats[i].dist2}));
+    return { vx, vy, attnVis, memReadVec, memW: memR.weights };
+  };
+
+  const loop = (t) => {
+    if (!running) return;
+
+    const ai = computeMove();
+    px = clamp(px + ai.vx, 0, W - pw);
+    py = clamp(py + ai.vy, 0, H - ph);
+    setPos();
+
+    if (t - lastSpawn > 550) { spawnEnemy(); lastSpawn = t; }
+
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      const e = enemies[i];
+      const vyE = parseFloat(e.dataset.vy);
+      const ny = (parseFloat(e.style.top) + vyE);
+      e.style.top = `${ny}px`;
+      if (ny > H + 40) { e.remove(); enemies.splice(i,1); continue; }
+      const ex = parseFloat(e.style.left), ew = e.offsetWidth, eh = e.offsetHeight;
+      if (collide(px, py, pw, ph, ex, ny, ew, eh)) {
+        endGame();
+        return;
+      }
+    }
+
+    const elapsed = (t - startTime)/1000;
+    timeEl.textContent = elapsed.toFixed(1);
+
+    frameCounter++;
+    if (frameCounter % 8 === 0) {
+      renderMem();
+      renderAttn(ai.attnVis);
+      renderMemRead(ai.memReadVec);
+    }
+
+    requestAnimationFrame(loop);
+  };
+
+  const endGame = () => {
+    running = false;
+    const elapsed = parseFloat(timeEl.textContent);
+    lastScore = elapsed;
+    if (elapsed > best) {
+      best = elapsed;
+      bestEl.textContent = best.toFixed(1);
+      bestSideEl.textContent = best.toFixed(1);
+    }
+    if (elapsed > topScore) {
+      topScore = elapsed;
+      topScoreEl.textContent = topScore.toFixed(1);
+      topSideEl.textContent = topScore.toFixed(1);
+      localStorage.setItem(STORAGE_TOP, topScore.toFixed(1));
+    }
+    lastScoreEl.textContent = elapsed.toFixed(1);
+
+    // Continuous learning per run (hill-climb)
+    if (learnToggle.checked) {
+      if (elapsed > bestScoreWeights) {
+        bestScoreWeights = elapsed;
+        bestParams = JSON.parse(JSON.stringify(params));
+        bestMats = JSON.parse(JSON.stringify(mats));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({params: bestParams, mats: bestMats, bestScore: bestScoreWeights}));
+      } else {
+        params = JSON.parse(JSON.stringify(bestParams));
+        mats = JSON.parse(JSON.stringify(bestMats));
+      }
+      mutateAll();
+      renderWeights();
+    }
+
+    localStorage.setItem(STORAGE_MEM, JSON.stringify(mem));
+    localStorage.setItem(STORAGE_USE, JSON.stringify(memUse));
+
+    if (restartTimer) clearTimeout(restartTimer);
+    restartTimer = setTimeout(startGame, 550);
+  };
+
+  const startGame = () => {
+    if (restartTimer) { clearTimeout(restartTimer); restartTimer = null; }
+    reset();
+    running = true;
+    startTime = performance.now();
+    runCount += 1;
+    runsEl.textContent = runCount;
+    requestAnimationFrame(loop);
+  };
+
+  resetLearnBtn.onclick = () => {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(STORAGE_TOP);
+    bestScoreWeights = 0;
+    topScore = 0; topScoreEl.textContent = '0.0'; topSideEl.textContent = '0.0';
+    best = 0; bestEl.textContent = '0.0'; bestSideEl.textContent = '0.0';
+    params = defaultParams();
+    mats = defaultMats();
+    bestParams = JSON.parse(JSON.stringify(params));
+    bestMats = JSON.parse(JSON.stringify(mats));
+    renderWeights();
+  };
+
+  resetMemBtn.onclick = () => {
+    mem = Array.from({length: memSlots}, () => Array(memDim).fill(0));
+    memUse = Array(memSlots).fill(0);
+    prevMemW = Array(memSlots).fill(1/memSlots);
+    localStorage.removeItem(STORAGE_MEM);
+    localStorage.removeItem(STORAGE_USE);
+    renderMem();
+    renderMemRead(Array(memDim).fill(0));
+  };
+
+  // Initial render
+  renderWeights();
+  renderMem();
+  renderMemRead(Array(memDim).fill(0));
+  bestEl.textContent = best.toFixed(1);
+  bestSideEl.textContent = best.toFixed(1);
+  topScoreEl.textContent = topScore.toFixed(1);
+  topSideEl.textContent = topScore.toFixed(1);
+
+  // Start automatically
+  startGame();
+})();
+</script>
+
+
+</body></html>

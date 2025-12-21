@@ -1,0 +1,1380 @@
+<!DOCTYPE html><html lang="en"><head><meta name="x-poe-datastore-behavior" content="local_only"><meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://code.jquery.com https://unpkg.com https://d3js.org https://threejs.org https://cdn.plot.ly https://stackpath.bootstrapcdn.com https://maps.googleapis.com https://cdn.tailwindcss.com https://ajax.googleapis.com https://kit.fontawesome.com https://cdn.datatables.net https://maxcdn.bootstrapcdn.com https://code.highcharts.com https://tako-static-assets-production.s3.amazonaws.com https://www.youtube.com https://fonts.googleapis.com https://fonts.gstatic.com https://pfst.cf2.poecdn.net https://puc.poecdn.net https://i.imgur.com https://wikimedia.org https://*.icons8.com https://*.giphy.com https://picsum.photos https://images.unsplash.com; frame-src 'self' https://www.youtube.com https://trytako.com; child-src 'self'; manifest-src 'self'; worker-src 'self'; upgrade-insecure-requests; block-all-mixed-content;">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deterministic Coordinate-Descent Unary Net — Slow-Rise K</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #0b1021;
+  --panel: rgba(255,255,255,0.06);
+  --border: rgba(255,255,255,0.12);
+  --text: #e9ecf5;
+  --muted: #9aa4c2;
+  --accent: #7dd3fc;
+  --accent2: #5eead4;
+  --code: rgba(255,255,255,0.08);
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f7f9fc;
+    --panel: #ffffff;
+    --border: #e2e8f0;
+    --text: #0f172a;
+    --muted: #475569;
+    --accent: #0ea5e9;
+    --accent2: #10b981;
+    --code: #eef2f7;
+  }
+}
+*{box-sizing:border-box;}
+body{
+  margin:0;
+  font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+  background:
+    radial-gradient(circle at 15% 20%, rgba(125,211,252,0.12), transparent 28%),
+    radial-gradient(circle at 80% 0%, rgba(94,234,212,0.12), transparent 32%),
+    var(--bg);
+  color:var(--text);
+  line-height:1.6;
+  padding:1rem;
+}
+.container{max-width:1180px;margin:0 auto;display:grid;gap:1rem;}
+.card{
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:1rem;
+  box-shadow:0 10px 32px rgba(0,0,0,0.14);
+  backdrop-filter:blur(6px);
+}
+h1{margin:0 0 0.3em 0;font-size:clamp(1.5rem,3.6vw,2.2rem);}
+p{margin:0 0 0.6em 0;}
+.muted{color:var(--muted);}
+.controls{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:0.6rem;
+  align-items:center;
+}
+label{font-size:0.95rem;color:var(--muted);display:block;}
+select,input[type="range"],input[type="number"],input[type="text"],button,input[type="checkbox"],textarea{
+  width:100%;
+  font:inherit;
+  padding:0.55rem 0.75rem;
+  border-radius:10px;
+  border:1px solid var(--border);
+  background:var(--panel);
+  color:var(--text);
+  cursor:pointer;
+  transition:border-color 0.15s ease, transform 0.08s ease;
+}
+textarea{
+  resize:vertical;
+  min-height:130px;
+  max-height:260px;
+  line-height:1.35;
+  cursor:text;
+}
+button:hover,select:hover,input[type="number"]:hover,input[type="text"]:hover,textarea:hover{border-color:var(--accent);}
+button:active{transform:scale(0.98);}
+input[type="range"]{padding:0.35rem 0;}
+input[type="checkbox"]{width:auto; height:auto; padding:0.4rem;}
+.badges{display:flex;flex-wrap:wrap;gap:0.45rem;margin-top:0.5rem;}
+.badge{
+  display:inline-flex;align-items:center;gap:0.35rem;
+  padding:0.35rem 0.65rem;
+  border-radius:999px;
+  border:1px solid var(--border);
+  background:var(--panel);
+  color:var(--muted);
+  font-size:0.92rem;
+}
+.grid-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:0.9rem;align-items:start;}
+canvas{
+  width:100%;
+  height:260px;
+  border-radius:12px;
+  border:1px solid var(--border);
+  background:var(--code);
+  display:block;
+}
+@media(max-width:560px){canvas{height:220px;}}
+.section-title{font-size:0.95rem;color:var(--muted);margin:0 0 0.35rem 0;}
+.unary-bar{display:grid;gap:4px;}
+.bit{
+  height:22px;
+  border-radius:6px;
+  border:1px solid var(--border);
+  background:var(--panel);
+}
+.small{font-size:0.9rem;}
+.table-wrap{
+  border:1px solid var(--border);
+  border-radius:10px;
+  overflow:auto;
+  max-height:260px;
+  background:var(--panel);
+}
+table{border-collapse:collapse;width:100%;font-size:0.88rem;min-width:460px;}
+th,td{padding:0.35rem 0.5rem;text-align:right;border-bottom:1px solid var(--border);}
+th{position:sticky;top:0;background:var(--panel);z-index:1;}
+.row-head{position:sticky;left:0;background:var(--panel);text-align:left;}
+.grid-3{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0.8rem;}
+.pill{
+  display:inline-flex;align-items:center;gap:0.35rem;
+  padding:0.35rem 0.6rem;
+  border-radius:999px;
+  background:var(--panel);
+  border:1px solid var(--border);
+  color:var(--muted);
+  font-size:0.9rem;
+}
+.inline-row{display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;}
+.btn-row{display:flex;gap:0.4rem;flex-wrap:wrap;}
+</style>
+</head>
+<body>
+<div class="container">
+  <div>
+    <h1>Deterministic Coordinate-Descent Unary Network</h1>
+    <p class="muted">
+      Slow-rise mode: K increases by 1 each phase over time. Double scan per pass, gradient-prioritized steps, flat-accept walks, block moves, pulse/super-pulse steps. Now you can set a Phase target to force long runs (e.g., 80 phases).
+    </p>
+  </div>
+
+  <div class="card">
+    <div class="controls">
+      <label>
+        Target
+        <select id="fn">
+          <option value="slope">Slope (y = x)</option>
+          <option value="hill">Hill (up then down)</option>
+          <option value="step">Step</option>
+        </select>
+      </label>
+      <label>
+        Unary length K (manual)
+        <select id="k">
+          <option value="16">16</option>
+          <option value="24" selected="">24</option>
+          <option value="32">32</option>
+          <option value="48">48</option>
+          <option value="64">64</option>
+          <option value="80">80</option>
+          <option value="96">96</option>
+        </select>
+        <div class="small muted">Manual K for single-phase runs.</div>
+      </label>
+      <label>
+        Hidden H (manual)
+        <select id="h-select">
+          <option value="8" selected="">8</option>
+          <option value="12">12</option>
+          <option value="16">16</option>
+        </select>
+      </label>
+      <label class="inline-row">
+        <input id="auto-h" type="checkbox">
+        <span class="small muted">Auto H (≥60→16; ≥48→12; else 8)</span>
+      </label>
+      <label>
+        Clamp base (WMAX)
+        <select id="clamp">
+          <option value="6" selected="">6</option>
+          <option value="8">8</option>
+          <option value="10">10</option>
+        </select>
+      </label>
+      <label>
+        Inspect x
+        <input id="inspect" type="range" min="0" max="24" step="1" value="12">
+        <div class="small muted">x = <span id="inspect-val">12</span></div>
+      </label>
+
+      <!-- Curriculum controls -->
+      <label>
+        Curriculum Ks (comma)
+        <input id="curr-ks" type="text" value="16,32,48,64">
+        <div class="small muted">Example: 16,32,48,64,80</div>
+      </label>
+      <label>
+        Phase target (repeat to reach)
+        <input id="phase-target" type="number" min="0" value="0">
+        <div class="small muted">0 = disabled; set 80 to force 80 phases</div>
+      </label>
+      <label>
+        Plateau limit (phase)
+        <input id="plate-limit" type="number" min="1" value="18">
+      </label>
+      <label>
+        Max passes / phase
+        <input id="max-pass" type="number" min="1" value="90">
+      </label>
+      <label>
+        Loss stop &lt;
+        <input id="loss-stop" type="number" min="0" step="0.01" value="0.5">
+      </label>
+      <label>
+        Step delay (ms)
+        <input id="step-delay" type="number" min="20" value="90">
+      </label>
+
+      <!-- Fine-tune guards -->
+      <label>
+        Fine-tune loss stop &lt;
+        <input id="fine-stop" type="number" min="0" step="0.01" value="0.12">
+      </label>
+      <label>
+        Fine-tune plateau limit
+        <input id="fine-plate" type="number" min="1" value="50">
+      </label>
+
+      <!-- Slow-rise controls -->
+      <label>
+        Slow-rise start K
+        <input id="slow-start" type="number" min="4" value="16">
+      </label>
+      <label>
+        Slow-rise end K
+        <input id="slow-end" type="number" min="4" value="64">
+      </label>
+
+      <div class="btn-row">
+        <button id="step">Pass (double scan)</button>
+        <button id="auto">Auto (curriculum×2 → fine-tune)</button>
+        <button id="fine">Fine-tune only</button>
+        <button id="curriculum">Curriculum only (×2)</button>
+        <button id="slow-rise">Slow-rise K (+1 each phase)</button>
+        <button id="reset">Reset</button>
+      </div>
+    </div>
+
+    <div class="badges">
+      <span class="badge">Loss: <span id="loss">—</span></span>
+      <span class="badge">Best loss: <span id="best-loss">—</span></span>
+      <span class="badge">Best @ pass: <span id="best-pass">—</span></span>
+      <span class="badge">Passes (total): <span id="steps">0</span></span>
+      <span class="badge">Change last pass: <span id="changed">—</span></span>
+      <span class="badge">Block change: <span id="block-changed">—</span></span>
+      <span class="badge">Scan order: <span id="order-label">Fwd→Rev</span></span>
+      <span class="badge">Step set: <span id="step-set-label">±2,±1</span></span>
+      <span class="badge">Plateau streak: <span id="plateau">0</span></span>
+      <span class="badge">ŷ (inspect): <span id="yhat">—</span></span>
+      <span class="badge">y (inspect): <span id="ytrue">—</span></span>
+      <span class="badge">Auto: <span id="auto-status">Off</span></span>
+      <span class="badge">Curriculum: <span id="curr-status">Off</span></span>
+      <span class="badge">Slow-rise: <span id="slow-status">Off</span></span>
+      <span class="badge">Phase: <span id="phase-badge">—</span></span>
+      <span class="badge">Phase passes: <span id="phase-passes">0</span></span>
+      <span class="badge">H: <span id="h-badge">8</span></span>
+      <span class="badge">Clamp: <span id="clamp-badge">6</span></span>
+    </div>
+
+    <div class="grid-2" style="margin-top:0.8rem;">
+      <div>
+        <div class="section-title">Target (dots) vs Prediction (line, blue)</div>
+        <canvas id="plot" aria-label="Function plot"></canvas>
+      </div>
+      <div>
+        <div class="section-title">Weight matrices (integers, clamped)</div>
+        <div class="table-wrap" id="table-w1-wrap"></div>
+        <div class="grid-3" style="margin-top:0.7rem;">
+          <div>
+            <div class="section-title">W2 (size H)</div>
+            <div class="table-wrap" id="table-w2-wrap"></div>
+          </div>
+          <div>
+            <div class="section-title">b1 (size H)</div>
+            <div class="table-wrap" id="table-b1-wrap"></div>
+          </div>
+          <div>
+            <div class="section-title">b2 (scalar)</div>
+            <div class="pill" id="b2-val" style="margin-top:0.35rem;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:0.8rem;">
+      <div class="section-title">Unary encoding for inspected x</div>
+      <div class="unary-bar" id="ubar"></div>
+    </div>
+
+    <div class="grid-3" style="margin-top:0.8rem;">
+      <div class="card" style="padding:0.75rem;">
+        <div class="pill">Input x bits (length K, unary)</div>
+        <div id="vec-x" class="small" style="margin-top:0.4rem;word-break:break-word;"></div>
+      </div>
+      <div class="card" style="padding:0.75rem;">
+        <div class="pill">Hidden pre-activation z1 (int)</div>
+        <div id="vec-z1" class="small" style="margin-top:0.4rem;word-break:break-word;"></div>
+        <div class="pill" style="margin-top:0.55rem;">Hidden activation a1 (unary magnitude)</div>
+        <div id="vec-a1" class="small" style="margin-top:0.4rem;word-break:break-word;"></div>
+      </div>
+      <div class="card" style="padding:0.75rem;">
+        <div class="pill">Output (int)</div>
+        <div id="vec-out" class="small" style="margin-top:0.4rem;word-break:break-word;"></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:0.9rem;">
+      <div class="section-title">State I/O (export / import)</div>
+      <div class="btn-row" style="margin-bottom:0.5rem;">
+        <button id="export-state">Export state</button>
+        <button id="copy-state">Copy</button>
+        <button id="import-state">Apply import</button>
+      </div>
+      <textarea id="state-area" placeholder="Exported state JSON will appear here. Paste here to import."></textarea>
+      <p class="small muted" style="margin-top:0.35rem;">
+        Tip: Export, copy, and later paste here then “Apply import”. All automation will be stopped before applying. Clamp and shapes must match K/H in the payload.
+      </p>
+    </div>
+
+    <p class="small muted" style="margin-top:0.8rem;">
+      Use Phase target to repeat the curriculum until the desired number of phases (e.g., 80) is reached. Auto still doubles the base list when Phase target is 0; curriculum-only doubles likewise; slow-rise grows K by +1 per phase.
+    </p>
+  </div>
+</div>
+
+<script>
+(() => {
+  // State
+  let K = 24;
+  let H = 8;
+  let WMAX_BASE = 6;
+  let WMAX = WMAX_BASE;
+  const pulseEvery = 5;
+  const superEvery = 10;
+  let W1, b1, W2, b2;
+  let xs = [], ys = [];
+  let passCount = 0;       // within current phase
+  let plateauCounter = 0;
+  let autoFineTimer = null;
+  let curriculumRunning = false;
+  let autoRunning = false; // auto pipeline
+  let fineRunning = false; // fine-tune only mode
+  let slowRiseRunning = false;
+  let phasePasses = 0;
+  let bestLoss = Infinity;
+  let bestPass = 0;
+
+  // DOM
+  const plot = document.getElementById('plot');
+  const pctx = plot.getContext('2d');
+  const lossEl = document.getElementById('loss');
+  const bestLossEl = document.getElementById('best-loss');
+  const bestPassEl = document.getElementById('best-pass');
+  const stepsEl = document.getElementById('steps');
+  const changedEl = document.getElementById('changed');
+  const blockChangedEl = document.getElementById('block-changed');
+  const plateauEl = document.getElementById('plateau');
+  const orderEl = document.getElementById('order-label');
+  const stepSetEl= document.getElementById('step-set-label');
+  const yhatEl = document.getElementById('yhat');
+  const ytrueEl= document.getElementById('ytrue');
+  const fnSel = document.getElementById('fn');
+  const kSel = document.getElementById('k');
+  const hSel = document.getElementById('h-select');
+  const autoHSwitch = document.getElementById('auto-h');
+  const clampSel = document.getElementById('clamp');
+  const inspect = document.getElementById('inspect');
+  const inspectVal = document.getElementById('inspect-val');
+  const autoBtn = document.getElementById('auto');
+  const fineBtn = document.getElementById('fine');
+  const stepBtn = document.getElementById('step');
+  const resetBtn= document.getElementById('reset');
+  const curriculumBtn = document.getElementById('curriculum');
+  const slowRiseBtn = document.getElementById('slow-rise');
+  const autoStatus = document.getElementById('auto-status');
+  const currStatus = document.getElementById('curr-status');
+  const slowStatus = document.getElementById('slow-status');
+  const hBadge = document.getElementById('h-badge');
+  const clampBadge = document.getElementById('clamp-badge');
+  const phaseBadge = document.getElementById('phase-badge');
+  const phasePassesEl = document.getElementById('phase-passes');
+  const currKsInput = document.getElementById('curr-ks');
+  const phaseTargetInput = document.getElementById('phase-target');
+  const plateLimitInput = document.getElementById('plate-limit');
+  const maxPassInput = document.getElementById('max-pass');
+  const lossStopInput = document.getElementById('loss-stop');
+  const stepDelayInput = document.getElementById('step-delay');
+  const fineStopInput = document.getElementById('fine-stop');
+  const finePlateInput = document.getElementById('fine-plate');
+  const slowStartInput = document.getElementById('slow-start');
+  const slowEndInput = document.getElementById('slow-end');
+
+  const ubar = document.getElementById('ubar');
+  const vecX = document.getElementById('vec-x');
+  const vecZ1= document.getElementById('vec-z1');
+  const vecA1= document.getElementById('vec-a1');
+  const vecOut= document.getElementById('vec-out');
+  const tableW1Wrap = document.getElementById('table-w1-wrap');
+  const tableW2Wrap = document.getElementById('table-w2-wrap');
+  const tableB1Wrap = document.getElementById('table-b1-wrap');
+  const b2Val = document.getElementById('b2-val');
+
+  const exportBtn = document.getElementById('export-state');
+  const importBtn = document.getElementById('import-state');
+  const copyBtn   = document.getElementById('copy-state');
+  const stateArea = document.getElementById('state-area');
+
+  const dpr = window.devicePixelRatio || 1;
+
+  const normalSteps = [0, +2, +1, -1, -2];
+  const pulseSteps  = [0, +3, +2, +1, -1, -2, -3];
+  const superSteps  = [0, +4, +3, +2, +1, -1, -2, -3, -4];
+
+  function clampInt(v){ return Math.max(-WMAX, Math.min(WMAX, v)); }
+
+  function buildXs(){ xs=[]; for(let i=0;i<=K;i++) xs.push(i); }
+  function makeTargets(kind){
+    ys = xs.map(v=>{
+      if(kind==='slope') return v;
+      if(kind==='hill'){
+        const m=K/2;
+        if(v<=m) return Math.round((v/m)*K);
+        return Math.round(((K-v)/m)*K);
+      }
+      return v < K/2 ? 0 : K;
+    });
+  }
+
+  function initParams(){
+    W1 = Array.from({length:H}, (_,i)=>{
+      const row = new Int8Array(K);
+      for(let j=0;j<K;j++){
+        const s = ((i+j)%2===0 ? 1 : -1);
+        row[j] = clampInt(s * ((i%3===0)?0:1));
+      }
+      return row;
+    });
+    b1 = new Int8Array(H);
+    for(let i=0;i<H;i++) b1[i] = clampInt((i%2===0?1:-1));
+    W2 = new Int8Array(H);
+    for(let i=0;i<H;i++) W2[i] = clampInt((i%2===0?1:-1));
+    b2 = 0;
+  }
+
+  function unary(v){
+    const a=new Int8Array(K);
+    for(let i=0;i<K;i++) a[i]= i < v ? 1 : 0;
+    return a;
+  }
+  function forward(xVec, cache){
+    const z1=new Int16Array(H);
+    const a1=new Int16Array(H);
+    for(let i=0;i<H;i++){
+      let s=b1[i];
+      const w=W1[i];
+      for(let j=0;j<K;j++) s += w[j]*xVec[j];
+      z1[i]=s;
+      a1[i]= s>0 ? s : 0;
+    }
+    let y=b2;
+    for(let i=0;i<H;i++) y += W2[i]*a1[i];
+    if(cache){cache.z1=z1; cache.a1=a1; cache.y=y;}
+    return y;
+  }
+
+  function fullLoss(){
+    let loss=0;
+    for(let idx=0; idx<xs.length; idx++){
+      const yhat = forward(unary(xs[idx]));
+      const e = yhat - ys[idx];
+      loss += e*e;
+    }
+    return loss / xs.length;
+  }
+
+  function gradSign(getter, setter){
+    const orig = getter();
+    setter(clampInt(orig+1)); const Lp = fullLoss();
+    setter(clampInt(orig-1)); const Lm = fullLoss();
+    setter(orig);
+    const g = Lp - Lm;
+    if (g > 0) return -1;
+    if (g < 0) return +1;
+    return 0;
+  }
+
+  function blockMoveHidden(curLoss){
+    let changed=false;
+    const offs = [0, +1, +2, -1, -2];
+    for(let h=0; h<H; h++){
+      const origB = b1[h];
+      const origW = W2[h];
+      let bestLoss = curLoss;
+      let bestBOff = 0, bestWOff = 0;
+      for(const db of offs){
+        for(const dw of offs){
+          const nb = clampInt(origB + db);
+          const nw = clampInt(origW + dw);
+          b1[h]=nb; W2[h]=nw;
+          const L = fullLoss();
+          if (L < bestLoss ||
+              (L === bestLoss && (Math.abs(db)+Math.abs(dw)) < (Math.abs(bestBOff)+Math.abs(bestWOff))) ||
+              (L === bestLoss && (Math.abs(db)+Math.abs(dw)) === (Math.abs(bestBOff)+Math.abs(bestWOff)) && (db < bestBOff || (db===bestBOff && dw < bestWOff)))) {
+            bestLoss = L; bestBOff = db; bestWOff = dw;
+          }
+        }
+      }
+      b1[h]=origB; W2[h]=origW;
+      if (bestBOff !== 0 || bestWOff !== 0){
+        b1[h]=clampInt(origB + bestBOff);
+        W2[h]=clampInt(origW + bestWOff);
+        curLoss = bestLoss;
+        changed = true;
+      }
+    }
+    return {loss: curLoss, changed};
+  }
+
+  function coordPass(){
+    passCount += 1;
+    const isSuper = (passCount % superEvery === 0);
+    const isPulse = (!isSuper) && (passCount % pulseEvery === 0);
+    const stepSet = isSuper ? superSteps : isPulse ? pulseSteps : normalSteps;
+    WMAX = isSuper ? WMAX_BASE + 2 : WMAX_BASE;
+    const baseForward = (passCount % 2 === 1);
+    let changed = false;
+    let curLoss = fullLoss();
+
+    const tryParamWithWalk = (getter,setter)=>{
+      const orig = getter();
+      const gdir = gradSign(getter, setter);
+      const mags = Array.from(new Set(stepSet.filter(s=>s!==0).map(s=>Math.abs(s)))).sort((a,b)=>a-b);
+      const ordered = [0];
+      if (gdir !== 0){
+        for(const m of mags) ordered.push(gdir*m);
+        for(const m of mags) ordered.push(-gdir*m);
+      } else {
+        for(const m of mags) ordered.push(m, -m);
+      }
+      const finalSteps = ordered.filter(s=>stepSet.includes(s));
+
+      let bestDelta = 0;
+      let bestLoss = curLoss;
+      for(const d of finalSteps){
+        const nv = clampInt(orig + d);
+        setter(nv);
+        const L = fullLoss();
+        if (L < bestLoss ||
+            (L === bestLoss && Math.abs(d) < Math.abs(bestDelta)) ||
+            (L === bestLoss && Math.abs(d) === Math.abs(bestDelta) && d < bestDelta)) {
+          bestLoss = L; bestDelta = d;
+        }
+      }
+      setter(orig);
+      if (bestDelta === 0) return curLoss;
+
+      let dir = Math.sign(bestDelta);
+      setter(clampInt(orig + dir));
+      curLoss = fullLoss();
+      let pos = getter();
+      let usedFlat = false;
+      while(true){
+        const next = clampInt(pos + dir);
+        setter(next);
+        const L = fullLoss();
+        if (L < curLoss || (!usedFlat && L === curLoss)){
+          if (L === curLoss) usedFlat = true;
+          curLoss = L;
+          pos = next;
+        } else {
+          setter(pos);
+          break;
+        }
+      }
+      changed = true;
+      return curLoss;
+    };
+
+    const visitAll = (forward=true)=>{
+      if(forward){
+        for(let i=0;i<H;i++){
+          for(let j=0;j<K;j++) curLoss = tryParamWithWalk(()=>W1[i][j], v=>{W1[i][j]=v;});
+        }
+        for(let i=0;i<H;i++) curLoss = tryParamWithWalk(()=>b1[i], v=>{b1[i]=v;});
+        for(let i=0;i<H;i++) curLoss = tryParamWithWalk(()=>W2[i], v=>{W2[i]=v;});
+        curLoss = tryParamWithWalk(()=>b2, v=>{b2=v;});
+      } else {
+        curLoss = tryParamWithWalk(()=>b2, v=>{b2=v;});
+        for(let i=H-1;i>=0;i--) curLoss = tryParamWithWalk(()=>W2[i], v=>{W2[i]=v;});
+        for(let i=H-1;i>=0;i--) curLoss = tryParamWithWalk(()=>b1[i], v=>{b1[i]=v;});
+        for(let i=H-1;i>=0;i--){
+          for(let j=K-1;j>=0;j--) curLoss = tryParamWithWalk(()=>W1[i][j], v=>{W1[i][j]=v;});
+        }
+      }
+    };
+
+    if(baseForward){ visitAll(true); visitAll(false); }
+    else { visitAll(false); visitAll(true); }
+
+    const blockRes = blockMoveHidden(curLoss);
+    curLoss = blockRes.loss;
+    const blockChanged = blockRes.changed;
+    changed = changed || blockChanged;
+
+    WMAX = WMAX_BASE;
+
+    return {
+      loss: curLoss,
+      changed,
+      blockChanged,
+      usePulse: isPulse,
+      useSuper: isSuper,
+      orderLabel: baseForward ? 'Fwd→Rev' : 'Rev→Fwd'
+    };
+  }
+
+  function fitCanvas(cv, ctx){
+    const r=cv.getBoundingClientRect();
+    cv.width=Math.round(r.width*dpr);
+    cv.height=Math.round(r.height*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+
+  function renderPlot(){
+    fitCanvas(plot,pctx);
+    const w=plot.clientWidth, h=plot.clientHeight;
+    pctx.clearRect(0,0,w,h);
+    const preds = xs.map(v=>forward(unary(v)));
+    const yAll = ys.concat(preds);
+    let yMin = Math.min(...yAll, 0);
+    let yMax = Math.max(...yAll, 1);
+    const pad = Math.max(1, (yMax - yMin)*0.1);
+    yMin -= pad; yMax += pad;
+    if (yMax === yMin) yMax = yMin + 1;
+
+    const xTo = x => (x/Math.max(1,K))*w;
+    const yTo = y => h - ((y - yMin)/(yMax - yMin))*h;
+
+    pctx.strokeStyle='rgba(255,255,255,0.22)';
+    pctx.lineWidth=1;
+    pctx.beginPath(); pctx.moveTo(0,yTo(0)); pctx.lineTo(w,yTo(0)); pctx.stroke();
+    pctx.beginPath(); pctx.moveTo(0,0); pctx.lineTo(0,h); pctx.stroke();
+
+    pctx.fillStyle='rgba(94,234,212,0.9)';
+    for(let i=0;i<xs.length;i++){
+      const px=xTo(xs[i]), py=yTo(ys[i]);
+      pctx.beginPath(); pctx.arc(px,py,4,0,Math.PI*2); pctx.fill();
+    }
+
+    pctx.strokeStyle='rgba(125,211,252,0.95)';
+    pctx.lineWidth=2.5;
+    pctx.beginPath();
+    for(let i=0;i<xs.length;i++){
+      const px=xTo(xs[i]), py=yTo(preds[i]);
+      if(i===0) pctx.moveTo(px,py); else pctx.lineTo(px,py);
+    }
+    pctx.stroke();
+
+    pctx.fillStyle='rgba(125,211,252,0.9)';
+    for(let i=0;i<xs.length;i++){
+      const px=xTo(xs[i]), py=yTo(preds[i]);
+      pctx.fillRect(px-3, py-3, 6, 6);
+    }
+  }
+
+  function renderUnaryBar(xv){
+    ubar.innerHTML='';
+    ubar.style.gridTemplateColumns = `repeat(${K}, minmax(0,1fr))`;
+    for(let i=0;i<K;i++){
+      const d=document.createElement('div');
+      d.className='bit';
+      if(i < xv){
+        d.style.background='linear-gradient(135deg, var(--accent), var(--accent2))';
+        d.style.borderColor='rgba(255,255,255,0.5)';
+      }
+      ubar.appendChild(d);
+    }
+  }
+
+  function renderVector(el, arr, prefix=''){
+    const parts=[];
+    for(let i=0;i<arr.length;i++) parts.push(`${prefix}${i}:${arr[i]}`);
+    el.textContent = parts.join('   ');
+  }
+
+  function valColor(v){
+    const a=Math.min(1, Math.abs(v)/(WMAX_BASE||1));
+    const base = v>=0 ? '96,165,250' : '248,113,113';
+    return `rgba(${base},${0.15+0.65*a})`;
+  }
+
+  function renderTableW1(){
+    const table=document.createElement('table');
+    const thead=document.createElement('thead');
+    const trh=document.createElement('tr');
+    const th0=document.createElement('th'); th0.className='row-head'; th0.textContent='h\\x';
+    trh.appendChild(th0);
+    for(let j=0;j<K;j++){ const th=document.createElement('th'); th.textContent=j; trh.appendChild(th); }
+    thead.appendChild(trh); table.appendChild(thead);
+    const tbody=document.createElement('tbody');
+    for(let i=0;i<H;i++){
+      const tr=document.createElement('tr');
+      const th=document.createElement('th'); th.className='row-head'; th.textContent=`h${i}`; tr.appendChild(th);
+      for(let j=0;j<K;j++){
+        const td=document.createElement('td');
+        const v=W1[i][j];
+        td.textContent=String(v);
+        td.style.background=valColor(v);
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    tableW1Wrap.innerHTML=''; tableW1Wrap.appendChild(table);
+  }
+
+  function renderTableW2(){
+    const table=document.createElement('table');
+    const thead=document.createElement('thead');
+    const trh=document.createElement('tr');
+    const th0=document.createElement('th'); th0.className='row-head'; th0.textContent='h';
+    const th1=document.createElement('th'); th1.textContent='W2[h]';
+    trh.appendChild(th0); trh.appendChild(th1);
+    thead.appendChild(trh); table.appendChild(thead);
+    const tbody=document.createElement('tbody');
+    for(let i=0;i<H;i++){
+      const tr=document.createElement('tr');
+      const th=document.createElement('th'); th.className='row-head'; th.textContent=`h${i}`; tr.appendChild(th);
+      const td=document.createElement('td'); td.textContent=String(W2[i]); td.style.background=valColor(W2[i]);
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    tableW2Wrap.innerHTML=''; tableW2Wrap.appendChild(table);
+  }
+
+  function renderTableB1(){
+    const table=document.createElement('table');
+    const thead=document.createElement('thead');
+    const trh=document.createElement('tr');
+    const th0=document.createElement('th'); th0.className='row-head'; th0.textContent='h';
+    const th1=document.createElement('th'); th1.textContent='b1[h]';
+    trh.appendChild(th0); trh.appendChild(th1);
+    thead.appendChild(trh); table.appendChild(thead);
+    const tbody=document.createElement('tbody');
+    for(let i=0;i<H;i++){
+      const tr=document.createElement('tr');
+      const th=document.createElement('th'); th.className='row-head'; th.textContent=`h${i}`; tr.appendChild(th);
+      const td=document.createElement('td'); td.textContent=String(b1[i]); td.style.background=valColor(b1[i]);
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    tableB1Wrap.innerHTML=''; tableB1Wrap.appendChild(table);
+  }
+
+  function renderB2(){ b2Val.textContent = `b2 = ${b2}`; }
+
+  function currentActivations(){
+    const xv = parseInt(inspect.value,10);
+    const xVec = unary(xv);
+    const cache={};
+    forward(xVec, cache);
+    return {xv, xVec, ...cache};
+  }
+
+  function updateInspect(){
+    const act = currentActivations();
+    inspectVal.textContent = act.xv;
+    yhatEl.textContent = String(act.y);
+    ytrueEl.textContent = String(ys[act.xv]);
+    renderUnaryBar(act.xv);
+    renderVector(vecX, act.xVec, 'x');
+    renderVector(vecZ1, act.z1, 'z1');
+    renderVector(vecA1, act.a1, 'a1');
+    vecOut.textContent = `y = ${act.y}`;
+  }
+
+  function updateBest(loss){
+    if(loss < bestLoss){
+      bestLoss = loss;
+      bestPass = parseInt(stepsEl.textContent,10);
+      bestLossEl.textContent = loss.toFixed(3);
+      bestPassEl.textContent = bestPass;
+    }
+  }
+
+  function renderAll(){
+    renderPlot();
+    renderTableW1();
+    renderTableW2();
+    renderTableB1();
+    renderB2();
+    updateInspect();
+    hBadge.textContent = H;
+    clampBadge.textContent = WMAX_BASE;
+    phasePassesEl.textContent = phasePasses;
+    if(bestLoss < Infinity){
+      bestLossEl.textContent = bestLoss.toFixed(3);
+      bestPassEl.textContent = bestPass;
+    }
+  }
+
+  function stopAutoFine(){
+    if(autoFineTimer){
+      clearInterval(autoFineTimer);
+      autoFineTimer=null;
+    }
+    fineRunning=false;
+  }
+
+  function stopCurriculum(){
+    curriculumRunning=false;
+    currStatus.textContent='Off';
+    phaseBadge.textContent='—';
+    phasePasses = 0;
+    phasePassesEl.textContent = phasePasses;
+  }
+
+  function stopSlowRise(){
+    slowRiseRunning=false;
+    slowStatus.textContent='Off';
+    phaseBadge.textContent='—';
+    phasePasses = 0;
+    phasePassesEl.textContent = phasePasses;
+  }
+
+  function stopAllAuto(){
+    autoRunning=false;
+    autoStatus.textContent='Off';
+    autoBtn.textContent='Auto (curriculum×2 → fine-tune)';
+    fineBtn.textContent='Fine-tune only';
+    slowRiseBtn.textContent='Slow-rise K (+1 each phase)';
+    stopAutoFine();
+    stopCurriculum();
+    stopSlowRise();
+  }
+
+  function reclampAll(){
+    for(let i=0;i<H;i++){
+      for(let j=0;j<K;j++) W1[i][j] = clampInt(W1[i][j]);
+      b1[i] = clampInt(b1[i]);
+      W2[i] = clampInt(W2[i]);
+    }
+    b2 = clampInt(b2);
+  }
+
+  function determineH(kNew){
+    if(autoHSwitch.checked){
+      if(kNew >= 60) return 16;
+      if(kNew >= 48) return 12;
+      return 8;
+    }
+    return parseInt(hSel.value,10);
+  }
+
+  function warmStartParams(kNew, hNew){
+    const hasOld = !!W1 && W1.length===H;
+    const Kold = K, Hold = H;
+    const W1old = W1, b1old=b1, W2old=W2, b2old=b2;
+    K = kNew; H = hNew;
+    buildXs(); makeTargets(fnSel.value);
+    const newW1 = Array.from({length:H}, ()=>new Int8Array(K));
+    const newB1 = new Int8Array(H);
+    const newW2 = new Int8Array(H);
+    let newB2 = hasOld ? b2old : 0;
+    const rowsCommon = hasOld ? Math.min(Hold, H) : 0;
+
+    for(let i=0;i<rowsCommon;i++){
+      for(let j=0;j<K;j++){
+        const jOld = Math.floor(j * Kold / K);
+        const v = W1old[i][jOld];
+        newW1[i][j] = clampInt(v);
+      }
+      newB1[i] = clampInt(b1old[i]);
+      newW2[i] = clampInt(W2old[i]);
+    }
+    if(H > rowsCommon){
+      for(let i=rowsCommon;i<H;i++){
+        const row = new Int8Array(K);
+        for(let j=0;j<K;j++){
+          const s = ((i+j)%2===0 ? 1 : -1);
+          row[j] = clampInt(s * ((i%3===0)?0:1));
+        }
+        newW1[i] = row;
+        newB1[i] = clampInt((i%2===0?1:-1));
+        newW2[i] = clampInt((i%2===0?1:-1));
+      }
+    }
+    W1=newW1; b1=newB1; W2=newW2; b2=newB2;
+
+    inspect.max = K;
+    if(+inspect.value > K) inspect.value = Math.floor(K/2);
+  }
+
+  function applyCoordPassAndRender(res){
+    stepsEl.textContent = (+stepsEl.textContent)+1;
+    phasePasses += 1;
+    phasePassesEl.textContent = phasePasses;
+    lossEl.textContent = res.loss.toFixed(3);
+    changedEl.textContent = res.changed ? 'Yes' : 'No';
+    blockChangedEl.textContent = res.blockChanged ? 'Yes' : 'No';
+    plateauCounter = res.changed ? 0 : plateauCounter+1;
+    plateauEl.textContent = plateauCounter;
+    orderEl.textContent = res.orderLabel;
+    stepSetEl.textContent = res.useSuper ? 'Super: ±4..±1' : res.usePulse ? 'Pulse: ±3..±1' : '±2,±1';
+    updateBest(res.loss);
+    renderAll();
+  }
+
+  // Helpers to build phase list with target
+  function repeatTo(base, target){
+    const out=[];
+    let i=0;
+    while(out.length < target){
+      out.push(base[i % base.length]);
+      i++;
+    }
+    return out.slice(0,target);
+  }
+
+  // Single manual step
+  stepBtn.addEventListener('click', ()=>{
+    if(curriculumRunning || autoRunning || fineRunning || slowRiseRunning) return;
+    const res = coordPass();
+    applyCoordPassAndRender(res);
+  });
+
+  function startFineTuneLoop(){
+    stopAutoFine();
+    fineRunning = true;
+    const delay = Math.max(20, parseInt(stepDelayInput.value,10)||90);
+    autoFineTimer = setInterval(()=>{
+      if(!(autoRunning || fineRunning)){ stopAutoFine(); return; }
+      const res = coordPass();
+      applyCoordPassAndRender(res);
+      const fineStop = Math.max(0, parseFloat(fineStopInput.value)||0);
+      const finePlate = Math.max(1, parseInt(finePlateInput.value,10)||50);
+      const shouldStop = (res.loss < fineStop) || (plateauCounter >= finePlate);
+      if(shouldStop){
+        stopAllAuto();
+      }
+    }, delay);
+  }
+
+  function runCurriculumSequence(ksArr, plateauLimit, maxPassPerPhase, lossStop, delay, onDone){
+    curriculumRunning=true;
+    currStatus.textContent='Running';
+    function runPhase(idx){
+      if(!curriculumRunning) return;
+      if(idx >= ksArr.length){
+        curriculumRunning=false;
+        currStatus.textContent='Done';
+        phaseBadge.textContent='—';
+        phasePasses = 0;
+        phasePassesEl.textContent = phasePasses;
+        onDone();
+        return;
+      }
+      const targetK = ksArr[idx];
+      const targetH = determineH(targetK);
+      warmStartParams(targetK, targetH);
+      passCount = 0;
+      phasePasses = 0;
+      plateauCounter = 0;
+      plateauEl.textContent = plateauCounter;
+      phasePassesEl.textContent = phasePasses;
+      phaseBadge.textContent = `${idx+1}/${ksArr.length}`;
+      lossEl.textContent='—';
+      changedEl.textContent='—';
+      blockChangedEl.textContent='—';
+      orderEl.textContent='Fwd→Rev';
+      stepSetEl.textContent='±2,±1';
+      renderAll();
+
+      function stepPhase(){
+        if(!curriculumRunning) return;
+        const res = coordPass();
+        applyCoordPassAndRender(res);
+        const stopLoss = res.loss < lossStop;
+        const stopPlateau = plateauCounter >= plateauLimit;
+        const stopMax = phasePasses >= maxPassPerPhase;
+        if(stopLoss || stopPlateau || stopMax){
+          setTimeout(()=>runPhase(idx+1), delay);
+        } else {
+          setTimeout(stepPhase, delay);
+        }
+      }
+      setTimeout(stepPhase, delay);
+    }
+    runPhase(0);
+  }
+
+  function runSlowRiseSequence(startK, endK, plateauLimit, maxPassPerPhase, lossStop, delay){
+    slowRiseRunning = true;
+    slowStatus.textContent='Running';
+    const ksArr = [];
+    for(let kVal=startK; kVal<=endK; kVal++){
+      ksArr.push(kVal);
+    }
+    function onDone(){
+      slowRiseRunning=false;
+      slowStatus.textContent='Done';
+      phaseBadge.textContent='—';
+      phasePasses = 0;
+      phasePassesEl.textContent = phasePasses;
+    }
+    runCurriculumSequence(ksArr, plateauLimit, maxPassPerPhase, lossStop, delay, onDone);
+  }
+
+  // Auto: curriculum (doubled) then fine-tune
+  autoBtn.addEventListener('click', ()=>{
+    if(autoRunning){
+      stopAllAuto();
+      return;
+    }
+    if(slowRiseRunning || curriculumRunning || fineRunning){
+      stopAllAuto();
+    }
+    autoRunning = true;
+    autoStatus.textContent='Running';
+    autoBtn.textContent='Auto (stop)';
+    plateauCounter = 0;
+    plateauEl.textContent = plateauCounter;
+
+    const baseKs = currKsInput.value.split(',').map(s=>parseInt(s.trim(),10)).filter(v=>Number.isFinite(v)&&v>0);
+    if(baseKs.length===0){
+      alert('Curriculum Ks is empty or invalid.');
+      stopAllAuto();
+      return;
+    }
+    const phaseTarget = Math.max(0, parseInt(phaseTargetInput.value,10)||0);
+    let ksArr;
+    if(phaseTarget > 0){
+      ksArr = repeatTo(baseKs, phaseTarget);
+    } else {
+      ksArr = baseKs.concat(baseKs); // doubled default
+    }
+    const plateauLimit = Math.max(1, parseInt(plateLimitInput.value,10)||18);
+    const maxPassPerPhase = Math.max(1, parseInt(maxPassInput.value,10)||90);
+    const lossStop = Math.max(0, parseFloat(lossStopInput.value)||0.5);
+    const delay = Math.max(20, parseInt(stepDelayInput.value,10)||90);
+
+    runCurriculumSequence(ksArr, plateauLimit, maxPassPerPhase, lossStop, delay, ()=>{
+      if(!autoRunning) return;
+      startFineTuneLoop();
+    });
+  });
+
+  // Fine-tune only
+  fineBtn.addEventListener('click', ()=>{
+    if(fineRunning){
+      stopAllAuto();
+      return;
+    }
+    if(curriculumRunning || autoRunning || slowRiseRunning){
+      stopAllAuto();
+    }
+    fineRunning = true;
+    autoStatus.textContent='Running';
+    fineBtn.textContent='Fine-tune (stop)';
+    plateauCounter = 0;
+    plateauEl.textContent = plateauCounter;
+    startFineTuneLoop();
+  });
+
+  // Curriculum only (doubled unless target set)
+  curriculumBtn.addEventListener('click', ()=>{
+    if(curriculumRunning || autoRunning || fineRunning || slowRiseRunning){
+      stopAllAuto();
+      return;
+    }
+    const baseKs = currKsInput.value.split(',').map(s=>parseInt(s.trim(),10)).filter(v=>Number.isFinite(v)&&v>0);
+    if(baseKs.length===0){
+      alert('Curriculum Ks is empty or invalid.');
+      return;
+    }
+    const phaseTarget = Math.max(0, parseInt(phaseTargetInput.value,10)||0);
+    let ksArr;
+    if(phaseTarget > 0){
+      ksArr = repeatTo(baseKs, phaseTarget);
+    } else {
+      ksArr = baseKs.concat(baseKs);
+    }
+    const plateauLimit = Math.max(1, parseInt(plateLimitInput.value,10)||18);
+    const maxPassPerPhase = Math.max(1, parseInt(maxPassInput.value,10)||90);
+    const lossStop = Math.max(0, parseFloat(lossStopInput.value)||0.5);
+    const delay = Math.max(20, parseInt(stepDelayInput.value,10)||90);
+    autoRunning = false;
+    autoStatus.textContent='Off';
+    autoBtn.textContent='Auto (curriculum×2 → fine-tune)';
+    runCurriculumSequence(ksArr, plateauLimit, maxPassPerPhase, lossStop, delay, ()=>{});
+  });
+
+  // Slow-rise K (+1 each phase)
+  slowRiseBtn.addEventListener('click', ()=>{
+    if(slowRiseRunning){
+      stopAllAuto();
+      return;
+    }
+    if(curriculumRunning || autoRunning || fineRunning){
+      stopAllAuto();
+    }
+    const startK = parseInt(slowStartInput.value,10);
+    const endK = parseInt(slowEndInput.value,10);
+    if(!Number.isFinite(startK)||!Number.isFinite(endK)||startK<4||endK<startK){
+      alert('Slow-rise start/end K invalid (need start >=4 and end >= start).');
+      return;
+    }
+    const plateauLimit = Math.max(1, parseInt(plateLimitInput.value,10)||18);
+    const maxPassPerPhase = Math.max(1, parseInt(maxPassInput.value,10)||90);
+    const lossStop = Math.max(0, parseFloat(lossStopInput.value)||0.5);
+    const delay = Math.max(20, parseInt(stepDelayInput.value,10)||90);
+    slowRiseBtn.textContent='Slow-rise (stop)';
+    runSlowRiseSequence(startK, endK, plateauLimit, maxPassPerPhase, lossStop, delay);
+  });
+
+  // Reset
+  resetBtn.addEventListener('click', ()=>{
+    stopAllAuto();
+    passCount = 0;
+    phasePasses = 0;
+    plateauCounter = 0;
+    plateauEl.textContent = plateauCounter;
+    phasePassesEl.textContent = phasePasses;
+    stepsEl.textContent=0;
+    lossEl.textContent='—';
+    changedEl.textContent='—';
+    blockChangedEl.textContent='—';
+    orderEl.textContent='Fwd→Rev';
+    stepSetEl.textContent='±2,±1';
+    bestLoss = Infinity;
+    bestPass = 0;
+    bestLossEl.textContent='—';
+    bestPassEl.textContent='—';
+    buildXs(); makeTargets(fnSel.value);
+    initParams();
+    inspect.max = K;
+    if(+inspect.value > K) inspect.value = Math.floor(K/2);
+    renderAll();
+  });
+
+  fnSel.addEventListener('change', e=>{
+    makeTargets(e.target.value);
+    renderAll();
+  });
+
+  kSel.addEventListener('change', e=>{
+    if(curriculumRunning || autoRunning || fineRunning || slowRiseRunning) return;
+    const newK = parseInt(e.target.value,10);
+    const newH = determineH(newK);
+    warmStartParams(newK, newH);
+    passCount = 0;
+    phasePasses = 0;
+    plateauCounter = 0;
+    plateauEl.textContent = plateauCounter;
+    phasePassesEl.textContent = phasePasses;
+    renderAll();
+  });
+
+  hSel.addEventListener('change', e=>{
+    if(curriculumRunning || autoRunning || fineRunning || slowRiseRunning) return;
+    if(autoHSwitch.checked) return;
+    const newH = parseInt(e.target.value,10);
+    const newK = K;
+    warmStartParams(newK, newH);
+    passCount = 0;
+    phasePasses = 0;
+    plateauCounter = 0;
+    plateauEl.textContent = plateauCounter;
+    phasePassesEl.textContent = phasePasses;
+    renderAll();
+  });
+
+  autoHSwitch.addEventListener('change', ()=>{
+    if(curriculumRunning || autoRunning || fineRunning || slowRiseRunning) return;
+    const newH = determineH(K);
+    warmStartParams(K, newH);
+    passCount = 0;
+    phasePasses = 0;
+    plateauCounter = 0;
+    plateauEl.textContent = plateauCounter;
+    phasePassesEl.textContent = phasePasses;
+    renderAll();
+  });
+
+  clampSel.addEventListener('change', e=>{
+    WMAX_BASE = parseInt(e.target.value,10);
+    WMAX = WMAX_BASE;
+    reclampAll();
+    renderAll();
+  });
+
+  inspect.addEventListener('input', ()=>{ updateInspect(); });
+
+  // --- State export/import ---
+  function exportState(){
+    const state = {
+      fn: fnSel.value,
+      K,
+      H,
+      WMAX_BASE,
+      autoH: autoHSwitch.checked,
+      clampSel: clampSel.value,
+      currKs: currKsInput.value,
+      phaseTarget: parseInt(phaseTargetInput.value,10)||0,
+      plateLimit: parseInt(plateLimitInput.value,10)||18,
+      maxPass: parseInt(maxPassInput.value,10)||90,
+      lossStop: parseFloat(lossStopInput.value)||0.5,
+      stepDelay: parseInt(stepDelayInput.value,10)||90,
+      fineStop: parseFloat(fineStopInput.value)||0.12,
+      finePlate: parseInt(finePlateInput.value,10)||50,
+      slowStart: parseInt(slowStartInput.value,10)||16,
+      slowEnd: parseInt(slowEndInput.value,10)||64,
+      inspectVal: parseInt(inspect.value,10)||0,
+      passCount,
+      phasePasses,
+      plateauCounter,
+      steps: parseInt(stepsEl.textContent,10)||0,
+      bestLoss,
+      bestPass,
+      W1: W1.map(r=>Array.from(r)),
+      b1: Array.from(b1),
+      W2: Array.from(W2),
+      b2
+    };
+    stateArea.value = JSON.stringify(state);
+  }
+
+  function applyImportedState(obj){
+    stopAllAuto();
+
+    // Basic validation
+    if(!obj || typeof obj !== 'object') throw new Error('Invalid state object.');
+    if(!Number.isFinite(obj.K) || !Number.isFinite(obj.H)) throw new Error('State missing K/H.');
+    const kNew = obj.K|0;
+    const hNew = obj.H|0;
+    if(!Array.isArray(obj.W1) || obj.W1.length !== hNew) throw new Error('W1 shape mismatch.');
+    if(!Array.isArray(obj.b1) || obj.b1.length !== hNew) throw new Error('b1 length mismatch.');
+    if(!Array.isArray(obj.W2) || obj.W2.length !== hNew) throw new Error('W2 length mismatch.');
+    if(!Number.isFinite(obj.b2)) throw new Error('b2 invalid.');
+
+    // Apply settings
+    if(['slope','hill','step'].includes(obj.fn)) fnSel.value = obj.fn;
+    K = kNew;
+    H = hNew;
+
+    // Clamp base
+    if(['6','8','10'].includes(String(obj.WMAX_BASE))) {
+      WMAX_BASE = parseInt(obj.WMAX_BASE,10);
+      clampSel.value = String(obj.WMAX_BASE);
+    } else {
+      WMAX_BASE = parseInt(clampSel.value,10);
+    }
+    WMAX = WMAX_BASE;
+
+    // Auto H
+    autoHSwitch.checked = !!obj.autoH;
+    if(!autoHSwitch.checked){
+      if(['8','12','16'].includes(String(hNew))) hSel.value = String(hNew);
+    }
+
+    // Curriculum + guards
+    if(typeof obj.currKs === 'string') currKsInput.value = obj.currKs;
+    if(Number.isFinite(obj.phaseTarget)) phaseTargetInput.value = obj.phaseTarget;
+    if(Number.isFinite(obj.plateLimit)) plateLimitInput.value = obj.plateLimit;
+    if(Number.isFinite(obj.maxPass)) maxPassInput.value = obj.maxPass;
+    if(Number.isFinite(obj.lossStop)) lossStopInput.value = obj.lossStop;
+    if(Number.isFinite(obj.stepDelay)) stepDelayInput.value = obj.stepDelay;
+    if(Number.isFinite(obj.fineStop)) fineStopInput.value = obj.fineStop;
+    if(Number.isFinite(obj.finePlate)) finePlateInput.value = obj.finePlate;
+    if(Number.isFinite(obj.slowStart)) slowStartInput.value = obj.slowStart;
+    if(Number.isFinite(obj.slowEnd)) slowEndInput.value = obj.slowEnd;
+
+    // Build xs/ys
+    buildXs();
+    makeTargets(fnSel.value);
+
+    // Rebuild params
+    W1 = Array.from({length:H}, (_,i)=>{
+      const rowArr = obj.W1[i];
+      if(!Array.isArray(rowArr) || rowArr.length!==K) throw new Error('W1 row length mismatch.');
+      const row = new Int8Array(K);
+      for(let j=0;j<K;j++) row[j] = clampInt(rowArr[j]|0);
+      return row;
+    });
+    b1 = new Int8Array(H);
+    for(let i=0;i<H;i++) b1[i] = clampInt(obj.b1[i]|0);
+    W2 = new Int8Array(H);
+    for(let i=0;i<H;i++) W2[i] = clampInt(obj.W2[i]|0);
+    b2 = clampInt(obj.b2|0);
+
+    passCount = obj.passCount|0;
+    phasePasses = obj.phasePasses|0;
+    plateauCounter = obj.plateauCounter|0;
+    stepsEl.textContent = obj.steps|0;
+
+    bestLoss = Number.isFinite(obj.bestLoss) ? obj.bestLoss : Infinity;
+    bestPass = obj.bestPass|0;
+    if(bestLoss < Infinity){
+      bestLossEl.textContent = bestLoss.toFixed(3);
+      bestPassEl.textContent = bestPass;
+    } else {
+      bestLossEl.textContent='—';
+      bestPassEl.textContent='—';
+    }
+
+    plateauEl.textContent = plateauCounter;
+    phasePassesEl.textContent = phasePasses;
+
+    // Inspect
+    inspect.max = K;
+    const iVal = Number.isFinite(obj.inspectVal) ? obj.inspectVal : Math.floor(K/2);
+    inspect.value = Math.min(K, Math.max(0, iVal));
+
+    // Reset badges
+    lossEl.textContent = fullLoss().toFixed(3);
+    changedEl.textContent='—';
+    blockChangedEl.textContent='—';
+    orderEl.textContent='Fwd→Rev';
+    stepSetEl.textContent='±2,±1';
+    autoStatus.textContent='Off';
+    currStatus.textContent='Off';
+    slowStatus.textContent='Off';
+    phaseBadge.textContent='—';
+
+    // Reflect K in selector if present
+    const kOpt = [...kSel.options].find(o=>parseInt(o.value,10)===K);
+    if(kOpt) kSel.value = String(K);
+
+    renderAll();
+  }
+
+  exportBtn.addEventListener('click', exportState);
+
+  copyBtn.addEventListener('click', ()=>{
+    if(!stateArea.value) { exportState(); }
+    if(navigator.clipboard && window.isSecureContext){
+      navigator.clipboard.writeText(stateArea.value).catch(()=>{});
+    } else {
+      stateArea.select();
+      document.execCommand('copy');
+    }
+  });
+
+  importBtn.addEventListener('click', ()=>{
+    try{
+      const obj = JSON.parse(stateArea.value);
+      applyImportedState(obj);
+      alert('State applied.');
+    } catch(err){
+      alert('Import failed: ' + err.message);
+    }
+  });
+
+  function initAll(){
+    buildXs(); makeTargets('slope'); initParams();
+    renderAll();
+  }
+  initAll();
+
+  window.addEventListener('resize', ()=>{ renderPlot(); });
+})();
+</script>
+
+
+</body></html>

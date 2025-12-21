@@ -1,0 +1,676 @@
+<!DOCTYPE html><html lang="en"><head><meta name="x-poe-datastore-behavior" content="local_only"><meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://code.jquery.com https://unpkg.com https://d3js.org https://threejs.org https://cdn.plot.ly https://stackpath.bootstrapcdn.com https://maps.googleapis.com https://cdn.tailwindcss.com https://ajax.googleapis.com https://kit.fontawesome.com https://cdn.datatables.net https://maxcdn.bootstrapcdn.com https://code.highcharts.com https://tako-static-assets-production.s3.amazonaws.com https://www.youtube.com https://fonts.googleapis.com https://fonts.gstatic.com https://pfst.cf2.poecdn.net https://puc.poecdn.net https://i.imgur.com https://wikimedia.org https://*.icons8.com https://*.giphy.com https://picsum.photos https://images.unsplash.com; frame-src 'self' https://www.youtube.com https://trytako.com; child-src 'self'; manifest-src 'self'; worker-src 'self'; upgrade-insecure-requests; block-all-mixed-content;">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unary (Base‑1 / Thermometer) Neural Network — In‑Depth Visualizer</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #0b1021;
+    --panel: rgba(255,255,255,0.06);
+    --border: rgba(255,255,255,0.12);
+    --text: #e9ecf5;
+    --muted: #9aa4c2;
+    --accent: #7dd3fc;
+    --accent2: #5eead4;
+    --warn: #fbbf24;
+    --danger: #f87171;
+    --code: rgba(255,255,255,0.06);
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f7f9fc;
+      --panel: #ffffff;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --muted: #475569;
+      --accent: #0ea5e9;
+      --accent2: #10b981;
+      --warn: #d97706;
+      --danger: #dc2626;
+      --code: #f1f5f9;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background:
+      radial-gradient(circle at 18% 18%, rgba(125,211,252,0.12), transparent 30%),
+      radial-gradient(circle at 78% 0%, rgba(94,234,212,0.12), transparent 32%),
+      var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 1rem;
+  }
+  .container { max-width: 1200px; margin: 0 auto; display: grid; gap: 1rem; }
+  h1 { margin: 0 0 0.35em 0; font-size: clamp(1.7rem, 4vw, 2.3rem); }
+  p { margin: 0 0 0.6em 0; }
+  .muted { color: var(--muted); }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1rem;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.12);
+    backdrop-filter: blur(6px);
+  }
+  .controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.6rem;
+    align-items: center;
+    margin-bottom: 0.7rem;
+  }
+  button, select, input[type="range"] {
+    font: inherit;
+    padding: 0.55rem 0.8rem;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    cursor: pointer;
+    transition: transform 0.08s ease, border-color 0.15s ease;
+  }
+  button:hover, select:hover { border-color: var(--accent); }
+  button:active { transform: scale(0.98); }
+  input[type="range"] { width: 100%; padding: 0.35rem 0; }
+  .pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .pill {
+    padding: 0.35rem 0.7rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+  .grid-2 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 0.75rem;
+    align-items: start;
+  }
+  .grid-3 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.75rem;
+  }
+  canvas {
+    width: 100%;
+    height: 320px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--code);
+    display: block;
+  }
+  @media (max-width: 560px) { canvas { height: 240px; } }
+  .unary-bar {
+    display: grid;
+    grid-template-columns: repeat(32, minmax(0,1fr));
+    gap: 4px;
+    margin-top: 0.4rem;
+  }
+  .bit {
+    height: 22px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+  }
+  .small { font-size: 0.9rem; }
+</style>
+</head>
+<body>
+  <div class="container">
+    <div>
+      <h1>Unary (Base‑1 / Thermometer) Neural Network — In‑Depth</h1>
+      <p class="muted">
+        Deterministic unary encoding (no stochastic bitstreams). Adjust unary length K, inspect encodings, and view weights/activations live.
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="controls">
+        <label>
+          <span class="muted">Target function</span><br>
+          <select id="fn-select">
+            <option value="hill">Hill (up then down)</option>
+            <option value="slope">Slope (rising)</option>
+            <option value="step">Step</option>
+          </select>
+        </label>
+        <label>
+          <span class="muted">Unary length K</span><br>
+          <select id="k-select">
+            <option value="8">8</option>
+            <option value="12">12</option>
+            <option value="16" selected="">16</option>
+            <option value="24">24</option>
+            <option value="32">32</option>
+          </select>
+        </label>
+        <label>
+          <span class="muted">Inspect x (0..K)</span><br>
+          <input id="inspect" type="range" min="0" max="16" step="1" value="8">
+        </label>
+        <button id="toggle">Start</button>
+        <button id="reset">Reset</button>
+      </div>
+
+      <div class="pills">
+        <div class="pill">Loss: <span id="loss">—</span></div>
+        <div class="pill">Steps: <span id="steps">0</span></div>
+        <div class="pill">Net: K → 24 → 12 → 1 (ReLU)</div>
+        <div class="pill">Opt: SGD lr 0.03 (full batch)</div>
+        <div class="pill">Samples: K+1 over x ∈ [0, K]</div>
+        <div class="pill">Grad norms |gW1|, |gW2|, |gW3|: <span id="gnorms">—</span></div>
+      </div>
+
+      <div class="grid-2">
+        <div>
+          <canvas id="plot" aria-label="Training plot"></canvas>
+        </div>
+        <div>
+          <div class="muted">Unary encoding for x = <span id="inspect-val">8</span> (density = <span id="density">0.50</span>)</div>
+          <div class="unary-bar" id="unary-bar"></div>
+          <div class="pill" style="margin-top:0.4rem;">Predicted ŷ: <span id="inspect-pred">—</span></div>
+          <div class="pill">Target y: <span id="inspect-true">—</span></div>
+          <p class="small muted" style="margin-top:0.5rem;">
+            Thermometer code: first x bits are 1, rest 0. Dot products can be seen as AND+sum (popcount) when weights are positive masks.
+          </p>
+        </div>
+      </div>
+
+      <div class="grid-3" style="margin-top:0.85rem;">
+        <div>
+          <div class="muted">Weight heatmap: Input → Hidden1 (rows=H1, cols=K)</div>
+          <canvas id="w1map" aria-label="W1 heatmap"></canvas>
+        </div>
+        <div>
+          <div class="muted">Weight heatmap: Hidden1 → Hidden2 (rows=H2, cols=H1)</div>
+          <canvas id="w2map" aria-label="W2 heatmap"></canvas>
+        </div>
+        <div>
+          <div class="muted">Activation map: Hidden1 across x</div>
+          <canvas id="actmap" aria-label="Activation map"></canvas>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+<script>
+(() => {
+  // ---------- Hyperparameters ----------
+  let K = 16;            // unary length
+  const H1 = 24;
+  const H2 = 12;
+  const lr = 0.03;
+  const stepsPerFrame = 6;
+
+  // ---------- Data ----------
+  let xs = [];
+  let ys = [];
+  let X = [];
+
+  function makeGrid() {
+    xs = [];
+    for (let v = 0; v <= K; v++) xs.push(v);
+  }
+  function makeTargets(kind) {
+    ys = [];
+    for (let v = 0; v <= K; v++) {
+      let y;
+      if (kind === 'hill') {
+        const mid = K / 2;
+        y = v <= mid ? v / mid : (K - v) / mid; // peak 1 at center
+      } else if (kind === 'slope') {
+        y = v / K;
+      } else { // step
+        y = v < K / 2 ? 0.2 : 0.9;
+      }
+      ys.push(y);
+    }
+  }
+  function encodeUnary(v) {
+    const out = new Float64Array(K);
+    for (let i = 0; i < K; i++) out[i] = i < v ? 1 : 0;
+    return out;
+  }
+  function rebuildX() {
+    X = xs.map(encodeUnary);
+  }
+
+  // ---------- Parameters ----------
+  let W1, b1, W2, b2, W3, b3;
+
+  function randn() {
+    let u = 0, v = 0;
+    while (u === 0) u = Math.random();
+    while (v === 0) v = Math.random();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  }
+
+  function initParams() {
+    const s1 = Math.sqrt(2 / K);
+    const s2 = Math.sqrt(2 / H1);
+    const s3 = Math.sqrt(2 / H2);
+    W1 = Array.from({length: H1}, () => {
+      const row = new Float64Array(K);
+      for (let j = 0; j < K; j++) row[j] = randn() * s1;
+      return row;
+    });
+    b1 = new Float64Array(H1);
+    W2 = Array.from({length: H2}, () => {
+      const row = new Float64Array(H1);
+      for (let j = 0; j < H1; j++) row[j] = randn() * s2;
+      return row;
+    });
+    b2 = new Float64Array(H2);
+    W3 = new Float64Array(H2);
+    for (let k = 0; k < H2; k++) W3[k] = randn() * s3;
+    b3 = 0;
+  }
+
+  // ---------- Forward ----------
+  function forward(xVec, z1buf, a1buf, z2buf, a2buf) {
+    // layer1
+    for (let k = 0; k < H1; k++) {
+      let sum = b1[k];
+      const w = W1[k];
+      for (let j = 0; j < K; j++) sum += w[j] * xVec[j];
+      z1buf[k] = sum;
+      a1buf[k] = sum > 0 ? sum : 0;
+    }
+    // layer2
+    for (let k = 0; k < H2; k++) {
+      let sum = b2[k];
+      const w = W2[k];
+      for (let j = 0; j < H1; j++) sum += w[j] * a1buf[j];
+      z2buf[k] = sum;
+      a2buf[k] = sum > 0 ? sum : 0;
+    }
+    // out
+    let y = b3;
+    for (let k = 0; k < H2; k++) y += W3[k] * a2buf[k];
+    return y;
+  }
+
+  // ---------- Training step (full batch SGD) ----------
+  function trainStep() {
+    const dW1 = Array.from({length: H1}, () => new Float64Array(K));
+    const db1 = new Float64Array(H1);
+    const dW2 = Array.from({length: H2}, () => new Float64Array(H1));
+    const db2 = new Float64Array(H2);
+    const dW3 = new Float64Array(H2);
+    let db3_acc = 0;
+    let loss = 0;
+    const N = xs.length;
+
+    const z1b = new Float64Array(H1);
+    const a1b = new Float64Array(H1);
+    const z2b = new Float64Array(H2);
+    const a2b = new Float64Array(H2);
+    const da1 = new Float64Array(H1);
+    const da2 = new Float64Array(H2);
+
+    for (let i = 0; i < N; i++) {
+      da1.fill(0);
+      da2.fill(0);
+      const xVec = X[i];
+      const yTrue = ys[i];
+
+      // forward
+      for (let k = 0; k < H1; k++) {
+        let sum = b1[k];
+        const w = W1[k];
+        for (let j = 0; j < K; j++) sum += w[j] * xVec[j];
+        z1b[k] = sum;
+        a1b[k] = sum > 0 ? sum : 0;
+      }
+      for (let k = 0; k < H2; k++) {
+        let sum = b2[k];
+        const w = W2[k];
+        for (let j = 0; j < H1; j++) sum += w[j] * a1b[j];
+        z2b[k] = sum;
+        a2b[k] = sum > 0 ? sum : 0;
+      }
+      let yPred = b3;
+      for (let k = 0; k < H2; k++) yPred += W3[k] * a2b[k];
+
+      const diff = yPred - yTrue;
+      loss += 0.5 * diff * diff;
+      const dL_dy = diff;
+
+      // output layer
+      for (let k = 0; k < H2; k++) {
+        dW3[k] += dL_dy * a2b[k];
+        da2[k] = dL_dy * W3[k];
+      }
+      db3_acc += dL_dy;
+
+      // layer2 backprop
+      for (let k = 0; k < H2; k++) {
+        const dz2 = z2b[k] > 0 ? da2[k] : 0;
+        db2[k] += dz2;
+        const w2k = W2[k];
+        const dW2k = dW2[k];
+        for (let j = 0; j < H1; j++) {
+          dW2k[j] += dz2 * a1b[j];
+          da1[j] += dz2 * w2k[j];
+        }
+      }
+
+      // layer1 backprop
+      for (let k = 0; k < H1; k++) {
+        const dz1 = z1b[k] > 0 ? da1[k] : 0;
+        db1[k] += dz1;
+        const dW1k = dW1[k];
+        for (let j = 0; j < K; j++) dW1k[j] += dz1 * xVec[j];
+      }
+    }
+
+    // SGD update + grad norms
+    let gnorm1 = 0, gnorm2 = 0, gnorm3 = 0;
+    const invN = 1 / N;
+    for (let k = 0; k < H1; k++) {
+      const w1k = W1[k];
+      const dW1k = dW1[k];
+      for (let j = 0; j < K; j++) {
+        const g = dW1k[j] * invN;
+        gnorm1 += g*g;
+        w1k[j] -= lr * g;
+      }
+      b1[k] -= lr * db1[k] * invN;
+    }
+    for (let k = 0; k < H2; k++) {
+      const w2k = W2[k];
+      const dW2k = dW2[k];
+      for (let j = 0; j < H1; j++) {
+        const g = dW2k[j] * invN;
+        gnorm2 += g*g;
+        w2k[j] -= lr * g;
+      }
+      b2[k] -= lr * db2[k] * invN;
+      const g3 = dW3[k] * invN;
+      gnorm3 += g3*g3;
+      W3[k] -= lr * g3;
+    }
+    b3 -= lr * db3_acc * invN;
+
+    return { loss: loss * invN, g1: Math.sqrt(gnorm1), g2: Math.sqrt(gnorm2), g3: Math.sqrt(gnorm3) };
+  }
+
+  // ---------- Canvas setup ----------
+  const plot = document.getElementById('plot');
+  const w1map = document.getElementById('w1map');
+  const w2map = document.getElementById('w2map');
+  const actmap = document.getElementById('actmap');
+  const pctx = plot.getContext('2d');
+  const w1ctx = w1map.getContext('2d');
+  const w2ctx = w2map.getContext('2d');
+  const actctx = actmap.getContext('2d');
+  let pw=0, ph=0, w1w=0, w1h=0, w2w=0, w2h=0, aw=0, ah=0, dpr=window.devicePixelRatio||1;
+
+  function resize() {
+    const pr = plot.getBoundingClientRect();
+    pw = pr.width; ph = pr.height;
+    plot.width = Math.round(pw*dpr); plot.height = Math.round(ph*dpr);
+    pctx.setTransform(dpr,0,0,dpr,0,0);
+
+    const r1 = w1map.getBoundingClientRect();
+    w1w = r1.width; w1h = r1.height;
+    w1map.width = Math.round(w1w*dpr); w1map.height = Math.round(w1h*dpr);
+    w1ctx.setTransform(dpr,0,0,dpr,0,0);
+
+    const r2 = w2map.getBoundingClientRect();
+    w2w = r2.width; w2h = r2.height;
+    w2map.width = Math.round(w2w*dpr); w2map.height = Math.round(w2h*dpr);
+    w2ctx.setTransform(dpr,0,0,dpr,0,0);
+
+    const r3 = actmap.getBoundingClientRect();
+    aw = r3.width; ah = r3.height;
+    actmap.width = Math.round(aw*dpr); actmap.height = Math.round(ah*dpr);
+    actctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------- Rendering helpers ----------
+  function renderPlot(lossVal) {
+    pctx.clearRect(0,0,pw,ph);
+    const yMin = -0.1, yMax = 1.1;
+    const xToPx = x => (x / K) * pw;
+    const yToPx = y => ph - ((y - yMin) / (yMax - yMin)) * ph;
+
+    // axes
+    pctx.strokeStyle = 'rgba(255,255,255,0.32)';
+    pctx.lineWidth = 1;
+    const y0 = yToPx(0);
+    pctx.beginPath(); pctx.moveTo(0,y0); pctx.lineTo(pw,y0); pctx.stroke();
+    pctx.beginPath(); pctx.moveTo(0,0); pctx.lineTo(0,ph); pctx.stroke();
+
+    // target points
+    pctx.fillStyle = 'rgba(94,234,212,0.9)';
+    for (let i = 0; i < xs.length; i++) {
+      const px = xToPx(xs[i]);
+      const py = yToPx(ys[i]);
+      pctx.beginPath(); pctx.arc(px, py, 4, 0, Math.PI*2); pctx.fill();
+    }
+
+    // prediction line
+    pctx.strokeStyle = 'rgba(125,211,252,0.95)';
+    pctx.lineWidth = 2;
+    const z1b = new Float64Array(H1);
+    const a1b = new Float64Array(H1);
+    const z2b = new Float64Array(H2);
+    const a2b = new Float64Array(H2);
+    pctx.beginPath();
+    for (let i = 0; i < xs.length; i++) {
+      const yhat = forward(X[i], z1b, a1b, z2b, a2b);
+      const px = xToPx(xs[i]);
+      const py = yToPx(yhat);
+      if (i===0) pctx.moveTo(px,py); else pctx.lineTo(px,py);
+    }
+    pctx.stroke();
+
+    document.getElementById('loss').textContent = lossVal !== null ? lossVal.toFixed(5) : '—';
+  }
+
+  function renderHeatmap(ctx, data2d, w, h) {
+    if (!data2d.length || !data2d[0].length) return;
+    ctx.clearRect(0,0,w,h);
+    const rows = data2d.length;
+    const cols = data2d[0].length;
+    let maxAbs = 0;
+    for (let r=0;r<rows;r++) for (let c=0;c<cols;c++) maxAbs = Math.max(maxAbs, Math.abs(data2d[r][c]));
+    maxAbs = Math.max(maxAbs, 1e-9);
+    const cw = w / cols;
+    const ch = h / rows;
+    for (let r=0;r<rows;r++) {
+      for (let c=0;c<cols;c++) {
+        const v = data2d[r][c] / maxAbs;
+        const a = Math.min(1, Math.abs(v));
+        let color;
+        if (v >= 0) color = `rgba(125,211,252,${0.2+0.8*a})`;
+        else color = `rgba(248,113,113,${0.2+0.8*a})`;
+        ctx.fillStyle = color;
+        ctx.fillRect(c*cw, r*ch, cw+0.5, ch+0.5);
+      }
+    }
+    // subtle grid
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 1;
+    for (let c=0;c<=cols;c++) {
+      ctx.beginPath(); ctx.moveTo(c*cw,0); ctx.lineTo(c*cw,h); ctx.stroke();
+    }
+    for (let r=0;r<=rows;r++) {
+      ctx.beginPath(); ctx.moveTo(0,r*ch); ctx.lineTo(w,r*ch); ctx.stroke();
+    }
+  }
+
+  function renderActMap() {
+    if (!xs.length) return;
+    actctx.clearRect(0,0,aw,ah);
+    const rows = H1;
+    const cols = xs.length;
+    const grid = Array.from({length: rows}, () => new Float64Array(cols));
+    const z1b = new Float64Array(H1);
+    const a1b = new Float64Array(H1);
+    const z2b = new Float64Array(H2);
+    const a2b = new Float64Array(H2);
+    let maxA = 0;
+    for (let i=0;i<cols;i++) {
+      forward(X[i], z1b, a1b, z2b, a2b);
+      for (let r=0;r<rows;r++) {
+        grid[r][i] = a1b[r];
+        if (Math.abs(a1b[r]) > maxA) maxA = Math.abs(a1b[r]);
+      }
+    }
+    maxA = Math.max(maxA, 1e-9);
+    const cw = aw / cols;
+    const ch = ah / rows;
+    for (let r=0;r<rows;r++) {
+      for (let c=0;c<cols;c++) {
+        const v = grid[r][c] / maxA;
+        const a = Math.min(1, Math.abs(v));
+        let color;
+        if (v >= 0) color = `rgba(125,211,252,${0.2+0.8*a})`;
+        else color = `rgba(248,113,113,${0.2+0.8*a})`;
+        actctx.fillStyle = color;
+        actctx.fillRect(c*cw, r*ch, cw+0.5, ch+0.5);
+      }
+    }
+    actctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    actctx.lineWidth = 1;
+    for (let c=0;c<=cols;c++) { actctx.beginPath(); actctx.moveTo(c*cw,0); actctx.lineTo(c*cw,ah); actctx.stroke(); }
+    for (let r=0;r<=rows;r++) { actctx.beginPath(); actctx.moveTo(0,r*ch); actctx.lineTo(aw,r*ch); actctx.stroke(); }
+  }
+
+  // ---------- Unary bar ----------
+  const bar = document.getElementById('unary-bar');
+  let bitElems = [];
+  function rebuildBar() {
+    bar.innerHTML = '';
+    bitElems = [];
+    for (let i=0;i<K;i++){
+      const d=document.createElement('div');
+      d.className='bit';
+      bar.appendChild(d);
+      bitElems.push(d);
+    }
+    // adjust grid columns
+    bar.style.gridTemplateColumns = `repeat(${K}, minmax(0,1fr))`;
+  }
+
+  function updateInspect(vInt) {
+    document.getElementById('inspect-val').textContent = vInt;
+    const enc = encodeUnary(vInt);
+    for (let i=0;i<K;i++){
+      bitElems[i].style.background = enc[i] ? 'linear-gradient(135deg, var(--accent), var(--accent2))' : 'var(--panel)';
+      bitElems[i].style.borderColor = enc[i] ? 'rgba(255,255,255,0.5)' : 'var(--border)';
+    }
+    const density = (vInt / (K||1)).toFixed(2);
+    document.getElementById('density').textContent = density;
+    const z1b = new Float64Array(H1);
+    const a1b = new Float64Array(H1);
+    const z2b = new Float64Array(H2);
+    const a2b = new Float64Array(H2);
+    const yPred = forward(enc, z1b, a1b, z2b, a2b);
+    const yTrue = ys[vInt];
+    document.getElementById('inspect-true').textContent = yTrue.toFixed(4);
+    document.getElementById('inspect-pred').textContent = yPred.toFixed(4);
+  }
+
+  // ---------- Loop ----------
+  let running = false;
+  let steps = 0;
+  function loop() {
+    if (running) {
+      let out;
+      for (let i=0;i<stepsPerFrame;i++){
+        out = trainStep();
+        steps++;
+      }
+      document.getElementById('steps').textContent = steps;
+      renderPlot(out.loss);
+      renderHeatmap(w1ctx, W1, w1w, w1h);
+      renderHeatmap(w2ctx, W2, w2w, w2h);
+      renderActMap();
+      document.getElementById('gnorms').textContent =
+        `${out.g1.toFixed(3)}, ${out.g2.toFixed(3)}, ${out.g3.toFixed(3)}`;
+      const vInt = parseInt(document.getElementById('inspect').value,10);
+      updateInspect(vInt);
+    }
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- UI ----------
+  document.getElementById('toggle').addEventListener('click', () => {
+    running = !running;
+    document.getElementById('toggle').textContent = running ? 'Pause' : 'Start';
+  });
+  document.getElementById('reset').addEventListener('click', () => {
+    running = false;
+    document.getElementById('toggle').textContent = 'Start';
+    steps = 0;
+    document.getElementById('steps').textContent = steps;
+    initParams();
+    renderPlot(null);
+    renderHeatmap(w1ctx, W1, w1w, w1h);
+    renderHeatmap(w2ctx, W2, w2w, w2h);
+    renderActMap();
+    updateInspect(parseInt(document.getElementById('inspect').value,10));
+    document.getElementById('gnorms').textContent = '—';
+  });
+  document.getElementById('fn-select').addEventListener('change', (e) => {
+    makeTargets(e.target.value);
+    steps = 0;
+    document.getElementById('steps').textContent = steps;
+    renderPlot(null);
+    renderActMap();
+    updateInspect(parseInt(document.getElementById('inspect').value,10));
+  });
+  document.getElementById('k-select').addEventListener('change', (e) => {
+    K = parseInt(e.target.value,10);
+    document.getElementById('inspect').max = K;
+    document.getElementById('inspect').value = Math.min(parseInt(document.getElementById('inspect').value,10), K);
+    makeGrid();
+    makeTargets(document.getElementById('fn-select').value);
+    rebuildX();
+    rebuildBar();
+    initParams();
+    steps = 0;
+    document.getElementById('steps').textContent = steps;
+    renderPlot(null);
+    renderHeatmap(w1ctx, W1, w1w, w1h);
+    renderHeatmap(w2ctx, W2, w2w, w2h);
+    renderActMap();
+    updateInspect(parseInt(document.getElementById('inspect').value,10));
+    document.getElementById('gnorms').textContent = '—';
+  });
+  document.getElementById('inspect').addEventListener('input', (e) => {
+    const v = parseInt(e.target.value,10);
+    updateInspect(v);
+  });
+
+  // ---------- Init ----------
+  makeGrid();
+  makeTargets('hill');
+  rebuildX();
+  rebuildBar();
+  initParams();
+  renderPlot(null);
+  renderHeatmap(w1ctx, W1, w1w, w1h);
+  renderHeatmap(w2ctx, W2, w2w, w2h);
+  renderActMap();
+  updateInspect(parseInt(document.getElementById('inspect').value,10));
+  loop();
+})();
+</script>
+
+
+</body></html>

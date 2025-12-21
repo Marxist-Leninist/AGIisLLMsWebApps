@@ -1,0 +1,394 @@
+<!DOCTYPE html><html lang="en"><head><meta name="x-poe-datastore-behavior" content="local_only"><meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://code.jquery.com https://unpkg.com https://d3js.org https://threejs.org https://cdn.plot.ly https://stackpath.bootstrapcdn.com https://maps.googleapis.com https://cdn.tailwindcss.com https://ajax.googleapis.com https://kit.fontawesome.com https://cdn.datatables.net https://maxcdn.bootstrapcdn.com https://code.highcharts.com https://tako-static-assets-production.s3.amazonaws.com https://www.youtube.com https://fonts.googleapis.com https://fonts.gstatic.com https://pfst.cf2.poecdn.net https://puc.poecdn.net https://i.imgur.com https://wikimedia.org https://*.icons8.com https://*.giphy.com https://picsum.photos https://images.unsplash.com; frame-src 'self' https://www.youtube.com https://trytako.com; child-src 'self'; manifest-src 'self'; worker-src 'self'; upgrade-insecure-requests; block-all-mixed-content;">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dodge the Squares — Toy Transformer Learner</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: radial-gradient(circle at 20% 20%, #0f152a, #070a16 45%, #050712);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: flex; justify-content: center; align-items: center; padding: 16px;
+    color: #e8ecf1;
+  }
+  #game {
+    border: 2px solid #2b354a;
+    background: radial-gradient(circle at 30% 30%, #162042, #0b0f1a 70%);
+    position: relative;
+    width: 420px;
+    max-width: 90vw;
+    aspect-ratio: 420 / 620;
+    height: 620px;
+    max-height: 90vh;
+    overflow: hidden;
+    box-shadow: 0 0 30px #0a0e1a, 0 20px 80px rgba(0,0,0,0.45);
+    border-radius: 12px;
+  }
+  #hud {
+    position: absolute;
+    top: 8px; left: 10px; right: 10px;
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    font-weight: 600; font-size: 14px; color: #cdd7e3;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.35);
+    flex-wrap: wrap;
+  }
+  #player {
+    position: absolute;
+    width: 22px; height: 22px;
+    background: #5ef5ff;
+    border-radius: 6px;
+    box-shadow: 0 0 10px #5ef5ff;
+  }
+  .enemy {
+    position: absolute;
+    width: 22px; height: 22px;
+    background: #ff4f6d;
+    border-radius: 3px;
+    box-shadow: 0 0 10px #ff4f6d;
+  }
+  #message {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center; flex-direction: column;
+    background: rgba(11,15,26,0.72);
+    color: #e8ecf1; gap: 10px; font-weight: 700; letter-spacing: 0.5px; text-align: center;
+    padding: 20px;
+  }
+  button {
+    background: #2d3b6a;
+    color: #e8ecf1;
+    border: 1px solid #3f4f80;
+    border-radius: 6px;
+    padding: 10px 16px;
+    cursor: pointer;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.25);
+    transition: background 120ms ease, transform 120ms ease;
+  }
+  button:hover { background: #3a4a7a; transform: translateY(-1px); }
+  button:active { transform: translateY(0); }
+  #learnBar {
+    position: absolute;
+    bottom: 8px; left: 10px; right: 10px;
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    font-size: 12px; color: #cdd7e3;
+  }
+  #weights {
+    display: flex; gap: 10px; flex-wrap: wrap;
+  }
+  .chip {
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+  input[type="checkbox"] { accent-color: #5ef5ff; }
+  @media (max-width: 520px) {
+    #hud { font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+<div id="game" aria-label="Dodge the Squares - AI learns over time">
+  <div id="hud">
+    <div>Time: <span id="time">0.0</span>s</div>
+    <div>Best: <span id="best">0.0</span>s</div>
+    <div>Top Score: <span id="topScore">0.0</span>s</div>
+  </div>
+  <div id="player" aria-label="AI-controlled player"></div>
+  <div id="message">
+    <div style="font-size:18px;">Dodge the Squares</div>
+    <div style="font-size:14px; color:#cdd7e3; max-width: 320px;">
+      Toy “Transformer-like” attention with a tiny self-tuning loop. It remembers
+      weights across games (stored locally).
+    </div>
+    <button id="startBtn">Start Watching</button>
+  </div>
+  <div id="learnBar">
+    <label><input type="checkbox" id="learnToggle" checked=""> Learning on</label>
+    <button id="resetLearnBtn" style="padding:6px 10px;">Reset Learning</button>
+    <div id="weights"></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ---- DOM ----
+  const game = document.getElementById('game');
+  const player = document.getElementById('player');
+  const timeEl = document.getElementById('time');
+  const bestEl = document.getElementById('best');
+  const topScoreEl = document.getElementById('topScore');
+  const message = document.getElementById('message');
+  const startBtn = document.getElementById('startBtn');
+  const learnToggle = document.getElementById('learnToggle');
+  const resetLearnBtn = document.getElementById('resetLearnBtn');
+  const weightsEl = document.getElementById('weights');
+
+  // ---- Game constants ----
+  const W = 420, H = 620;
+  const pw = 22, ph = 22;
+  const baseSpeed = 3.2;
+  const aiSpeed = baseSpeed * 1.05;
+
+  // ---- State ----
+  let px = W/2 - pw/2, py = H - 80;
+  let enemies = [];
+  let running = false;
+  let startTime = 0;
+  let best = 0;
+  let topScore = 0;
+  let lastSpawn = 0;
+
+  // ---- Learning state (toy hill-climber over heuristic weights) ----
+  const STORAGE_KEY = 'dodge_toy_transformer_weights_v1';
+  const STORAGE_TOP = 'dodge_toy_transformer_topscore_v1';
+
+  // Policy weights (heuristic, attention-inspired)
+  let weights = {
+    distScale: 0.0020,    // how strongly distance penalizes attention logits
+    aboveBonus: 0.60,     // bonus logit if enemy is above the player
+    centerBias: 0.0008,   // pull toward center (x)
+    upperBias: 0.0009,    // pull toward upper-mid (y)
+    noiseScale: 0.05,     // lateral noise when enemy above
+  };
+  let bestWeights = { ...weights };
+  let bestWeightsScore = 0;
+
+  // Load persisted
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      if (parsed && typeof parsed === 'object') {
+        weights = { ...weights, ...parsed };
+        bestWeights = { ...weights };
+      }
+    } catch {}
+  }
+  const savedTop = localStorage.getItem(STORAGE_TOP);
+  if (savedTop) {
+    topScore = parseFloat(savedTop) || 0;
+  }
+  topScoreEl.textContent = topScore.toFixed(1);
+
+  const renderWeights = () => {
+    weightsEl.innerHTML = '';
+    const entries = [
+      ['distScale', weights.distScale],
+      ['aboveBonus', weights.aboveBonus],
+      ['centerBias', weights.centerBias],
+      ['upperBias', weights.upperBias],
+      ['noiseScale', weights.noiseScale],
+    ];
+    for (const [k,v] of entries) {
+      const span = document.createElement('span');
+      span.className = 'chip';
+      span.textContent = `${k}: ${v.toFixed(4)}`;
+      weightsEl.appendChild(span);
+    }
+  };
+  renderWeights();
+
+  const setPos = () => { player.style.transform = `translate(${px}px, ${py}px)`; };
+  setPos();
+
+  const spawnEnemy = () => {
+    const e = document.createElement('div');
+    e.className = 'enemy';
+    const size = 18 + Math.random()*10;
+    e.style.width = `${size}px`;
+    e.style.height = `${size}px`;
+    const x = Math.random() * (W - size);
+    e.style.left = `${x}px`;
+    e.style.top = `-30px`;
+    e.dataset.vy = (1.4 + Math.random()*1.8).toFixed(2);
+    enemies.push(e);
+    game.appendChild(e);
+  };
+
+  const reset = () => {
+    enemies.forEach(e => e.remove());
+    enemies = [];
+    px = W/2 - pw/2; py = H - 80;
+    setPos();
+    timeEl.textContent = '0.0';
+    lastSpawn = performance.now();
+  };
+
+  const collide = (ax, ay, aw, ah, bx, by, bw, bh) =>
+    ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+
+  const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+
+  // --- Attention-inspired policy using weights ---
+  const computeAttentionMove = () => {
+    if (enemies.length === 0) {
+      const dxC = (W/2 - pw/2) - px;
+      const dyT = H*0.65 - py;
+      const len = Math.hypot(dxC, dyT) || 1;
+      return { vx: (dxC/len)*aiSpeed*0.6, vy: (dyT/len)*aiSpeed*0.6 };
+    }
+
+    const feats = [];
+    const pcx = px + pw/2;
+    const pcy = py + ph/2;
+    for (const e of enemies) {
+      const ex = parseFloat(e.style.left);
+      const ey = parseFloat(e.style.top);
+      const ew = e.offsetWidth;
+      const eh = e.offsetHeight;
+      const vyE = parseFloat(e.dataset.vy);
+      const ecx = ex + ew/2;
+      const ecy = ey + eh/2;
+      const dx = ecx - pcx;
+      const dy = ecy - pcy;
+      const dist2 = dx*dx + dy*dy + 1e-3;
+      feats.push({ dx, dy, dist2, vy: vyE });
+    }
+
+    feats.sort((a,b) => a.dist2 - b.dist2);
+    const K = 8;
+    const sel = feats.slice(0, K);
+
+    const logits = sel.map(f => {
+      return -f.dist2 * weights.distScale + (f.dy < 0 ? weights.aboveBonus : 0);
+    });
+    const maxLogit = Math.max(...logits);
+    const exps = logits.map(l => Math.exp(l - maxLogit));
+    const sumExp = exps.reduce((a,b)=>a+b, 0) || 1;
+    const attn = exps.map(e => e / sumExp);
+
+    let rx = 0, ry = 0;
+    sel.forEach((f, i) => {
+      const d2 = Math.max(f.dist2, 25);
+      const scale = attn[i] / d2;
+      rx -= f.dx * scale;
+      ry -= f.dy * scale;
+      if (f.dy < 0) {
+        rx += (Math.random()*2 - 1) * weights.noiseScale * attn[i];
+      }
+    });
+
+    rx += ((W/2 - pw/2) - px) * weights.centerBias;
+    ry += ((H*0.55) - py) * weights.upperBias;
+
+    const norm = Math.hypot(rx, ry);
+    if (norm > 1e-4) {
+      rx = rx / norm * aiSpeed;
+      ry = ry / norm * aiSpeed;
+    } else {
+      rx = 0; ry = 0;
+    }
+    return { vx: rx, vy: ry };
+  };
+
+  // Simple hill-climbing over weights: mutate, evaluate, keep if better
+  const mutateWeights = (src) => {
+    const factor = 0.12; // mutation scale
+    const jitter = (v) => v * (1 + (Math.random()*2 - 1) * factor);
+    return {
+      distScale: Math.max(0.0005, jitter(src.distScale)),
+      aboveBonus: jitter(src.aboveBonus),
+      centerBias: jitter(src.centerBias),
+      upperBias: jitter(src.upperBias),
+      noiseScale: Math.max(0.0, jitter(src.noiseScale)),
+    };
+  };
+
+  const loop = (t) => {
+    if (!running) return;
+
+    // AI move
+    const ai = computeAttentionMove();
+    px = clamp(px + ai.vx, 0, W - pw);
+    py = clamp(py + ai.vy, 0, H - ph);
+    setPos();
+
+    // spawn
+    if (t - lastSpawn > 550) { spawnEnemy(); lastSpawn = t; }
+
+    // update enemies and collisions
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      const e = enemies[i];
+      const vyE = parseFloat(e.dataset.vy);
+      const ny = (parseFloat(e.style.top) + vyE);
+      e.style.top = `${ny}px`;
+      if (ny > H + 40) { e.remove(); enemies.splice(i,1); continue; }
+      const ex = parseFloat(e.style.left), ew = e.offsetWidth, eh = e.offsetHeight;
+      if (collide(px, py, pw, ph, ex, ny, ew, eh)) {
+        endGame();
+        return;
+      }
+    }
+
+    // time
+    const elapsed = (t - startTime)/1000;
+    timeEl.textContent = elapsed.toFixed(1);
+    requestAnimationFrame(loop);
+  };
+
+  const endGame = () => {
+    running = false;
+    const elapsed = parseFloat(timeEl.textContent);
+    if (elapsed > best) {
+      best = elapsed;
+      bestEl.textContent = best.toFixed(1);
+    }
+    // Learning update: hill-climb accept
+    if (learnToggle.checked) {
+      if (elapsed > bestWeightsScore) {
+        bestWeightsScore = elapsed;
+        bestWeights = { ...weights };
+        if (elapsed > topScore) {
+          topScore = elapsed;
+          localStorage.setItem(STORAGE_TOP, topScore.toFixed(1));
+          topScoreEl.textContent = topScore.toFixed(1);
+        }
+        // persist
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(bestWeights));
+      } else {
+        // revert to best and try a new mutation next time
+        weights = { ...bestWeights };
+      }
+      // Propose a new mutant for next run
+      weights = mutateWeights(weights);
+      renderWeights();
+    }
+
+    message.style.display = 'flex';
+    startBtn.textContent = 'Watch Again';
+  };
+
+  startBtn.onclick = () => {
+    reset();
+    running = true;
+    message.style.display = 'none';
+    startTime = performance.now();
+    requestAnimationFrame(loop);
+  };
+
+  resetLearnBtn.onclick = () => {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(STORAGE_TOP);
+    topScore = 0;
+    topScoreEl.textContent = '0.0';
+    bestWeightsScore = 0;
+    weights = {
+      distScale: 0.0020,
+      aboveBonus: 0.60,
+      centerBias: 0.0008,
+      upperBias: 0.0009,
+      noiseScale: 0.05,
+    };
+    bestWeights = { ...weights };
+    renderWeights();
+  };
+})();
+</script>
+
+
+</body></html>

@@ -1,0 +1,1516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEURAL BOXING 3D - T+NTM vs Transformer</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #000;
+            overflow: hidden;
+            font-family: 'Share Tech Mono', monospace;
+        }
+        
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #canvas3d {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        
+        .hud {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 20px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            pointer-events: none;
+        }
+        
+        .fighter-panel {
+            width: 320px;
+            background: rgba(10, 10, 20, 0.85);
+            border-radius: 8px;
+            padding: 16px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .fighter-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        
+        .fighter-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+        
+        .hybrid-icon {
+            background: linear-gradient(135deg, #00ffaa, #00aa66);
+            box-shadow: 0 0 20px #00ffaa44;
+        }
+        
+        .transformer-icon {
+            background: linear-gradient(135deg, #ff4466, #aa2244);
+            box-shadow: 0 0 20px #ff446644;
+        }
+        
+        .fighter-name {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        .hybrid-name { color: #00ffaa; }
+        .transformer-name { color: #ff4466; }
+        
+        .health-section {
+            margin-bottom: 12px;
+        }
+        
+        .stat-label {
+            font-size: 10px;
+            color: rgba(255,255,255,0.5);
+            letter-spacing: 2px;
+            margin-bottom: 4px;
+        }
+        
+        .health-bar-container {
+            height: 20px;
+            background: rgba(30, 30, 50, 0.9);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .health-bar {
+            height: 100%;
+            transition: width 0.3s ease;
+            position: relative;
+        }
+        
+        .hybrid-health {
+            background: linear-gradient(90deg, #00ffaa, #00cc88);
+            box-shadow: inset 0 0 20px rgba(255,255,255,0.3);
+        }
+        
+        .transformer-health {
+            background: linear-gradient(90deg, #ff4466, #cc3355);
+            box-shadow: inset 0 0 20px rgba(255,255,255,0.3);
+        }
+        
+        .health-text {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 11px;
+            font-weight: 700;
+            color: #fff;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+        }
+        
+        .neural-display {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .memory-tape {
+            display: flex;
+            gap: 2px;
+        }
+        
+        .memory-cell {
+            width: 14px;
+            height: 14px;
+            background: rgba(0, 255, 170, 0.15);
+            border: 1px solid rgba(0, 255, 170, 0.3);
+            border-radius: 2px;
+            transition: all 0.15s;
+        }
+        
+        .memory-cell.active {
+            background: rgba(0, 255, 170, 0.8);
+            box-shadow: 0 0 8px #00ffaa;
+        }
+        
+        .attention-grid {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 2px;
+        }
+        
+        .attention-cell {
+            width: 14px;
+            height: 14px;
+            background: rgba(255, 68, 102, 0.15);
+            border: 1px solid rgba(255, 68, 102, 0.3);
+            border-radius: 2px;
+            transition: all 0.1s;
+        }
+        
+        .attention-cell.active {
+            background: rgba(255, 68, 102, 0.8);
+            box-shadow: 0 0 8px #ff4466;
+        }
+        
+        .state-indicator {
+            margin-top: 8px;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            letter-spacing: 1px;
+            text-align: center;
+        }
+        
+        .hybrid-state {
+            background: rgba(0, 255, 170, 0.15);
+            border: 1px solid rgba(0, 255, 170, 0.3);
+            color: #00ffaa;
+        }
+        
+        .transformer-state {
+            background: rgba(255, 68, 102, 0.15);
+            border: 1px solid rgba(255, 68, 102, 0.3);
+            color: #ff4466;
+        }
+        
+        .center-hud {
+            text-align: center;
+        }
+        
+        .round-display {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 12px;
+            color: #ffd700;
+            letter-spacing: 4px;
+            text-shadow: 0 0 10px #ffd70066;
+        }
+        
+        .timer {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 56px;
+            font-weight: 900;
+            color: #fff;
+            text-shadow: 0 0 40px rgba(255,255,255,0.4);
+            line-height: 1;
+        }
+        
+        .score-display {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 24px;
+            margin-top: 8px;
+            color: rgba(255,255,255,0.8);
+        }
+        
+        .score-hybrid { color: #00ffaa; }
+        .score-transformer { color: #ff4466; }
+        
+        .action-log {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            pointer-events: none;
+        }
+        
+        .action-item {
+            padding: 6px 16px;
+            background: rgba(10, 10, 20, 0.9);
+            border-radius: 4px;
+            font-size: 13px;
+            animation: fadeUp 2s ease-out forwards;
+            white-space: nowrap;
+        }
+        
+        @keyframes fadeUp {
+            0% { opacity: 1; transform: translateY(0); }
+            70% { opacity: 1; }
+            100% { opacity: 0; transform: translateY(-20px); }
+        }
+        
+        .action-hybrid { 
+            color: #00ffaa; 
+            border-left: 3px solid #00ffaa;
+        }
+        
+        .action-transformer { 
+            color: #ff4466; 
+            border-left: 3px solid #ff4466;
+        }
+        
+        .camera-controls {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            gap: 8px;
+            pointer-events: auto;
+        }
+        
+        .cam-btn {
+            width: 44px;
+            height: 44px;
+            background: rgba(30, 30, 50, 0.9);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+            color: #fff;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .cam-btn:hover {
+            background: rgba(60, 60, 100, 0.9);
+            border-color: rgba(255,255,255,0.4);
+        }
+        
+        .cam-btn.active {
+            background: rgba(255, 215, 0, 0.2);
+            border-color: #ffd700;
+            color: #ffd700;
+        }
+        
+        .winner-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s;
+        }
+        
+        .winner-overlay.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        
+        .winner-label {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 24px;
+            color: rgba(255,255,255,0.6);
+            letter-spacing: 8px;
+            margin-bottom: 16px;
+        }
+        
+        .winner-text {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 56px;
+            font-weight: 900;
+            text-transform: uppercase;
+            margin-bottom: 12px;
+        }
+        
+        .winner-text.hybrid {
+            color: #00ffaa;
+            text-shadow: 0 0 60px #00ffaa, 0 0 120px #00ffaa66;
+        }
+        
+        .winner-text.transformer {
+            color: #ff4466;
+            text-shadow: 0 0 60px #ff4466, 0 0 120px #ff446666;
+        }
+        
+        .winner-reason {
+            font-size: 16px;
+            color: rgba(255,255,255,0.6);
+            margin-bottom: 40px;
+        }
+        
+        .restart-btn {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 16px;
+            font-weight: 700;
+            padding: 16px 48px;
+            background: transparent;
+            border: 2px solid #ffd700;
+            color: #ffd700;
+            cursor: pointer;
+            letter-spacing: 4px;
+            transition: all 0.3s;
+            border-radius: 4px;
+        }
+        
+        .restart-btn:hover {
+            background: #ffd700;
+            color: #000;
+            box-shadow: 0 0 40px #ffd70066;
+        }
+        
+        .speed-control {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            pointer-events: auto;
+        }
+        
+        .speed-label {
+            font-size: 11px;
+            color: rgba(255,255,255,0.5);
+            letter-spacing: 2px;
+        }
+        
+        .speed-slider {
+            width: 120px;
+            -webkit-appearance: none;
+            height: 4px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 2px;
+            outline: none;
+        }
+        
+        .speed-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #ffd700;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        
+        .architecture-label {
+            font-size: 9px;
+            color: rgba(255,255,255,0.4);
+            letter-spacing: 1px;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="canvas3d"></canvas>
+        
+        <div class="hud">
+            <div class="fighter-panel">
+                <div class="fighter-header">
+                    <div class="fighter-icon hybrid-icon">⚡</div>
+                    <div>
+                        <div class="fighter-name hybrid-name">T+NTM HYBRID</div>
+                        <div class="architecture-label">TRANSFORMER + NEURAL TURING MACHINE</div>
+                    </div>
+                </div>
+                <div class="health-section">
+                    <div class="stat-label">HEALTH</div>
+                    <div class="health-bar-container">
+                        <div class="health-bar hybrid-health" id="hybridHealth" style="width: 100%"></div>
+                        <span class="health-text" id="hybridHealthText">100</span>
+                    </div>
+                </div>
+                <div class="stat-label">MEMORY TAPE (NTM)</div>
+                <div class="neural-display">
+                    <div class="memory-tape" id="memoryTape"></div>
+                </div>
+                <div class="state-indicator hybrid-state" id="hybridState">ANALYZING</div>
+            </div>
+            
+            <div class="center-hud">
+                <div class="round-display">ROUND <span id="roundNum">1</span></div>
+                <div class="timer" id="timer">99</div>
+                <div class="score-display">
+                    <span class="score-hybrid" id="hybridScore">0</span>
+                    <span style="color: rgba(255,255,255,0.3)"> - </span>
+                    <span class="score-transformer" id="transformerScore">0</span>
+                </div>
+            </div>
+            
+            <div class="fighter-panel">
+                <div class="fighter-header">
+                    <div class="fighter-icon transformer-icon">◉</div>
+                    <div>
+                        <div class="fighter-name transformer-name">TRANSFORMER</div>
+                        <div class="architecture-label">PURE SELF-ATTENTION</div>
+                    </div>
+                </div>
+                <div class="health-section">
+                    <div class="stat-label">HEALTH</div>
+                    <div class="health-bar-container">
+                        <div class="health-bar transformer-health" id="transformerHealth" style="width: 100%"></div>
+                        <span class="health-text" id="transformerHealthText">100</span>
+                    </div>
+                </div>
+                <div class="stat-label">ATTENTION HEADS</div>
+                <div class="neural-display">
+                    <div class="attention-grid" id="attentionGrid"></div>
+                </div>
+                <div class="state-indicator transformer-state" id="transformerState">ATTENDING</div>
+            </div>
+        </div>
+        
+        <div class="action-log" id="actionLog"></div>
+        
+        <div class="camera-controls">
+            <button class="cam-btn active" id="camOrbit" onclick="setCameraMode('orbit')">ORB</button>
+            <button class="cam-btn" id="camTop" onclick="setCameraMode('top')">TOP</button>
+            <button class="cam-btn" id="camSide" onclick="setCameraMode('side')">SIDE</button>
+            <button class="cam-btn" id="camDynamic" onclick="setCameraMode('dynamic')">DYN</button>
+        </div>
+        
+        <div class="speed-control">
+            <span class="speed-label">SPEED</span>
+            <input type="range" class="speed-slider" id="speedSlider" min="0.25" max="3" step="0.25" value="1">
+            <span class="speed-label" id="speedValue">1x</span>
+        </div>
+        
+        <div class="winner-overlay" id="winnerOverlay">
+            <div class="winner-label">KNOCKOUT</div>
+            <div class="winner-text" id="winnerText">WINNER</div>
+            <div class="winner-reason" id="winnerReason"></div>
+            <button class="restart-btn" onclick="restartGame()">REMATCH</button>
+        </div>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // ============ NEURAL NETWORK IMPLEMENTATIONS ============
+        
+        // Simple matrix operations
+        const Matrix = {
+            create: (rows, cols, fill = 0) => {
+                return Array(rows).fill(null).map(() => Array(cols).fill(fill));
+            },
+            random: (rows, cols, scale = 1) => {
+                return Array(rows).fill(null).map(() => 
+                    Array(cols).fill(null).map(() => (Math.random() - 0.5) * scale)
+                );
+            },
+            dot: (a, b) => {
+                if (!Array.isArray(a[0])) a = [a];
+                const result = [];
+                for (let i = 0; i < a.length; i++) {
+                    result[i] = [];
+                    for (let j = 0; j < b[0].length; j++) {
+                        let sum = 0;
+                        for (let k = 0; k < a[0].length; k++) {
+                            sum += a[i][k] * b[k][j];
+                        }
+                        result[i][j] = sum;
+                    }
+                }
+                return result.length === 1 ? result[0] : result;
+            },
+            softmax: (arr) => {
+                const max = Math.max(...arr);
+                const exp = arr.map(x => Math.exp(x - max));
+                const sum = exp.reduce((a, b) => a + b, 0);
+                return exp.map(x => x / sum);
+            },
+            tanh: (arr) => arr.map(x => Math.tanh(x)),
+            sigmoid: (x) => 1 / (1 + Math.exp(-x))
+        };
+        
+        // Neural Turing Machine Memory Controller
+        class NTMMemory {
+            constructor(memorySize = 16, memoryWidth = 8) {
+                this.size = memorySize;
+                this.width = memoryWidth;
+                this.memory = Matrix.create(memorySize, memoryWidth);
+                this.readHead = 0;
+                this.writeHead = 0;
+                this.readWeights = new Array(memorySize).fill(1/memorySize);
+                this.writeWeights = new Array(memorySize).fill(1/memorySize);
+            }
+            
+            contentAddressing(key, beta = 1) {
+                const similarities = [];
+                for (let i = 0; i < this.size; i++) {
+                    let dot = 0, normA = 0, normB = 0;
+                    for (let j = 0; j < this.width; j++) {
+                        dot += key[j] * this.memory[i][j];
+                        normA += key[j] * key[j];
+                        normB += this.memory[i][j] * this.memory[i][j];
+                    }
+                    const sim = dot / (Math.sqrt(normA) * Math.sqrt(normB) + 1e-8);
+                    similarities.push(sim * beta);
+                }
+                return Matrix.softmax(similarities);
+            }
+            
+            read(weights = null) {
+                const w = weights || this.readWeights;
+                const result = new Array(this.width).fill(0);
+                for (let i = 0; i < this.size; i++) {
+                    for (let j = 0; j < this.width; j++) {
+                        result[j] += w[i] * this.memory[i][j];
+                    }
+                }
+                return result;
+            }
+            
+            write(vector, weights = null, eraseStrength = 0.5, addStrength = 1) {
+                const w = weights || this.writeWeights;
+                for (let i = 0; i < this.size; i++) {
+                    for (let j = 0; j < this.width; j++) {
+                        this.memory[i][j] = this.memory[i][j] * (1 - w[i] * eraseStrength) + w[i] * addStrength * vector[j];
+                    }
+                }
+            }
+            
+            getActiveCell() {
+                let maxIdx = 0, maxVal = this.writeWeights[0];
+                for (let i = 1; i < this.size; i++) {
+                    if (this.writeWeights[i] > maxVal) {
+                        maxVal = this.writeWeights[i];
+                        maxIdx = i;
+                    }
+                }
+                return maxIdx;
+            }
+        }
+        
+        // Transformer Attention Mechanism
+        class TransformerAttention {
+            constructor(dModel = 16, numHeads = 8) {
+                this.dModel = dModel;
+                this.numHeads = numHeads;
+                this.dHead = Math.floor(dModel / numHeads);
+                this.contextWindow = [];
+                this.maxContext = 32;
+                this.attentionWeights = new Array(numHeads).fill(null).map(() => []);
+            }
+            
+            addToContext(observation) {
+                this.contextWindow.push(observation);
+                if (this.contextWindow.length > this.maxContext) {
+                    this.contextWindow.shift();
+                }
+            }
+            
+            selfAttention(query) {
+                if (this.contextWindow.length === 0) {
+                    return new Array(this.dModel).fill(0);
+                }
+                
+                const outputs = [];
+                for (let h = 0; h < this.numHeads; h++) {
+                    const scores = [];
+                    for (let i = 0; i < this.contextWindow.length; i++) {
+                        let score = 0;
+                        for (let j = 0; j < Math.min(query.length, this.contextWindow[i].length); j++) {
+                            score += query[j] * this.contextWindow[i][j];
+                        }
+                        scores.push(score / Math.sqrt(this.dHead));
+                    }
+                    
+                    const weights = Matrix.softmax(scores);
+                    this.attentionWeights[h] = weights;
+                    
+                    const output = new Array(this.dHead).fill(0);
+                    for (let i = 0; i < this.contextWindow.length; i++) {
+                        for (let j = 0; j < this.dHead; j++) {
+                            const idx = h * this.dHead + j;
+                            if (idx < this.contextWindow[i].length) {
+                                output[j] += weights[i] * this.contextWindow[i][idx];
+                            }
+                        }
+                    }
+                    outputs.push(...output);
+                }
+                
+                return outputs.slice(0, this.dModel);
+            }
+            
+            getActiveHeads() {
+                const active = [];
+                for (let h = 0; h < this.numHeads; h++) {
+                    if (this.attentionWeights[h].length > 0) {
+                        const maxWeight = Math.max(...this.attentionWeights[h]);
+                        if (maxWeight > 0.2) {
+                            active.push(h);
+                        }
+                    }
+                }
+                return active;
+            }
+        }
+        
+        // ============ FIGHTER AI ============
+        
+        class FighterAI {
+            constructor(type) {
+                this.type = type; // 'hybrid' or 'transformer'
+                this.inputSize = 16;
+                this.hiddenSize = 32;
+                this.outputSize = 8; // Actions: move_forward, move_back, move_left, move_right, jab, hook, uppercut, block
+                
+                // Neural network weights
+                this.W1 = Matrix.random(this.inputSize, this.hiddenSize, 0.5);
+                this.W2 = Matrix.random(this.hiddenSize, this.outputSize, 0.5);
+                
+                if (type === 'hybrid') {
+                    this.memory = new NTMMemory(16, 8);
+                    this.transformer = new TransformerAttention(16, 4);
+                } else {
+                    this.transformer = new TransformerAttention(16, 8);
+                }
+                
+                this.state = 'idle';
+                this.cooldown = 0;
+                this.lastAction = null;
+                this.opponentHistory = [];
+            }
+            
+            encodeState(self, opponent, ringBounds) {
+                // Create state vector
+                const state = [
+                    // Relative position (normalized)
+                    (opponent.x - self.x) / 10,
+                    (opponent.z - self.z) / 10,
+                    // Distance
+                    Math.sqrt((opponent.x - self.x)**2 + (opponent.z - self.z)**2) / 10,
+                    // Own health
+                    self.health / 100,
+                    // Opponent health
+                    opponent.health / 100,
+                    // Own state encoding
+                    self.state === 'attacking' ? 1 : 0,
+                    self.state === 'blocking' ? 1 : 0,
+                    // Opponent state
+                    opponent.state === 'attacking' ? 1 : 0,
+                    opponent.state === 'blocking' ? 1 : 0,
+                    // Ring boundary awareness
+                    (self.x - ringBounds.minX) / 10,
+                    (ringBounds.maxX - self.x) / 10,
+                    (self.z - ringBounds.minZ) / 10,
+                    (ringBounds.maxZ - self.z) / 10,
+                    // Cooldown
+                    this.cooldown / 30,
+                    // Random exploration
+                    Math.random() * 0.2,
+                    Math.random() * 0.2
+                ];
+                
+                return state;
+            }
+            
+            decide(self, opponent, ringBounds) {
+                if (this.cooldown > 0) {
+                    this.cooldown--;
+                    return null;
+                }
+                
+                const stateVector = this.encodeState(self, opponent, ringBounds);
+                
+                // Add to opponent history for pattern learning
+                this.opponentHistory.push({
+                    state: opponent.state,
+                    position: { x: opponent.x, z: opponent.z },
+                    time: Date.now()
+                });
+                if (this.opponentHistory.length > 50) this.opponentHistory.shift();
+                
+                let contextOutput;
+                
+                if (this.type === 'hybrid') {
+                    // Use NTM to read relevant memories
+                    const memoryKey = stateVector.slice(0, 8);
+                    this.memory.readWeights = this.memory.contentAddressing(memoryKey, 2);
+                    const memoryRead = this.memory.read();
+                    
+                    // Also use transformer attention on recent context
+                    this.transformer.addToContext(stateVector);
+                    const attentionOutput = this.transformer.selfAttention(stateVector);
+                    
+                    // Combine memory and attention
+                    contextOutput = stateVector.map((v, i) => {
+                        const memVal = i < memoryRead.length ? memoryRead[i] : 0;
+                        const attVal = i < attentionOutput.length ? attentionOutput[i] : 0;
+                        return v + memVal * 0.3 + attVal * 0.3;
+                    });
+                    
+                    // Write current state to memory
+                    this.memory.writeWeights = this.memory.contentAddressing(memoryKey, 1);
+                    this.memory.write(stateVector.slice(0, 8), null, 0.3, 0.5);
+                } else {
+                    // Pure transformer - only attention
+                    this.transformer.addToContext(stateVector);
+                    const attentionOutput = this.transformer.selfAttention(stateVector);
+                    
+                    contextOutput = stateVector.map((v, i) => {
+                        const attVal = i < attentionOutput.length ? attentionOutput[i] : 0;
+                        return v + attVal * 0.5;
+                    });
+                }
+                
+                // Forward pass through network
+                const hidden = Matrix.tanh(Matrix.dot([contextOutput], this.W1));
+                const output = Matrix.dot([hidden], this.W2)[0];
+                
+                // Action selection with softmax
+                const actionProbs = Matrix.softmax(output);
+                
+                // Sample action
+                const r = Math.random();
+                let cumProb = 0;
+                let actionIdx = 0;
+                for (let i = 0; i < actionProbs.length; i++) {
+                    cumProb += actionProbs[i];
+                    if (r < cumProb) {
+                        actionIdx = i;
+                        break;
+                    }
+                }
+                
+                const actions = ['move_forward', 'move_back', 'move_left', 'move_right', 'jab', 'hook', 'uppercut', 'block'];
+                const action = actions[actionIdx];
+                
+                // Set cooldown based on action
+                if (action === 'jab') this.cooldown = 15;
+                else if (action === 'hook') this.cooldown = 25;
+                else if (action === 'uppercut') this.cooldown = 35;
+                else if (action === 'block') this.cooldown = 20;
+                else this.cooldown = 5;
+                
+                this.lastAction = action;
+                return action;
+            }
+            
+            getStateDescription() {
+                if (this.cooldown > 20) return 'RECOVERING';
+                if (this.lastAction === 'block') return 'BLOCKING';
+                if (this.lastAction && this.lastAction.includes('move')) return 'REPOSITIONING';
+                if (this.lastAction === 'jab') return 'JABBING';
+                if (this.lastAction === 'hook') return 'HOOK SWING';
+                if (this.lastAction === 'uppercut') return 'UPPERCUT';
+                if (this.type === 'hybrid') return 'MEMORY SCAN';
+                return 'ATTENDING';
+            }
+        }
+        
+        // ============ GAME STATE ============
+        
+        const game = {
+            hybrid: {
+                x: -3, z: 0, y: 0,
+                health: 100,
+                state: 'idle',
+                score: 0,
+                ai: new FighterAI('hybrid')
+            },
+            transformer: {
+                x: 3, z: 0, y: 0,
+                health: 100,
+                state: 'idle',
+                score: 0,
+                ai: new FighterAI('transformer')
+            },
+            ringBounds: { minX: -6, maxX: 6, minZ: -4, maxZ: 4 },
+            round: 1,
+            timer: 99,
+            gameOver: false,
+            speed: 1,
+            cameraMode: 'orbit',
+            cameraAngle: 0
+        };
+        
+        // Initialize UI elements
+        const memoryTape = document.getElementById('memoryTape');
+        for (let i = 0; i < 16; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'memory-cell';
+            cell.id = `mem${i}`;
+            memoryTape.appendChild(cell);
+        }
+        
+        const attentionGrid = document.getElementById('attentionGrid');
+        for (let i = 0; i < 24; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'attention-cell';
+            cell.id = `att${i}`;
+            attentionGrid.appendChild(cell);
+        }
+        
+        // Speed slider
+        document.getElementById('speedSlider').addEventListener('input', (e) => {
+            game.speed = parseFloat(e.target.value);
+            document.getElementById('speedValue').textContent = game.speed + 'x';
+        });
+        
+        // ============ THREE.JS SETUP ============
+        
+        const canvas = document.getElementById('canvas3d');
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.setClearColor(0x050510);
+        
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0x334455, 0.5);
+        scene.add(ambientLight);
+        
+        const mainLight = new THREE.DirectionalLight(0xffffff, 1);
+        mainLight.position.set(5, 15, 5);
+        mainLight.castShadow = true;
+        mainLight.shadow.mapSize.width = 2048;
+        mainLight.shadow.mapSize.height = 2048;
+        mainLight.shadow.camera.near = 1;
+        mainLight.shadow.camera.far = 50;
+        mainLight.shadow.camera.left = -15;
+        mainLight.shadow.camera.right = 15;
+        mainLight.shadow.camera.top = 15;
+        mainLight.shadow.camera.bottom = -15;
+        scene.add(mainLight);
+        
+        // Colored spotlights for each fighter
+        const hybridSpot = new THREE.SpotLight(0x00ffaa, 2, 20, Math.PI / 4, 0.5);
+        hybridSpot.position.set(-8, 10, 0);
+        hybridSpot.castShadow = true;
+        scene.add(hybridSpot);
+        
+        const transformerSpot = new THREE.SpotLight(0xff4466, 2, 20, Math.PI / 4, 0.5);
+        transformerSpot.position.set(8, 10, 0);
+        transformerSpot.castShadow = true;
+        scene.add(transformerSpot);
+        
+        // Ring construction
+        function createRing() {
+            const ringGroup = new THREE.Group();
+            
+            // Canvas/floor
+            const floorGeom = new THREE.BoxGeometry(14, 0.5, 10);
+            const floorMat = new THREE.MeshStandardMaterial({
+                color: 0x1a1a2e,
+                metalness: 0.2,
+                roughness: 0.8
+            });
+            const floor = new THREE.Mesh(floorGeom, floorMat);
+            floor.position.y = -0.25;
+            floor.receiveShadow = true;
+            ringGroup.add(floor);
+            
+            // Ring lines
+            const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            const lineGeom = new THREE.BoxGeometry(12, 0.02, 0.05);
+            for (let z of [-3, 0, 3]) {
+                const line = new THREE.Mesh(lineGeom, lineMat);
+                line.position.set(0, 0.01, z);
+                ringGroup.add(line);
+            }
+            
+            // Center circle
+            const circleGeom = new THREE.RingGeometry(1.5, 1.6, 32);
+            const circleMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+            const circle = new THREE.Mesh(circleGeom, circleMat);
+            circle.rotation.x = -Math.PI / 2;
+            circle.position.y = 0.01;
+            ringGroup.add(circle);
+            
+            // Corner posts
+            const postMat = new THREE.MeshStandardMaterial({ color: 0x222233, metalness: 0.9, roughness: 0.1 });
+            const corners = [[-7, -5], [-7, 5], [7, -5], [7, 5]];
+            const postColors = [0x00ffaa, 0x00ffaa, 0xff4466, 0xff4466];
+            
+            corners.forEach(([x, z], i) => {
+                const post = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.15, 0.2, 4, 8),
+                    postMat
+                );
+                post.position.set(x, 2, z);
+                post.castShadow = true;
+                ringGroup.add(post);
+                
+                // Post top
+                const topMat = new THREE.MeshStandardMaterial({
+                    color: postColors[i],
+                    emissive: postColors[i],
+                    emissiveIntensity: 0.5
+                });
+                const top = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.25, 8, 8),
+                    topMat
+                );
+                top.position.set(x, 4.1, z);
+                ringGroup.add(top);
+            });
+            
+            // Ropes
+            const ropeMat = new THREE.MeshStandardMaterial({ 
+                color: 0xffd700, 
+                metalness: 0.7, 
+                roughness: 0.3 
+            });
+            
+            for (let h = 1; h <= 3; h++) {
+                const ropeY = 1 + h * 0.8;
+                
+                // Front and back ropes
+                for (let z of [-5, 5]) {
+                    const rope = new THREE.Mesh(
+                        new THREE.CylinderGeometry(0.04, 0.04, 14, 8),
+                        ropeMat
+                    );
+                    rope.rotation.z = Math.PI / 2;
+                    rope.position.set(0, ropeY, z);
+                    ringGroup.add(rope);
+                }
+                
+                // Side ropes
+                for (let x of [-7, 7]) {
+                    const rope = new THREE.Mesh(
+                        new THREE.CylinderGeometry(0.04, 0.04, 10, 8),
+                        ropeMat
+                    );
+                    rope.rotation.x = Math.PI / 2;
+                    rope.position.set(x, ropeY, 0);
+                    ringGroup.add(rope);
+                }
+            }
+            
+            // Platform/apron
+            const apronGeom = new THREE.BoxGeometry(18, 0.3, 14);
+            const apronMat = new THREE.MeshStandardMaterial({ color: 0x111122 });
+            const apron = new THREE.Mesh(apronGeom, apronMat);
+            apron.position.y = -0.65;
+            apron.receiveShadow = true;
+            ringGroup.add(apron);
+            
+            return ringGroup;
+        }
+        
+        const ring = createRing();
+        scene.add(ring);
+        
+        // Ground plane
+        const groundGeom = new THREE.PlaneGeometry(100, 100);
+        const groundMat = new THREE.MeshStandardMaterial({ color: 0x080810 });
+        const ground = new THREE.Mesh(groundGeom, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = -1;
+        ground.receiveShadow = true;
+        scene.add(ground);
+        
+        // Create boxers
+        function createBoxer(color, isHybrid) {
+            const group = new THREE.Group();
+            
+            const bodyMat = new THREE.MeshStandardMaterial({
+                color: color,
+                metalness: 0.5,
+                roughness: 0.4,
+                emissive: color,
+                emissiveIntensity: 0.15
+            });
+            
+            // Torso
+            const torso = new THREE.Mesh(
+                new THREE.BoxGeometry(0.9, 1.2, 0.5),
+                bodyMat
+            );
+            torso.position.y = 1.1;
+            torso.castShadow = true;
+            group.add(torso);
+            
+            // Head
+            const headGeom = isHybrid ?
+                new THREE.BoxGeometry(0.55, 0.6, 0.45) :
+                new THREE.SphereGeometry(0.32, 12, 10);
+            const head = new THREE.Mesh(headGeom, bodyMat);
+            head.position.y = 2;
+            head.castShadow = true;
+            group.add(head);
+            
+            // Eyes
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            const eyeGlowMat = new THREE.MeshBasicMaterial({
+                color: isHybrid ? 0x00ffaa : 0xff4466
+            });
+            
+            for (let side of [-0.1, 0.1]) {
+                const eye = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), eyeMat);
+                eye.position.set(side, 2.05, 0.25);
+                group.add(eye);
+                
+                const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 8), eyeGlowMat);
+                pupil.position.set(side, 2.05, 0.3);
+                group.add(pupil);
+            }
+            
+            // Arms
+            const gloveMat = new THREE.MeshStandardMaterial({
+                color: isHybrid ? 0x00ffaa : 0xff4466,
+                emissive: isHybrid ? 0x00ffaa : 0xff4466,
+                emissiveIntensity: 0.4,
+                metalness: 0.3,
+                roughness: 0.5
+            });
+            
+            function createArm(side) {
+                const armGroup = new THREE.Group();
+                
+                const upperArm = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.2, 0.5, 0.2),
+                    bodyMat
+                );
+                upperArm.position.y = -0.25;
+                armGroup.add(upperArm);
+                
+                const forearmGroup = new THREE.Group();
+                forearmGroup.position.y = -0.5;
+                
+                const forearm = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.18, 0.45, 0.18),
+                    bodyMat
+                );
+                forearm.position.y = -0.22;
+                forearmGroup.add(forearm);
+                
+                const glove = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.16, 10, 10),
+                    gloveMat
+                );
+                glove.scale.set(1.3, 1, 1.1);
+                glove.position.y = -0.5;
+                forearmGroup.add(glove);
+                
+                armGroup.add(forearmGroup);
+                armGroup.forearm = forearmGroup;
+                armGroup.position.set(side * 0.55, 1.5, 0);
+                
+                return armGroup;
+            }
+            
+            const leftArm = createArm(-1);
+            const rightArm = createArm(1);
+            group.add(leftArm);
+            group.add(rightArm);
+            group.leftArm = leftArm;
+            group.rightArm = rightArm;
+            
+            // Legs
+            for (let side of [-0.2, 0.2]) {
+                const leg = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.25, 0.7, 0.25),
+                    bodyMat
+                );
+                leg.position.set(side, 0.35, 0);
+                leg.castShadow = true;
+                group.add(leg);
+            }
+            
+            // Architecture indicators
+            if (isHybrid) {
+                // Memory tape on back
+                const tapeBg = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.8, 0.25, 0.08),
+                    new THREE.MeshStandardMaterial({ color: 0x001a11 })
+                );
+                tapeBg.position.set(0, 1.4, -0.3);
+                group.add(tapeBg);
+                
+                for (let i = 0; i < 8; i++) {
+                    const cell = new THREE.Mesh(
+                        new THREE.BoxGeometry(0.08, 0.15, 0.02),
+                        new THREE.MeshStandardMaterial({
+                            color: 0x00ff88,
+                            emissive: 0x00ff88,
+                            emissiveIntensity: 0.3
+                        })
+                    );
+                    cell.position.set(-0.32 + i * 0.09, 1.4, -0.26);
+                    group.add(cell);
+                    if (!group.memoryCells) group.memoryCells = [];
+                    group.memoryCells.push(cell);
+                }
+            } else {
+                // Attention rings
+                const ringMat = new THREE.MeshBasicMaterial({
+                    color: 0xff4466,
+                    transparent: true,
+                    opacity: 0.4,
+                    side: THREE.DoubleSide
+                });
+                
+                for (let i = 0; i < 3; i++) {
+                    const attRing = new THREE.Mesh(
+                        new THREE.TorusGeometry(0.4 + i * 0.12, 0.015, 8, 32),
+                        ringMat
+                    );
+                    attRing.position.y = 2;
+                    attRing.rotation.x = Math.PI / 2;
+                    group.add(attRing);
+                    if (!group.attRings) group.attRings = [];
+                    group.attRings.push(attRing);
+                }
+            }
+            
+            return group;
+        }
+        
+        const hybridMesh = createBoxer(0x00aa77, true);
+        hybridMesh.position.set(-3, 0, 0);
+        scene.add(hybridMesh);
+        
+        const transformerMesh = createBoxer(0xaa3355, false);
+        transformerMesh.position.set(3, 0, 0);
+        scene.add(transformerMesh);
+        
+        // Camera modes
+        function setCameraMode(mode) {
+            game.cameraMode = mode;
+            document.querySelectorAll('.cam-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('cam' + mode.charAt(0).toUpperCase() + mode.slice(1)).classList.add('active');
+        }
+        
+        function updateCamera(time) {
+            const midX = (game.hybrid.x + game.transformer.x) / 2;
+            const midZ = (game.hybrid.z + game.transformer.z) / 2;
+            
+            switch (game.cameraMode) {
+                case 'orbit':
+                    game.cameraAngle += 0.003 * game.speed;
+                    camera.position.x = Math.sin(game.cameraAngle) * 14;
+                    camera.position.z = Math.cos(game.cameraAngle) * 14;
+                    camera.position.y = 8;
+                    camera.lookAt(midX, 1.5, midZ);
+                    break;
+                    
+                case 'top':
+                    camera.position.set(0, 18, 0.1);
+                    camera.lookAt(0, 0, 0);
+                    break;
+                    
+                case 'side':
+                    camera.position.set(16, 5, 0);
+                    camera.lookAt(0, 1.5, 0);
+                    break;
+                    
+                case 'dynamic':
+                    const dist = Math.sqrt((game.hybrid.x - game.transformer.x)**2 + (game.hybrid.z - game.transformer.z)**2);
+                    const zoom = Math.max(8, Math.min(16, dist * 1.5 + 6));
+                    const angle = Math.atan2(
+                        game.transformer.z - game.hybrid.z,
+                        game.transformer.x - game.hybrid.x
+                    ) + Math.PI / 2;
+                    camera.position.x = midX + Math.sin(angle) * zoom;
+                    camera.position.z = midZ + Math.cos(angle) * zoom;
+                    camera.position.y = 6 + dist * 0.3;
+                    camera.lookAt(midX, 1.5, midZ);
+                    break;
+            }
+            
+            // Update spotlights
+            hybridSpot.target.position.set(game.hybrid.x, 0, game.hybrid.z);
+            transformerSpot.target.position.set(game.transformer.x, 0, game.transformer.z);
+        }
+        
+        // Action log
+        function logAction(fighter, action) {
+            const log = document.getElementById('actionLog');
+            const item = document.createElement('div');
+            item.className = `action-item action-${fighter}`;
+            
+            const name = fighter === 'hybrid' ? 'T+NTM' : 'TRANSFORMER';
+            item.textContent = `${name}: ${action.toUpperCase()}`;
+            
+            log.appendChild(item);
+            setTimeout(() => item.remove(), 2000);
+            
+            // Keep only last 5
+            while (log.children.length > 5) {
+                log.removeChild(log.firstChild);
+            }
+        }
+        
+        // Process fighter action
+        function processAction(fighter, opponent, fighterMesh, opponentMesh, action, fighterName) {
+            if (!action) return;
+            
+            const dx = opponent.x - fighter.x;
+            const dz = opponent.z - fighter.z;
+            const distance = Math.sqrt(dx * dx + dz * dz);
+            const moveSpeed = 0.08 * game.speed;
+            
+            switch (action) {
+                case 'move_forward':
+                    fighter.x += (dx / distance) * moveSpeed;
+                    fighter.z += (dz / distance) * moveSpeed;
+                    break;
+                    
+                case 'move_back':
+                    fighter.x -= (dx / distance) * moveSpeed;
+                    fighter.z -= (dz / distance) * moveSpeed;
+                    break;
+                    
+                case 'move_left':
+                    fighter.x += (dz / distance) * moveSpeed;
+                    fighter.z -= (dx / distance) * moveSpeed;
+                    break;
+                    
+                case 'move_right':
+                    fighter.x -= (dz / distance) * moveSpeed;
+                    fighter.z += (dx / distance) * moveSpeed;
+                    break;
+                    
+                case 'jab':
+                case 'hook':
+                case 'uppercut':
+                    fighter.state = 'attacking';
+                    logAction(fighterName, action);
+                    
+                    // Animate punch
+                    const arm = action === 'jab' ? fighterMesh.leftArm : fighterMesh.rightArm;
+                    arm.rotation.x = -1.3;
+                    if (arm.forearm) arm.forearm.rotation.x = 0.4;
+                    
+                    setTimeout(() => {
+                        arm.rotation.x = 0;
+                        if (arm.forearm) arm.forearm.rotation.x = 0;
+                        fighter.state = 'idle';
+                    }, 200 / game.speed);
+                    
+                    // Check hit
+                    if (distance < 2) {
+                        if (opponent.state !== 'blocking') {
+                            let damage = action === 'jab' ? 4 : action === 'hook' ? 8 : 12;
+                            // Distance bonus
+                            damage *= (2 - distance) / 2 + 0.5;
+                            opponent.health = Math.max(0, opponent.health - damage);
+                            fighter.score += Math.round(damage);
+                            
+                            if (opponent.health <= 0) {
+                                endGame(fighterName);
+                            }
+                        } else {
+                            // Blocked - small chip damage
+                            opponent.health = Math.max(0, opponent.health - 1);
+                        }
+                    }
+                    break;
+                    
+                case 'block':
+                    fighter.state = 'blocking';
+                    fighterMesh.leftArm.rotation.x = -0.9;
+                    fighterMesh.leftArm.rotation.z = 0.4;
+                    fighterMesh.rightArm.rotation.x = -0.9;
+                    fighterMesh.rightArm.rotation.z = -0.4;
+                    
+                    setTimeout(() => {
+                        fighterMesh.leftArm.rotation.x = 0;
+                        fighterMesh.leftArm.rotation.z = 0;
+                        fighterMesh.rightArm.rotation.x = 0;
+                        fighterMesh.rightArm.rotation.z = 0;
+                        fighter.state = 'idle';
+                    }, 400 / game.speed);
+                    break;
+            }
+            
+            // Clamp to ring bounds
+            fighter.x = Math.max(game.ringBounds.minX, Math.min(game.ringBounds.maxX, fighter.x));
+            fighter.z = Math.max(game.ringBounds.minZ, Math.min(game.ringBounds.maxZ, fighter.z));
+        }
+        
+        // Update UI
+        function updateUI() {
+            document.getElementById('hybridHealth').style.width = game.hybrid.health + '%';
+            document.getElementById('hybridHealthText').textContent = Math.round(game.hybrid.health);
+            document.getElementById('transformerHealth').style.width = game.transformer.health + '%';
+            document.getElementById('transformerHealthText').textContent = Math.round(game.transformer.health);
+            
+            document.getElementById('hybridScore').textContent = game.hybrid.score;
+            document.getElementById('transformerScore').textContent = game.transformer.score;
+            
+            document.getElementById('hybridState').textContent = game.hybrid.ai.getStateDescription();
+            document.getElementById('transformerState').textContent = game.transformer.ai.getStateDescription();
+            
+            // Update memory tape visualization
+            const activeMemCell = game.hybrid.ai.memory.getActiveCell();
+            for (let i = 0; i < 16; i++) {
+                const cell = document.getElementById(`mem${i}`);
+                if (i === activeMemCell) {
+                    cell.classList.add('active');
+                } else {
+                    cell.classList.remove('active');
+                }
+            }
+            
+            // Update attention grid
+            const activeHeads = game.transformer.ai.transformer.getActiveHeads();
+            for (let i = 0; i < 24; i++) {
+                const cell = document.getElementById(`att${i}`);
+                if (activeHeads.includes(i % 8) && Math.random() > 0.5) {
+                    cell.classList.add('active');
+                } else {
+                    cell.classList.remove('active');
+                }
+            }
+        }
+        
+        // End game
+        function endGame(winner) {
+            game.gameOver = true;
+            const overlay = document.getElementById('winnerOverlay');
+            const text = document.getElementById('winnerText');
+            const reason = document.getElementById('winnerReason');
+            
+            if (winner === 'hybrid') {
+                text.textContent = 'T+NTM HYBRID';
+                text.className = 'winner-text hybrid';
+                reason.textContent = 'External memory advantage proved decisive';
+            } else {
+                text.textContent = 'TRANSFORMER';
+                text.className = 'winner-text transformer';
+                reason.textContent = 'Pure attention mechanism dominated';
+            }
+            
+            overlay.classList.add('show');
+        }
+        
+        function restartGame() {
+            game.hybrid = {
+                x: -3, z: 0, y: 0,
+                health: 100,
+                state: 'idle',
+                score: 0,
+                ai: new FighterAI('hybrid')
+            };
+            game.transformer = {
+                x: 3, z: 0, y: 0,
+                health: 100,
+                state: 'idle',
+                score: 0,
+                ai: new FighterAI('transformer')
+            };
+            game.timer = 99;
+            game.gameOver = false;
+            
+            document.getElementById('winnerOverlay').classList.remove('show');
+        }
+        
+        // Timer
+        setInterval(() => {
+            if (!game.gameOver && game.timer > 0) {
+                game.timer--;
+                document.getElementById('timer').textContent = game.timer.toString().padStart(2, '0');
+                
+                if (game.timer === 0) {
+                    if (game.hybrid.health > game.transformer.health) {
+                        endGame('hybrid');
+                    } else {
+                        endGame('transformer');
+                    }
+                }
+            }
+        }, 1000);
+        
+        // Animation loop
+        let lastTime = 0;
+        function animate(currentTime) {
+            requestAnimationFrame(animate);
+            
+            const deltaTime = Math.min((currentTime - lastTime) / 1000, 0.1);
+            lastTime = currentTime;
+            
+            if (!game.gameOver) {
+                // AI decisions
+                const hybridAction = game.hybrid.ai.decide(
+                    game.hybrid, game.transformer, game.ringBounds
+                );
+                const transformerAction = game.transformer.ai.decide(
+                    game.transformer, game.hybrid, game.ringBounds
+                );
+                
+                // Process actions
+                processAction(game.hybrid, game.transformer, hybridMesh, transformerMesh, hybridAction, 'hybrid');
+                processAction(game.transformer, game.hybrid, transformerMesh, hybridMesh, transformerAction, 'transformer');
+                
+                // Update mesh positions
+                hybridMesh.position.x = game.hybrid.x;
+                hybridMesh.position.z = game.hybrid.z;
+                transformerMesh.position.x = game.transformer.x;
+                transformerMesh.position.z = game.transformer.z;
+                
+                // Face each other
+                hybridMesh.rotation.y = Math.atan2(
+                    game.transformer.x - game.hybrid.x,
+                    game.transformer.z - game.hybrid.z
+                );
+                transformerMesh.rotation.y = Math.atan2(
+                    game.hybrid.x - game.transformer.x,
+                    game.hybrid.z - game.transformer.z
+                );
+                
+                // Idle animations
+                hybridMesh.position.y = Math.sin(currentTime * 0.004) * 0.03;
+                transformerMesh.position.y = Math.sin(currentTime * 0.004 + 1) * 0.03;
+                
+                // Spin transformer attention rings
+                if (transformerMesh.attRings) {
+                    transformerMesh.attRings.forEach((ring, i) => {
+                        ring.rotation.z += deltaTime * (2 - i * 0.5) * game.speed;
+                    });
+                }
+                
+                // Pulse hybrid memory cells
+                if (hybridMesh.memoryCells) {
+                    const activeIdx = Math.floor((currentTime * 0.003 * game.speed) % 8);
+                    hybridMesh.memoryCells.forEach((cell, i) => {
+                        cell.material.emissiveIntensity = i === activeIdx ? 0.8 : 0.2;
+                    });
+                }
+                
+                updateUI();
+            }
+            
+            updateCamera(currentTime);
+            renderer.render(scene, camera);
+        }
+        
+        // Handle resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        // Expose for HTML onclick
+        window.setCameraMode = setCameraMode;
+        window.restartGame = restartGame;
+        
+        animate(0);
+    </script>
+</body>
+</html>

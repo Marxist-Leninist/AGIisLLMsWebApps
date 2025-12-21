@@ -1,0 +1,525 @@
+<!DOCTYPE html><html lang="en"><head><meta name="x-poe-datastore-behavior" content="local_only"><meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://code.jquery.com https://unpkg.com https://d3js.org https://threejs.org https://cdn.plot.ly https://stackpath.bootstrapcdn.com https://maps.googleapis.com https://cdn.tailwindcss.com https://ajax.googleapis.com https://kit.fontawesome.com https://cdn.datatables.net https://maxcdn.bootstrapcdn.com https://code.highcharts.com https://tako-static-assets-production.s3.amazonaws.com https://www.youtube.com https://fonts.googleapis.com https://fonts.gstatic.com https://pfst.cf2.poecdn.net https://puc.poecdn.net https://i.imgur.com https://wikimedia.org https://*.icons8.com https://*.giphy.com https://picsum.photos https://images.unsplash.com; frame-src 'self' https://www.youtube.com https://trytako.com; child-src 'self'; manifest-src 'self'; worker-src 'self'; upgrade-insecure-requests; block-all-mixed-content;">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Neural Network Training Visualizer</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #0b1021;
+    --card: rgba(255,255,255,0.06);
+    --border: rgba(255,255,255,0.12);
+    --text: #e8ecf7;
+    --muted: #9aa4c2;
+    --accent: #7dd3fc;
+    --accent-2: #5eead4;
+    --danger: #f87171;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f7f9fc;
+      --card: #ffffff;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --muted: #475569;
+      --accent: #0ea5e9;
+      --accent-2: #10b981;
+      --danger: #ef4444;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background:
+      radial-gradient(circle at 20% 20%, rgba(125,211,252,0.12), transparent 32%),
+      radial-gradient(circle at 80% 0%, rgba(94,234,212,0.12), transparent 30%),
+      var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 1rem;
+  }
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: grid;
+    gap: 1rem;
+  }
+  h1 { margin: 0 0 0.35em 0; font-size: clamp(1.6rem, 4vw, 2.2rem); }
+  p { margin: 0 0 0.6em 0; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1rem;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.12);
+    backdrop-filter: blur(6px);
+  }
+  .controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.6rem;
+    margin-bottom: 0.75rem;
+    align-items: center;
+  }
+  button, select {
+    font: inherit;
+    padding: 0.55rem 0.8rem;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    cursor: pointer;
+    transition: transform 0.08s ease, border-color 0.15s ease;
+  }
+  button:hover, select:hover { border-color: var(--accent); }
+  button:active { transform: scale(0.98); }
+  .pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .pill {
+    padding: 0.35rem 0.7rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+  .grids {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 0.75rem;
+  }
+  canvas {
+    width: 100%;
+    height: 320px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: rgba(0,0,0,0.08);
+    display: block;
+  }
+  @media (max-width: 560px) {
+    canvas { height: 240px; }
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <div>
+      <h1>Neural Network Training Visualizer</h1>
+      <p class="muted">Small MLP learning a 1D function. Left: target vs. prediction. Right: live network graph (weights and activations).</p>
+    </div>
+
+    <div class="card">
+      <div class="controls">
+        <label>
+          <span class="muted">Target function</span><br>
+          <select id="fn-select">
+            <option value="sin">sin(πx)</option>
+            <option value="bump">Bump (Gaussian)</option>
+            <option value="step">Step</option>
+            <option value="abs">Triangle (|x|)</option>
+            <option value="cubic">Cubic (x³)</option>
+          </select>
+        </label>
+        <button id="toggle">Start</button>
+        <button id="reset">Reset</button>
+      </div>
+      <div class="pills">
+        <div class="pill">Loss: <span id="loss">—</span></div>
+        <div class="pill">Steps: <span id="steps">0</span></div>
+        <div class="pill">Net: 1 → 10 → 10 → 1 (tanh)</div>
+        <div class="pill">Opt: SGD (full batch) lr 0.05</div>
+        <div class="pill">Samples: 128 over x ∈ [-1, 1]</div>
+      </div>
+
+      <div class="grids">
+        <div>
+          <canvas id="plot" aria-label="Function plot"></canvas>
+        </div>
+        <div>
+          <canvas id="net" aria-label="Network visualization"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // Hyperparams
+  const H1 = 10, H2 = 10;
+  const lr = 0.05;
+  const stepsPerFrame = 4;
+  const N = 128;
+  const xs = new Float64Array(N);
+  const ys = new Float64Array(N);
+  for (let i = 0; i < N; i++) {
+    xs[i] = -1 + (2 * i) / (N - 1);
+  }
+
+  function makeTargets(kind) {
+    for (let i = 0; i < N; i++) {
+      const x = xs[i];
+      let y;
+      if (kind === 'sin') y = Math.sin(Math.PI * x);
+      else if (kind === 'bump') y = Math.exp(-8 * x * x);
+      else if (kind === 'step') y = x < 0 ? -0.7 : 0.7;
+      else if (kind === 'abs') y = 1 - Math.abs(x);
+      else if (kind === 'cubic') y = x * x * x;
+      else y = 0;
+      ys[i] = y;
+    }
+  }
+  makeTargets('sin');
+
+  // Params
+  let W1 = new Float64Array(H1);
+  let b1 = new Float64Array(H1);
+  let W2 = Array.from({length: H2}, () => new Float64Array(H1));
+  let b2 = new Float64Array(H2);
+  let W3 = new Float64Array(H2);
+  let b3 = 0;
+
+  function randn() {
+    let u = 0, v = 0;
+    while (u === 0) u = Math.random();
+    while (v === 0) v = Math.random();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  }
+
+  function initParams() {
+    const s1 = Math.sqrt(1 / 1);   // Xavier for tanh with fan_in=1
+    const s2 = Math.sqrt(1 / H1);
+    const s3 = Math.sqrt(1 / H2);
+    for (let j = 0; j < H1; j++) {
+      W1[j] = randn() * s1;
+      b1[j] = 0;
+    }
+    for (let k = 0; k < H2; k++) {
+      const row = W2[k];
+      for (let j = 0; j < H1; j++) row[j] = randn() * s2;
+      b2[k] = 0;
+      W3[k] = randn() * s3;
+    }
+    b3 = 0;
+  }
+
+  initParams();
+
+  // Buffers
+  const z1 = new Float64Array(H1);
+  const a1 = new Float64Array(H1);
+  const z2 = new Float64Array(H2);
+  const a2 = new Float64Array(H2);
+
+  // Forward single
+  function forward(x) {
+    for (let j = 0; j < H1; j++) {
+      const z = W1[j] * x + b1[j];
+      z1[j] = z;
+      a1[j] = Math.tanh(z);
+    }
+    for (let k = 0; k < H2; k++) {
+      let z = b2[k];
+      const w2k = W2[k];
+      for (let j = 0; j < H1; j++) z += w2k[j] * a1[j];
+      z2[k] = z;
+      a2[k] = Math.tanh(z);
+    }
+    let y = b3;
+    for (let k = 0; k < H2; k++) y += W3[k] * a2[k];
+    return y;
+  }
+
+  // Train one full-batch step; return mean loss
+  function trainStep() {
+    // grads
+    const dW1 = new Float64Array(H1);
+    const db1 = new Float64Array(H1);
+    const dW2 = Array.from({length: H2}, () => new Float64Array(H1));
+    const db2 = new Float64Array(H2);
+    const dW3 = new Float64Array(H2);
+    let db3_acc = 0;
+    let loss = 0;
+
+    const da1 = new Float64Array(H1);
+    const da2 = new Float64Array(H2);
+
+    for (let i = 0; i < N; i++) {
+      const x = xs[i];
+      const yTrue = ys[i];
+
+      // forward
+      for (let j = 0; j < H1; j++) {
+        const z = W1[j] * x + b1[j];
+        z1[j] = z;
+        a1[j] = Math.tanh(z);
+      }
+      for (let k = 0; k < H2; k++) {
+        let z = b2[k];
+        const w2k = W2[k];
+        for (let j = 0; j < H1; j++) z += w2k[j] * a1[j];
+        z2[k] = z;
+        a2[k] = Math.tanh(z);
+      }
+      let yPred = b3;
+      for (let k = 0; k < H2; k++) yPred += W3[k] * a2[k];
+
+      const diff = yPred - yTrue;
+      loss += 0.5 * diff * diff;
+      const dL_dy = diff;
+
+      // grads for output layer
+      for (let k = 0; k < H2; k++) {
+        dW3[k] += dL_dy * a2[k];
+        da2[k] = dL_dy * W3[k];
+      }
+      db3_acc += dL_dy;
+
+      // layer 2 backprop
+      for (let k = 0; k < H2; k++) {
+        const dz2k = (1 - Math.tanh(z2[k]) ** 2) * da2[k];
+        db2[k] += dz2k;
+        const w2k = W2[k];
+        const dW2k = dW2[k];
+        for (let j = 0; j < H1; j++) {
+          dW2k[j] += dz2k * a1[j];
+          da1[j] += dz2k * w2k[j];
+        }
+      }
+
+      // layer 1 backprop
+      for (let j = 0; j < H1; j++) {
+        const dz1j = (1 - Math.tanh(z1[j]) ** 2) * da1[j];
+        db1[j] += dz1j;
+        dW1[j] += dz1j * x;
+      }
+    }
+
+    // apply SGD
+    const invN = 1 / N;
+    for (let j = 0; j < H1; j++) {
+      W1[j] -= lr * dW1[j] * invN;
+      b1[j] -= lr * db1[j] * invN;
+    }
+    for (let k = 0; k < H2; k++) {
+      const w2k = W2[k];
+      const dW2k = dW2[k];
+      for (let j = 0; j < H1; j++) w2k[j] -= lr * dW2k[j] * invN;
+      b2[k] -= lr * db2[k] * invN;
+      W3[k] -= lr * dW3[k] * invN;
+    }
+    b3 -= lr * db3_acc * invN;
+
+    return loss * invN;
+  }
+
+  // Plot canvas
+  const plot = document.getElementById('plot');
+  const net = document.getElementById('net');
+  const pctx = plot.getContext('2d');
+  const nctx = net.getContext('2d');
+  let pw=0, ph=0, nw=0, nh=0, dpr=window.devicePixelRatio||1;
+
+  function resize() {
+    const pr = plot.getBoundingClientRect();
+    pw = pr.width; ph = pr.height;
+    plot.width = Math.round(pw * dpr);
+    plot.height = Math.round(ph * dpr);
+    pctx.setTransform(dpr,0,0,dpr,0,0);
+
+    const nr = net.getBoundingClientRect();
+    nw = nr.width; nh = nr.height;
+    net.width = Math.round(nw * dpr);
+    net.height = Math.round(nh * dpr);
+    nctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function renderPlot(lossVal) {
+    pctx.clearRect(0,0,pw,ph);
+    // Axes
+    pctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    pctx.lineWidth = 1;
+    pctx.beginPath();
+    const y0 = ph/2;
+    pctx.moveTo(0,y0); pctx.lineTo(pw,y0); pctx.stroke();
+    pctx.beginPath(); pctx.moveTo(pw/2,0); pctx.lineTo(pw/2,ph); pctx.stroke();
+
+    // Target (green)
+    pctx.strokeStyle = 'rgba(94,234,212,0.9)';
+    pctx.lineWidth = 2;
+    pctx.beginPath();
+    for (let i = 0; i < N; i++) {
+      const x = xs[i];
+      const y = ys[i];
+      const px = ((x+1)/2)*pw;
+      const py = ph - ((y+1)/2)*ph;
+      if (i===0) pctx.moveTo(px,py); else pctx.lineTo(px,py);
+    }
+    pctx.stroke();
+
+    // Prediction (blue)
+    pctx.strokeStyle = 'rgba(125,211,252,0.95)';
+    pctx.lineWidth = 2;
+    pctx.beginPath();
+    for (let i = 0; i < N; i++) {
+      const x = xs[i];
+      const yhat = forward(x);
+      const px = ((x+1)/2)*pw;
+      const py = ph - ((yhat+1)/2)*ph;
+      if (i===0) pctx.moveTo(px,py); else pctx.lineTo(px,py);
+    }
+    pctx.stroke();
+
+    document.getElementById('loss').textContent = lossVal !== null ? lossVal.toFixed(4) : '—';
+  }
+
+  function colorForWeight(w, maxAbs) {
+    const a = Math.min(1, Math.abs(w) / (maxAbs + 1e-9));
+    if (w >= 0) return `rgba(125,211,252,${0.2 + 0.8*a})`; // blue
+    return `rgba(248,113,113,${0.2 + 0.8*a})`; // red
+  }
+  function colorForActivation(v) {
+    const a = Math.min(1, Math.abs(v));
+    if (v >= 0) return `rgba(125,211,252,${0.2 + 0.8*a})`;
+    return `rgba(248,113,113,${0.2 + 0.8*a})`;
+  }
+
+  function renderNet() {
+    nctx.clearRect(0,0,nw,nh);
+    const layers = [
+      [{act: 0}], // input node act = x drawn later maybe just 0
+      Array.from({length:H1}, ()=>({act:0})),
+      Array.from({length:H2}, ()=>({act:0})),
+      [{act:0}]
+    ];
+    // Evaluate activations at x=0 for visualization
+    const xvis = 0;
+    forward(xvis);
+    for (let j=0;j<H1;j++) layers[1][j].act = a1[j];
+    for (let k=0;k<H2;k++) layers[2][k].act = a2[k];
+    layers[0][0].act = xvis;
+    layers[3][0].act = forward(xvis);
+
+    const cols = layers.length;
+    const colX = idx => (idx/(cols-1)) * (nw-40) + 20;
+    const rowY = (layerLen, i) => {
+      const top = 20, bottom = nh-20;
+      if (layerLen===1) return nh/2;
+      return top + (i/(layerLen-1))*(bottom-top);
+    };
+
+    // Max abs weights per layer for color scaling
+    let maxW1 = 0, maxW2 = 0, maxW3 = 0;
+    for (let j=0;j<H1;j++) maxW1 = Math.max(maxW1, Math.abs(W1[j]));
+    for (let k=0;k<H2;k++) for (let j=0;j<H1;j++) maxW2 = Math.max(maxW2, Math.abs(W2[k][j]));
+    for (let k=0;k<H2;k++) maxW3 = Math.max(maxW3, Math.abs(W3[k]));
+    maxW1 = Math.max(maxW1, 1e-6);
+    maxW2 = Math.max(maxW2, 1e-6);
+    maxW3 = Math.max(maxW3, 1e-6);
+
+    // Draw connections
+    nctx.lineWidth = 1.5;
+    // input -> h1
+    for (let j=0;j<H1;j++) {
+      nctx.strokeStyle = colorForWeight(W1[j], maxW1);
+      nctx.beginPath();
+      nctx.moveTo(colX(0), rowY(1,0));
+      nctx.lineTo(colX(1), rowY(H1,j));
+      nctx.stroke();
+    }
+    // h1 -> h2
+    for (let k=0;k<H2;k++) {
+      for (let j=0;j<H1;j++) {
+        nctx.strokeStyle = colorForWeight(W2[k][j], maxW2);
+        nctx.beginPath();
+        nctx.moveTo(colX(1), rowY(H1,j));
+        nctx.lineTo(colX(2), rowY(H2,k));
+        nctx.stroke();
+      }
+    }
+    // h2 -> out
+    for (let k=0;k<H2;k++) {
+      nctx.strokeStyle = colorForWeight(W3[k], maxW3);
+      nctx.beginPath();
+      nctx.moveTo(colX(2), rowY(H2,k));
+      nctx.lineTo(colX(3), rowY(1,0));
+      nctx.stroke();
+    }
+
+    // Draw nodes
+    for (let li=0; li<layers.length; li++) {
+      const layer = layers[li];
+      for (let i=0; i<layer.length; i++) {
+        const act = layer[i].act;
+        nctx.fillStyle = colorForActivation(act);
+        nctx.strokeStyle = 'rgba(255,255,255,0.7)';
+        nctx.lineWidth = 1;
+        nctx.beginPath();
+        nctx.arc(colX(li), rowY(layer.length,i), 10, 0, Math.PI*2);
+        nctx.fill();
+        nctx.stroke();
+      }
+    }
+
+    // Labels
+    nctx.fillStyle = 'var(--muted)';
+    nctx.font = '12px system-ui';
+    nctx.fillText('Input (x=0)', colX(0)-24, 14);
+    nctx.fillText('Hidden 1', colX(1)-24, 14);
+    nctx.fillText('Hidden 2', colX(2)-24, 14);
+    nctx.fillText('Output', colX(3)-18, 14);
+  }
+
+  // Loop
+  let running = false;
+  let steps = 0;
+  function loop() {
+    if (running) {
+      let l = 0;
+      for (let i = 0; i < stepsPerFrame; i++) {
+        l = trainStep();
+        steps++;
+      }
+      document.getElementById('steps').textContent = steps;
+      renderPlot(l);
+      renderNet();
+    }
+    requestAnimationFrame(loop);
+  }
+
+  // UI
+  document.getElementById('toggle').addEventListener('click', () => {
+    running = !running;
+    document.getElementById('toggle').textContent = running ? 'Pause' : 'Start';
+  });
+  document.getElementById('reset').addEventListener('click', () => {
+    running = false;
+    document.getElementById('toggle').textContent = 'Start';
+    steps = 0;
+    document.getElementById('steps').textContent = steps;
+    initParams();
+    renderPlot(null);
+    renderNet();
+  });
+  document.getElementById('fn-select').addEventListener('change', (e) => {
+    makeTargets(e.target.value);
+    steps = 0;
+    document.getElementById('steps').textContent = steps;
+    renderPlot(null);
+    renderNet();
+  });
+
+  // Initial render
+  renderPlot(null);
+  renderNet();
+  loop();
+})();
+</script>
+
+
+</body></html>

@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Transformer Dogfight</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            background: #0a0a12; 
+            display: flex; 
+            flex-direction: column;
+            align-items: center; 
+            font-family: 'Courier New', monospace;
+            color: #0f0;
+            overflow: hidden;
+        }
+        #header {
+            padding: 10px;
+            text-align: center;
+            width: 100%;
+            background: linear-gradient(180deg, #111 0%, transparent 100%);
+        }
+        h1 { color: #0ff; font-size: 1.4em; text-shadow: 0 0 10px #0ff; }
+        #hud {
+            position: absolute;
+            top: 60px;
+            left: 10px;
+            font-size: 12px;
+            z-index: 100;
+        }
+        #controls-help {
+            position: absolute;
+            top: 60px;
+            right: 10px;
+            font-size: 11px;
+            text-align: right;
+            color: #888;
+        }
+        #neural-display {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            width: 280px;
+            background: rgba(0,20,0,0.8);
+            border: 1px solid #0f0;
+            padding: 8px;
+            font-size: 10px;
+        }
+        #scoreboard {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0,20,0,0.8);
+            border: 1px solid #0f0;
+            padding: 8px;
+            font-size: 11px;
+        }
+        canvas { 
+            border: 1px solid #0f0; 
+            box-shadow: 0 0 20px rgba(0,255,0,0.3);
+        }
+        .ally { color: #0f0; }
+        .enemy { color: #f00; }
+        .player { color: #0ff; }
+    </style>
+</head>
+<body>
+    <div id="header">
+        <h1>⚔️ TRANSFORMER DOGFIGHT ⚔️</h1>
+    </div>
+    <div id="hud">
+        <div class="player">PLAYER: <span id="player-hp">100</span> HP</div>
+        <div>Altitude: <span id="altitude">1000</span>m</div>
+        <div>Speed: <span id="speed">0</span></div>
+        <div>Heading: <span id="heading">0</span>°</div>
+        <div style="margin-top:5px">Ammo: <span id="ammo">∞</span></div>
+    </div>
+    <div id="controls-help">
+        W/S: Pitch<br>
+        A/D: Roll<br>
+        Q/E: Yaw<br>
+        SPACE: Fire<br>
+        SHIFT: Boost
+    </div>
+    <canvas id="canvas" width="900" height="600"></canvas>
+    <div id="neural-display">
+        <div style="color:#0ff;margin-bottom:5px;">═══ TRANSFORMER AI STATUS ═══</div>
+        <div id="ai-thoughts"></div>
+    </div>
+    <div id="scoreboard">
+        <div style="color:#0ff;margin-bottom:5px;">══ SCORE ══</div>
+        <div class="ally">Allies: <span id="ally-kills">0</span></div>
+        <div class="enemy">Enemies: <span id="enemy-kills">0</span></div>
+    </div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+// Transformer Neural Network
+class TransformerBrain {
+    constructor(inputSize, hiddenSize, numHeads) {
+        this.inputSize = inputSize;
+        this.hiddenSize = hiddenSize;
+        this.numHeads = numHeads;
+        this.headDim = Math.floor(hiddenSize / numHeads);
+        
+        // Initialize weights with Xavier initialization
+        this.Wq = this.initWeight(inputSize, hiddenSize);
+        this.Wk = this.initWeight(inputSize, hiddenSize);
+        this.Wv = this.initWeight(inputSize, hiddenSize);
+        this.Wo = this.initWeight(hiddenSize, hiddenSize);
+        this.W1 = this.initWeight(hiddenSize, hiddenSize * 2);
+        this.W2 = this.initWeight(hiddenSize * 2, 6); // 6 outputs: pitch, roll, yaw, throttle, fire, target_priority
+        
+        this.lastAttention = [];
+        this.lastOutput = [];
+        this.experience = [];
+        this.learningRate = 0.01;
+    }
+    
+    initWeight(rows, cols) {
+        const scale = Math.sqrt(2 / (rows + cols));
+        return Array(rows).fill(0).map(() => 
+            Array(cols).fill(0).map(() => (Math.random() - 0.5) * scale)
+        );
+    }
+    
+    matmul(A, B) {
+        const rowsA = A.length, colsA = A[0].length;
+        const colsB = B[0].length;
+        const result = Array(rowsA).fill(0).map(() => Array(colsB).fill(0));
+        for (let i = 0; i < rowsA; i++) {
+            for (let j = 0; j < colsB; j++) {
+                for (let k = 0; k < colsA; k++) {
+                    result[i][j] += A[i][k] * B[k][j];
+                }
+            }
+        }
+        return result;
+    }
+    
+    softmax(arr) {
+        const max = Math.max(...arr);
+        const exp = arr.map(x => Math.exp(x - max));
+        const sum = exp.reduce((a, b) => a + b, 0);
+        return exp.map(x => x / sum);
+    }
+    
+    relu(x) { return Math.max(0, x); }
+    tanh(x) { return Math.tanh(x); }
+    
+    attention(queries, keys, values) {
+        const d_k = keys[0].length;
+        const scores = [];
+        
+        for (let i = 0; i < queries.length; i++) {
+            const row = [];
+            for (let j = 0; j < keys.length; j++) {
+                let dot = 0;
+                for (let k = 0; k < d_k; k++) {
+                    dot += queries[i][k] * keys[j][k];
+                }
+                row.push(dot / Math.sqrt(d_k));
+            }
+            scores.push(this.softmax(row));
+        }
+        
+        this.lastAttention = scores;
+        
+        // Apply attention to values
+        const output = [];
+        for (let i = 0; i < scores.length; i++) {
+            const row = Array(values[0].length).fill(0);
+            for (let j = 0; j < values.length; j++) {
+                for (let k = 0; k < values[0].length; k++) {
+                    row[k] += scores[i][j] * values[j][k];
+                }
+            }
+            output.push(row);
+        }
+        return output;
+    }
+    
+    forward(inputs) {
+        // inputs: array of entity states [[x,y,z,vx,vy,vz,hp,team,dist,angle],...]
+        if (inputs.length === 0) return [0, 0, 0, 0.5, 0, 0];
+        
+        // Pad inputs to inputSize
+        const paddedInputs = inputs.map(inp => {
+            const padded = [...inp];
+            while (padded.length < this.inputSize) padded.push(0);
+            return padded.slice(0, this.inputSize);
+        });
+        
+        // Project to Q, K, V
+        const Q = this.matmul(paddedInputs, this.Wq);
+        const K = this.matmul(paddedInputs, this.Wk);
+        const V = this.matmul(paddedInputs, this.Wv);
+        
+        // Self-attention
+        const attended = this.attention(Q, K, V);
+        
+        // Output projection
+        const projected = this.matmul(attended, this.Wo);
+        
+        // Pool across sequence (mean)
+        const pooled = Array(this.hiddenSize).fill(0);
+        for (let i = 0; i < projected.length; i++) {
+            for (let j = 0; j < this.hiddenSize; j++) {
+                pooled[j] += projected[i][j] / projected.length;
+            }
+        }
+        
+        // FFN layer 1
+        const hidden = [];
+        for (let i = 0; i < this.hiddenSize * 2; i++) {
+            let sum = 0;
+            for (let j = 0; j < this.hiddenSize; j++) {
+                sum += pooled[j] * this.W1[j][i];
+            }
+            hidden.push(this.relu(sum));
+        }
+        
+        // FFN layer 2 -> outputs
+        const outputs = [];
+        for (let i = 0; i < 6; i++) {
+            let sum = 0;
+            for (let j = 0; j < this.hiddenSize * 2; j++) {
+                sum += hidden[j] * this.W2[j][i];
+            }
+            outputs.push(this.tanh(sum));
+        }
+        
+        this.lastOutput = outputs;
+        return outputs;
+    }
+    
+    learn(reward) {
+        // Simple weight perturbation learning
+        const perturbScale = this.learningRate * reward;
+        
+        const perturb = (W) => {
+            for (let i = 0; i < W.length; i++) {
+                for (let j = 0; j < W[i].length; j++) {
+                    W[i][j] += (Math.random() - 0.5) * perturbScale;
+                }
+            }
+        };
+        
+        if (Math.abs(reward) > 0.1) {
+            perturb(this.Wq);
+            perturb(this.Wk);
+            perturb(this.Wv);
+            perturb(this.W2);
+        }
+    }
+}
+
+// Fighter plane class
+class Fighter {
+    constructor(x, y, z, team, isPlayer = false) {
+        this.x = x;
+        this.y = y;
+        this.z = z;
+        this.vx = 0;
+        this.vy = 0;
+        this.vz = 0;
+        this.pitch = 0;
+        this.roll = 0;
+        this.yaw = Math.random() * Math.PI * 2;
+        this.speed = 3;
+        this.hp = 100;
+        this.maxHp = 100;
+        this.team = team; // 'ally' or 'enemy'
+        this.isPlayer = isPlayer;
+        this.brain = isPlayer ? null : new TransformerBrain(12, 32, 4);
+        this.fireCooldown = 0;
+        this.target = null;
+        this.alive = true;
+        this.respawnTimer = 0;
+        this.kills = 0;
+        this.id = Math.random().toString(36).substr(2, 9);
+    }
+    
+    getState() {
+        return [this.x, this.y, this.z, this.vx, this.vy, this.vz, 
+                this.hp / this.maxHp, this.team === 'ally' ? 1 : -1,
+                this.pitch, this.roll, this.yaw, this.speed];
+    }
+    
+    update(allFighters, bullets) {
+        if (!this.alive) {
+            this.respawnTimer--;
+            if (this.respawnTimer <= 0) {
+                this.respawn();
+            }
+            return;
+        }
+        
+        if (this.fireCooldown > 0) this.fireCooldown--;
+        
+        if (!this.isPlayer && this.brain) {
+            this.aiUpdate(allFighters, bullets);
+        }
+        
+        // Apply physics
+        const cosYaw = Math.cos(this.yaw);
+        const sinYaw = Math.sin(this.yaw);
+        const cosPitch = Math.cos(this.pitch);
+        
+        this.vx = sinYaw * cosPitch * this.speed;
+        this.vy = -Math.sin(this.pitch) * this.speed;
+        this.vz = cosYaw * cosPitch * this.speed;
+        
+        this.x += this.vx;
+        this.y += this.vy;
+        this.z += this.vz;
+        
+        // Boundaries
+        this.x = Math.max(-800, Math.min(800, this.x));
+        this.z = Math.max(-800, Math.min(800, this.z));
+        this.y = Math.max(50, Math.min(500, this.y));
+        
+        // Dampen pitch/roll
+        this.pitch *= 0.98;
+        this.roll *= 0.98;
+    }
+    
+    aiUpdate(allFighters, bullets) {
+        // Build perception
+        const perception = [];
+        
+        // Add self state first
+        perception.push([0, 0, 0, this.vx, this.vy, this.vz, 
+                        this.hp/this.maxHp, 0, this.pitch, this.roll, this.yaw, this.speed]);
+        
+        // Add other fighters relative to self
+        for (const other of allFighters) {
+            if (other.id === this.id || !other.alive) continue;
+            
+            const dx = other.x - this.x;
+            const dy = other.y - this.y;
+            const dz = other.z - this.z;
+            const dist = Math.sqrt(dx*dx + dy*dy + dz*dz) || 1;
+            const angle = Math.atan2(dx, dz) - this.yaw;
+            const isEnemy = other.team !== this.team ? 1 : -1;
+            
+            perception.push([
+                dx / 100, dy / 100, dz / 100,
+                other.vx, other.vy, other.vz,
+                other.hp / other.maxHp,
+                isEnemy,
+                dist / 200,
+                angle,
+                other.pitch,
+                other.speed
+            ]);
+        }
+        
+        // Add nearby bullets as threats
+        for (const bullet of bullets) {
+            if (bullet.team === this.team) continue;
+            const dx = bullet.x - this.x;
+            const dy = bullet.y - this.y;
+            const dz = bullet.z - this.z;
+            const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+            if (dist < 150) {
+                perception.push([
+                    dx / 100, dy / 100, dz / 100,
+                    bullet.vx, bullet.vy, bullet.vz,
+                    0, -1, dist / 200, 0, 0, 10
+                ]);
+            }
+        }
+        
+        // Run through transformer
+        const outputs = this.brain.forward(perception);
+        
+        // Apply outputs
+        this.pitch += outputs[0] * 0.05;
+        this.roll += outputs[1] * 0.05;
+        this.yaw += outputs[2] * 0.03;
+        this.speed = 2 + (outputs[3] + 1) * 2; // 2-6 speed
+        
+        // Clamp
+        this.pitch = Math.max(-0.5, Math.min(0.5, this.pitch));
+        this.roll = Math.max(-0.8, Math.min(0.8, this.roll));
+        
+        // Fire decision
+        if (outputs[4] > 0.3 && this.fireCooldown <= 0) {
+            this.fire(bullets);
+        }
+    }
+    
+    fire(bullets) {
+        if (this.fireCooldown > 0) return null;
+        this.fireCooldown = 15;
+        
+        const cosYaw = Math.cos(this.yaw);
+        const sinYaw = Math.sin(this.yaw);
+        const cosPitch = Math.cos(this.pitch);
+        
+        const bullet = {
+            x: this.x,
+            y: this.y,
+            z: this.z,
+            vx: sinYaw * cosPitch * 12 + this.vx,
+            vy: -Math.sin(this.pitch) * 12 + this.vy,
+            vz: cosYaw * cosPitch * 12 + this.vz,
+            team: this.team,
+            owner: this,
+            life: 80
+        };
+        bullets.push(bullet);
+        return bullet;
+    }
+    
+    takeDamage(amount, attacker) {
+        this.hp -= amount;
+        if (this.hp <= 0 && this.alive) {
+            this.alive = false;
+            this.respawnTimer = 180;
+            if (attacker) {
+                attacker.kills++;
+                if (attacker.brain) {
+                    attacker.brain.learn(1.0); // Reward for kill
+                }
+            }
+            if (this.brain) {
+                this.brain.learn(-0.5); // Penalty for death
+            }
+        }
+    }
+    
+    respawn() {
+        this.alive = true;
+        this.hp = this.maxHp;
+        this.x = (Math.random() - 0.5) * 600;
+        this.y = 200 + Math.random() * 200;
+        this.z = (Math.random() - 0.5) * 600;
+        this.yaw = Math.random() * Math.PI * 2;
+        this.pitch = 0;
+        this.roll = 0;
+    }
+}
+
+// Game state
+const game = {
+    player: null,
+    fighters: [],
+    bullets: [],
+    keys: {},
+    allyKills: 0,
+    enemyKills: 0,
+    cameraX: 0,
+    cameraZ: 0
+};
+
+// Initialize
+function init() {
+    // Player
+    game.player = new Fighter(0, 200, 0, 'ally', true);
+    game.fighters.push(game.player);
+    
+    // Allied AI
+    for (let i = 0; i < 3; i++) {
+        const ally = new Fighter(
+            (Math.random() - 0.5) * 400,
+            150 + Math.random() * 150,
+            (Math.random() - 0.5) * 400,
+            'ally'
+        );
+        game.fighters.push(ally);
+    }
+    
+    // Enemy AI
+    for (let i = 0; i < 5; i++) {
+        const enemy = new Fighter(
+            (Math.random() - 0.5) * 600,
+            150 + Math.random() * 150,
+            300 + Math.random() * 300,
+            'enemy'
+        );
+        game.fighters.push(enemy);
+    }
+}
+
+// Input handling
+document.addEventListener('keydown', e => {
+    game.keys[e.key.toLowerCase()] = true;
+    if (e.key === ' ') e.preventDefault();
+});
+document.addEventListener('keyup', e => {
+    game.keys[e.key.toLowerCase()] = false;
+});
+
+function handleInput() {
+    const p = game.player;
+    if (!p.alive) return;
+    
+    // W=nose up, S=nose down
+    if (game.keys['w']) p.pitch -= 0.03;
+    if (game.keys['s']) p.pitch += 0.03;
+    
+    // A=roll left, D=roll right
+    if (game.keys['a']) {
+        p.roll -= 0.04;
+        p.yaw -= 0.02;
+    }
+    if (game.keys['d']) {
+        p.roll += 0.04;
+        p.yaw += 0.02;
+    }
+    
+    // Q=yaw left, E=yaw right
+    if (game.keys['q']) p.yaw -= 0.04;
+    if (game.keys['e']) p.yaw += 0.04;
+    
+    // Boost
+    if (game.keys['shift']) {
+        p.speed = Math.min(8, p.speed + 0.2);
+    } else {
+        p.speed = Math.max(3, p.speed - 0.05);
+    }
+    
+    // Fire
+    if (game.keys[' ']) {
+        p.fire(game.bullets);
+    }
+    
+    // Clamp
+    p.pitch = Math.max(-0.6, Math.min(0.6, p.pitch));
+    p.roll = Math.max(-1, Math.min(1, p.roll));
+}
+
+function updateBullets() {
+    for (let i = game.bullets.length - 1; i >= 0; i--) {
+        const b = game.bullets[i];
+        b.x += b.vx;
+        b.y += b.vy;
+        b.z += b.vz;
+        b.life--;
+        
+        if (b.life <= 0 || Math.abs(b.x) > 1000 || Math.abs(b.z) > 1000 || b.y < 0 || b.y > 600) {
+            game.bullets.splice(i, 1);
+            continue;
+        }
+        
+        // Check hits
+        for (const fighter of game.fighters) {
+            if (!fighter.alive || fighter.team === b.team) continue;
+            
+            const dx = fighter.x - b.x;
+            const dy = fighter.y - b.y;
+            const dz = fighter.z - b.z;
+            const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+            
+            if (dist < 20) {
+                fighter.takeDamage(15, b.owner);
+                game.bullets.splice(i, 1);
+                
+                if (!fighter.alive) {
+                    if (b.owner.team === 'ally') game.allyKills++;
+                    else game.enemyKills++;
+                }
+                break;
+            }
+        }
+    }
+}
+
+function project3D(x, y, z) {
+    // Simple perspective projection relative to player
+    const camX = game.player.x;
+    const camY = game.player.y;
+    const camZ = game.player.z - 300;
+    
+    const rx = x - camX;
+    const ry = y - camY;
+    const rz = z - camZ;
+    
+    if (rz < 10) return null;
+    
+    const scale = 400 / rz;
+    const sx = canvas.width / 2 + rx * scale;
+    const sy = canvas.height / 2 - ry * scale;
+    
+    return { x: sx, y: sy, scale: scale, depth: rz };
+}
+
+function drawFighter(fighter) {
+    if (!fighter.alive) return;
+    
+    const proj = project3D(fighter.x, fighter.y, fighter.z);
+    if (!proj || proj.x < -50 || proj.x > canvas.width + 50) return;
+    
+    const size = Math.max(5, 25 * proj.scale);
+    
+    ctx.save();
+    ctx.translate(proj.x, proj.y);
+    ctx.rotate(fighter.roll);
+    
+    // Body color based on team
+    if (fighter.isPlayer) {
+        ctx.fillStyle = '#0ff';
+        ctx.strokeStyle = '#0ff';
+    } else if (fighter.team === 'ally') {
+        ctx.fillStyle = '#0f0';
+        ctx.strokeStyle = '#0f0';
+    } else {
+        ctx.fillStyle = '#f00';
+        ctx.strokeStyle = '#f00';
+    }
+    
+    // Draw plane shape
+    ctx.beginPath();
+    ctx.moveTo(0, -size);
+    ctx.lineTo(-size * 0.7, size * 0.5);
+    ctx.lineTo(0, size * 0.3);
+    ctx.lineTo(size * 0.7, size * 0.5);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Wings
+    ctx.beginPath();
+    ctx.moveTo(-size * 1.2, 0);
+    ctx.lineTo(size * 1.2, 0);
+    ctx.lineWidth = Math.max(1, size * 0.15);
+    ctx.stroke();
+    
+    // HP bar
+    if (!fighter.isPlayer) {
+        const barWidth = size * 2;
+        const barHeight = 3;
+        ctx.fillStyle = '#300';
+        ctx.fillRect(-barWidth/2, -size - 8, barWidth, barHeight);
+        ctx.fillStyle = fighter.team === 'ally' ? '#0f0' : '#f00';
+        ctx.fillRect(-barWidth/2, -size - 8, barWidth * (fighter.hp / fighter.maxHp), barHeight);
+    }
+    
+    ctx.restore();
+}
+
+function drawBullet(bullet) {
+    const proj = project3D(bullet.x, bullet.y, bullet.z);
+    if (!proj) return;
+    
+    ctx.fillStyle = bullet.team === 'ally' ? '#ff0' : '#f80';
+    const size = Math.max(2, 4 * proj.scale);
+    ctx.beginPath();
+    ctx.arc(proj.x, proj.y, size, 0, Math.PI * 2);
+    ctx.fill();
+}
+
+function drawGround() {
+    // Grid
+    ctx.strokeStyle = '#030';
+    ctx.lineWidth = 1;
+    
+    const gridSize = 100;
+    const camX = game.player.x;
+    const camZ = game.player.z;
+    
+    for (let x = -800; x <= 800; x += gridSize) {
+        const p1 = project3D(x, 0, -800);
+        const p2 = project3D(x, 0, 800);
+        if (p1 && p2) {
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+        }
+    }
+    for (let z = -800; z <= 800; z += gridSize) {
+        const p1 = project3D(-800, 0, z);
+        const p2 = project3D(800, 0, z);
+        if (p1 && p2) {
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+        }
+    }
+}
+
+function drawHorizon() {
+    const roll = game.player.roll;
+    const pitch = game.player.pitch;
+    
+    ctx.save();
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate(roll);
+    
+    // Sky gradient
+    const grad = ctx.createLinearGradient(0, -300 + pitch * 500, 0, 300 + pitch * 500);
+    grad.addColorStop(0, '#001');
+    grad.addColorStop(0.5, '#013');
+    grad.addColorStop(1, '#021');
+    ctx.fillStyle = grad;
+    ctx.fillRect(-500, -400, 1000, 800);
+    
+    // Horizon line
+    ctx.strokeStyle = '#050';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-500, pitch * 300);
+    ctx.lineTo(500, pitch * 300);
+    ctx.stroke();
+    
+    ctx.restore();
+}
+
+function drawRadar() {
+    const rx = canvas.width - 100;
+    const ry = 100;
+    const rr = 60;
+    
+    ctx.fillStyle = 'rgba(0,20,0,0.7)';
+    ctx.beginPath();
+    ctx.arc(rx, ry, rr, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.strokeStyle = '#0f0';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(rx, ry, rr, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(rx, ry, rr/2, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // Draw blips
+    for (const f of game.fighters) {
+        if (!f.alive) continue;
+        
+        const dx = (f.x - game.player.x) / 15;
+        const dz = (f.z - game.player.z) / 15;
+        
+        if (Math.abs(dx) < rr && Math.abs(dz) < rr) {
+            if (f.isPlayer) ctx.fillStyle = '#0ff';
+            else if (f.team === 'ally') ctx.fillStyle = '#0f0';
+            else ctx.fillStyle = '#f00';
+            
+            ctx.beginPath();
+            ctx.arc(rx + dx, ry + dz, f.isPlayer ? 4 : 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+}
+
+function updateHUD() {
+    document.getElementById('player-hp').textContent = Math.max(0, game.player.hp);
+    document.getElementById('altitude').textContent = Math.floor(game.player.y);
+    document.getElementById('speed').textContent = game.player.speed.toFixed(1);
+    document.getElementById('heading').textContent = Math.floor((game.player.yaw * 180 / Math.PI + 360) % 360);
+    document.getElementById('ally-kills').textContent = game.allyKills;
+    document.getElementById('enemy-kills').textContent = game.enemyKills;
+    
+    // AI thoughts display
+    let aiInfo = '';
+    const enemies = game.fighters.filter(f => f.team === 'enemy' && f.alive && f.brain);
+    for (let i = 0; i < Math.min(2, enemies.length); i++) {
+        const e = enemies[i];
+        const out = e.brain.lastOutput;
+        if (out.length > 0) {
+            aiInfo += `<div style="margin-bottom:5px;">
+                <span style="color:#f00;">Enemy ${i+1}:</span><br>
+                Pitch: ${(out[0]*100).toFixed(0)}% | Roll: ${(out[1]*100).toFixed(0)}%<br>
+                Yaw: ${(out[2]*100).toFixed(0)}% | Fire: ${out[4] > 0.3 ? '🔥' : '○'}<br>
+                Attn: [${e.brain.lastAttention.length} heads active]
+            </div>`;
+        }
+    }
+    document.getElementById('ai-thoughts').innerHTML = aiInfo || 'Initializing...';
+}
+
+function render() {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    drawHorizon();
+    drawGround();
+    
+    // Sort by depth for proper rendering
+    const sortedFighters = [...game.fighters].sort((a, b) => {
+        const da = Math.sqrt((a.x - game.player.x)**2 + (a.z - game.player.z)**2);
+        const db = Math.sqrt((b.x - game.player.x)**2 + (b.z - game.player.z)**2);
+        return db - da;
+    });
+    
+    for (const f of sortedFighters) {
+        drawFighter(f);
+    }
+    
+    for (const b of game.bullets) {
+        drawBullet(b);
+    }
+    
+    drawRadar();
+    
+    // Death screen
+    if (!game.player.alive) {
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#f00';
+        ctx.font = '48px Courier New';
+        ctx.textAlign = 'center';
+        ctx.fillText('DESTROYED', canvas.width/2, canvas.height/2);
+        ctx.font = '20px Courier New';
+        ctx.fillStyle = '#fff';
+        ctx.fillText(`Respawning in ${Math.ceil(game.player.respawnTimer/60)}...`, canvas.width/2, canvas.height/2 + 40);
+    }
+}
+
+function gameLoop() {
+    handleInput();
+    
+    for (const f of game.fighters) {
+        f.update(game.fighters, game.bullets);
+    }
+    
+    updateBullets();
+    updateHUD();
+    render();
+    
+    requestAnimationFrame(gameLoop);
+}
+
+init();
+gameLoop();
+</script>
+</body>
+</html>

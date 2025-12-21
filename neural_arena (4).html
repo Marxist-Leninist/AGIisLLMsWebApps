@@ -1,0 +1,1427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEURAL ARENA: Architecture Wars</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            background: linear-gradient(135deg, #0a0a12 0%, #1a0a20 100%);
+            color: #e0e0e0;
+            font-family: 'Courier New', monospace;
+            min-height: 100vh;
+            padding: 15px;
+            overflow-x: hidden;
+        }
+        
+        h1 {
+            text-align: center;
+            font-size: 2.5rem;
+            background: linear-gradient(90deg, #ff6666, #ffaa00, #00ffaa, #00aaff, #aa66ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 30px #ffffff33;
+            margin-bottom: 5px;
+            letter-spacing: 4px;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 20px;
+        }
+        
+        .arena-container {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .fighter-panel {
+            background: linear-gradient(145deg, #12121a, #0a0a10);
+            border: 2px solid #1a1a2e;
+            border-radius: 15px;
+            padding: 15px;
+            width: 220px;
+        }
+        
+        .fighter-panel.left { border-color: #ff6666; }
+        .fighter-panel.right { border-color: #00aaff; }
+        
+        .fighter-name {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .fighter-panel.left .fighter-name { color: #ff6666; }
+        .fighter-panel.right .fighter-name { color: #00aaff; }
+        
+        .fighter-icon {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+        }
+        
+        .hp-bar {
+            height: 20px;
+            background: #1a1a2e;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+        
+        .hp-fill {
+            height: 100%;
+            transition: width 0.3s;
+            border-radius: 10px;
+        }
+        
+        .hp-fill.left { background: linear-gradient(90deg, #ff4444, #ff6666); }
+        .hp-fill.right { background: linear-gradient(90deg, #0088cc, #00aaff); }
+        
+        .stats {
+            font-size: 0.75rem;
+            color: #888;
+            margin-bottom: 10px;
+        }
+        
+        .stats div {
+            display: flex;
+            justify-content: space-between;
+            margin: 3px 0;
+        }
+        
+        .stats .value { color: #ffaa00; }
+        
+        .brain-viz {
+            background: #0a0a10;
+            border-radius: 8px;
+            padding: 10px;
+            min-height: 100px;
+        }
+        
+        .brain-viz h4 {
+            font-size: 0.7rem;
+            color: #555;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+        
+        .memory-grid {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 2px;
+        }
+        
+        .mem-cell {
+            width: 18px;
+            height: 18px;
+            border-radius: 3px;
+            background: #1a1a2e;
+        }
+        
+        .hidden-state {
+            display: flex;
+            gap: 3px;
+            flex-wrap: wrap;
+        }
+        
+        .neuron {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #1a1a2e;
+        }
+        
+        .attention-heads {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .attn-head {
+            flex: 1;
+            height: 40px;
+            background: #1a1a2e;
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .attn-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #aa66ff;
+            transition: height 0.1s;
+        }
+        
+        .arena {
+            position: relative;
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle at center, #1a1a2e 0%, #0a0a12 100%);
+            border: 3px solid #2a2a3e;
+            border-radius: 50%;
+            overflow: hidden;
+        }
+        
+        .arena::before {
+            content: '';
+            position: absolute;
+            inset: 20px;
+            border: 2px dashed #333;
+            border-radius: 50%;
+        }
+        
+        .fighter {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            transition: transform 0.05s;
+            cursor: pointer;
+        }
+        
+        .fighter.f1 {
+            background: radial-gradient(circle at 30% 30%, #ff8888, #ff4444);
+            box-shadow: 0 0 20px #ff444488;
+        }
+        
+        .fighter.f2 {
+            background: radial-gradient(circle at 30% 30%, #88ccff, #0088ff);
+            box-shadow: 0 0 20px #0088ff88;
+        }
+        
+        .projectile {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            pointer-events: none;
+        }
+        
+        .thought-bubble {
+            position: absolute;
+            background: #000000cc;
+            padding: 5px 10px;
+            border-radius: 10px;
+            font-size: 0.7rem;
+            white-space: nowrap;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        
+        .thought-bubble.visible {
+            opacity: 1;
+        }
+        
+        .commentary {
+            background: linear-gradient(145deg, #12121a, #0a0a10);
+            border: 2px solid #1a1a2e;
+            border-radius: 15px;
+            padding: 15px;
+            margin-top: 20px;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        .commentary h3 {
+            color: #ffaa00;
+            margin-bottom: 10px;
+            font-size: 0.9rem;
+        }
+        
+        #commentary-text {
+            color: #aaa;
+            font-size: 0.85rem;
+            line-height: 1.6;
+            min-height: 60px;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            background: linear-gradient(145deg, #2a2a3e, #1a1a2e);
+            border: 2px solid #3a3a4e;
+            padding: 10px 20px;
+            font-family: inherit;
+            font-size: 0.9rem;
+            color: #aaa;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        button:hover {
+            border-color: #00ffaa;
+            color: #00ffaa;
+            box-shadow: 0 0 15px #00ffaa33;
+        }
+        
+        button.active {
+            background: linear-gradient(145deg, #00ffaa33, #00aa7733);
+            border-color: #00ffaa;
+            color: #00ffaa;
+        }
+        
+        .speed-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .speed-controls span {
+            color: #666;
+            font-size: 0.8rem;
+        }
+        
+        .score-display {
+            text-align: center;
+            font-size: 2rem;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        
+        .score-display .left { color: #ff6666; }
+        .score-display .right { color: #00aaff; }
+        .score-display .vs { color: #555; margin: 0 15px; }
+        
+        .fighter-select {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            margin-bottom: 10px;
+        }
+        
+        .fighter-option {
+            padding: 8px;
+            background: #1a1a2e;
+            border: 2px solid transparent;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            transition: all 0.2s;
+        }
+        
+        .fighter-option:hover {
+            border-color: #555;
+        }
+        
+        .fighter-option.selected {
+            border-color: #00ffaa;
+            background: #1a2a2e;
+        }
+        
+        .fighter-option .name {
+            font-weight: bold;
+            color: #fff;
+        }
+        
+        .fighter-option .desc {
+            color: #666;
+            font-size: 0.65rem;
+        }
+        
+        .damage-number {
+            position: absolute;
+            font-size: 1.2rem;
+            font-weight: bold;
+            pointer-events: none;
+            animation: float-up 1s ease-out forwards;
+        }
+        
+        @keyframes float-up {
+            0% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-50px); }
+        }
+        
+        .effect {
+            position: absolute;
+            border-radius: 50%;
+            pointer-events: none;
+            animation: explode 0.3s ease-out forwards;
+        }
+        
+        @keyframes explode {
+            0% { transform: scale(0); opacity: 1; }
+            100% { transform: scale(2); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <h1>⚔️ NEURAL ARENA ⚔️</h1>
+    <div class="subtitle">Architecture Wars — Watch AI brains battle it out!</div>
+    
+    <div class="score-display">
+        <span class="left" id="score1">0</span>
+        <span class="vs">vs</span>
+        <span class="right" id="score2">0</span>
+    </div>
+    
+    <div class="controls">
+        <button id="btn-start" onclick="toggleBattle()">▶ START BATTLE</button>
+        <button onclick="resetBattle()">↺ RESET</button>
+        <div class="speed-controls">
+            <span>Speed:</span>
+            <button onclick="setSpeed(0.5)">0.5x</button>
+            <button onclick="setSpeed(1)" class="active" id="speed-1">1x</button>
+            <button onclick="setSpeed(2)">2x</button>
+        </div>
+    </div>
+    
+    <div class="arena-container">
+        <div class="fighter-panel left">
+            <div class="fighter-name">
+                <div class="fighter-icon" style="background: #ff6666;">🧠</div>
+                <span id="f1-name">TNTM</span>
+            </div>
+            
+            <div class="fighter-select" id="select1">
+                <div class="fighter-option selected" data-type="tntm" onclick="selectFighter(1, 'tntm')">
+                    <div class="name">🧠 TNTM</div>
+                    <div class="desc">External memory + attention addressing</div>
+                </div>
+                <div class="fighter-option" data-type="transformer" onclick="selectFighter(1, 'transformer')">
+                    <div class="name">⚡ Transformer</div>
+                    <div class="desc">Pure self-attention, no memory</div>
+                </div>
+                <div class="fighter-option" data-type="lstm" onclick="selectFighter(1, 'lstm')">
+                    <div class="name">🔄 LSTM</div>
+                    <div class="desc">Gated recurrence, forget gates</div>
+                </div>
+                <div class="fighter-option" data-type="mlp" onclick="selectFighter(1, 'mlp')">
+                    <div class="name">📊 MLP</div>
+                    <div class="desc">Simple feedforward, no memory</div>
+                </div>
+            </div>
+            
+            <div class="hp-bar">
+                <div class="hp-fill left" id="hp1" style="width: 100%;"></div>
+            </div>
+            
+            <div class="stats">
+                <div><span>HP:</span> <span class="value" id="hp1-text">100/100</span></div>
+                <div><span>Damage:</span> <span class="value" id="dmg1">0</span></div>
+                <div><span>Accuracy:</span> <span class="value" id="acc1">0%</span></div>
+            </div>
+            
+            <div class="brain-viz">
+                <h4 id="brain1-title">External Memory</h4>
+                <div id="brain1"></div>
+            </div>
+        </div>
+        
+        <div class="arena" id="arena">
+            <!-- Fighters rendered here -->
+        </div>
+        
+        <div class="fighter-panel right">
+            <div class="fighter-name">
+                <div class="fighter-icon" style="background: #00aaff;">⚡</div>
+                <span id="f2-name">Transformer</span>
+            </div>
+            
+            <div class="fighter-select" id="select2">
+                <div class="fighter-option" data-type="tntm" onclick="selectFighter(2, 'tntm')">
+                    <div class="name">🧠 TNTM</div>
+                    <div class="desc">External memory + attention addressing</div>
+                </div>
+                <div class="fighter-option selected" data-type="transformer" onclick="selectFighter(2, 'transformer')">
+                    <div class="name">⚡ Transformer</div>
+                    <div class="desc">Pure self-attention, no memory</div>
+                </div>
+                <div class="fighter-option" data-type="lstm" onclick="selectFighter(2, 'lstm')">
+                    <div class="name">🔄 LSTM</div>
+                    <div class="desc">Gated recurrence, forget gates</div>
+                </div>
+                <div class="fighter-option" data-type="mlp" onclick="selectFighter(2, 'mlp')">
+                    <div class="name">📊 MLP</div>
+                    <div class="desc">Simple feedforward, no memory</div>
+                </div>
+            </div>
+            
+            <div class="hp-bar">
+                <div class="hp-fill right" id="hp2" style="width: 100%;"></div>
+            </div>
+            
+            <div class="stats">
+                <div><span>HP:</span> <span class="value" id="hp2-text">100/100</span></div>
+                <div><span>Damage:</span> <span class="value" id="dmg2">0</span></div>
+                <div><span>Accuracy:</span> <span class="value" id="acc2">0%</span></div>
+            </div>
+            
+            <div class="brain-viz">
+                <h4 id="brain2-title">Attention Heads</h4>
+                <div id="brain2"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="commentary">
+        <h3>📢 COMMENTARY</h3>
+        <div id="commentary-text">Select your fighters and press START BATTLE!</div>
+    </div>
+
+    <script>
+        // ============================================
+        // NEURAL NETWORK IMPLEMENTATIONS
+        // ============================================
+        
+        class TNTMBrain {
+            constructor() {
+                this.name = 'TNTM';
+                this.icon = '🧠';
+                this.color = '#ff6666';
+                
+                this.memorySlots = 32;
+                this.memoryDim = 8;
+                this.memory = [];
+                for (let i = 0; i < this.memorySlots; i++) {
+                    this.memory.push(new Array(this.memoryDim).fill(0));
+                }
+                
+                this.readWeights = new Array(this.memorySlots).fill(1/this.memorySlots);
+                this.writeHead = 0;
+                this.sharpness = 2.0;
+                
+                // Combat state memory
+                this.lastEnemyPos = null;
+                this.patternMemory = [];
+            }
+            
+            encodeState(myPos, enemyPos, myHp, enemyHp) {
+                return [
+                    myPos.x / 500, myPos.y / 500,
+                    enemyPos.x / 500, enemyPos.y / 500,
+                    myHp / 100, enemyHp / 100,
+                    (enemyPos.x - myPos.x) / 500,
+                    (enemyPos.y - myPos.y) / 500
+                ];
+            }
+            
+            write(vector) {
+                this.writeHead = (this.writeHead + 1) % this.memorySlots;
+                
+                for (let j = 0; j < this.memoryDim; j++) {
+                    this.memory[this.writeHead][j] = this.memory[this.writeHead][j] * 0.3 + vector[j] * 0.7;
+                }
+            }
+            
+            read(query) {
+                // Content-based addressing
+                const similarities = [];
+                
+                for (let i = 0; i < this.memorySlots; i++) {
+                    let dot = 0, normQ = 0, normM = 0;
+                    for (let j = 0; j < this.memoryDim; j++) {
+                        dot += query[j] * this.memory[i][j];
+                        normQ += query[j] * query[j];
+                        normM += this.memory[i][j] * this.memory[i][j];
+                    }
+                    const sim = dot / (Math.sqrt(normQ) * Math.sqrt(normM) + 1e-8);
+                    similarities.push(sim);
+                }
+                
+                // Softmax with sharpness
+                const max = Math.max(...similarities);
+                const exps = similarities.map(s => Math.exp((s - max) * this.sharpness));
+                const sum = exps.reduce((a, b) => a + b, 0);
+                this.readWeights = exps.map(e => e / sum);
+                
+                // Weighted read
+                const result = new Array(this.memoryDim).fill(0);
+                for (let i = 0; i < this.memorySlots; i++) {
+                    for (let j = 0; j < this.memoryDim; j++) {
+                        result[j] += this.readWeights[i] * this.memory[i][j];
+                    }
+                }
+                
+                return result;
+            }
+            
+            decide(myPos, enemyPos, myHp, enemyHp, arena) {
+                const state = this.encodeState(myPos, enemyPos, myHp, enemyHp);
+                
+                // Write current state to memory
+                this.write(state);
+                
+                // Read from memory to find similar past situations
+                const retrieved = this.read(state);
+                
+                // Track enemy movement patterns
+                if (this.lastEnemyPos) {
+                    const dx = enemyPos.x - this.lastEnemyPos.x;
+                    const dy = enemyPos.y - this.lastEnemyPos.y;
+                    this.patternMemory.push({dx, dy});
+                    if (this.patternMemory.length > 10) this.patternMemory.shift();
+                }
+                this.lastEnemyPos = {...enemyPos};
+                
+                // Predict enemy position based on pattern memory
+                let predictedX = enemyPos.x;
+                let predictedY = enemyPos.y;
+                
+                if (this.patternMemory.length > 3) {
+                    const avgDx = this.patternMemory.reduce((a, p) => a + p.dx, 0) / this.patternMemory.length;
+                    const avgDy = this.patternMemory.reduce((a, p) => a + p.dy, 0) / this.patternMemory.length;
+                    predictedX += avgDx * 10;
+                    predictedY += avgDy * 10;
+                }
+                
+                // Decision making
+                const distToEnemy = Math.sqrt((enemyPos.x - myPos.x)**2 + (enemyPos.y - myPos.y)**2);
+                
+                let action = { move: {x: 0, y: 0}, shoot: false, aimX: predictedX, aimY: predictedY };
+                
+                // Use memory confidence for strategy
+                const confidence = Math.max(...this.readWeights);
+                
+                if (confidence > 0.3) {
+                    // High confidence - aggressive
+                    const optimalDist = 150;
+                    const angle = Math.atan2(enemyPos.y - myPos.y, enemyPos.x - myPos.x);
+                    
+                    if (distToEnemy > optimalDist + 30) {
+                        action.move.x = Math.cos(angle) * 3;
+                        action.move.y = Math.sin(angle) * 3;
+                    } else if (distToEnemy < optimalDist - 30) {
+                        action.move.x = -Math.cos(angle) * 3;
+                        action.move.y = -Math.sin(angle) * 3;
+                    } else {
+                        // Strafe
+                        action.move.x = Math.cos(angle + Math.PI/2) * 2;
+                        action.move.y = Math.sin(angle + Math.PI/2) * 2;
+                    }
+                    
+                    action.shoot = Math.random() < 0.15;
+                } else {
+                    // Low confidence - cautious, gathering data
+                    const angle = Math.atan2(enemyPos.y - myPos.y, enemyPos.x - myPos.x);
+                    action.move.x = Math.cos(angle + Math.PI/3) * 2;
+                    action.move.y = Math.sin(angle + Math.PI/3) * 2;
+                    action.shoot = Math.random() < 0.08;
+                }
+                
+                action.thought = confidence > 0.3 ? 
+                    `Pattern confidence: ${(confidence*100).toFixed(0)}%` :
+                    "Building memory...";
+                
+                return action;
+            }
+            
+            renderBrain(container) {
+                container.innerHTML = '';
+                const grid = document.createElement('div');
+                grid.className = 'memory-grid';
+                
+                for (let i = 0; i < this.memorySlots; i++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'mem-cell';
+                    
+                    // Color based on read weight and content
+                    const weight = this.readWeights[i];
+                    const content = Math.sqrt(this.memory[i].reduce((a, b) => a + b*b, 0));
+                    
+                    const r = Math.floor(255 * weight);
+                    const g = Math.floor(100 * content);
+                    const b = Math.floor(50 * weight);
+                    
+                    cell.style.background = `rgb(${r}, ${g}, ${b})`;
+                    if (i === this.writeHead) {
+                        cell.style.border = '2px solid #fff';
+                    }
+                    
+                    grid.appendChild(cell);
+                }
+                
+                container.appendChild(grid);
+            }
+        }
+        
+        class TransformerBrain {
+            constructor() {
+                this.name = 'Transformer';
+                this.icon = '⚡';
+                this.color = '#00aaff';
+                
+                this.nHeads = 4;
+                this.attentionWeights = [];
+                for (let h = 0; h < this.nHeads; h++) {
+                    this.attentionWeights.push(new Array(8).fill(0.125));
+                }
+                
+                this.contextWindow = [];
+                this.maxContext = 8;
+            }
+            
+            attend(query, keys) {
+                // Scaled dot-product attention
+                const scores = keys.map(k => {
+                    let dot = 0;
+                    for (let i = 0; i < query.length; i++) {
+                        dot += query[i] * k[i];
+                    }
+                    return dot / Math.sqrt(query.length);
+                });
+                
+                // Softmax
+                const max = Math.max(...scores);
+                const exps = scores.map(s => Math.exp(s - max));
+                const sum = exps.reduce((a, b) => a + b, 0);
+                return exps.map(e => e / sum);
+            }
+            
+            decide(myPos, enemyPos, myHp, enemyHp, arena) {
+                // Add to context window
+                const state = [
+                    myPos.x / 500, myPos.y / 500,
+                    enemyPos.x / 500, enemyPos.y / 500,
+                    myHp / 100, enemyHp / 100,
+                    Math.sin(Date.now() / 500),
+                    Math.cos(Date.now() / 500)
+                ];
+                
+                this.contextWindow.push(state);
+                if (this.contextWindow.length > this.maxContext) {
+                    this.contextWindow.shift();
+                }
+                
+                // Multi-head self-attention over context
+                const query = state;
+                const keys = this.contextWindow;
+                
+                let combinedAttention = new Array(8).fill(0);
+                
+                for (let h = 0; h < this.nHeads; h++) {
+                    // Different "head" focuses on different aspects
+                    const headQuery = query.map((v, i) => v * (1 + 0.5 * Math.sin(h + i)));
+                    this.attentionWeights[h] = this.attend(headQuery, keys);
+                    
+                    // Weighted sum of values
+                    for (let i = 0; i < keys.length; i++) {
+                        for (let j = 0; j < 8; j++) {
+                            combinedAttention[j] += this.attentionWeights[h][i] * keys[i][j] / this.nHeads;
+                        }
+                    }
+                }
+                
+                // Pure attention - no memory, just patterns in current context
+                // This makes it reactive but forgetful
+                
+                const distToEnemy = Math.sqrt((enemyPos.x - myPos.x)**2 + (enemyPos.y - myPos.y)**2);
+                const angle = Math.atan2(enemyPos.y - myPos.y, enemyPos.x - myPos.x);
+                
+                let action = { move: {x: 0, y: 0}, shoot: false, aimX: enemyPos.x, aimY: enemyPos.y };
+                
+                // Attention-weighted strategy
+                const aggressiveness = combinedAttention[4]; // Based on my HP attention
+                
+                if (aggressiveness > 0.5) {
+                    // Aggressive - close distance
+                    action.move.x = Math.cos(angle) * 3.5;
+                    action.move.y = Math.sin(angle) * 3.5;
+                    action.shoot = Math.random() < 0.18;
+                } else {
+                    // Defensive - circle
+                    action.move.x = Math.cos(angle + Math.PI/2) * 3;
+                    action.move.y = Math.sin(angle + Math.PI/2) * 3;
+                    action.shoot = Math.random() < 0.1;
+                }
+                
+                // Random juke based on attention variance
+                const variance = this.attentionWeights[0].reduce((a, w) => a + (w - 0.125)**2, 0);
+                if (variance > 0.05) {
+                    action.move.x += (Math.random() - 0.5) * 4;
+                    action.move.y += (Math.random() - 0.5) * 4;
+                }
+                
+                action.thought = `Attending to ${this.contextWindow.length} timesteps`;
+                
+                return action;
+            }
+            
+            renderBrain(container) {
+                container.innerHTML = '';
+                const heads = document.createElement('div');
+                heads.className = 'attention-heads';
+                
+                for (let h = 0; h < this.nHeads; h++) {
+                    const head = document.createElement('div');
+                    head.className = 'attn-head';
+                    head.title = `Head ${h + 1}`;
+                    
+                    // Show max attention as bar height
+                    const maxAttn = Math.max(...this.attentionWeights[h]);
+                    const bar = document.createElement('div');
+                    bar.className = 'attn-bar';
+                    bar.style.height = `${maxAttn * 100}%`;
+                    bar.style.background = `hsl(${200 + h * 30}, 80%, 50%)`;
+                    
+                    head.appendChild(bar);
+                    heads.appendChild(head);
+                }
+                
+                container.appendChild(heads);
+            }
+        }
+        
+        class LSTMBrain {
+            constructor() {
+                this.name = 'LSTM';
+                this.icon = '🔄';
+                this.color = '#66ff66';
+                
+                this.hiddenSize = 16;
+                this.hidden = new Array(this.hiddenSize).fill(0);
+                this.cell = new Array(this.hiddenSize).fill(0);
+                
+                // Gate values for visualization
+                this.forgetGate = new Array(this.hiddenSize).fill(0.5);
+                this.inputGate = new Array(this.hiddenSize).fill(0.5);
+                this.outputGate = new Array(this.hiddenSize).fill(0.5);
+            }
+            
+            sigmoid(x) {
+                return 1 / (1 + Math.exp(-x));
+            }
+            
+            tanh(x) {
+                return Math.tanh(x);
+            }
+            
+            step(input) {
+                // Simplified LSTM step
+                const combined = [...input, ...this.hidden];
+                
+                for (let i = 0; i < this.hiddenSize; i++) {
+                    // Compute gates (simplified - using weighted sums)
+                    let forgetInput = 0, inputInput = 0, outputInput = 0, candidateInput = 0;
+                    
+                    for (let j = 0; j < combined.length; j++) {
+                        const w = Math.sin(i * 17 + j * 13); // Pseudo-weights
+                        forgetInput += combined[j] * w * 0.5;
+                        inputInput += combined[j] * Math.cos(i * 19 + j * 11) * 0.5;
+                        outputInput += combined[j] * Math.sin(i * 23 + j * 7) * 0.5;
+                        candidateInput += combined[j] * Math.cos(i * 29 + j * 3) * 0.5;
+                    }
+                    
+                    this.forgetGate[i] = this.sigmoid(forgetInput);
+                    this.inputGate[i] = this.sigmoid(inputInput);
+                    this.outputGate[i] = this.sigmoid(outputInput);
+                    
+                    const candidate = this.tanh(candidateInput);
+                    
+                    // Update cell state
+                    this.cell[i] = this.forgetGate[i] * this.cell[i] + this.inputGate[i] * candidate;
+                    
+                    // Update hidden state
+                    this.hidden[i] = this.outputGate[i] * this.tanh(this.cell[i]);
+                }
+                
+                return this.hidden;
+            }
+            
+            decide(myPos, enemyPos, myHp, enemyHp, arena) {
+                const input = [
+                    myPos.x / 500, myPos.y / 500,
+                    enemyPos.x / 500, enemyPos.y / 500,
+                    myHp / 100, enemyHp / 100,
+                    (enemyPos.x - myPos.x) / 500,
+                    (enemyPos.y - myPos.y) / 500
+                ];
+                
+                const hidden = this.step(input);
+                
+                // Use hidden state for decision
+                const moveX = hidden[0] * 4;
+                const moveY = hidden[1] * 4;
+                const shootProb = this.sigmoid(hidden[2] * 3);
+                const aimOffset = hidden[3] * 50;
+                
+                const angle = Math.atan2(enemyPos.y - myPos.y, enemyPos.x - myPos.x);
+                
+                // LSTM tends to be smooth and predictable due to gradual state changes
+                let action = {
+                    move: { x: moveX, y: moveY },
+                    shoot: Math.random() < shootProb * 0.3,
+                    aimX: enemyPos.x + Math.cos(angle + 0.1) * aimOffset,
+                    aimY: enemyPos.y + Math.sin(angle + 0.1) * aimOffset
+                };
+                
+                // Check forget gate average - if high, LSTM is "forgetting" (resetting)
+                const avgForget = this.forgetGate.reduce((a, b) => a + b, 0) / this.hiddenSize;
+                action.thought = `Forget: ${(avgForget * 100).toFixed(0)}%, Cell: ${this.cell.slice(0, 3).map(c => c.toFixed(1)).join(',')}`;
+                
+                return action;
+            }
+            
+            renderBrain(container) {
+                container.innerHTML = '';
+                const neurons = document.createElement('div');
+                neurons.className = 'hidden-state';
+                
+                for (let i = 0; i < this.hiddenSize; i++) {
+                    const neuron = document.createElement('div');
+                    neuron.className = 'neuron';
+                    
+                    // Color based on hidden state activation
+                    const activation = this.sigmoid(this.hidden[i]);
+                    const forget = this.forgetGate[i];
+                    
+                    const r = Math.floor(100 + 155 * forget);
+                    const g = Math.floor(200 * activation);
+                    const b = Math.floor(100 * (1 - forget));
+                    
+                    neuron.style.background = `rgb(${r}, ${g}, ${b})`;
+                    neuron.title = `h=${this.hidden[i].toFixed(2)}, f=${forget.toFixed(2)}`;
+                    
+                    neurons.appendChild(neuron);
+                }
+                
+                container.appendChild(neurons);
+            }
+        }
+        
+        class MLPBrain {
+            constructor() {
+                this.name = 'MLP';
+                this.icon = '📊';
+                this.color = '#ffaa00';
+                
+                this.layers = [8, 16, 16, 4];
+                this.activations = [];
+                
+                for (let l = 0; l < this.layers.length; l++) {
+                    this.activations.push(new Array(this.layers[l]).fill(0));
+                }
+                
+                // Random weights (fixed for consistency)
+                this.weights = [];
+                for (let l = 0; l < this.layers.length - 1; l++) {
+                    const w = [];
+                    for (let i = 0; i < this.layers[l]; i++) {
+                        const row = [];
+                        for (let j = 0; j < this.layers[l + 1]; j++) {
+                            row.push((Math.sin(l * 100 + i * 17 + j * 31) * 2));
+                        }
+                        w.push(row);
+                    }
+                    this.weights.push(w);
+                }
+            }
+            
+            relu(x) {
+                return Math.max(0, x);
+            }
+            
+            forward(input) {
+                this.activations[0] = input;
+                
+                for (let l = 0; l < this.layers.length - 1; l++) {
+                    for (let j = 0; j < this.layers[l + 1]; j++) {
+                        let sum = 0;
+                        for (let i = 0; i < this.layers[l]; i++) {
+                            sum += this.activations[l][i] * this.weights[l][i][j];
+                        }
+                        this.activations[l + 1][j] = l < this.layers.length - 2 ? this.relu(sum) : sum;
+                    }
+                }
+                
+                return this.activations[this.activations.length - 1];
+            }
+            
+            decide(myPos, enemyPos, myHp, enemyHp, arena) {
+                const input = [
+                    myPos.x / 500, myPos.y / 500,
+                    enemyPos.x / 500, enemyPos.y / 500,
+                    myHp / 100, enemyHp / 100,
+                    (enemyPos.x - myPos.x) / 500,
+                    (enemyPos.y - myPos.y) / 500
+                ];
+                
+                const output = this.forward(input);
+                
+                // MLP is purely reactive - no memory whatsoever
+                // This makes it predictable but fast
+                
+                const angle = Math.atan2(enemyPos.y - myPos.y, enemyPos.x - myPos.x);
+                
+                let action = {
+                    move: {
+                        x: output[0] * 3,
+                        y: output[1] * 3
+                    },
+                    shoot: output[2] > 0.5,
+                    aimX: enemyPos.x,
+                    aimY: enemyPos.y
+                };
+                
+                // Add some deterministic movement based on position
+                const distToCenter = Math.sqrt((myPos.x - 250)**2 + (myPos.y - 250)**2);
+                if (distToCenter > 200) {
+                    action.move.x += (250 - myPos.x) * 0.02;
+                    action.move.y += (250 - myPos.y) * 0.02;
+                }
+                
+                action.thought = `Layer activations: ${this.activations[1].filter(a => a > 0).length}/16 ReLU`;
+                
+                return action;
+            }
+            
+            renderBrain(container) {
+                container.innerHTML = '';
+                const neurons = document.createElement('div');
+                neurons.className = 'hidden-state';
+                
+                // Show middle layer
+                const layer = this.activations[1];
+                for (let i = 0; i < layer.length; i++) {
+                    const neuron = document.createElement('div');
+                    neuron.className = 'neuron';
+                    
+                    const activation = Math.min(1, layer[i] / 2);
+                    const r = Math.floor(255 * activation);
+                    const g = Math.floor(170 * activation);
+                    const b = 0;
+                    
+                    neuron.style.background = activation > 0 ? `rgb(${r}, ${g}, ${b})` : '#1a1a2e';
+                    neuron.title = `a=${layer[i].toFixed(2)}`;
+                    
+                    neurons.appendChild(neuron);
+                }
+                
+                container.appendChild(neurons);
+            }
+        }
+        
+        // ============================================
+        // GAME ENGINE
+        // ============================================
+        
+        const arena = document.getElementById('arena');
+        let fighter1, fighter2;
+        let projectiles = [];
+        let running = false;
+        let speed = 1;
+        let scores = [0, 0];
+        
+        const brainTypes = {
+            tntm: TNTMBrain,
+            transformer: TransformerBrain,
+            lstm: LSTMBrain,
+            mlp: MLPBrain
+        };
+        
+        const brainTitles = {
+            tntm: 'External Memory',
+            transformer: 'Attention Heads',
+            lstm: 'Hidden State',
+            mlp: 'Layer Activations'
+        };
+        
+        const commentary = [
+            // Generic
+            "{attacker} fires! {result}",
+            "What a {result} by {defender}!",
+            "{attacker}'s {brain} is working overtime!",
+            
+            // TNTM specific
+            "TNTM is building up pattern memory...",
+            "That prediction from TNTM's external memory was SPOT ON!",
+            "TNTM's content-addressing found the perfect strategy!",
+            "Watch that write head go! TNTM is learning fast!",
+            
+            // Transformer specific
+            "Transformer's attention is EVERYWHERE at once!",
+            "Pure self-attention making quick decisions!",
+            "No memory needed when you've got 4 attention heads!",
+            "Transformer living in the moment - no past, no future!",
+            
+            // LSTM specific  
+            "LSTM's forget gate just triggered - resetting strategy!",
+            "Those hidden states are flowing smoothly!",
+            "Gated recurrence keeping LSTM stable under pressure!",
+            "Cell state holding strong memories of past encounters!",
+            
+            // MLP specific
+            "MLP with the pure reactive play!",
+            "No memory, no problem! MLP strikes!",
+            "Feedforward and simple - but effective!",
+            "ReLU activations firing across the hidden layer!",
+            
+            // Matchup specific
+            "Memory vs no memory - classic architecture battle!",
+            "External memory facing off against recurrent memory!",
+            "Attention mechanisms in a pure duel!",
+        ];
+        
+        function createFighter(id, type, x, y) {
+            const BrainClass = brainTypes[type];
+            const brain = new BrainClass();
+            
+            return {
+                id,
+                x, y,
+                hp: 100,
+                maxHp: 100,
+                brain,
+                shots: 0,
+                hits: 0,
+                damage: 0,
+                element: null,
+                thought: '',
+                cooldown: 0
+            };
+        }
+        
+        function selectFighter(slot, type) {
+            document.querySelectorAll(`#select${slot} .fighter-option`).forEach(opt => {
+                opt.classList.toggle('selected', opt.dataset.type === type);
+            });
+            
+            const brain = new brainTypes[type]();
+            document.getElementById(`f${slot}-name`).textContent = brain.name;
+            document.getElementById(`brain${slot}-title`).textContent = brainTitles[type];
+            
+            if (slot === 1) {
+                fighter1 = createFighter(1, type, 100, 250);
+            } else {
+                fighter2 = createFighter(2, type, 400, 250);
+            }
+            
+            renderFighters();
+            updateBrainViz();
+        }
+        
+        function renderFighters() {
+            // Clear existing
+            arena.querySelectorAll('.fighter, .projectile, .thought-bubble').forEach(el => el.remove());
+            
+            [fighter1, fighter2].forEach((f, i) => {
+                const el = document.createElement('div');
+                el.className = `fighter f${i + 1}`;
+                el.textContent = f.brain.icon;
+                el.style.left = `${f.x - 25}px`;
+                el.style.top = `${f.y - 25}px`;
+                f.element = el;
+                
+                const thought = document.createElement('div');
+                thought.className = 'thought-bubble';
+                thought.id = `thought${i + 1}`;
+                thought.style.left = `${f.x - 50}px`;
+                thought.style.top = `${f.y - 60}px`;
+                
+                arena.appendChild(el);
+                arena.appendChild(thought);
+            });
+        }
+        
+        function spawnProjectile(shooter, targetX, targetY) {
+            const angle = Math.atan2(targetY - shooter.y, targetX - shooter.x);
+            const speed = 8;
+            
+            projectiles.push({
+                x: shooter.x,
+                y: shooter.y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                owner: shooter.id,
+                color: shooter.id === 1 ? '#ff6666' : '#00aaff'
+            });
+            
+            shooter.shots++;
+            shooter.cooldown = 15;
+        }
+        
+        function updateProjectiles() {
+            const toRemove = [];
+            
+            for (let i = 0; i < projectiles.length; i++) {
+                const p = projectiles[i];
+                p.x += p.vx * speed;
+                p.y += p.vy * speed;
+                
+                // Check bounds
+                if (p.x < 0 || p.x > 500 || p.y < 0 || p.y > 500) {
+                    toRemove.push(i);
+                    continue;
+                }
+                
+                // Check hits
+                const target = p.owner === 1 ? fighter2 : fighter1;
+                const dist = Math.sqrt((p.x - target.x)**2 + (p.y - target.y)**2);
+                
+                if (dist < 30) {
+                    const damage = 8 + Math.random() * 4;
+                    target.hp -= damage;
+                    
+                    const shooter = p.owner === 1 ? fighter1 : fighter2;
+                    shooter.hits++;
+                    shooter.damage += damage;
+                    
+                    // Damage number
+                    showDamage(target.x, target.y, damage, p.color);
+                    showEffect(p.x, p.y, p.color);
+                    
+                    toRemove.push(i);
+                    
+                    // Commentary
+                    if (Math.random() < 0.3) {
+                        addCommentary(shooter, target, 'hit');
+                    }
+                }
+            }
+            
+            // Remove hit/oob projectiles
+            for (let i = toRemove.length - 1; i >= 0; i--) {
+                projectiles.splice(toRemove[i], 1);
+            }
+        }
+        
+        function showDamage(x, y, amount, color) {
+            const el = document.createElement('div');
+            el.className = 'damage-number';
+            el.textContent = `-${Math.floor(amount)}`;
+            el.style.left = `${x}px`;
+            el.style.top = `${y}px`;
+            el.style.color = color;
+            arena.appendChild(el);
+            
+            setTimeout(() => el.remove(), 1000);
+        }
+        
+        function showEffect(x, y, color) {
+            const el = document.createElement('div');
+            el.className = 'effect';
+            el.style.left = `${x - 20}px`;
+            el.style.top = `${y - 20}px`;
+            el.style.width = '40px';
+            el.style.height = '40px';
+            el.style.border = `3px solid ${color}`;
+            arena.appendChild(el);
+            
+            setTimeout(() => el.remove(), 300);
+        }
+        
+        function addCommentary(attacker, defender, result) {
+            const templates = commentary.filter(c => {
+                if (c.includes('TNTM') && attacker.brain.name !== 'TNTM' && defender.brain.name !== 'TNTM') return false;
+                if (c.includes('Transformer') && attacker.brain.name !== 'Transformer' && defender.brain.name !== 'Transformer') return false;
+                if (c.includes('LSTM') && attacker.brain.name !== 'LSTM' && defender.brain.name !== 'LSTM') return false;
+                if (c.includes('MLP') && attacker.brain.name !== 'MLP' && defender.brain.name !== 'MLP') return false;
+                return true;
+            });
+            
+            let text = templates[Math.floor(Math.random() * templates.length)];
+            text = text.replace('{attacker}', attacker.brain.name);
+            text = text.replace('{defender}', defender.brain.name);
+            text = text.replace('{result}', result === 'hit' ? 'DIRECT HIT' : 'miss');
+            text = text.replace('{brain}', attacker.brain.name);
+            
+            document.getElementById('commentary-text').textContent = text;
+        }
+        
+        function renderProjectiles() {
+            arena.querySelectorAll('.projectile').forEach(el => el.remove());
+            
+            for (const p of projectiles) {
+                const el = document.createElement('div');
+                el.className = 'projectile';
+                el.style.left = `${p.x - 6}px`;
+                el.style.top = `${p.y - 6}px`;
+                el.style.background = p.color;
+                el.style.boxShadow = `0 0 10px ${p.color}`;
+                arena.appendChild(el);
+            }
+        }
+        
+        function updateUI() {
+            document.getElementById('hp1').style.width = `${Math.max(0, fighter1.hp)}%`;
+            document.getElementById('hp2').style.width = `${Math.max(0, fighter2.hp)}%`;
+            document.getElementById('hp1-text').textContent = `${Math.max(0, Math.floor(fighter1.hp))}/${fighter1.maxHp}`;
+            document.getElementById('hp2-text').textContent = `${Math.max(0, Math.floor(fighter2.hp))}/${fighter2.maxHp}`;
+            
+            document.getElementById('dmg1').textContent = Math.floor(fighter1.damage);
+            document.getElementById('dmg2').textContent = Math.floor(fighter2.damage);
+            document.getElementById('acc1').textContent = fighter1.shots > 0 ? `${Math.floor(fighter1.hits / fighter1.shots * 100)}%` : '0%';
+            document.getElementById('acc2').textContent = fighter2.shots > 0 ? `${Math.floor(fighter2.hits / fighter2.shots * 100)}%` : '0%';
+            
+            document.getElementById('score1').textContent = scores[0];
+            document.getElementById('score2').textContent = scores[1];
+        }
+        
+        function updateBrainViz() {
+            fighter1.brain.renderBrain(document.getElementById('brain1'));
+            fighter2.brain.renderBrain(document.getElementById('brain2'));
+        }
+        
+        function gameLoop() {
+            if (!running) return;
+            
+            // Get actions from brains
+            const action1 = fighter1.brain.decide(
+                {x: fighter1.x, y: fighter1.y},
+                {x: fighter2.x, y: fighter2.y},
+                fighter1.hp, fighter2.hp,
+                arena
+            );
+            
+            const action2 = fighter2.brain.decide(
+                {x: fighter2.x, y: fighter2.y},
+                {x: fighter1.x, y: fighter1.y},
+                fighter2.hp, fighter1.hp,
+                arena
+            );
+            
+            // Apply movements
+            fighter1.x += action1.move.x * speed;
+            fighter1.y += action1.move.y * speed;
+            fighter2.x += action2.move.x * speed;
+            fighter2.y += action2.move.y * speed;
+            
+            // Keep in arena (circular)
+            [fighter1, fighter2].forEach(f => {
+                const dist = Math.sqrt((f.x - 250)**2 + (f.y - 250)**2);
+                if (dist > 220) {
+                    const angle = Math.atan2(f.y - 250, f.x - 250);
+                    f.x = 250 + Math.cos(angle) * 220;
+                    f.y = 250 + Math.sin(angle) * 220;
+                }
+            });
+            
+            // Shooting
+            fighter1.cooldown = Math.max(0, fighter1.cooldown - speed);
+            fighter2.cooldown = Math.max(0, fighter2.cooldown - speed);
+            
+            if (action1.shoot && fighter1.cooldown <= 0) {
+                spawnProjectile(fighter1, action1.aimX, action1.aimY);
+            }
+            if (action2.shoot && fighter2.cooldown <= 0) {
+                spawnProjectile(fighter2, action2.aimX, action2.aimY);
+            }
+            
+            // Update projectiles
+            updateProjectiles();
+            
+            // Update thoughts
+            fighter1.thought = action1.thought || '';
+            fighter2.thought = action2.thought || '';
+            
+            const thought1 = document.getElementById('thought1');
+            const thought2 = document.getElementById('thought2');
+            
+            if (thought1 && fighter1.thought) {
+                thought1.textContent = fighter1.thought;
+                thought1.style.left = `${fighter1.x - 60}px`;
+                thought1.style.top = `${fighter1.y - 60}px`;
+                thought1.classList.add('visible');
+            }
+            if (thought2 && fighter2.thought) {
+                thought2.textContent = fighter2.thought;
+                thought2.style.left = `${fighter2.x - 60}px`;
+                thought2.style.top = `${fighter2.y - 60}px`;
+                thought2.classList.add('visible');
+            }
+            
+            // Render
+            fighter1.element.style.left = `${fighter1.x - 25}px`;
+            fighter1.element.style.top = `${fighter1.y - 25}px`;
+            fighter2.element.style.left = `${fighter2.x - 25}px`;
+            fighter2.element.style.top = `${fighter2.y - 25}px`;
+            
+            renderProjectiles();
+            updateUI();
+            updateBrainViz();
+            
+            // Check for KO
+            if (fighter1.hp <= 0 || fighter2.hp <= 0) {
+                running = false;
+                document.getElementById('btn-start').textContent = '▶ START BATTLE';
+                
+                if (fighter1.hp <= 0) {
+                    scores[1]++;
+                    document.getElementById('commentary-text').textContent = 
+                        `🏆 ${fighter2.brain.name} WINS! ${fighter2.brain.name}'s architecture proved superior!`;
+                } else {
+                    scores[0]++;
+                    document.getElementById('commentary-text').textContent = 
+                        `🏆 ${fighter1.brain.name} WINS! ${fighter1.brain.name}'s architecture proved superior!`;
+                }
+                
+                updateUI();
+                return;
+            }
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        function toggleBattle() {
+            running = !running;
+            document.getElementById('btn-start').textContent = running ? '⏸ PAUSE' : '▶ START BATTLE';
+            
+            if (running) {
+                requestAnimationFrame(gameLoop);
+            }
+        }
+        
+        function resetBattle() {
+            running = false;
+            document.getElementById('btn-start').textContent = '▶ START BATTLE';
+            
+            projectiles = [];
+            
+            // Get current types
+            const type1 = document.querySelector('#select1 .fighter-option.selected').dataset.type;
+            const type2 = document.querySelector('#select2 .fighter-option.selected').dataset.type;
+            
+            fighter1 = createFighter(1, type1, 100, 250);
+            fighter2 = createFighter(2, type2, 400, 250);
+            
+            renderFighters();
+            updateUI();
+            updateBrainViz();
+            
+            document.getElementById('commentary-text').textContent = 
+                `${fighter1.brain.name} vs ${fighter2.brain.name} — FIGHT!`;
+        }
+        
+        function setSpeed(s) {
+            speed = s;
+            document.querySelectorAll('.speed-controls button').forEach(btn => {
+                btn.classList.toggle('active', btn.textContent === `${s}x`);
+            });
+        }
+        
+        // Initialize
+        fighter1 = createFighter(1, 'tntm', 100, 250);
+        fighter2 = createFighter(2, 'transformer', 400, 250);
+        renderFighters();
+        updateUI();
+        updateBrainViz();
+    </script>
+</body>
+</html>

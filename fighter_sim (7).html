@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Transformer Dogfight</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            background: #000; 
+            display: flex; 
+            flex-direction: column;
+            align-items: center; 
+            font-family: 'Courier New', monospace;
+            color: #0f0;
+            overflow: hidden;
+        }
+        #header {
+            padding: 8px;
+            text-align: center;
+            width: 100%;
+            background: #111;
+        }
+        h1 { color: #0ff; font-size: 1.3em; text-shadow: 0 0 10px #0ff; }
+        #container { position: relative; }
+        #hud {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 12px;
+            z-index: 100;
+            background: rgba(0,20,0,0.7);
+            padding: 8px;
+            border: 1px solid #0f0;
+        }
+        #controls-help {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 11px;
+            text-align: right;
+            color: #888;
+            background: rgba(0,0,0,0.7);
+            padding: 8px;
+        }
+        #neural-display {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            width: 260px;
+            background: rgba(0,20,0,0.85);
+            border: 1px solid #0f0;
+            padding: 8px;
+            font-size: 10px;
+        }
+        #scoreboard {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0,20,0,0.85);
+            border: 1px solid #0f0;
+            padding: 8px;
+            font-size: 11px;
+        }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <div id="header">
+        <h1>⚔️ TRANSFORMER DOGFIGHT ⚔️</h1>
+    </div>
+    <div id="container">
+        <canvas id="canvas" width="1000" height="620"></canvas>
+        <div id="hud">
+            <div style="color:#0ff">PLAYER: <span id="player-hp">100</span> HP</div>
+            <div>Alt: <span id="altitude">200</span>m</div>
+            <div>Speed: <span id="speed">100</span> kts</div>
+            <div>Hdg: <span id="heading">0</span>°</div>
+        </div>
+        <div id="controls-help">
+            W/S: Pitch<br>
+            A/D: Roll<br>
+            Q/E: Yaw<br>
+            SPACE: Fire<br>
+            SHIFT: Boost
+        </div>
+        <div id="neural-display">
+            <div style="color:#0ff;margin-bottom:5px;">═══ TRANSFORMER AI ═══</div>
+            <div id="ai-thoughts"></div>
+        </div>
+        <div id="scoreboard">
+            <div style="color:#0ff;margin-bottom:5px;">══ SCORE ══</div>
+            <div style="color:#0f0">Allies: <span id="ally-kills">0</span></div>
+            <div style="color:#f00">Enemies: <span id="enemy-kills">0</span></div>
+        </div>
+    </div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+
+// Simple Transformer Brain
+class TransformerBrain {
+    constructor() {
+        this.weights = [];
+        for (let i = 0; i < 100; i++) {
+            this.weights.push((Math.random() - 0.5) * 0.5);
+        }
+        this.lastOutput = [0,0,0,0,0];
+    }
+    
+    forward(inputs) {
+        // Simplified neural computation
+        let outputs = [0, 0, 0, 0, 0]; // pitch, roll, yaw, throttle, fire
+        for (let o = 0; o < 5; o++) {
+            for (let i = 0; i < Math.min(inputs.length, 20); i++) {
+                outputs[o] += inputs[i] * this.weights[o * 20 + i];
+            }
+            outputs[o] = Math.tanh(outputs[o]);
+        }
+        this.lastOutput = outputs;
+        return outputs;
+    }
+    
+    learn(reward) {
+        for (let i = 0; i < this.weights.length; i++) {
+            this.weights[i] += (Math.random() - 0.5) * 0.02 * reward;
+        }
+    }
+}
+
+// Flight dynamics - simple but stable
+class Aircraft {
+    constructor(x, y, z, team, isPlayer = false) {
+        this.x = x;
+        this.y = y;
+        this.z = z;
+        this.heading = isPlayer ? 0 : Math.random() * 360; // degrees
+        this.pitch = 0;   // degrees, + = nose up
+        this.roll = 0;    // degrees, + = right wing down
+        this.speed = 150; // units per second
+        this.hp = 100;
+        this.team = team;
+        this.isPlayer = isPlayer;
+        this.brain = isPlayer ? null : new TransformerBrain();
+        this.fireCooldown = 0;
+        this.alive = true;
+        this.respawnTimer = 0;
+        
+        // Control inputs (target values)
+        this.pitchInput = 0;
+        this.rollInput = 0;
+        this.yawInput = 0;
+    }
+    
+    update(dt, aircraft, bullets) {
+        if (!this.alive) {
+            this.respawnTimer -= dt;
+            if (this.respawnTimer <= 0) this.respawn();
+            return;
+        }
+        
+        if (this.fireCooldown > 0) this.fireCooldown -= dt;
+        
+        if (!this.isPlayer) {
+            this.runAI(aircraft);
+        }
+        
+        // Smoothly approach target angles
+        const pitchRate = 30; // degrees per second max
+        const rollRate = 45;
+        const yawRate = 20;
+        
+        // Apply inputs to angles (gradual)
+        this.pitch += this.pitchInput * pitchRate * dt;
+        this.roll += this.rollInput * rollRate * dt;
+        this.heading += this.yawInput * yawRate * dt;
+        
+        // Roll causes turn (bank-to-turn)
+        this.heading += this.roll * 0.3 * dt;
+        
+        // Clamp angles
+        this.pitch = Math.max(-45, Math.min(45, this.pitch));
+        this.roll = Math.max(-60, Math.min(60, this.roll));
+        this.heading = (this.heading + 360) % 360;
+        
+        // Damping - return to level
+        this.pitch *= 0.98;
+        this.roll *= 0.97;
+        
+        // Movement based on heading and pitch
+        const headRad = this.heading * Math.PI / 180;
+        const pitchRad = this.pitch * Math.PI / 180;
+        
+        const vx = Math.sin(headRad) * Math.cos(pitchRad) * this.speed * dt;
+        const vy = Math.sin(pitchRad) * this.speed * dt * 0.5;
+        const vz = Math.cos(headRad) * Math.cos(pitchRad) * this.speed * dt;
+        
+        this.x += vx;
+        this.y += vy;
+        this.z += vz;
+        
+        // Altitude limits
+        this.y = Math.max(20, Math.min(800, this.y));
+        
+        // World wrap
+        if (this.x > 3000) this.x -= 6000;
+        if (this.x < -3000) this.x += 6000;
+        if (this.z > 3000) this.z -= 6000;
+        if (this.z < -3000) this.z += 6000;
+    }
+    
+    runAI(aircraft) {
+        // Find nearest enemy
+        let nearest = null;
+        let nearestDist = Infinity;
+        
+        for (const a of aircraft) {
+            if (a === this || !a.alive || a.team === this.team) continue;
+            const dx = a.x - this.x;
+            const dz = a.z - this.z;
+            const dist = Math.sqrt(dx*dx + dz*dz);
+            if (dist < nearestDist) {
+                nearestDist = dist;
+                nearest = a;
+            }
+        }
+        
+        if (nearest) {
+            const dx = nearest.x - this.x;
+            const dz = nearest.z - this.z;
+            const dy = nearest.y - this.y;
+            const targetHeading = Math.atan2(dx, dz) * 180 / Math.PI;
+            
+            let headingDiff = targetHeading - this.heading;
+            while (headingDiff > 180) headingDiff -= 360;
+            while (headingDiff < -180) headingDiff += 360;
+            
+            // Use brain for some randomness
+            const inputs = [headingDiff/180, dy/200, nearestDist/1000, this.pitch/45, this.roll/60];
+            const out = this.brain.forward(inputs);
+            
+            // Mix AI pursuit with neural noise
+            this.rollInput = Math.sign(headingDiff) * 0.5 + out[1] * 0.3;
+            this.pitchInput = Math.sign(dy) * 0.3 + out[0] * 0.2;
+            this.yawInput = out[2] * 0.3;
+            
+            // Fire when aligned
+            if (Math.abs(headingDiff) < 15 && nearestDist < 600) {
+                this.fire(bullets);
+            }
+        }
+    }
+    
+    fire(bullets) {
+        if (this.fireCooldown > 0) return;
+        this.fireCooldown = 0.2;
+        
+        const headRad = this.heading * Math.PI / 180;
+        const pitchRad = this.pitch * Math.PI / 180;
+        
+        bullets.push({
+            x: this.x,
+            y: this.y,
+            z: this.z,
+            vx: Math.sin(headRad) * 500,
+            vy: Math.sin(pitchRad) * 200,
+            vz: Math.cos(headRad) * 500,
+            team: this.team,
+            owner: this,
+            life: 2.0
+        });
+    }
+    
+    takeDamage(amt, attacker) {
+        this.hp -= amt;
+        if (this.hp <= 0) {
+            this.alive = false;
+            this.respawnTimer = 3;
+            if (attacker && attacker.brain) {
+                attacker.brain.learn(1);
+            }
+            if (this.brain) this.brain.learn(-0.5);
+            return true;
+        }
+        return false;
+    }
+    
+    respawn() {
+        this.alive = true;
+        this.hp = 100;
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 800 + Math.random() * 500;
+        this.x = Math.cos(angle) * dist;
+        this.y = 150 + Math.random() * 200;
+        this.z = Math.sin(angle) * dist;
+        this.heading = Math.random() * 360;
+        this.pitch = 0;
+        this.roll = 0;
+    }
+}
+
+// Game state
+const game = {
+    player: null,
+    aircraft: [],
+    bullets: [],
+    explosions: [],
+    keys: {},
+    allyKills: 0,
+    enemyKills: 0,
+    lastTime: 0
+};
+
+function init() {
+    // Player
+    game.player = new Aircraft(0, 200, 0, 'ally', true);
+    game.aircraft.push(game.player);
+    
+    // Allies
+    for (let i = 0; i < 3; i++) {
+        const a = new Aircraft(
+            (Math.random() - 0.5) * 400,
+            180 + Math.random() * 100,
+            -200 + Math.random() * 100,
+            'ally'
+        );
+        game.aircraft.push(a);
+    }
+    
+    // Enemies - spawn ahead
+    for (let i = 0; i < 5; i++) {
+        const a = new Aircraft(
+            (Math.random() - 0.5) * 600,
+            150 + Math.random() * 200,
+            600 + Math.random() * 400,
+            'enemy'
+        );
+        a.heading = 180 + (Math.random() - 0.5) * 60;
+        game.aircraft.push(a);
+    }
+}
+
+document.addEventListener('keydown', e => {
+    game.keys[e.key.toLowerCase()] = true;
+    if (e.key === ' ') e.preventDefault();
+});
+document.addEventListener('keyup', e => {
+    game.keys[e.key.toLowerCase()] = false;
+});
+
+function handleInput() {
+    const p = game.player;
+    if (!p.alive) return;
+    
+    // Set input values (-1 to 1)
+    p.pitchInput = 0;
+    p.rollInput = 0;
+    p.yawInput = 0;
+    
+    if (game.keys['w']) p.pitchInput = 1;    // nose up
+    if (game.keys['s']) p.pitchInput = -1;   // nose down
+    if (game.keys['a']) p.rollInput = -1;    // roll left
+    if (game.keys['d']) p.rollInput = 1;     // roll right
+    if (game.keys['q']) p.yawInput = -1;     // yaw left
+    if (game.keys['e']) p.yawInput = 1;      // yaw right
+    
+    if (game.keys['shift']) {
+        p.speed = Math.min(250, p.speed + 2);
+    } else {
+        p.speed = Math.max(120, p.speed - 1);
+    }
+    
+    if (game.keys[' ']) {
+        p.fire(game.bullets);
+    }
+}
+
+function updateBullets(dt) {
+    for (let i = game.bullets.length - 1; i >= 0; i--) {
+        const b = game.bullets[i];
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
+        b.z += b.vz * dt;
+        b.life -= dt;
+        
+        if (b.life <= 0) {
+            game.bullets.splice(i, 1);
+            continue;
+        }
+        
+        // Hit detection
+        for (const a of game.aircraft) {
+            if (!a.alive || a.team === b.team) continue;
+            const dx = a.x - b.x;
+            const dy = a.y - b.y;
+            const dz = a.z - b.z;
+            if (dx*dx + dy*dy + dz*dz < 900) { // 30 unit radius
+                const killed = a.takeDamage(25, b.owner);
+                game.explosions.push({
+                    x: b.x, y: b.y, z: b.z,
+                    life: 0.5,
+                    size: killed ? 60 : 20
+                });
+                if (killed) {
+                    if (b.owner.team === 'ally') game.allyKills++;
+                    else game.enemyKills++;
+                }
+                game.bullets.splice(i, 1);
+                break;
+            }
+        }
+    }
+}
+
+function worldToScreen(wx, wy, wz, player) {
+    // Transform to player-relative coordinates
+    const dx = wx - player.x;
+    const dy = wy - player.y;
+    const dz = wz - player.z;
+    
+    // Rotate by player heading
+    const headRad = -player.heading * Math.PI / 180;
+    const cos = Math.cos(headRad);
+    const sin = Math.sin(headRad);
+    
+    const rx = dx * cos - dz * sin;
+    const rz = dx * sin + dz * cos;
+    const ry = dy;
+    
+    // Behind camera?
+    if (rz < 10) return null;
+    
+    // Project
+    const fov = 600;
+    const sx = W/2 + (rx / rz) * fov;
+    const sy = H/2 - (ry / rz) * fov;
+    
+    return { x: sx, y: sy, z: rz };
+}
+
+function drawSky() {
+    // Sky gradient
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, '#001020');
+    grad.addColorStop(0.5, '#103050');
+    grad.addColorStop(1, '#205070');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+    
+    // Horizon line based on player pitch
+    const horizonY = H/2 + game.player.pitch * 5;
+    
+    // Ground
+    ctx.fillStyle = '#0a1a10';
+    ctx.fillRect(0, horizonY, W, H - horizonY);
+    
+    // Horizon glow
+    ctx.strokeStyle = 'rgba(100, 200, 100, 0.3)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, horizonY);
+    ctx.lineTo(W, horizonY);
+    ctx.stroke();
+}
+
+function drawHUD() {
+    const p = game.player;
+    
+    // Crosshair
+    ctx.strokeStyle = 'rgba(0, 255, 255, 0.8)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(W/2 - 30, H/2);
+    ctx.lineTo(W/2 - 10, H/2);
+    ctx.moveTo(W/2 + 10, H/2);
+    ctx.lineTo(W/2 + 30, H/2);
+    ctx.moveTo(W/2, H/2 - 30);
+    ctx.lineTo(W/2, H/2 - 10);
+    ctx.moveTo(W/2, H/2 + 10);
+    ctx.lineTo(W/2, H/2 + 30);
+    ctx.stroke();
+    
+    // Pitch ladder
+    ctx.strokeStyle = 'rgba(0, 255, 0, 0.5)';
+    ctx.lineWidth = 1;
+    for (let angle = -30; angle <= 30; angle += 10) {
+        if (angle === 0) continue;
+        const y = H/2 - (angle - p.pitch) * 5;
+        if (y > 50 && y < H - 50) {
+            ctx.beginPath();
+            ctx.moveTo(W/2 - 40, y);
+            ctx.lineTo(W/2 - 20, y);
+            ctx.moveTo(W/2 + 20, y);
+            ctx.lineTo(W/2 + 40, y);
+            ctx.stroke();
+            
+            ctx.fillStyle = '#0f0';
+            ctx.font = '10px Courier New';
+            ctx.textAlign = 'right';
+            ctx.fillText(angle + '°', W/2 - 45, y + 3);
+        }
+    }
+    
+    // Roll indicator
+    ctx.save();
+    ctx.translate(W/2, 80);
+    ctx.rotate(-p.roll * Math.PI / 180);
+    ctx.strokeStyle = 'rgba(0, 255, 255, 0.7)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-50, 0);
+    ctx.lineTo(-20, 0);
+    ctx.moveTo(20, 0);
+    ctx.lineTo(50, 0);
+    ctx.moveTo(0, -10);
+    ctx.lineTo(0, 10);
+    ctx.stroke();
+    ctx.restore();
+    
+    // Roll indicator fixed reference
+    ctx.strokeStyle = 'rgba(255, 255, 0, 0.5)';
+    ctx.beginPath();
+    ctx.moveTo(W/2, 60);
+    ctx.lineTo(W/2 - 5, 70);
+    ctx.lineTo(W/2 + 5, 70);
+    ctx.closePath();
+    ctx.stroke();
+    
+    // Compass
+    ctx.fillStyle = '#0f0';
+    ctx.font = '12px Courier New';
+    ctx.textAlign = 'center';
+    const compassY = H - 40;
+    for (let h = 0; h < 360; h += 30) {
+        let diff = h - p.heading;
+        while (diff > 180) diff -= 360;
+        while (diff < -180) diff += 360;
+        
+        if (Math.abs(diff) < 60) {
+            const cx = W/2 + diff * 3;
+            ctx.fillStyle = h % 90 === 0 ? '#0ff' : '#0f0';
+            const label = h === 0 ? 'N' : h === 90 ? 'E' : h === 180 ? 'S' : h === 270 ? 'W' : h.toString();
+            ctx.fillText(label, cx, compassY);
+        }
+    }
+    
+    // Compass marker
+    ctx.strokeStyle = '#ff0';
+    ctx.beginPath();
+    ctx.moveTo(W/2, compassY - 15);
+    ctx.lineTo(W/2 - 5, compassY - 25);
+    ctx.lineTo(W/2 + 5, compassY - 25);
+    ctx.closePath();
+    ctx.stroke();
+    
+    // Radar
+    const rx = W - 90, ry = H/2, rr = 70;
+    ctx.fillStyle = 'rgba(0, 30, 15, 0.8)';
+    ctx.beginPath();
+    ctx.arc(rx, ry, rr, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0, 200, 100, 0.5)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(rx, ry, rr/2, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // Radar blips
+    for (const a of game.aircraft) {
+        if (!a.alive) continue;
+        const dx = a.x - p.x;
+        const dz = a.z - p.z;
+        
+        // Rotate to player heading
+        const headRad = -p.heading * Math.PI / 180;
+        const rdx = (dx * Math.cos(headRad) - dz * Math.sin(headRad)) / 30;
+        const rdz = (dx * Math.sin(headRad) + dz * Math.cos(headRad)) / 30;
+        
+        if (Math.abs(rdx) < rr - 5 && Math.abs(rdz) < rr - 5) {
+            ctx.fillStyle = a.isPlayer ? '#0ff' : a.team === 'ally' ? '#0f0' : '#f00';
+            ctx.beginPath();
+            ctx.arc(rx + rdx, ry - rdz, a.isPlayer ? 5 : 4, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+    
+    // Forward indicator on radar
+    ctx.strokeStyle = 'rgba(0, 255, 100, 0.4)';
+    ctx.beginPath();
+    ctx.moveTo(rx, ry);
+    ctx.lineTo(rx, ry - rr);
+    ctx.stroke();
+}
+
+function drawAircraft(a, player) {
+    if (!a.alive || a.isPlayer) return;
+    
+    const proj = worldToScreen(a.x, a.y, a.z, player);
+    if (!proj) return;
+    
+    const dist = proj.z;
+    const size = Math.max(5, 800 / dist);
+    
+    // Fog
+    const fog = Math.min(1, dist / 2000);
+    const alpha = 1 - fog * 0.8;
+    
+    // Color
+    const color = a.team === 'ally' ? [0, 255, 100] : [255, 80, 50];
+    
+    // Draw plane shape
+    ctx.fillStyle = `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${alpha})`;
+    ctx.beginPath();
+    ctx.moveTo(proj.x, proj.y - size);
+    ctx.lineTo(proj.x - size * 1.5, proj.y + size * 0.5);
+    ctx.lineTo(proj.x, proj.y + size * 0.3);
+    ctx.lineTo(proj.x + size * 1.5, proj.y + size * 0.5);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Wings
+    ctx.strokeStyle = `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${alpha})`;
+    ctx.lineWidth = Math.max(1, size / 4);
+    ctx.beginPath();
+    ctx.moveTo(proj.x - size * 2.5, proj.y);
+    ctx.lineTo(proj.x + size * 2.5, proj.y);
+    ctx.stroke();
+    
+    // HP bar
+    if (dist < 600) {
+        const barW = 40;
+        const barH = 4;
+        const barY = proj.y - size - 15;
+        
+        ctx.fillStyle = `rgba(50, 0, 0, ${alpha})`;
+        ctx.fillRect(proj.x - barW/2, barY, barW, barH);
+        
+        ctx.fillStyle = `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${alpha})`;
+        ctx.fillRect(proj.x - barW/2, barY, barW * (a.hp / 100), barH);
+    }
+    
+    // Distance
+    if (dist > 200) {
+        ctx.fillStyle = `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${alpha * 0.7})`;
+        ctx.font = '10px Courier New';
+        ctx.textAlign = 'center';
+        ctx.fillText(Math.floor(dist) + 'm', proj.x, proj.y + size + 15);
+    }
+}
+
+function drawBullets(player) {
+    for (const b of game.bullets) {
+        const proj = worldToScreen(b.x, b.y, b.z, player);
+        if (!proj) continue;
+        
+        const size = Math.max(2, 100 / proj.z);
+        const color = b.team === 'ally' ? '255, 255, 0' : '255, 150, 0';
+        
+        // Glow
+        const grad = ctx.createRadialGradient(proj.x, proj.y, 0, proj.x, proj.y, size * 4);
+        grad.addColorStop(0, `rgba(${color}, 0.8)`);
+        grad.addColorStop(1, `rgba(${color}, 0)`);
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(proj.x, proj.y, size * 4, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Core
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(proj.x, proj.y, size, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+function drawExplosions(player) {
+    for (let i = game.explosions.length - 1; i >= 0; i--) {
+        const e = game.explosions[i];
+        e.life -= 0.016;
+        if (e.life <= 0) {
+            game.explosions.splice(i, 1);
+            continue;
+        }
+        
+        const proj = worldToScreen(e.x, e.y, e.z, player);
+        if (!proj) continue;
+        
+        const progress = 1 - e.life / 0.5;
+        const size = e.size * (1 + progress * 2) * 100 / proj.z;
+        const alpha = 1 - progress;
+        
+        const grad = ctx.createRadialGradient(proj.x, proj.y, 0, proj.x, proj.y, size);
+        grad.addColorStop(0, `rgba(255, 255, 200, ${alpha})`);
+        grad.addColorStop(0.3, `rgba(255, 150, 50, ${alpha * 0.8})`);
+        grad.addColorStop(1, 'rgba(255, 50, 0, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(proj.x, proj.y, size, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+function updateHUDText() {
+    const p = game.player;
+    document.getElementById('player-hp').textContent = Math.max(0, p.hp);
+    document.getElementById('altitude').textContent = Math.floor(p.y);
+    document.getElementById('speed').textContent = Math.floor(p.speed);
+    document.getElementById('heading').textContent = Math.floor(p.heading);
+    document.getElementById('ally-kills').textContent = game.allyKills;
+    document.getElementById('enemy-kills').textContent = game.enemyKills;
+    
+    // AI display
+    let aiText = '';
+    const enemies = game.aircraft.filter(a => a.team === 'enemy' && a.alive);
+    for (let i = 0; i < Math.min(2, enemies.length); i++) {
+        const e = enemies[i];
+        const dx = e.x - p.x;
+        const dz = e.z - p.z;
+        const dist = Math.floor(Math.sqrt(dx*dx + dz*dz));
+        const out = e.brain.lastOutput;
+        aiText += `<div style="margin-bottom:4px;color:#f66">Enemy ${i+1} (${dist}m)</div>`;
+        aiText += `<div>P:${(out[0]*100).toFixed(0)}% R:${(out[1]*100).toFixed(0)}%</div>`;
+    }
+    document.getElementById('ai-thoughts').innerHTML = aiText || 'No contacts';
+}
+
+function gameLoop(time) {
+    const dt = Math.min(0.05, (time - game.lastTime) / 1000);
+    game.lastTime = time;
+    
+    handleInput();
+    
+    for (const a of game.aircraft) {
+        a.update(dt, game.aircraft, game.bullets);
+    }
+    
+    updateBullets(dt);
+    
+    // Render
+    drawSky();
+    
+    // Sort by distance
+    const sorted = game.aircraft
+        .filter(a => a.alive && !a.isPlayer)
+        .map(a => ({
+            a,
+            dist: Math.sqrt((a.x-game.player.x)**2 + (a.z-game.player.z)**2)
+        }))
+        .sort((a, b) => b.dist - a.dist);
+    
+    for (const { a } of sorted) {
+        drawAircraft(a, game.player);
+    }
+    
+    drawBullets(game.player);
+    drawExplosions(game.player);
+    drawHUD();
+    updateHUDText();
+    
+    // Death screen
+    if (!game.player.alive) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#f00';
+        ctx.font = 'bold 48px Courier New';
+        ctx.textAlign = 'center';
+        ctx.fillText('DESTROYED', W/2, H/2);
+        ctx.font = '20px Courier New';
+        ctx.fillStyle = '#fff';
+        ctx.fillText(`Respawning in ${Math.ceil(game.player.respawnTimer)}...`, W/2, H/2 + 40);
+    }
+    
+    requestAnimationFrame(gameLoop);
+}
+
+init();
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>

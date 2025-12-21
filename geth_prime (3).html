@@ -1,0 +1,1900 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GETH PRIME - Neural Horde Survival</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500;700&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #0a0a0f;
+  font-family: 'Rajdhani', sans-serif;
+  overflow: hidden;
+  color: #e0e0e0;
+}
+
+#game-container {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+}
+
+canvas { display: block; }
+
+#hud {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+#crosshair {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 24px; height: 24px;
+}
+#crosshair::before, #crosshair::after {
+  content: '';
+  position: absolute;
+  background: rgba(255, 100, 50, 0.9);
+  box-shadow: 0 0 8px rgba(255, 100, 50, 0.6);
+}
+#crosshair::before {
+  width: 2px; height: 24px;
+  left: 50%; transform: translateX(-50%);
+}
+#crosshair::after {
+  width: 24px; height: 2px;
+  top: 50%; transform: translateY(-50%);
+}
+
+#health-bar {
+  position: absolute;
+  bottom: 40px; left: 40px;
+  width: 280px;
+}
+
+#shield-bar {
+  position: absolute;
+  bottom: 80px; left: 40px;
+  width: 280px;
+}
+
+.bar-container {
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  height: 12px;
+  position: relative;
+  clip-path: polygon(0 0, 100% 0, 98% 100%, 2% 100%);
+}
+
+.bar-fill {
+  height: 100%;
+  transition: width 0.2s ease;
+}
+
+#health-fill {
+  background: linear-gradient(90deg, #ff3333, #ff6644);
+  box-shadow: 0 0 10px rgba(255, 50, 50, 0.5);
+}
+
+#shield-fill {
+  background: linear-gradient(90deg, #3399ff, #66ccff);
+  box-shadow: 0 0 10px rgba(50, 150, 255, 0.5);
+}
+
+.bar-label {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 10px;
+  letter-spacing: 2px;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+#ammo-display {
+  position: absolute;
+  bottom: 40px; right: 40px;
+  text-align: right;
+}
+
+#ammo-weapon {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 4px;
+}
+
+#ammo-counts {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+#ammo-clip {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 52px;
+  font-weight: 900;
+  color: #ff6644;
+  text-shadow: 0 0 20px rgba(255, 100, 50, 0.5);
+  line-height: 1;
+}
+
+#ammo-separator {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 24px;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+#ammo-reserve {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 28px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1;
+}
+
+#reload-prompt {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 14px;
+  color: #ffaa33;
+  margin-top: 8px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+#reload-prompt.visible {
+  opacity: 1;
+  animation: pulse 0.8s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+#wave-display {
+  position: absolute;
+  top: 30px; left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+}
+
+#wave-number {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 14px;
+  letter-spacing: 4px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+#wave-objective {
+  font-size: 18px;
+  color: #ffaa33;
+  margin-top: 4px;
+}
+
+#enemy-count {
+  position: absolute;
+  top: 30px; right: 40px;
+  font-family: 'Orbitron', sans-serif;
+}
+
+#score-display {
+  position: absolute;
+  top: 30px; left: 40px;
+  font-family: 'Orbitron', sans-serif;
+}
+
+#score-value {
+  font-size: 24px;
+  color: #66ff66;
+}
+
+#minimap {
+  position: absolute;
+  top: 80px; right: 40px;
+  width: 180px; height: 180px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(100, 200, 255, 0.3);
+  border-radius: 4px;
+}
+
+#ai-stats {
+  position: absolute;
+  bottom: 140px; left: 40px;
+  font-size: 11px;
+  color: rgba(150, 200, 255, 0.7);
+  font-family: 'Rajdhani', monospace;
+}
+
+#damage-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 50%, rgba(255, 0, 0, 0.4) 100%);
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.menu-screen {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(135deg, #0a0a15 0%, #151530 50%, #0a0a15 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  pointer-events: auto;
+}
+
+.menu-screen.hidden { display: none; }
+
+#main-menu h1 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 72px;
+  font-weight: 900;
+  color: #ff6644;
+  text-shadow: 0 0 40px rgba(255, 100, 50, 0.5), 0 0 80px rgba(255, 100, 50, 0.3);
+  margin-bottom: 10px;
+  letter-spacing: 8px;
+}
+
+#main-menu h2 {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 24px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 60px;
+  letter-spacing: 6px;
+  font-weight: 300;
+}
+
+.menu-btn {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 16px;
+  letter-spacing: 3px;
+  padding: 16px 48px;
+  margin: 10px;
+  background: transparent;
+  border: 2px solid rgba(255, 100, 50, 0.6);
+  color: #ff6644;
+  cursor: pointer;
+  transition: all 0.2s;
+  clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
+}
+
+.menu-btn:hover {
+  background: rgba(255, 100, 50, 0.2);
+  border-color: #ff6644;
+  box-shadow: 0 0 30px rgba(255, 100, 50, 0.3);
+}
+
+#controls-info {
+  position: absolute;
+  bottom: 40px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.4);
+  text-align: center;
+}
+
+#wave-announce {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: 'Orbitron', sans-serif;
+  font-size: 64px;
+  color: #ff6644;
+  text-shadow: 0 0 40px rgba(255, 100, 50, 0.8);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 50;
+}
+
+#kill-feed {
+  position: absolute;
+  top: 100px; left: 40px;
+  width: 300px;
+}
+
+.kill-entry {
+  font-size: 13px;
+  color: #ffaa33;
+  margin-bottom: 4px;
+  opacity: 0;
+  animation: killFade 3s ease-out forwards;
+}
+
+@keyframes killFade {
+  0% { opacity: 0; transform: translateX(-20px); }
+  10% { opacity: 1; transform: translateX(0); }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+#nn-viz {
+  position: absolute;
+  bottom: 40px; left: 350px;
+  width: 220px; height: 120px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(100, 200, 255, 0.2);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+#nn-canvas {
+  width: 100%; height: 100%;
+}
+
+#reload-bar {
+  position: absolute;
+  bottom: 120px; right: 40px;
+  width: 120px;
+  height: 6px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  opacity: 0;
+}
+
+#reload-bar.active {
+  opacity: 1;
+}
+
+#reload-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #ffaa33, #ff6644);
+  transition: width 0.05s linear;
+}
+
+#nn-output-display {
+  position: absolute;
+  bottom: 170px; left: 350px;
+  font-size: 10px;
+  color: rgba(150, 200, 255, 0.6);
+  font-family: monospace;
+  width: 220px;
+}
+</style>
+</head>
+<body>
+
+<div id="game-container">
+  <div id="hud">
+    <div id="crosshair"></div>
+    
+    <div id="shield-bar">
+      <div class="bar-label">SHIELDS</div>
+      <div class="bar-container">
+        <div class="bar-fill" id="shield-fill" style="width: 100%"></div>
+      </div>
+    </div>
+    
+    <div id="health-bar">
+      <div class="bar-label">HEALTH</div>
+      <div class="bar-container">
+        <div class="bar-fill" id="health-fill" style="width: 100%"></div>
+      </div>
+    </div>
+    
+    <div id="ammo-display">
+      <div id="ammo-weapon">M-8 AVENGER</div>
+      <div id="ammo-counts">
+        <span id="ammo-clip">30</span>
+        <span id="ammo-separator">/</span>
+        <span id="ammo-reserve">210</span>
+      </div>
+      <div id="reload-prompt">[R] RELOAD</div>
+    </div>
+    
+    <div id="reload-bar">
+      <div id="reload-fill"></div>
+    </div>
+    
+    <div id="wave-display">
+      <div id="wave-number">WAVE 1</div>
+      <div id="wave-objective">ELIMINATE ALL HOSTILES</div>
+    </div>
+    
+    <div id="enemy-count">
+      <span style="color: #ff4444;">●</span> HOSTILES: <span id="hostile-num">0</span>
+    </div>
+    
+    <div id="score-display">
+      <div style="font-size: 10px; color: rgba(255,255,255,0.5); letter-spacing: 2px;">CREDITS</div>
+      <div id="score-value">0</div>
+    </div>
+    
+    <canvas id="minimap"></canvas>
+    
+    <div id="ai-stats">
+      <div>NEURAL EPOCH: <span id="epoch-num">0</span></div>
+      <div>AVG LOSS: <span id="loss-val">0.000</span></div>
+      <div>LEARNING: <span id="learning-status">ACTIVE</span></div>
+    </div>
+    
+    <div id="nn-output-display">
+      <div>MOVE: <span id="nn-move">0.0, 0.0</span></div>
+      <div>AIM: <span id="nn-aim">0.0, 0.0</span></div>
+      <div>FIRE: <span id="nn-fire">0.0</span></div>
+    </div>
+    
+    <div id="nn-viz">
+      <canvas id="nn-canvas"></canvas>
+    </div>
+    
+    <div id="kill-feed"></div>
+    <div id="wave-announce"></div>
+    <div id="damage-overlay"></div>
+  </div>
+  
+  <div id="main-menu" class="menu-screen">
+    <h1>GETH PRIME</h1>
+    <h2>NEURAL HORDE SURVIVAL</h2>
+    <button class="menu-btn" onclick="startGame()">DEPLOY</button>
+    <div id="controls-info">
+      WASD - Move | MOUSE - Aim | CLICK - Fire | R - Reload | SHIFT - Sprint<br>
+      <br>
+      <span style="color: #ff6644;">AI enemies use transformer networks with continuous movement & aiming</span>
+    </div>
+  </div>
+  
+  <div id="game-over" class="menu-screen hidden">
+    <h1 style="font-size: 48px;">EXTRACTION FAILED</h1>
+    <h2>NEURAL ADAPTATION COMPLETE</h2>
+    <div style="margin-bottom: 40px;">
+      <div style="font-size: 18px; color: rgba(255,255,255,0.7);">FINAL SCORE</div>
+      <div id="final-score" style="font-family: 'Orbitron'; font-size: 48px; color: #66ff66;">0</div>
+      <div style="font-size: 14px; color: rgba(255,255,255,0.5); margin-top: 10px;">WAVES SURVIVED: <span id="final-waves">0</span></div>
+    </div>
+    <button class="menu-btn" onclick="startGame()">REDEPLOY</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ============================================
+// CONTINUOUS ACTION TRANSFORMER NEURAL NETWORK
+// Outputs: moveX, moveZ, aimOffsetX, aimOffsetY, fireProb
+// ============================================
+
+class ContinuousTransformerAI {
+  constructor(inputDim = 32, dModel = 48, nHeads = 4, nLayers = 2) {
+    this.inputDim = inputDim;
+    this.dModel = dModel;
+    this.nHeads = nHeads;
+    this.nLayers = nLayers;
+    this.headDim = Math.floor(dModel / nHeads);
+    
+    // Output dimensions: moveX, moveZ, aimX, aimY, fireProb (5 continuous outputs)
+    this.outputDim = 5;
+    
+    this.inputProj = this.initMatrix(inputDim, dModel);
+    this.layers = [];
+    
+    for (let l = 0; l < nLayers; l++) {
+      this.layers.push({
+        Wq: this.initMatrix(dModel, dModel),
+        Wk: this.initMatrix(dModel, dModel),
+        Wv: this.initMatrix(dModel, dModel),
+        Wo: this.initMatrix(dModel, dModel),
+        ff1: this.initMatrix(dModel, dModel * 2),
+        ff2: this.initMatrix(dModel * 2, dModel),
+        ln1_g: new Float32Array(dModel).fill(1),
+        ln1_b: new Float32Array(dModel).fill(0),
+        ln2_g: new Float32Array(dModel).fill(1),
+        ln2_b: new Float32Array(dModel).fill(0),
+      });
+    }
+    
+    // Continuous output heads
+    this.moveHead = this.initMatrix(dModel, 2);      // moveX, moveZ
+    this.aimHead = this.initMatrix(dModel, 2);       // aimOffsetX, aimOffsetY  
+    this.fireHead = this.initMatrix(dModel, 1);      // fire probability
+    this.valueHead = this.initMatrix(dModel, 1);     // value estimate
+    
+    // Log std for continuous actions (learnable)
+    this.moveLogStd = new Float32Array(2).fill(-0.5);
+    this.aimLogStd = new Float32Array(2).fill(-1.0);
+    
+    this.experienceBuffer = [];
+    this.maxBufferSize = 800;
+    this.epoch = 0;
+    this.avgLoss = 0;
+    this.learningRate = 0.0005;
+    
+    // Track recent outputs for visualization
+    this.lastOutput = { move: [0, 0], aim: [0, 0], fire: 0 };
+  }
+  
+  initMatrix(rows, cols) {
+    const scale = Math.sqrt(2 / (rows + cols));
+    const mat = new Float32Array(rows * cols);
+    for (let i = 0; i < mat.length; i++) {
+      mat[i] = (Math.random() * 2 - 1) * scale;
+    }
+    return { data: mat, rows, cols };
+  }
+  
+  matmul(a, b, aRows, aCols, bCols) {
+    const result = new Float32Array(aRows * bCols);
+    for (let i = 0; i < aRows; i++) {
+      for (let j = 0; j < bCols; j++) {
+        let sum = 0;
+        for (let k = 0; k < aCols; k++) {
+          sum += a[i * aCols + k] * b[k * bCols + j];
+        }
+        result[i * bCols + j] = sum;
+      }
+    }
+    return result;
+  }
+  
+  layerNorm(x, gamma, beta) {
+    const n = x.length;
+    let mean = 0, variance = 0;
+    for (let i = 0; i < n; i++) mean += x[i];
+    mean /= n;
+    for (let i = 0; i < n; i++) variance += (x[i] - mean) ** 2;
+    variance /= n;
+    const std = Math.sqrt(variance + 1e-6);
+    const result = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      result[i] = gamma[i] * (x[i] - mean) / std + beta[i];
+    }
+    return result;
+  }
+  
+  gelu(x) {
+    const result = new Float32Array(x.length);
+    for (let i = 0; i < x.length; i++) {
+      const val = x[i];
+      result[i] = 0.5 * val * (1 + Math.tanh(Math.sqrt(2 / Math.PI) * (val + 0.044715 * val ** 3)));
+    }
+    return result;
+  }
+  
+  tanh(x) {
+    return x.map(v => Math.tanh(v));
+  }
+  
+  sigmoid(x) {
+    return 1 / (1 + Math.exp(-Math.max(-20, Math.min(20, x))));
+  }
+  
+  softmax(x) {
+    const max = Math.max(...x);
+    const exp = x.map(v => Math.exp(v - max));
+    const sum = exp.reduce((a, b) => a + b, 0);
+    return exp.map(v => v / sum);
+  }
+  
+  attention(x, Wq, Wk, Wv, Wo) {
+    const seqLen = 1;
+    const Q = this.matmul(x, Wq.data, seqLen, this.dModel, this.dModel);
+    const K = this.matmul(x, Wk.data, seqLen, this.dModel, this.dModel);
+    const V = this.matmul(x, Wv.data, seqLen, this.dModel, this.dModel);
+    
+    const scale = Math.sqrt(this.headDim);
+    const scores = new Float32Array(this.nHeads);
+    
+    for (let h = 0; h < this.nHeads; h++) {
+      let dot = 0;
+      for (let d = 0; d < this.headDim; d++) {
+        dot += Q[h * this.headDim + d] * K[h * this.headDim + d];
+      }
+      scores[h] = dot / scale;
+    }
+    
+    const attnWeights = this.softmax(scores);
+    
+    const attended = new Float32Array(this.dModel);
+    for (let h = 0; h < this.nHeads; h++) {
+      for (let d = 0; d < this.headDim; d++) {
+        attended[h * this.headDim + d] = attnWeights[h] * V[h * this.headDim + d];
+      }
+    }
+    
+    return this.matmul(attended, Wo.data, 1, this.dModel, this.dModel);
+  }
+  
+  feedforward(x, ff1, ff2) {
+    const hidden = this.gelu(this.matmul(x, ff1.data, 1, this.dModel, this.dModel * 2));
+    return this.matmul(hidden, ff2.data, 1, this.dModel * 2, this.dModel);
+  }
+  
+  forward(obs) {
+    let x = this.matmul(new Float32Array(obs), this.inputProj.data, 1, this.inputDim, this.dModel);
+    
+    for (const layer of this.layers) {
+      const normed1 = this.layerNorm(x, layer.ln1_g, layer.ln1_b);
+      const attnOut = this.attention(normed1, layer.Wq, layer.Wk, layer.Wv, layer.Wo);
+      for (let i = 0; i < this.dModel; i++) x[i] += attnOut[i];
+      
+      const normed2 = this.layerNorm(x, layer.ln2_g, layer.ln2_b);
+      const ffOut = this.feedforward(normed2, layer.ff1, layer.ff2);
+      for (let i = 0; i < this.dModel; i++) x[i] += ffOut[i];
+    }
+    
+    // Get continuous outputs
+    const moveMean = this.tanh(Array.from(this.matmul(x, this.moveHead.data, 1, this.dModel, 2)));
+    const aimMean = this.tanh(Array.from(this.matmul(x, this.aimHead.data, 1, this.dModel, 2)));
+    const fireLogit = this.matmul(x, this.fireHead.data, 1, this.dModel, 1)[0];
+    const value = this.matmul(x, this.valueHead.data, 1, this.dModel, 1)[0];
+    
+    return { moveMean, aimMean, fireLogit, value };
+  }
+  
+  sampleContinuous(mean, logStd) {
+    // Sample from Gaussian with reparameterization
+    const std = Math.exp(logStd);
+    const noise = this.gaussianNoise();
+    return mean + std * noise;
+  }
+  
+  gaussianNoise() {
+    // Box-Muller transform
+    const u1 = Math.random();
+    const u2 = Math.random();
+    return Math.sqrt(-2 * Math.log(u1 + 1e-8)) * Math.cos(2 * Math.PI * u2);
+  }
+  
+  act(obs) {
+    const { moveMean, aimMean, fireLogit, value } = this.forward(obs);
+    
+    // Sample continuous actions with exploration noise
+    const moveX = this.sampleContinuous(moveMean[0], this.moveLogStd[0]);
+    const moveZ = this.sampleContinuous(moveMean[1], this.moveLogStd[1]);
+    const aimX = this.sampleContinuous(aimMean[0], this.aimLogStd[0]);
+    const aimY = this.sampleContinuous(aimMean[1], this.aimLogStd[1]);
+    
+    // Fire is Bernoulli
+    const fireProb = this.sigmoid(fireLogit);
+    const fire = Math.random() < fireProb;
+    
+    // Clamp outputs
+    const action = {
+      moveX: Math.max(-1, Math.min(1, moveX)),
+      moveZ: Math.max(-1, Math.min(1, moveZ)),
+      aimX: Math.max(-1, Math.min(1, aimX)),
+      aimY: Math.max(-1, Math.min(1, aimY)),
+      fire: fire,
+      fireProb: fireProb
+    };
+    
+    // Store for viz
+    this.lastOutput = {
+      move: [action.moveX, action.moveZ],
+      aim: [action.aimX, action.aimY],
+      fire: fireProb
+    };
+    
+    return { action, value, moveMean, aimMean, fireLogit };
+  }
+  
+  storeExperience(obs, action, reward, done, moveMean, aimMean, fireLogit) {
+    this.experienceBuffer.push({ 
+      obs: [...obs], 
+      action: { ...action },
+      reward, 
+      done,
+      moveMean: [...moveMean],
+      aimMean: [...aimMean],
+      fireLogit
+    });
+    if (this.experienceBuffer.length > this.maxBufferSize) {
+      this.experienceBuffer.shift();
+    }
+  }
+  
+  gaussianLogProb(x, mean, logStd) {
+    const std = Math.exp(logStd);
+    const variance = std * std;
+    return -0.5 * (Math.log(2 * Math.PI * variance) + ((x - mean) ** 2) / variance);
+  }
+  
+  learn() {
+    if (this.experienceBuffer.length < 64) return;
+    
+    const batchSize = Math.min(48, this.experienceBuffer.length);
+    const batch = [];
+    for (let i = 0; i < batchSize; i++) {
+      const idx = Math.floor(Math.random() * this.experienceBuffer.length);
+      batch.push(this.experienceBuffer[idx]);
+    }
+    
+    let totalLoss = 0;
+    
+    for (const exp of batch) {
+      const { moveMean, aimMean, fireLogit, value } = this.forward(exp.obs);
+      
+      // Compute log probabilities for continuous actions
+      let logProb = 0;
+      logProb += this.gaussianLogProb(exp.action.moveX, moveMean[0], this.moveLogStd[0]);
+      logProb += this.gaussianLogProb(exp.action.moveZ, moveMean[1], this.moveLogStd[1]);
+      logProb += this.gaussianLogProb(exp.action.aimX, aimMean[0], this.aimLogStd[0]);
+      logProb += this.gaussianLogProb(exp.action.aimY, aimMean[1], this.aimLogStd[1]);
+      
+      // Bernoulli log prob for fire
+      const fireProb = this.sigmoid(fireLogit);
+      if (exp.action.fire) {
+        logProb += Math.log(fireProb + 1e-8);
+      } else {
+        logProb += Math.log(1 - fireProb + 1e-8);
+      }
+      
+      const advantage = exp.reward - value;
+      const policyLoss = -logProb * advantage;
+      const valueLoss = 0.5 * advantage ** 2;
+      
+      totalLoss += policyLoss + valueLoss;
+      
+      // Update move head
+      const moveGrad = this.learningRate * advantage;
+      for (let i = 0; i < 2; i++) {
+        const diff = (i === 0 ? exp.action.moveX : exp.action.moveZ) - moveMean[i];
+        for (let j = 0; j < this.dModel; j++) {
+          this.moveHead.data[j * 2 + i] += moveGrad * diff * 0.01;
+        }
+      }
+      
+      // Update aim head
+      const aimGrad = this.learningRate * advantage;
+      for (let i = 0; i < 2; i++) {
+        const diff = (i === 0 ? exp.action.aimX : exp.action.aimY) - aimMean[i];
+        for (let j = 0; j < this.dModel; j++) {
+          this.aimHead.data[j * 2 + i] += aimGrad * diff * 0.01;
+        }
+      }
+      
+      // Update fire head
+      const fireTarget = exp.action.fire ? 1 : 0;
+      const fireGrad = this.learningRate * advantage * (fireTarget - fireProb);
+      for (let j = 0; j < this.dModel; j++) {
+        this.fireHead.data[j] += fireGrad * 0.01;
+      }
+    }
+    
+    this.avgLoss = totalLoss / batchSize;
+    this.epoch++;
+  }
+  
+  getActivations() {
+    return {
+      epoch: this.epoch,
+      avgLoss: this.avgLoss,
+      bufferSize: this.experienceBuffer.length,
+      lastOutput: this.lastOutput
+    };
+  }
+}
+
+// ============================================
+// GAME ENGINE - BIGGER MAP
+// ============================================
+
+let scene, camera, renderer, clock;
+let player, enemies = [], bullets = [], pickups = [];
+let keys = {}, mouseDown = false;
+let isPlaying = false;
+let score = 0, wave = 1, enemiesRemaining = 0;
+
+let transformerAI;
+const AI_UPDATE_INTERVAL = 80; // Faster updates for continuous control
+let lastAIUpdate = 0;
+
+// BIGGER MAP
+const MAP_SIZE = 120; // Was 60, now 120
+const COVER_POSITIONS = [];
+
+const PLAYER = {
+  health: 100,
+  maxHealth: 100,
+  shield: 100,
+  maxShield: 100,
+  clipAmmo: 30,
+  clipSize: 30,
+  reserveAmmo: 210,
+  maxReserve: 210,
+  speed: 0.18,
+  sprintSpeed: 0.30,
+  damage: 25,
+  fireRate: 100,
+  lastShot: 0,
+  shieldRegenDelay: 3000,
+  lastDamage: 0,
+  isReloading: false,
+  reloadTime: 1500,
+  reloadStart: 0
+};
+
+function init() {
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0a0a15);
+  scene.fog = new THREE.FogExp2(0x0a0a15, 0.012); // Adjusted for bigger map
+  
+  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.position.set(0, 2, 0);
+  
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  document.getElementById('game-container').insertBefore(renderer.domElement, document.getElementById('hud'));
+  
+  clock = new THREE.Clock();
+  
+  const ambient = new THREE.AmbientLight(0x202040, 0.5);
+  scene.add(ambient);
+  
+  const mainLight = new THREE.DirectionalLight(0xffffff, 0.8);
+  mainLight.position.set(40, 60, 40);
+  mainLight.castShadow = true;
+  mainLight.shadow.mapSize.width = 4096;
+  mainLight.shadow.mapSize.height = 4096;
+  mainLight.shadow.camera.near = 0.5;
+  mainLight.shadow.camera.far = 200;
+  mainLight.shadow.camera.left = -80;
+  mainLight.shadow.camera.right = 80;
+  mainLight.shadow.camera.top = 80;
+  mainLight.shadow.camera.bottom = -80;
+  scene.add(mainLight);
+  
+  // More lights for bigger map
+  const lights = [
+    { color: 0xff4400, pos: [-50, 8, -50], intensity: 3 },
+    { color: 0x0066ff, pos: [50, 8, 50], intensity: 3 },
+    { color: 0xff0044, pos: [50, 8, -50], intensity: 2.5 },
+    { color: 0x00ffaa, pos: [-50, 8, 50], intensity: 2.5 },
+    { color: 0xffaa00, pos: [0, 10, 0], intensity: 2 },
+    { color: 0x6644ff, pos: [-80, 6, 0], intensity: 2 },
+    { color: 0xff6644, pos: [80, 6, 0], intensity: 2 },
+    { color: 0x44ffaa, pos: [0, 6, -80], intensity: 2 },
+    { color: 0xaa44ff, pos: [0, 6, 80], intensity: 2 },
+  ];
+  
+  lights.forEach(l => {
+    const pl = new THREE.PointLight(l.color, l.intensity, 60);
+    pl.position.set(...l.pos);
+    scene.add(pl);
+  });
+  
+  createMap();
+  initTransformerAI();
+  
+  document.addEventListener('keydown', e => keys[e.code] = true);
+  document.addEventListener('keyup', e => keys[e.code] = false);
+  document.addEventListener('mousedown', () => mouseDown = true);
+  document.addEventListener('mouseup', () => mouseDown = false);
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('click', () => {
+    if (isPlaying) renderer.domElement.requestPointerLock();
+  });
+  
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+  
+  animate();
+}
+
+function createMap() {
+  // Bigger floor
+  const floorGeo = new THREE.PlaneGeometry(MAP_SIZE * 2, MAP_SIZE * 2, 40, 40);
+  const floorMat = new THREE.MeshStandardMaterial({
+    color: 0x1a1a2e,
+    roughness: 0.8,
+    metalness: 0.2
+  });
+  const floor = new THREE.Mesh(floorGeo, floorMat);
+  floor.rotation.x = -Math.PI / 2;
+  floor.receiveShadow = true;
+  scene.add(floor);
+  
+  const gridHelper = new THREE.GridHelper(MAP_SIZE * 2, 60, 0x333366, 0x222244);
+  gridHelper.position.y = 0.01;
+  scene.add(gridHelper);
+  
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0x2a2a4e, roughness: 0.6, metalness: 0.3 });
+  
+  const walls = [
+    { pos: [0, 8, -MAP_SIZE], rot: 0 },
+    { pos: [0, 8, MAP_SIZE], rot: 0 },
+    { pos: [-MAP_SIZE, 8, 0], rot: Math.PI / 2 },
+    { pos: [MAP_SIZE, 8, 0], rot: Math.PI / 2 },
+  ];
+  
+  walls.forEach(w => {
+    const wallGeo = new THREE.BoxGeometry(MAP_SIZE * 2, 16, 2);
+    const wall = new THREE.Mesh(wallGeo, wallMat);
+    wall.position.set(...w.pos);
+    wall.rotation.y = w.rot;
+    wall.castShadow = true;
+    wall.receiveShadow = true;
+    scene.add(wall);
+  });
+  
+  const coverMat = new THREE.MeshStandardMaterial({ color: 0x3a3a5e, roughness: 0.5, metalness: 0.4 });
+  const coverGlowMat = new THREE.MeshBasicMaterial({ color: 0x4466aa, transparent: true, opacity: 0.3 });
+  
+  // More cover for bigger map
+  const coverConfigs = [
+    // Inner ring
+    { pos: [-20, 2, -20], size: [5, 4, 5] },
+    { pos: [20, 2, -20], size: [5, 4, 5] },
+    { pos: [-20, 2, 20], size: [5, 4, 5] },
+    { pos: [20, 2, 20], size: [5, 4, 5] },
+    // Outer ring
+    { pos: [-50, 2, -50], size: [6, 4, 6] },
+    { pos: [50, 2, -50], size: [6, 4, 6] },
+    { pos: [-50, 2, 50], size: [6, 4, 6] },
+    { pos: [50, 2, 50], size: [6, 4, 6] },
+    // Cardinal walls
+    { pos: [0, 3, -60], size: [12, 6, 3] },
+    { pos: [0, 3, 60], size: [12, 6, 3] },
+    { pos: [-60, 3, 0], size: [3, 6, 12] },
+    { pos: [60, 3, 0], size: [3, 6, 12] },
+    // Middle cover
+    { pos: [-35, 1.5, 0], size: [4, 3, 8] },
+    { pos: [35, 1.5, 0], size: [4, 3, 8] },
+    { pos: [0, 1.5, -35], size: [8, 3, 4] },
+    { pos: [0, 1.5, 35], size: [8, 3, 4] },
+    // Diagonal
+    { pos: [-70, 2, -30], size: [5, 4, 5] },
+    { pos: [70, 2, -30], size: [5, 4, 5] },
+    { pos: [-70, 2, 30], size: [5, 4, 5] },
+    { pos: [70, 2, 30], size: [5, 4, 5] },
+    { pos: [-30, 2, -70], size: [5, 4, 5] },
+    { pos: [30, 2, -70], size: [5, 4, 5] },
+    { pos: [-30, 2, 70], size: [5, 4, 5] },
+    { pos: [30, 2, 70], size: [5, 4, 5] },
+    // Scattered small
+    { pos: [-10, 1, -45], size: [2, 2, 2] },
+    { pos: [10, 1, -45], size: [2, 2, 2] },
+    { pos: [-10, 1, 45], size: [2, 2, 2] },
+    { pos: [10, 1, 45], size: [2, 2, 2] },
+    { pos: [-45, 1, -10], size: [2, 2, 2] },
+    { pos: [-45, 1, 10], size: [2, 2, 2] },
+    { pos: [45, 1, -10], size: [2, 2, 2] },
+    { pos: [45, 1, 10], size: [2, 2, 2] },
+    // Central structure
+    { pos: [0, 4, 0], size: [10, 8, 10] },
+  ];
+  
+  coverConfigs.forEach(c => {
+    const geo = new THREE.BoxGeometry(...c.size);
+    const cover = new THREE.Mesh(geo, coverMat);
+    cover.position.set(...c.pos);
+    cover.castShadow = true;
+    cover.receiveShadow = true;
+    cover.userData.isCollider = true;
+    scene.add(cover);
+    
+    const glowGeo = new THREE.BoxGeometry(c.size[0] + 0.1, c.size[1] + 0.1, c.size[2] + 0.1);
+    const glow = new THREE.Mesh(glowGeo, coverGlowMat);
+    glow.position.copy(cover.position);
+    scene.add(glow);
+    
+    COVER_POSITIONS.push(new THREE.Vector3(...c.pos));
+  });
+}
+
+function initTransformerAI() {
+  // 32 input dimensions for richer observation
+  transformerAI = new ContinuousTransformerAI(32, 48, 4, 2);
+}
+
+// ============================================
+// GETH MODEL
+// ============================================
+
+function createGethModel(type = 'trooper') {
+  const geth = new THREE.Group();
+  
+  const metalColor = type === 'prime' ? 0x556677 : 0x3a4455;
+  const glowColor = 0xffffff;
+  const accentColor = type === 'prime' ? 0x66aaff : 0xaaccff;
+  
+  const metalMat = new THREE.MeshStandardMaterial({ 
+    color: metalColor, 
+    roughness: 0.3, 
+    metalness: 0.9,
+    emissive: 0x111122,
+    emissiveIntensity: 0.1
+  });
+  
+  const darkMetalMat = new THREE.MeshStandardMaterial({ 
+    color: 0x222233, 
+    roughness: 0.4, 
+    metalness: 0.8 
+  });
+  
+  const glowMat = new THREE.MeshBasicMaterial({ 
+    color: glowColor,
+    transparent: true,
+    opacity: 0.95
+  });
+  
+  const softGlowMat = new THREE.MeshBasicMaterial({ 
+    color: accentColor,
+    transparent: true,
+    opacity: 0.4
+  });
+  
+  const scale = type === 'prime' ? 1.4 : 1.0;
+  
+  // Torso
+  const torsoGeo = new THREE.BoxGeometry(0.6 * scale, 0.8 * scale, 0.35 * scale);
+  const torso = new THREE.Mesh(torsoGeo, metalMat);
+  torso.position.y = 1.1 * scale;
+  torso.rotation.x = 0.15;
+  torso.castShadow = true;
+  geth.add(torso);
+  
+  const chestGeo = new THREE.BoxGeometry(0.4 * scale, 0.5 * scale, 0.1 * scale);
+  const chest = new THREE.Mesh(chestGeo, darkMetalMat);
+  chest.position.set(0, 1.15 * scale, 0.18 * scale);
+  geth.add(chest);
+  
+  // Neck
+  const neckGeo = new THREE.CylinderGeometry(0.08 * scale, 0.12 * scale, 0.25 * scale, 6);
+  const neck = new THREE.Mesh(neckGeo, darkMetalMat);
+  neck.position.y = 1.6 * scale;
+  geth.add(neck);
+  
+  // Head - flashlight
+  const headGroup = new THREE.Group();
+  
+  const headBackGeo = new THREE.BoxGeometry(0.25 * scale, 0.3 * scale, 0.4 * scale);
+  const headBack = new THREE.Mesh(headBackGeo, metalMat);
+  headBack.position.z = -0.1 * scale;
+  headBack.castShadow = true;
+  headGroup.add(headBack);
+  
+  const facePlateGeo = new THREE.BoxGeometry(0.28 * scale, 0.35 * scale, 0.15 * scale);
+  const facePlate = new THREE.Mesh(facePlateGeo, darkMetalMat);
+  facePlate.position.z = 0.15 * scale;
+  headGroup.add(facePlate);
+  
+  const eyeGeo = new THREE.CircleGeometry(0.1 * scale, 16);
+  const eye = new THREE.Mesh(eyeGeo, glowMat);
+  eye.position.z = 0.23 * scale;
+  headGroup.add(eye);
+  
+  const eyeRingGeo = new THREE.RingGeometry(0.1 * scale, 0.14 * scale, 16);
+  const eyeRing = new THREE.Mesh(eyeRingGeo, softGlowMat);
+  eyeRing.position.z = 0.22 * scale;
+  headGroup.add(eyeRing);
+  
+  const eyeHousingGeo = new THREE.CylinderGeometry(0.16 * scale, 0.12 * scale, 0.1 * scale, 8);
+  const eyeHousing = new THREE.Mesh(eyeHousingGeo, metalMat);
+  eyeHousing.rotation.x = Math.PI / 2;
+  eyeHousing.position.z = 0.18 * scale;
+  headGroup.add(eyeHousing);
+  
+  const finGeo = new THREE.BoxGeometry(0.04 * scale, 0.15 * scale, 0.25 * scale);
+  [-1, 1].forEach(side => {
+    const fin = new THREE.Mesh(finGeo, metalMat);
+    fin.position.set(side * 0.18 * scale, 0.1 * scale, -0.05 * scale);
+    fin.rotation.z = side * 0.2;
+    headGroup.add(fin);
+  });
+  
+  const crestGeo = new THREE.BoxGeometry(0.08 * scale, 0.12 * scale, 0.3 * scale);
+  const crest = new THREE.Mesh(crestGeo, metalMat);
+  crest.position.y = 0.2 * scale;
+  crest.position.z = -0.05 * scale;
+  headGroup.add(crest);
+  
+  headGroup.position.y = 1.85 * scale;
+  headGroup.rotation.x = -0.1;
+  geth.add(headGroup);
+  
+  // Arms
+  [-1, 1].forEach(side => {
+    const armGroup = new THREE.Group();
+    
+    const shoulderGeo = new THREE.SphereGeometry(0.1 * scale, 8, 8);
+    const shoulder = new THREE.Mesh(shoulderGeo, metalMat);
+    armGroup.add(shoulder);
+    
+    const upperArmGeo = new THREE.CylinderGeometry(0.05 * scale, 0.06 * scale, 0.4 * scale, 6);
+    const upperArm = new THREE.Mesh(upperArmGeo, metalMat);
+    upperArm.position.y = -0.2 * scale;
+    upperArm.castShadow = true;
+    armGroup.add(upperArm);
+    
+    const elbowGeo = new THREE.SphereGeometry(0.06 * scale, 6, 6);
+    const elbow = new THREE.Mesh(elbowGeo, darkMetalMat);
+    elbow.position.y = -0.4 * scale;
+    armGroup.add(elbow);
+    
+    const lowerArmGeo = new THREE.CylinderGeometry(0.04 * scale, 0.05 * scale, 0.35 * scale, 6);
+    const lowerArm = new THREE.Mesh(lowerArmGeo, metalMat);
+    lowerArm.position.y = -0.6 * scale;
+    lowerArm.castShadow = true;
+    armGroup.add(lowerArm);
+    
+    const handGeo = new THREE.BoxGeometry(0.08 * scale, 0.12 * scale, 0.06 * scale);
+    const hand = new THREE.Mesh(handGeo, darkMetalMat);
+    hand.position.y = -0.8 * scale;
+    armGroup.add(hand);
+    
+    armGroup.position.set(side * 0.4 * scale, 1.3 * scale, 0);
+    armGroup.rotation.z = side * 0.15;
+    armGroup.rotation.x = 0.3;
+    geth.add(armGroup);
+  });
+  
+  // Legs
+  [-1, 1].forEach(side => {
+    const legGroup = new THREE.Group();
+    
+    const hipGeo = new THREE.SphereGeometry(0.1 * scale, 8, 8);
+    const hip = new THREE.Mesh(hipGeo, metalMat);
+    legGroup.add(hip);
+    
+    const upperLegGeo = new THREE.CylinderGeometry(0.06 * scale, 0.05 * scale, 0.45 * scale, 6);
+    const upperLeg = new THREE.Mesh(upperLegGeo, metalMat);
+    upperLeg.position.y = -0.25 * scale;
+    upperLeg.castShadow = true;
+    legGroup.add(upperLeg);
+    
+    const kneeGeo = new THREE.SphereGeometry(0.07 * scale, 6, 6);
+    const knee = new THREE.Mesh(kneeGeo, darkMetalMat);
+    knee.position.y = -0.5 * scale;
+    knee.position.z = 0.05 * scale;
+    legGroup.add(knee);
+    
+    const lowerLegGeo = new THREE.CylinderGeometry(0.04 * scale, 0.05 * scale, 0.4 * scale, 6);
+    const lowerLeg = new THREE.Mesh(lowerLegGeo, metalMat);
+    lowerLeg.position.y = -0.75 * scale;
+    lowerLeg.position.z = -0.08 * scale;
+    lowerLeg.rotation.x = 0.3;
+    lowerLeg.castShadow = true;
+    legGroup.add(lowerLeg);
+    
+    const footGeo = new THREE.BoxGeometry(0.08 * scale, 0.04 * scale, 0.2 * scale);
+    const foot = new THREE.Mesh(footGeo, darkMetalMat);
+    foot.position.y = -0.98 * scale;
+    foot.position.z = 0.05 * scale;
+    legGroup.add(foot);
+    
+    legGroup.position.set(side * 0.2 * scale, 0.7 * scale, 0);
+    geth.add(legGroup);
+  });
+  
+  // Backpack
+  const backpackGeo = new THREE.BoxGeometry(0.4 * scale, 0.5 * scale, 0.25 * scale);
+  const backpack = new THREE.Mesh(backpackGeo, metalMat);
+  backpack.position.set(0, 1.2 * scale, -0.25 * scale);
+  backpack.castShadow = true;
+  geth.add(backpack);
+  
+  for (let i = 0; i < 3; i++) {
+    const ventGeo = new THREE.BoxGeometry(0.3 * scale, 0.06 * scale, 0.05 * scale);
+    const vent = new THREE.Mesh(ventGeo, darkMetalMat);
+    vent.position.set(0, 1.0 * scale + i * 0.12 * scale, -0.38 * scale);
+    geth.add(vent);
+  }
+  
+  geth.userData.eye = eye;
+  geth.userData.eyeRing = eyeRing;
+  geth.userData.headGroup = headGroup;
+  
+  return geth;
+}
+
+function startGame() {
+  document.getElementById('main-menu').classList.add('hidden');
+  document.getElementById('game-over').classList.add('hidden');
+  
+  score = 0;
+  wave = 1;
+  PLAYER.health = PLAYER.maxHealth;
+  PLAYER.shield = PLAYER.maxShield;
+  PLAYER.clipAmmo = PLAYER.clipSize;
+  PLAYER.reserveAmmo = PLAYER.maxReserve;
+  PLAYER.isReloading = false;
+  
+  camera.position.set(0, 2, 0);
+  camera.rotation.set(0, 0, 0);
+  
+  enemies.forEach(e => scene.remove(e.mesh));
+  bullets.forEach(b => scene.remove(b.mesh));
+  enemies = [];
+  bullets = [];
+  
+  isPlaying = true;
+  renderer.domElement.requestPointerLock();
+  
+  spawnWave();
+  updateHUD();
+}
+
+function spawnWave() {
+  const baseEnemies = 5;
+  const enemyCount = baseEnemies + wave * 3; // More enemies for bigger map
+  enemiesRemaining = enemyCount;
+  
+  const announce = document.getElementById('wave-announce');
+  announce.textContent = `WAVE ${wave}`;
+  announce.style.opacity = 1;
+  setTimeout(() => announce.style.opacity = 0, 2000);
+  
+  for (let i = 0; i < enemyCount; i++) {
+    setTimeout(() => spawnEnemy(), i * 400);
+  }
+  
+  document.getElementById('wave-number').textContent = `WAVE ${wave}`;
+}
+
+function spawnEnemy() {
+  const isPrime = wave > 2 && Math.random() < 0.15;
+  const gethMesh = createGethModel(isPrime ? 'prime' : 'trooper');
+  
+  // Spawn from edges of bigger map
+  const side = Math.floor(Math.random() * 4);
+  const offset = (Math.random() - 0.5) * MAP_SIZE * 1.8;
+  
+  switch(side) {
+    case 0: gethMesh.position.set(offset, 0, -MAP_SIZE + 8); break;
+    case 1: gethMesh.position.set(offset, 0, MAP_SIZE - 8); break;
+    case 2: gethMesh.position.set(-MAP_SIZE + 8, 0, offset); break;
+    case 3: gethMesh.position.set(MAP_SIZE - 8, 0, offset); break;
+  }
+  
+  scene.add(gethMesh);
+  
+  const baseHealth = isPrime ? 150 : 50;
+  const enemy = {
+    mesh: gethMesh,
+    health: baseHealth + wave * 10,
+    maxHealth: baseHealth + wave * 10,
+    baseSpeed: (isPrime ? 0.04 : 0.05) + wave * 0.003,
+    damage: (isPrime ? 20 : 10) + wave * 2,
+    lastShot: 0,
+    fireRate: isPrime ? 1200 : (1800 - wave * 80),
+    lastAction: 0,
+    lastObs: null,
+    isPrime: isPrime,
+    eyePulse: 0,
+    // Continuous action state
+    currentMoveDir: new THREE.Vector3(),
+    currentAimOffset: new THREE.Vector2(),
+    wantsToFire: false
+  };
+  
+  enemies.push(enemy);
+}
+
+// Extended observation for continuous control
+function getEnemyObservation(enemy) {
+  const pos = enemy.mesh.position;
+  const playerPos = camera.position;
+  
+  const dx = playerPos.x - pos.x;
+  const dz = playerPos.z - pos.z;
+  const dist = Math.sqrt(dx * dx + dz * dz);
+  const angle = Math.atan2(dz, dx);
+  
+  const hasLOS = checkLineOfSight(pos, playerPos) ? 1 : 0;
+  
+  // Find nearest covers
+  let nearestCoverDist = 999;
+  let nearestCoverAngle = 0;
+  let secondCoverDist = 999;
+  let secondCoverAngle = 0;
+  
+  COVER_POSITIONS.forEach(c => {
+    const cd = pos.distanceTo(c);
+    if (cd < nearestCoverDist) {
+      secondCoverDist = nearestCoverDist;
+      secondCoverAngle = nearestCoverAngle;
+      nearestCoverDist = cd;
+      nearestCoverAngle = Math.atan2(c.z - pos.z, c.x - pos.x);
+    } else if (cd < secondCoverDist) {
+      secondCoverDist = cd;
+      secondCoverAngle = Math.atan2(c.z - pos.z, c.x - pos.x);
+    }
+  });
+  
+  const playerHealthNorm = PLAYER.health / PLAYER.maxHealth;
+  const playerShieldNorm = PLAYER.shield / PLAYER.maxShield;
+  const healthNorm = enemy.health / enemy.maxHealth;
+  const recentDamage = (Date.now() - PLAYER.lastDamage < 1000) ? 1 : 0;
+  
+  let alliesNearby = 0;
+  let avgAllyDirX = 0, avgAllyDirZ = 0;
+  enemies.forEach(e => {
+    if (e !== enemy) {
+      const d = e.mesh.position.distanceTo(pos);
+      if (d < 25) {
+        alliesNearby++;
+        avgAllyDirX += (e.mesh.position.x - pos.x) / (d + 1);
+        avgAllyDirZ += (e.mesh.position.z - pos.z) / (d + 1);
+      }
+    }
+  });
+  if (alliesNearby > 0) {
+    avgAllyDirX /= alliesNearby;
+    avgAllyDirZ /= alliesNearby;
+  }
+  
+  // 32 observation dimensions
+  return [
+    pos.x / MAP_SIZE,                    // 0: own x
+    pos.z / MAP_SIZE,                    // 1: own z
+    dx / MAP_SIZE,                       // 2: delta x to player
+    dz / MAP_SIZE,                       // 3: delta z to player
+    dist / MAP_SIZE,                     // 4: distance to player
+    Math.sin(angle),                     // 5: angle sin
+    Math.cos(angle),                     // 6: angle cos
+    hasLOS,                              // 7: line of sight
+    nearestCoverDist / MAP_SIZE,         // 8: nearest cover dist
+    Math.sin(nearestCoverAngle),         // 9: nearest cover angle sin
+    Math.cos(nearestCoverAngle),         // 10: nearest cover angle cos
+    secondCoverDist / MAP_SIZE,          // 11: second cover dist
+    Math.sin(secondCoverAngle),          // 12: second cover angle sin
+    Math.cos(secondCoverAngle),          // 13: second cover angle cos
+    playerHealthNorm,                    // 14: player health
+    playerShieldNorm,                    // 15: player shield
+    healthNorm,                          // 16: own health
+    recentDamage,                        // 17: recent damage
+    alliesNearby / 8,                    // 18: allies nearby
+    avgAllyDirX,                         // 19: avg ally direction x
+    avgAllyDirZ,                         // 20: avg ally direction z
+    wave / 15,                           // 21: wave
+    PLAYER.clipAmmo / PLAYER.clipSize,   // 22: player ammo
+    PLAYER.isReloading ? 1 : 0,          // 23: player reloading
+    enemy.currentMoveDir.x,              // 24: current move x
+    enemy.currentMoveDir.z,              // 25: current move z
+    enemy.currentAimOffset.x,            // 26: current aim x
+    enemy.currentAimOffset.y,            // 27: current aim y
+    (Date.now() - enemy.lastShot) / 2000,// 28: time since last shot
+    enemy.isPrime ? 1 : 0,               // 29: is prime
+    Math.sin(Date.now() * 0.001),        // 30: time signal
+    Math.random() * 0.5,                 // 31: exploration noise
+  ];
+}
+
+function updateEnemyAI(enemy, delta) {
+  const now = Date.now();
+  
+  // Animate eye
+  enemy.eyePulse += delta * 3;
+  if (enemy.mesh.userData.eye) {
+    const pulse = 0.9 + Math.sin(enemy.eyePulse) * 0.1;
+    enemy.mesh.userData.eye.scale.setScalar(pulse);
+  }
+  
+  // Update AI at interval
+  if (now - enemy.lastAction > AI_UPDATE_INTERVAL) {
+    enemy.lastAction = now;
+    
+    const obs = getEnemyObservation(enemy);
+    enemy.lastObs = obs;
+    
+    const { action, value, moveMean, aimMean, fireLogit } = transformerAI.act(obs);
+    
+    // Store action info for experience
+    enemy.lastActionData = { action, moveMean, aimMean, fireLogit };
+    
+    // Apply continuous movement direction
+    enemy.currentMoveDir.set(action.moveX, 0, action.moveZ);
+    
+    // Apply aim offset (for leading shots, etc)
+    enemy.currentAimOffset.set(action.aimX * 5, action.aimY * 2);
+    
+    // Fire decision
+    enemy.wantsToFire = action.fire;
+  }
+  
+  // Execute continuous movement
+  const pos = enemy.mesh.position;
+  const playerPos = camera.position;
+  
+  if (enemy.currentMoveDir.lengthSq() > 0.01) {
+    const moveSpeed = enemy.baseSpeed * delta * 60;
+    pos.x += enemy.currentMoveDir.x * moveSpeed;
+    pos.z += enemy.currentMoveDir.z * moveSpeed;
+  }
+  
+  // Keep in bounds
+  pos.x = Math.max(-MAP_SIZE + 3, Math.min(MAP_SIZE - 3, pos.x));
+  pos.z = Math.max(-MAP_SIZE + 3, Math.min(MAP_SIZE - 3, pos.z));
+  
+  // Face player (with some aim offset influence)
+  const lookTarget = new THREE.Vector3(
+    playerPos.x + enemy.currentAimOffset.x,
+    enemy.mesh.position.y,
+    playerPos.z
+  );
+  enemy.mesh.lookAt(lookTarget);
+  
+  // Combat with continuous aim
+  const dist = pos.distanceTo(playerPos);
+  if (dist < 60 && enemy.wantsToFire && checkLineOfSight(pos, playerPos)) {
+    if (now - enemy.lastShot > enemy.fireRate) {
+      enemy.lastShot = now;
+      enemyShoot(enemy);
+    }
+  }
+}
+
+function enemyShoot(enemy) {
+  const bulletGeo = new THREE.SphereGeometry(0.12, 8, 8);
+  const bulletMat = new THREE.MeshBasicMaterial({ color: enemy.isPrime ? 0x66aaff : 0xffffff });
+  const bullet = new THREE.Mesh(bulletGeo, bulletMat);
+  
+  bullet.position.copy(enemy.mesh.position);
+  bullet.position.y = 1.8;
+  
+  // Aim at player with learned offset
+  const targetPos = new THREE.Vector3(
+    camera.position.x + enemy.currentAimOffset.x,
+    camera.position.y + enemy.currentAimOffset.y,
+    camera.position.z
+  );
+  
+  const dir = new THREE.Vector3()
+    .subVectors(targetPos, bullet.position)
+    .normalize();
+  
+  // Small random spread
+  dir.x += (Math.random() - 0.5) * 0.08;
+  dir.y += (Math.random() - 0.5) * 0.08;
+  dir.z += (Math.random() - 0.5) * 0.08;
+  dir.normalize();
+  
+  scene.add(bullet);
+  bullets.push({
+    mesh: bullet,
+    velocity: dir.multiplyScalar(0.9),
+    isEnemy: true,
+    damage: enemy.damage,
+    enemy: enemy
+  });
+}
+
+function checkLineOfSight(from, to) {
+  const dir = new THREE.Vector3().subVectors(to, from).normalize();
+  const ray = new THREE.Raycaster(from, dir, 0.1, from.distanceTo(to));
+  
+  const colliders = scene.children.filter(c => c.userData && c.userData.isCollider);
+  const hits = ray.intersectObjects(colliders);
+  
+  return hits.length === 0;
+}
+
+function playerShoot() {
+  if (PLAYER.clipAmmo <= 0 || PLAYER.isReloading) return;
+  
+  const now = Date.now();
+  if (now - PLAYER.lastShot < PLAYER.fireRate) return;
+  
+  PLAYER.lastShot = now;
+  PLAYER.clipAmmo--;
+  
+  if (PLAYER.clipAmmo === 0 && PLAYER.reserveAmmo > 0) {
+    document.getElementById('reload-prompt').classList.add('visible');
+  }
+  
+  const bulletGeo = new THREE.SphereGeometry(0.08, 8, 8);
+  const bulletMat = new THREE.MeshBasicMaterial({ color: 0x66aaff });
+  const bullet = new THREE.Mesh(bulletGeo, bulletMat);
+  
+  bullet.position.copy(camera.position);
+  
+  const dir = new THREE.Vector3(0, 0, -1);
+  dir.applyQuaternion(camera.quaternion);
+  
+  scene.add(bullet);
+  bullets.push({
+    mesh: bullet,
+    velocity: dir.multiplyScalar(2.0), // Faster bullets for bigger map
+    isEnemy: false,
+    damage: PLAYER.damage
+  });
+  
+  updateHUD();
+}
+
+function startReload() {
+  if (PLAYER.isReloading) return;
+  if (PLAYER.clipAmmo === PLAYER.clipSize) return;
+  if (PLAYER.reserveAmmo <= 0) return;
+  
+  PLAYER.isReloading = true;
+  PLAYER.reloadStart = Date.now();
+  
+  document.getElementById('reload-bar').classList.add('active');
+  document.getElementById('reload-prompt').classList.remove('visible');
+}
+
+function updateReload() {
+  if (!PLAYER.isReloading) return;
+  
+  const elapsed = Date.now() - PLAYER.reloadStart;
+  const progress = Math.min(elapsed / PLAYER.reloadTime, 1);
+  
+  document.getElementById('reload-fill').style.width = `${progress * 100}%`;
+  
+  if (progress >= 1) {
+    const needed = PLAYER.clipSize - PLAYER.clipAmmo;
+    const available = Math.min(needed, PLAYER.reserveAmmo);
+    
+    PLAYER.clipAmmo += available;
+    PLAYER.reserveAmmo -= available;
+    PLAYER.isReloading = false;
+    
+    document.getElementById('reload-bar').classList.remove('active');
+    document.getElementById('reload-fill').style.width = '0%';
+    
+    updateHUD();
+  }
+}
+
+function updateBullets(delta) {
+  const toRemove = [];
+  
+  bullets.forEach((b, idx) => {
+    b.mesh.position.add(b.velocity);
+    
+    if (Math.abs(b.mesh.position.x) > MAP_SIZE + 10 || 
+        Math.abs(b.mesh.position.z) > MAP_SIZE + 10 ||
+        b.mesh.position.y < 0 || b.mesh.position.y > 30) {
+      toRemove.push(idx);
+      return;
+    }
+    
+    if (b.isEnemy) {
+      if (b.mesh.position.distanceTo(camera.position) < 1.2) {
+        damagePlayer(b.damage);
+        
+        // Reward for hitting player
+        if (b.enemy && b.enemy.lastObs && b.enemy.lastActionData) {
+          const ad = b.enemy.lastActionData;
+          transformerAI.storeExperience(
+            b.enemy.lastObs, ad.action, 8, false,
+            ad.moveMean, ad.aimMean, ad.fireLogit
+          );
+        }
+        
+        toRemove.push(idx);
+      }
+    } else {
+      enemies.forEach((e, eidx) => {
+        const headPos = e.mesh.position.clone();
+        headPos.y = 1.8;
+        
+        if (b.mesh.position.distanceTo(e.mesh.position) < 1.2 ||
+            b.mesh.position.distanceTo(headPos) < 1) {
+          e.health -= b.damage;
+          
+          // Penalty for getting hit
+          if (e.lastObs && e.lastActionData) {
+            const ad = e.lastActionData;
+            transformerAI.storeExperience(
+              e.lastObs, ad.action, -4, false,
+              ad.moveMean, ad.aimMean, ad.fireLogit
+            );
+          }
+          
+          if (e.health <= 0) {
+            killEnemy(e, eidx);
+          }
+          
+          toRemove.push(idx);
+        }
+      });
+    }
+  });
+  
+  toRemove.sort((a, b) => b - a).forEach(idx => {
+    scene.remove(bullets[idx].mesh);
+    bullets.splice(idx, 1);
+  });
+}
+
+function killEnemy(enemy, index) {
+  scene.remove(enemy.mesh);
+  enemies.splice(index, 1);
+  
+  const points = enemy.isPrime ? 250 : 100;
+  score += points * wave;
+  enemiesRemaining--;
+  
+  // Death penalty
+  if (enemy.lastObs && enemy.lastActionData) {
+    const ad = enemy.lastActionData;
+    transformerAI.storeExperience(
+      enemy.lastObs, ad.action, -15, true,
+      ad.moveMean, ad.aimMean, ad.fireLogit
+    );
+  }
+  
+  const name = enemy.isPrime ? 'GETH PRIME' : 'GETH TROOPER';
+  addKillFeed(`${name} TERMINATED [+${points * wave}]`);
+  
+  if (enemies.length === 0) {
+    wave++;
+    setTimeout(spawnWave, 3000);
+  }
+  
+  updateHUD();
+}
+
+function damagePlayer(amount) {
+  PLAYER.lastDamage = Date.now();
+  
+  if (PLAYER.shield > 0) {
+    PLAYER.shield = Math.max(0, PLAYER.shield - amount);
+  } else {
+    PLAYER.health = Math.max(0, PLAYER.health - amount);
+  }
+  
+  document.getElementById('damage-overlay').style.opacity = 0.5;
+  setTimeout(() => document.getElementById('damage-overlay').style.opacity = 0, 100);
+  
+  if (PLAYER.health <= 0) {
+    gameOver();
+  }
+  
+  updateHUD();
+}
+
+function gameOver() {
+  isPlaying = false;
+  document.exitPointerLock();
+  
+  document.getElementById('game-over').classList.remove('hidden');
+  document.getElementById('final-score').textContent = score;
+  document.getElementById('final-waves').textContent = wave - 1;
+}
+
+function addKillFeed(text) {
+  const feed = document.getElementById('kill-feed');
+  const entry = document.createElement('div');
+  entry.className = 'kill-entry';
+  entry.textContent = text;
+  feed.appendChild(entry);
+  
+  setTimeout(() => entry.remove(), 3000);
+}
+
+let pitch = 0, yaw = 0;
+
+function onMouseMove(e) {
+  if (!isPlaying || document.pointerLockElement !== renderer.domElement) return;
+  
+  yaw -= e.movementX * 0.002;
+  pitch -= e.movementY * 0.002;
+  pitch = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, pitch));
+  
+  camera.rotation.order = 'YXZ';
+  camera.rotation.y = yaw;
+  camera.rotation.x = pitch;
+}
+
+function updatePlayer(delta) {
+  const speed = keys['ShiftLeft'] ? PLAYER.sprintSpeed : PLAYER.speed;
+  const moveDir = new THREE.Vector3();
+  
+  if (keys['KeyW']) moveDir.z -= 1;
+  if (keys['KeyS']) moveDir.z += 1;
+  if (keys['KeyA']) moveDir.x -= 1;
+  if (keys['KeyD']) moveDir.x += 1;
+  
+  if (moveDir.lengthSq() > 0) {
+    moveDir.normalize();
+    moveDir.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+    camera.position.add(moveDir.multiplyScalar(speed * delta * 60));
+  }
+  
+  camera.position.x = Math.max(-MAP_SIZE + 3, Math.min(MAP_SIZE - 3, camera.position.x));
+  camera.position.z = Math.max(-MAP_SIZE + 3, Math.min(MAP_SIZE - 3, camera.position.z));
+  camera.position.y = 2;
+  
+  if (keys['KeyR']) {
+    startReload();
+  }
+  
+  updateReload();
+  
+  if (mouseDown && !PLAYER.isReloading) {
+    playerShoot();
+  }
+  
+  if (Date.now() - PLAYER.lastDamage > PLAYER.shieldRegenDelay) {
+    PLAYER.shield = Math.min(PLAYER.maxShield, PLAYER.shield + 0.5);
+    updateHUD();
+  }
+}
+
+function updateHUD() {
+  document.getElementById('health-fill').style.width = `${(PLAYER.health / PLAYER.maxHealth) * 100}%`;
+  document.getElementById('shield-fill').style.width = `${(PLAYER.shield / PLAYER.maxShield) * 100}%`;
+  document.getElementById('ammo-clip').textContent = PLAYER.clipAmmo;
+  document.getElementById('ammo-reserve').textContent = PLAYER.reserveAmmo;
+  document.getElementById('hostile-num').textContent = enemies.length;
+  document.getElementById('score-value').textContent = score.toLocaleString();
+  
+  const reloadPrompt = document.getElementById('reload-prompt');
+  if (PLAYER.clipAmmo <= 5 && PLAYER.clipAmmo > 0 && PLAYER.reserveAmmo > 0 && !PLAYER.isReloading) {
+    reloadPrompt.classList.add('visible');
+  } else if (PLAYER.clipAmmo > 5 || PLAYER.isReloading) {
+    reloadPrompt.classList.remove('visible');
+  }
+  
+  const aiStats = transformerAI.getActivations();
+  document.getElementById('epoch-num').textContent = aiStats.epoch;
+  document.getElementById('loss-val').textContent = aiStats.avgLoss.toFixed(3);
+  
+  // Show continuous outputs
+  document.getElementById('nn-move').textContent = 
+    `${aiStats.lastOutput.move[0].toFixed(2)}, ${aiStats.lastOutput.move[1].toFixed(2)}`;
+  document.getElementById('nn-aim').textContent = 
+    `${aiStats.lastOutput.aim[0].toFixed(2)}, ${aiStats.lastOutput.aim[1].toFixed(2)}`;
+  document.getElementById('nn-fire').textContent = aiStats.lastOutput.fire.toFixed(2);
+}
+
+function updateMinimap() {
+  const canvas = document.getElementById('minimap');
+  const ctx = canvas.getContext('2d');
+  
+  canvas.width = 180;
+  canvas.height = 180;
+  
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+  ctx.fillRect(0, 0, 180, 180);
+  
+  const scale = 180 / (MAP_SIZE * 2);
+  const cx = 90, cy = 90;
+  
+  ctx.fillStyle = 'rgba(50, 50, 80, 0.6)';
+  COVER_POSITIONS.forEach(c => {
+    ctx.fillRect(cx + c.x * scale - 2, cy + c.z * scale - 2, 4, 4);
+  });
+  
+  enemies.forEach(e => {
+    ctx.fillStyle = e.isPrime ? '#66aaff' : '#ffffff';
+    ctx.beginPath();
+    ctx.arc(cx + e.mesh.position.x * scale, cy + e.mesh.position.z * scale, e.isPrime ? 3 : 2, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Show move direction
+    if (e.currentMoveDir.lengthSq() > 0.1) {
+      ctx.strokeStyle = ctx.fillStyle;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cx + e.mesh.position.x * scale, cy + e.mesh.position.z * scale);
+      ctx.lineTo(
+        cx + e.mesh.position.x * scale + e.currentMoveDir.x * 8,
+        cy + e.mesh.position.z * scale + e.currentMoveDir.z * 8
+      );
+      ctx.stroke();
+    }
+  });
+  
+  ctx.fillStyle = '#44ff44';
+  ctx.beginPath();
+  ctx.arc(cx + camera.position.x * scale, cy + camera.position.z * scale, 4, 0, Math.PI * 2);
+  ctx.fill();
+  
+  ctx.strokeStyle = '#44ff44';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cx + camera.position.x * scale, cy + camera.position.z * scale);
+  const dirLen = 12;
+  ctx.lineTo(
+    cx + camera.position.x * scale - Math.sin(yaw) * dirLen,
+    cy + camera.position.z * scale - Math.cos(yaw) * dirLen
+  );
+  ctx.stroke();
+}
+
+function drawNNVisualization() {
+  const canvas = document.getElementById('nn-canvas');
+  const ctx = canvas.getContext('2d');
+  
+  canvas.width = 220;
+  canvas.height = 120;
+  
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+  ctx.fillRect(0, 0, 220, 120);
+  
+  // Show network with continuous outputs
+  const layers = [8, 12, 12, 5]; // Input summary, 2 hidden, outputs (moveX, moveZ, aimX, aimY, fire)
+  const colors = ['#3366ff', '#6699ff', '#99ccff', '#ffffff'];
+  const outputLabels = ['Mx', 'Mz', 'Ax', 'Ay', 'F'];
+  
+  layers.forEach((nodes, layer) => {
+    const x = 30 + layer * 50;
+    const startY = (120 - nodes * 9) / 2;
+    
+    for (let i = 0; i < nodes; i++) {
+      const y = startY + i * 9 + 4;
+      
+      let brightness = Math.random();
+      
+      // Show actual output values for last layer
+      if (layer === 3) {
+        const out = transformerAI.lastOutput;
+        const vals = [out.move[0], out.move[1], out.aim[0], out.aim[1], out.fire];
+        brightness = Math.abs(vals[i]);
+      }
+      
+      ctx.fillStyle = colors[layer];
+      ctx.globalAlpha = 0.3 + brightness * 0.7;
+      ctx.beginPath();
+      ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Output labels
+      if (layer === 3) {
+        ctx.globalAlpha = 0.7;
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '8px monospace';
+        ctx.fillText(outputLabels[i], x + 8, y + 3);
+      }
+      
+      if (layer < layers.length - 1) {
+        const nextNodes = layers[layer + 1];
+        const nextStartY = (120 - nextNodes * 9) / 2;
+        
+        ctx.strokeStyle = colors[layer];
+        ctx.globalAlpha = 0.08;
+        ctx.lineWidth = 0.5;
+        
+        for (let j = 0; j < nextNodes; j++) {
+          ctx.beginPath();
+          ctx.moveTo(x + 4, y);
+          ctx.lineTo(30 + (layer + 1) * 50 - 4, nextStartY + j * 9 + 4);
+          ctx.stroke();
+        }
+      }
+    }
+  });
+  
+  ctx.globalAlpha = 1;
+}
+
+let lastLearnTime = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+  
+  const delta = clock.getDelta();
+  const now = Date.now();
+  
+  if (isPlaying) {
+    updatePlayer(delta);
+    
+    enemies.forEach(e => updateEnemyAI(e, delta));
+    updateBullets(delta);
+    
+    if (now - lastLearnTime > 800) {
+      lastLearnTime = now;
+      transformerAI.learn();
+      updateHUD();
+    }
+    
+    updateMinimap();
+    drawNNVisualization();
+  }
+  
+  renderer.render(scene, camera);
+}
+
+init();
+</script>
+</body>
+</html>

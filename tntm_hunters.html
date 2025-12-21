@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TNTM Hunters</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            background: #0a0a12;
+            color: #e0e0e0;
+            font-family: 'Courier New', monospace;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            user-select: none;
+        }
+        
+        h1 {
+            color: #ff6666;
+            text-shadow: 0 0 20px #ff666655;
+            margin-bottom: 5px;
+            font-size: 2rem;
+            letter-spacing: 3px;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 15px;
+            font-size: 0.8rem;
+        }
+        
+        .game-wrapper {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        canvas {
+            border: 2px solid #1a1a2e;
+            border-radius: 10px;
+            background: #05050a;
+        }
+        
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 280px;
+        }
+        
+        .panel {
+            background: linear-gradient(145deg, #12121a, #0a0a10);
+            border: 2px solid #1a1a2e;
+            border-radius: 10px;
+            padding: 15px;
+        }
+        
+        .panel h3 {
+            color: #00aaff;
+            margin-bottom: 10px;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        
+        .stat {
+            background: #0a0a10;
+            padding: 10px;
+            border-radius: 6px;
+            text-align: center;
+        }
+        
+        .stat-label {
+            font-size: 0.65rem;
+            color: #666;
+            text-transform: uppercase;
+        }
+        
+        .stat-value {
+            font-size: 1.3rem;
+            font-weight: bold;
+            color: #00ffaa;
+        }
+        
+        .memory-display {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 3px;
+        }
+        
+        .mem-slot {
+            width: 28px;
+            height: 28px;
+            border-radius: 4px;
+            background: #1a1a2e;
+            position: relative;
+        }
+        
+        .mem-slot .weight {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #00ffaa;
+            border-radius: 0 0 4px 4px;
+            transition: height 0.1s;
+        }
+        
+        .mem-slot.write {
+            border: 2px solid #ff6666;
+        }
+        
+        .mem-slot.read {
+            border: 2px solid #00ffaa;
+        }
+        
+        .hunter-select {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        
+        .hunter-btn {
+            flex: 1;
+            padding: 8px;
+            background: #1a1a2e;
+            border: 2px solid #333;
+            border-radius: 6px;
+            color: #888;
+            font-family: inherit;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .hunter-btn.active {
+            border-color: #ff6666;
+            color: #ff6666;
+            background: #2a1a1a;
+        }
+        
+        .hunter-btn:hover {
+            border-color: #ff6666;
+        }
+        
+        .controls {
+            font-size: 0.7rem;
+            color: #555;
+            line-height: 1.8;
+        }
+        
+        .controls kbd {
+            background: #1a1a2e;
+            padding: 2px 6px;
+            border-radius: 3px;
+            color: #00ffaa;
+        }
+        
+        .hunter-state {
+            font-size: 0.75rem;
+            color: #888;
+            margin-top: 10px;
+            padding: 10px;
+            background: #0a0a10;
+            border-radius: 6px;
+        }
+        
+        .hunter-state .label {
+            color: #555;
+        }
+        
+        .hunter-state .value {
+            color: #ffaa00;
+        }
+        
+        .game-over-overlay {
+            position: fixed;
+            inset: 0;
+            background: #0a0a12ee;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s;
+            z-index: 100;
+        }
+        
+        .game-over-overlay.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+        
+        .game-over-overlay h2 {
+            font-size: 2.5rem;
+            color: #ff4466;
+            margin-bottom: 15px;
+        }
+        
+        .game-over-overlay .score {
+            font-size: 1.5rem;
+            color: #ffaa00;
+            margin-bottom: 25px;
+        }
+        
+        button {
+            background: linear-gradient(145deg, #00ffaa, #00aa77);
+            border: none;
+            padding: 12px 30px;
+            font-size: 1rem;
+            font-family: inherit;
+            font-weight: bold;
+            color: #0a0a12;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 25px #00ffaa66;
+        }
+        
+        .legend {
+            display: flex;
+            gap: 15px;
+            font-size: 0.7rem;
+            color: #666;
+            margin-top: 10px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body>
+    <h1>TNTM HUNTERS</h1>
+    <div class="subtitle">Neural Turing Machine-controlled predators — watch their memory as they hunt you</div>
+    
+    <div class="game-wrapper">
+        <div>
+            <canvas id="game" width="600" height="600"></canvas>
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: #00ff88;"></div>
+                    <span>You</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: #ff4466;"></div>
+                    <span>Hunters</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: #ffaa00;"></div>
+                    <span>Points</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: #00aaff;"></div>
+                    <span>Decoy</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sidebar">
+            <div class="panel">
+                <h3>📊 Stats</h3>
+                <div class="stats">
+                    <div class="stat">
+                        <div class="stat-label">Score</div>
+                        <div id="score" class="stat-value">0</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">Time</div>
+                        <div id="time" class="stat-value">0s</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">Decoys</div>
+                        <div id="decoys" class="stat-value" style="color: #00aaff;">3</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">Hunters</div>
+                        <div id="hunters" class="stat-value" style="color: #ff6666;">2</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="panel">
+                <h3>🧠 Hunter Memory</h3>
+                <div class="hunter-select">
+                    <button class="hunter-btn active" data-hunter="0">Hunter 1</button>
+                    <button class="hunter-btn" data-hunter="1">Hunter 2</button>
+                </div>
+                <div id="memory-display" class="memory-display"></div>
+                <div id="hunter-state" class="hunter-state">
+                    <div><span class="label">Mode:</span> <span id="h-mode" class="value">SEARCHING</span></div>
+                    <div><span class="label">β (sharpness):</span> <span id="h-beta" class="value">1.0</span></div>
+                    <div><span class="label">Last seen:</span> <span id="h-lastseen" class="value">—</span></div>
+                    <div><span class="label">Confidence:</span> <span id="h-conf" class="value">0%</span></div>
+                </div>
+            </div>
+            
+            <div class="panel">
+                <h3>🎮 Controls</h3>
+                <div class="controls">
+                    <kbd>WASD</kbd> or <kbd>Arrows</kbd> Move<br>
+                    <kbd>SPACE</kbd> Drop decoy (confuses TNTM)<br>
+                    <kbd>SHIFT</kbd> Sprint (limited)<br><br>
+                    <em>Hunters write your position to memory and use content-addressing to predict where you'll go!</em>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="game-over" class="game-over-overlay">
+        <h2>CAUGHT!</h2>
+        <div id="final-score" class="score">Score: 0</div>
+        <button onclick="startGame()">TRY AGAIN</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+        const W = canvas.width;
+        const H = canvas.height;
+        
+        // ===========================================
+        // TNTM IMPLEMENTATION (simplified for game)
+        // ===========================================
+        
+        class TNTMBrain {
+            constructor(memorySlots = 32, memoryDim = 4) {
+                this.nSlots = memorySlots;
+                this.dim = memoryDim;
+                
+                // External memory bank
+                this.memory = [];
+                for (let i = 0; i < memorySlots; i++) {
+                    this.memory.push(new Array(memoryDim).fill(0));
+                }
+                
+                // Read/write head weights
+                this.readWeights = new Array(memorySlots).fill(1 / memorySlots);
+                this.writeWeights = new Array(memorySlots).fill(1 / memorySlots);
+                
+                // Attention parameters
+                this.sharpness = 1.0; // β
+                this.writeHead = 0;
+                
+                // State
+                this.lastReadVector = new Array(memoryDim).fill(0);
+                this.confidence = 0;
+            }
+            
+            // Content-based addressing (cosine similarity)
+            contentAddress(query) {
+                const weights = [];
+                
+                for (let i = 0; i < this.nSlots; i++) {
+                    const mem = this.memory[i];
+                    
+                    // Cosine similarity
+                    let dot = 0, normQ = 0, normM = 0;
+                    for (let j = 0; j < this.dim; j++) {
+                        dot += query[j] * mem[j];
+                        normQ += query[j] * query[j];
+                        normM += mem[j] * mem[j];
+                    }
+                    
+                    normQ = Math.sqrt(normQ) + 1e-8;
+                    normM = Math.sqrt(normM) + 1e-8;
+                    
+                    const similarity = dot / (normQ * normM);
+                    weights.push(similarity);
+                }
+                
+                // Softmax with sharpness
+                return this.softmax(weights, this.sharpness);
+            }
+            
+            softmax(logits, temp = 1.0) {
+                const max = Math.max(...logits);
+                const exps = logits.map(l => Math.exp((l - max) * temp));
+                const sum = exps.reduce((a, b) => a + b, 0);
+                return exps.map(e => e / sum);
+            }
+            
+            // Write to memory
+            write(vector, erase = 0.1) {
+                // Move write head forward (sequential addressing)
+                this.writeHead = (this.writeHead + 1) % this.nSlots;
+                
+                // Generate write weights (location-based, focused on write head)
+                this.writeWeights = [];
+                for (let i = 0; i < this.nSlots; i++) {
+                    let dist = Math.abs(i - this.writeHead);
+                    dist = Math.min(dist, this.nSlots - dist);
+                    this.writeWeights.push(Math.exp(-dist * dist / 2));
+                }
+                const sum = this.writeWeights.reduce((a, b) => a + b, 0);
+                this.writeWeights = this.writeWeights.map(w => w / sum);
+                
+                // Erase then add
+                for (let i = 0; i < this.nSlots; i++) {
+                    const w = this.writeWeights[i];
+                    for (let j = 0; j < this.dim; j++) {
+                        // Erase
+                        this.memory[i][j] *= (1 - w * erase);
+                        // Add
+                        this.memory[i][j] += w * vector[j];
+                    }
+                }
+            }
+            
+            // Read from memory using content addressing
+            read(query) {
+                this.readWeights = this.contentAddress(query);
+                
+                // Weighted sum of memory contents
+                this.lastReadVector = new Array(this.dim).fill(0);
+                for (let i = 0; i < this.nSlots; i++) {
+                    for (let j = 0; j < this.dim; j++) {
+                        this.lastReadVector[j] += this.readWeights[i] * this.memory[i][j];
+                    }
+                }
+                
+                // Compute confidence (max attention weight)
+                this.confidence = Math.max(...this.readWeights);
+                
+                return this.lastReadVector;
+            }
+            
+            // Decay memory over time
+            decay(rate = 0.99) {
+                for (let i = 0; i < this.nSlots; i++) {
+                    for (let j = 0; j < this.dim; j++) {
+                        this.memory[i][j] *= rate;
+                    }
+                }
+            }
+        }
+        
+        // ===========================================
+        // GAME ENTITIES
+        // ===========================================
+        
+        class Player {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.radius = 15;
+                this.speed = 4;
+                this.sprintSpeed = 7;
+                this.stamina = 100;
+                this.maxStamina = 100;
+            }
+            
+            update(keys) {
+                let dx = 0, dy = 0;
+                
+                if (keys['w'] || keys['arrowup']) dy -= 1;
+                if (keys['s'] || keys['arrowdown']) dy += 1;
+                if (keys['a'] || keys['arrowleft']) dx -= 1;
+                if (keys['d'] || keys['arrowright']) dx += 1;
+                
+                // Normalize diagonal movement
+                if (dx !== 0 && dy !== 0) {
+                    dx *= 0.707;
+                    dy *= 0.707;
+                }
+                
+                // Sprint
+                let speed = this.speed;
+                if (keys['shift'] && this.stamina > 0) {
+                    speed = this.sprintSpeed;
+                    this.stamina -= 1;
+                } else {
+                    this.stamina = Math.min(this.maxStamina, this.stamina + 0.3);
+                }
+                
+                this.x += dx * speed;
+                this.y += dy * speed;
+                
+                // Bounds
+                this.x = Math.max(this.radius, Math.min(W - this.radius, this.x));
+                this.y = Math.max(this.radius, Math.min(H - this.radius, this.y));
+            }
+            
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#00ff88';
+                ctx.fill();
+                ctx.strokeStyle = '#00ffaa';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+                
+                // Stamina bar
+                const barWidth = 30;
+                const barHeight = 4;
+                ctx.fillStyle = '#333';
+                ctx.fillRect(this.x - barWidth/2, this.y - this.radius - 10, barWidth, barHeight);
+                ctx.fillStyle = '#00aaff';
+                ctx.fillRect(this.x - barWidth/2, this.y - this.radius - 10, barWidth * (this.stamina / this.maxStamina), barHeight);
+            }
+        }
+        
+        class Hunter {
+            constructor(x, y, id) {
+                this.x = x;
+                this.y = y;
+                this.id = id;
+                this.radius = 18;
+                this.speed = 2.5;
+                this.brain = new TNTMBrain(32, 4);
+                
+                // Behavior state
+                this.mode = 'SEARCHING';
+                this.targetX = x;
+                this.targetY = y;
+                this.lastSeenTime = 0;
+                this.searchAngle = Math.random() * Math.PI * 2;
+            }
+            
+            // Encode position as vector for memory
+            encodePosition(x, y, vx = 0, vy = 0) {
+                return [x / W, y / H, vx / 10, vy / 10];
+            }
+            
+            // Decode vector back to position
+            decodePosition(vec) {
+                return {
+                    x: vec[0] * W,
+                    y: vec[1] * H,
+                    vx: vec[2] * 10,
+                    vy: vec[3] * 10
+                };
+            }
+            
+            canSeePlayer(player, decoys) {
+                const dx = player.x - this.x;
+                const dy = player.y - this.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                // Vision range
+                if (dist > 250) return false;
+                
+                // Check if decoy is blocking (closer and in line of sight)
+                for (const decoy of decoys) {
+                    if (!decoy.active) continue;
+                    
+                    const ddx = decoy.x - this.x;
+                    const ddy = decoy.y - this.y;
+                    const decoyDist = Math.sqrt(ddx * ddx + ddy * ddy);
+                    
+                    if (decoyDist < dist) {
+                        // Decoy is closer - check if in similar direction
+                        const dot = (dx * ddx + dy * ddy) / (dist * decoyDist);
+                        if (dot > 0.9) {
+                            // Decoy is confusing the hunter!
+                            return false;
+                        }
+                    }
+                }
+                
+                return true;
+            }
+            
+            update(player, decoys, dt) {
+                const canSee = this.canSeePlayer(player, decoys);
+                
+                // Compute player velocity (for prediction)
+                const pvx = player.x - (player.prevX || player.x);
+                const pvy = player.y - (player.prevY || player.y);
+                
+                if (canSee) {
+                    // WRITE player position to memory
+                    const posVector = this.encodePosition(player.x, player.y, pvx, pvy);
+                    this.brain.write(posVector);
+                    
+                    this.mode = 'HUNTING';
+                    this.targetX = player.x;
+                    this.targetY = player.y;
+                    this.lastSeenTime = Date.now();
+                    
+                    // Increase sharpness when tracking
+                    this.brain.sharpness = Math.min(5, this.brain.sharpness + 0.1);
+                } else {
+                    // READ from memory to predict player location
+                    // Query with last known position
+                    const query = this.encodePosition(this.targetX, this.targetY, 0, 0);
+                    const prediction = this.brain.read(query);
+                    const decoded = this.decodePosition(prediction);
+                    
+                    // Predict future position using stored velocity
+                    this.targetX = decoded.x + decoded.vx * 20;
+                    this.targetY = decoded.y + decoded.vy * 20;
+                    
+                    // Clamp to bounds
+                    this.targetX = Math.max(0, Math.min(W, this.targetX));
+                    this.targetY = Math.max(0, Math.min(H, this.targetY));
+                    
+                    const timeSinceSeen = Date.now() - this.lastSeenTime;
+                    
+                    if (timeSinceSeen > 3000) {
+                        this.mode = 'SEARCHING';
+                        this.brain.sharpness = Math.max(1, this.brain.sharpness - 0.05);
+                    } else {
+                        this.mode = 'PREDICTING';
+                    }
+                }
+                
+                // Check for nearby decoys (they attract attention)
+                for (const decoy of decoys) {
+                    if (!decoy.active) continue;
+                    
+                    const ddx = decoy.x - this.x;
+                    const ddy = decoy.y - this.y;
+                    const dist = Math.sqrt(ddx * ddx + ddy * ddy);
+                    
+                    if (dist < 150) {
+                        // Decoy confuses the brain - write decoy position!
+                        const decoyVec = this.encodePosition(decoy.x, decoy.y, 0, 0);
+                        this.brain.write(decoyVec, 0.3);
+                        this.mode = 'CONFUSED';
+                    }
+                }
+                
+                // Move toward target
+                if (this.mode === 'SEARCHING') {
+                    // Random patrol
+                    this.searchAngle += (Math.random() - 0.5) * 0.2;
+                    this.targetX = this.x + Math.cos(this.searchAngle) * 100;
+                    this.targetY = this.y + Math.sin(this.searchAngle) * 100;
+                }
+                
+                const dx = this.targetX - this.x;
+                const dy = this.targetY - this.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                if (dist > 5) {
+                    const speed = this.mode === 'HUNTING' ? this.speed * 1.3 : this.speed;
+                    this.x += (dx / dist) * speed;
+                    this.y += (dy / dist) * speed;
+                }
+                
+                // Bounds
+                this.x = Math.max(this.radius, Math.min(W - this.radius, this.x));
+                this.y = Math.max(this.radius, Math.min(H - this.radius, this.y));
+                
+                // Memory decay
+                this.brain.decay(0.998);
+            }
+            
+            draw() {
+                // Vision cone (faint)
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y);
+                ctx.arc(this.x, this.y, 250, 0, Math.PI * 2);
+                ctx.fillStyle = this.mode === 'HUNTING' ? '#ff000008' : '#ffff0005';
+                ctx.fill();
+                
+                // Body
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                
+                const colors = {
+                    'SEARCHING': '#ff6666',
+                    'HUNTING': '#ff2222',
+                    'PREDICTING': '#ff8844',
+                    'CONFUSED': '#aa44ff'
+                };
+                
+                ctx.fillStyle = colors[this.mode] || '#ff6666';
+                ctx.fill();
+                ctx.strokeStyle = '#ff8888';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+                
+                // Eye (looks at target)
+                const angle = Math.atan2(this.targetY - this.y, this.targetX - this.x);
+                ctx.beginPath();
+                ctx.arc(
+                    this.x + Math.cos(angle) * 6,
+                    this.y + Math.sin(angle) * 6,
+                    5, 0, Math.PI * 2
+                );
+                ctx.fillStyle = '#fff';
+                ctx.fill();
+                
+                // Mode indicator
+                ctx.fillStyle = '#fff';
+                ctx.font = '10px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(this.mode, this.x, this.y - this.radius - 5);
+            }
+            
+            checkCollision(player) {
+                const dx = player.x - this.x;
+                const dy = player.y - this.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                return dist < (this.radius + player.radius);
+            }
+        }
+        
+        class Decoy {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.radius = 12;
+                this.active = true;
+                this.life = 5000; // 5 seconds
+                this.spawnTime = Date.now();
+            }
+            
+            update() {
+                if (Date.now() - this.spawnTime > this.life) {
+                    this.active = false;
+                }
+            }
+            
+            draw() {
+                if (!this.active) return;
+                
+                const alpha = 1 - (Date.now() - this.spawnTime) / this.life;
+                
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(0, 170, 255, ${alpha * 0.7})`;
+                ctx.fill();
+                ctx.strokeStyle = `rgba(0, 200, 255, ${alpha})`;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                // Pulse effect
+                const pulse = Math.sin(Date.now() / 100) * 5 + 10;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius + pulse, 0, Math.PI * 2);
+                ctx.strokeStyle = `rgba(0, 170, 255, ${alpha * 0.3})`;
+                ctx.stroke();
+            }
+        }
+        
+        class Pickup {
+            constructor() {
+                this.x = Math.random() * (W - 100) + 50;
+                this.y = Math.random() * (H - 100) + 50;
+                this.radius = 10;
+                this.value = 10;
+            }
+            
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffaa00';
+                ctx.fill();
+                ctx.strokeStyle = '#ffcc00';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+            
+            checkCollision(player) {
+                const dx = player.x - this.x;
+                const dy = player.y - this.y;
+                return Math.sqrt(dx * dx + dy * dy) < (this.radius + player.radius);
+            }
+        }
+        
+        // ===========================================
+        // GAME STATE
+        // ===========================================
+        
+        let player, hunters, decoys, pickups;
+        let score = 0;
+        let startTime = 0;
+        let gameOver = false;
+        let decoyCount = 3;
+        let selectedHunter = 0;
+        let keys = {};
+        
+        function startGame() {
+            player = new Player(W / 2, H / 2);
+            hunters = [
+                new Hunter(50, 50, 0),
+                new Hunter(W - 50, H - 50, 1)
+            ];
+            decoys = [];
+            pickups = [];
+            
+            for (let i = 0; i < 5; i++) {
+                pickups.push(new Pickup());
+            }
+            
+            score = 0;
+            startTime = Date.now();
+            gameOver = false;
+            decoyCount = 3;
+            
+            document.getElementById('game-over').classList.remove('active');
+            
+            // Initialize memory display
+            updateMemoryDisplay();
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        function endGame() {
+            gameOver = true;
+            document.getElementById('final-score').textContent = `Score: ${score} | Time: ${Math.floor((Date.now() - startTime) / 1000)}s`;
+            document.getElementById('game-over').classList.add('active');
+        }
+        
+        function spawnDecoy() {
+            if (decoyCount > 0) {
+                decoys.push(new Decoy(player.x, player.y));
+                decoyCount--;
+            }
+        }
+        
+        function updateMemoryDisplay() {
+            const display = document.getElementById('memory-display');
+            display.innerHTML = '';
+            
+            const hunter = hunters[selectedHunter];
+            if (!hunter) return;
+            
+            for (let i = 0; i < hunter.brain.nSlots; i++) {
+                const slot = document.createElement('div');
+                slot.className = 'mem-slot';
+                
+                // Check if this slot has write weight
+                if (hunter.brain.writeWeights[i] > 0.1) {
+                    slot.classList.add('write');
+                }
+                if (hunter.brain.readWeights[i] > 0.1) {
+                    slot.classList.add('read');
+                }
+                
+                const weight = document.createElement('div');
+                weight.className = 'weight';
+                
+                // Use memory magnitude as visual
+                const mem = hunter.brain.memory[i];
+                const mag = Math.sqrt(mem.reduce((a, b) => a + b * b, 0));
+                weight.style.height = `${Math.min(100, mag * 100)}%`;
+                
+                slot.appendChild(weight);
+                display.appendChild(slot);
+            }
+            
+            // Update hunter state display
+            document.getElementById('h-mode').textContent = hunter.mode;
+            document.getElementById('h-beta').textContent = hunter.brain.sharpness.toFixed(1);
+            document.getElementById('h-lastseen').textContent = 
+                hunter.lastSeenTime > 0 ? `${((Date.now() - hunter.lastSeenTime) / 1000).toFixed(1)}s ago` : '—';
+            document.getElementById('h-conf').textContent = `${(hunter.brain.confidence * 100).toFixed(0)}%`;
+        }
+        
+        function updateUI() {
+            document.getElementById('score').textContent = score;
+            document.getElementById('time').textContent = `${Math.floor((Date.now() - startTime) / 1000)}s`;
+            document.getElementById('decoys').textContent = decoyCount;
+            document.getElementById('hunters').textContent = hunters.length;
+            
+            updateMemoryDisplay();
+        }
+        
+        function gameLoop() {
+            if (gameOver) return;
+            
+            // Store previous position for velocity calculation
+            player.prevX = player.x;
+            player.prevY = player.y;
+            
+            // Update
+            player.update(keys);
+            
+            for (const hunter of hunters) {
+                hunter.update(player, decoys, 16);
+                
+                if (hunter.checkCollision(player)) {
+                    endGame();
+                    return;
+                }
+            }
+            
+            for (const decoy of decoys) {
+                decoy.update();
+            }
+            decoys = decoys.filter(d => d.active);
+            
+            // Pickup collection
+            for (let i = pickups.length - 1; i >= 0; i--) {
+                if (pickups[i].checkCollision(player)) {
+                    score += pickups[i].value;
+                    pickups.splice(i, 1);
+                    
+                    // Spawn new pickup
+                    pickups.push(new Pickup());
+                    
+                    // Every 50 points, add decoy
+                    if (score % 50 === 0) {
+                        decoyCount++;
+                    }
+                    
+                    // Every 100 points, speed up hunters
+                    if (score % 100 === 0 && hunters.length < 5) {
+                        hunters.push(new Hunter(
+                            Math.random() < 0.5 ? 30 : W - 30,
+                            Math.random() < 0.5 ? 30 : H - 30,
+                            hunters.length
+                        ));
+                    }
+                }
+            }
+            
+            // Draw
+            ctx.fillStyle = '#05050a';
+            ctx.fillRect(0, 0, W, H);
+            
+            // Grid
+            ctx.strokeStyle = '#111118';
+            ctx.lineWidth = 1;
+            for (let x = 0; x < W; x += 50) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, H);
+                ctx.stroke();
+            }
+            for (let y = 0; y < H; y += 50) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(W, y);
+                ctx.stroke();
+            }
+            
+            for (const pickup of pickups) {
+                pickup.draw();
+            }
+            
+            for (const decoy of decoys) {
+                decoy.draw();
+            }
+            
+            player.draw();
+            
+            for (const hunter of hunters) {
+                hunter.draw();
+            }
+            
+            updateUI();
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Input handling
+        document.addEventListener('keydown', (e) => {
+            keys[e.key.toLowerCase()] = true;
+            
+            if (e.key === ' ' && !gameOver) {
+                spawnDecoy();
+                e.preventDefault();
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            keys[e.key.toLowerCase()] = false;
+        });
+        
+        // Hunter selection
+        document.querySelectorAll('.hunter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.hunter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                selectedHunter = parseInt(btn.dataset.hunter);
+            });
+        });
+        
+        // Start
+        startGame();
+    </script>
+</body>
+</html>

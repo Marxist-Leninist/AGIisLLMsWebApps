@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Transformer Dogfight</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            background: #000; 
+            display: flex; 
+            flex-direction: column;
+            align-items: center; 
+            font-family: 'Courier New', monospace;
+            color: #0f0;
+            overflow: hidden;
+        }
+        #header {
+            padding: 8px;
+            text-align: center;
+            width: 100%;
+            background: #111;
+        }
+        h1 { color: #0ff; font-size: 1.3em; }
+        #container { position: relative; }
+        #hud {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 12px;
+            background: rgba(0,20,0,0.8);
+            padding: 8px;
+            border: 1px solid #0f0;
+        }
+        #controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 11px;
+            color: #888;
+            background: rgba(0,0,0,0.8);
+            padding: 8px;
+        }
+        #ai-panel {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            width: 250px;
+            background: rgba(0,20,0,0.85);
+            border: 1px solid #0f0;
+            padding: 8px;
+            font-size: 10px;
+        }
+        #score {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0,20,0,0.85);
+            border: 1px solid #0f0;
+            padding: 8px;
+            font-size: 11px;
+        }
+        canvas { display: block; background: #001; }
+    </style>
+</head>
+<body>
+    <div id="header"><h1>⚔️ TRANSFORMER DOGFIGHT ⚔️</h1></div>
+    <div id="container">
+        <canvas id="c" width="1000" height="600"></canvas>
+        <div id="hud">
+            <div style="color:#0ff">HP: <span id="hp">100</span></div>
+            <div>Alt: <span id="alt">200</span>m</div>
+            <div>Spd: <span id="spd">150</span></div>
+            <div>Hdg: <span id="hdg">0</span>°</div>
+        </div>
+        <div id="controls">W/S: Pitch | A/D: Turn<br>Q/E: Yaw | SPACE: Fire<br>SHIFT: Boost</div>
+        <div id="ai-panel">
+            <div style="color:#0ff">═ TRANSFORMER AI ═</div>
+            <div id="ai-info"></div>
+        </div>
+        <div id="score">
+            <div style="color:#0ff">═ SCORE ═</div>
+            <div style="color:#0f0">Allies: <span id="ally-k">0</span></div>
+            <div style="color:#f00">Enemies: <span id="enemy-k">0</span></div>
+        </div>
+    </div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+
+// Simple transformer brain
+class Brain {
+    constructor() {
+        this.w = new Array(50).fill(0).map(() => Math.random() - 0.5);
+        this.out = [0,0,0,0];
+    }
+    
+    think(inputs) {
+        this.out = [0, 0, 0, 0];
+        for (let o = 0; o < 4; o++) {
+            for (let i = 0; i < inputs.length && i < 10; i++) {
+                this.out[o] += (inputs[i] || 0) * (this.w[o * 10 + i] || 0);
+            }
+            this.out[o] = Math.tanh(this.out[o]);
+        }
+        return this.out;
+    }
+    
+    learn(r) {
+        for (let i = 0; i < this.w.length; i++) {
+            this.w[i] += (Math.random() - 0.5) * 0.01 * r;
+        }
+    }
+}
+
+// Game state
+const G = {
+    planes: [],
+    bullets: [],
+    booms: [],
+    keys: {},
+    allyK: 0,
+    enemyK: 0
+};
+
+// Player ref
+let player = null;
+
+class Plane {
+    constructor(x, y, z, team, isPlayer) {
+        this.x = x || 0;
+        this.y = y || 200;
+        this.z = z || 0;
+        this.heading = isPlayer ? 0 : Math.random() * 360;
+        this.pitch = 0;
+        this.speed = 150;
+        this.hp = 100;
+        this.team = team;
+        this.isPlayer = isPlayer;
+        this.brain = isPlayer ? null : new Brain();
+        this.cooldown = 0;
+        this.alive = true;
+        this.respawn = 0;
+    }
+    
+    update() {
+        if (!this.alive) {
+            this.respawn--;
+            if (this.respawn <= 0) this.doRespawn();
+            return;
+        }
+        
+        if (this.cooldown > 0) this.cooldown--;
+        
+        // AI
+        if (!this.isPlayer && this.brain) {
+            this.doAI();
+        }
+        
+        // Damping
+        this.pitch *= 0.95;
+        
+        // Movement
+        const hr = this.heading * Math.PI / 180;
+        const pr = this.pitch * Math.PI / 180;
+        
+        this.x += Math.sin(hr) * this.speed * 0.016;
+        this.z += Math.cos(hr) * this.speed * 0.016;
+        this.y += Math.sin(pr) * this.speed * 0.008;
+        
+        // Clamp
+        this.y = Math.max(20, Math.min(700, this.y));
+        this.heading = ((this.heading % 360) + 360) % 360;
+        this.pitch = Math.max(-40, Math.min(40, this.pitch));
+        
+        // Wrap world
+        if (this.x > 2500) this.x -= 5000;
+        if (this.x < -2500) this.x += 5000;
+        if (this.z > 2500) this.z -= 5000;
+        if (this.z < -2500) this.z += 5000;
+    }
+    
+    doAI() {
+        // Find nearest enemy
+        let target = null;
+        let best = 99999;
+        
+        for (const p of G.planes) {
+            if (p === this || !p.alive || p.team === this.team) continue;
+            const d = Math.sqrt((p.x-this.x)**2 + (p.z-this.z)**2);
+            if (d < best) { best = d; target = p; }
+        }
+        
+        if (!target) return;
+        
+        const dx = target.x - this.x;
+        const dz = target.z - this.z;
+        const dy = target.y - this.y;
+        const targetHdg = Math.atan2(dx, dz) * 180 / Math.PI;
+        
+        let diff = targetHdg - this.heading;
+        while (diff > 180) diff -= 360;
+        while (diff < -180) diff += 360;
+        
+        // Brain input
+        const inp = [diff / 180, dy / 300, best / 1000];
+        const out = this.brain.think(inp);
+        
+        // Turn toward target with some neural noise
+        this.heading += Math.sign(diff) * 1.5 + out[0] * 0.5;
+        this.pitch += Math.sign(dy) * 0.5 + out[1] * 0.3;
+        
+        // Fire when aligned
+        if (Math.abs(diff) < 20 && best < 500) {
+            this.fire();
+        }
+    }
+    
+    fire() {
+        if (this.cooldown > 0) return;
+        this.cooldown = 12;
+        
+        const hr = this.heading * Math.PI / 180;
+        G.bullets.push({
+            x: this.x,
+            y: this.y,
+            z: this.z,
+            vx: Math.sin(hr) * 400,
+            vz: Math.cos(hr) * 400,
+            vy: 0,
+            team: this.team,
+            owner: this,
+            life: 120
+        });
+    }
+    
+    hit(dmg, attacker) {
+        this.hp -= dmg;
+        if (this.hp <= 0) {
+            this.alive = false;
+            this.respawn = 180;
+            if (attacker && attacker.brain) attacker.brain.learn(1);
+            if (this.brain) this.brain.learn(-0.5);
+            return true;
+        }
+        return false;
+    }
+    
+    doRespawn() {
+        this.alive = true;
+        this.hp = 100;
+        const ang = Math.random() * Math.PI * 2;
+        this.x = Math.cos(ang) * 800;
+        this.z = Math.sin(ang) * 800;
+        this.y = 150 + Math.random() * 200;
+        this.heading = Math.random() * 360;
+        this.pitch = 0;
+    }
+}
+
+function init() {
+    // Player
+    player = new Plane(0, 200, 0, 'ally', true);
+    G.planes.push(player);
+    
+    // Allies
+    for (let i = 0; i < 3; i++) {
+        G.planes.push(new Plane(
+            (Math.random() - 0.5) * 300,
+            180 + Math.random() * 80,
+            -150 - Math.random() * 100,
+            'ally', false
+        ));
+    }
+    
+    // Enemies ahead
+    for (let i = 0; i < 5; i++) {
+        const e = new Plane(
+            (Math.random() - 0.5) * 500,
+            150 + Math.random() * 150,
+            500 + Math.random() * 300,
+            'enemy', false
+        );
+        e.heading = 180 + (Math.random() - 0.5) * 40;
+        G.planes.push(e);
+    }
+}
+
+// Input
+document.addEventListener('keydown', e => { G.keys[e.key.toLowerCase()] = true; e.preventDefault(); });
+document.addEventListener('keyup', e => { G.keys[e.key.toLowerCase()] = false; });
+
+function input() {
+    if (!player.alive) return;
+    
+    if (G.keys['w']) player.pitch = Math.min(40, player.pitch + 1.2);
+    if (G.keys['s']) player.pitch = Math.max(-40, player.pitch - 1.2);
+    if (G.keys['a']) player.heading -= 1.8;
+    if (G.keys['d']) player.heading += 1.8;
+    if (G.keys['q']) player.heading -= 1.2;
+    if (G.keys['e']) player.heading += 1.2;
+    
+    if (G.keys['shift']) player.speed = Math.min(250, player.speed + 2);
+    else player.speed = Math.max(120, player.speed - 1);
+    
+    if (G.keys[' ']) player.fire();
+}
+
+function updateBullets() {
+    for (let i = G.bullets.length - 1; i >= 0; i--) {
+        const b = G.bullets[i];
+        b.x += b.vx * 0.016;
+        b.z += b.vz * 0.016;
+        b.y += b.vy * 0.016;
+        b.life--;
+        
+        if (b.life <= 0) { G.bullets.splice(i, 1); continue; }
+        
+        // Hit check
+        for (const p of G.planes) {
+            if (!p.alive || p.team === b.team) continue;
+            const d = Math.sqrt((p.x-b.x)**2 + (p.y-b.y)**2 + (p.z-b.z)**2);
+            if (d < 30) {
+                const killed = p.hit(25, b.owner);
+                G.booms.push({ x: b.x, y: b.y, z: b.z, life: 30, size: killed ? 50 : 15 });
+                if (killed) {
+                    if (b.owner.team === 'ally') G.allyK++;
+                    else G.enemyK++;
+                }
+                G.bullets.splice(i, 1);
+                break;
+            }
+        }
+    }
+}
+
+function project(wx, wy, wz) {
+    const dx = wx - player.x;
+    const dy = wy - player.y;
+    const dz = wz - player.z;
+    
+    const hr = -player.heading * Math.PI / 180;
+    const c = Math.cos(hr), s = Math.sin(hr);
+    const rx = dx * c - dz * s;
+    const rz = dx * s + dz * c;
+    const ry = dy;
+    
+    if (rz < 20) return null;
+    
+    const scale = 500 / rz;
+    return {
+        x: W/2 + rx * scale,
+        y: H/2 - ry * scale,
+        z: rz,
+        scale: scale
+    };
+}
+
+function render() {
+    // Sky
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, '#001828');
+    sky.addColorStop(0.6, '#104060');
+    sky.addColorStop(1, '#206040');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, H);
+    
+    // Horizon
+    const horizY = H/2 + player.pitch * 3;
+    ctx.fillStyle = '#0a1a10';
+    ctx.fillRect(0, horizY, W, H);
+    
+    ctx.strokeStyle = 'rgba(0,255,100,0.3)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, horizY);
+    ctx.lineTo(W, horizY);
+    ctx.stroke();
+    
+    // Grid on ground
+    ctx.strokeStyle = 'rgba(0,150,80,0.2)';
+    ctx.lineWidth = 1;
+    for (let gz = 0; gz < 2000; gz += 200) {
+        const p1 = project(-1500, 0, gz);
+        const p2 = project(1500, 0, gz);
+        if (p1 && p2) {
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+        }
+    }
+    
+    // Sort planes by distance
+    const sorted = G.planes
+        .filter(p => p.alive && !p.isPlayer)
+        .map(p => ({ p, d: Math.sqrt((p.x-player.x)**2+(p.z-player.z)**2) }))
+        .sort((a,b) => b.d - a.d);
+    
+    // Draw planes
+    for (const {p, d} of sorted) {
+        const proj = project(p.x, p.y, p.z);
+        if (!proj) continue;
+        
+        const sz = Math.max(4, 25 * proj.scale);
+        const fog = Math.min(0.9, d / 1500);
+        const alpha = 1 - fog;
+        
+        const col = p.team === 'ally' ? [0, 255, 100] : [255, 70, 50];
+        
+        ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha})`;
+        ctx.beginPath();
+        ctx.moveTo(proj.x, proj.y - sz);
+        ctx.lineTo(proj.x - sz, proj.y + sz/2);
+        ctx.lineTo(proj.x + sz, proj.y + sz/2);
+        ctx.closePath();
+        ctx.fill();
+        
+        // Wings
+        ctx.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha})`;
+        ctx.lineWidth = Math.max(1, sz/3);
+        ctx.beginPath();
+        ctx.moveTo(proj.x - sz*2, proj.y);
+        ctx.lineTo(proj.x + sz*2, proj.y);
+        ctx.stroke();
+        
+        // HP bar
+        if (d < 500) {
+            ctx.fillStyle = `rgba(50,0,0,${alpha})`;
+            ctx.fillRect(proj.x - 20, proj.y - sz - 10, 40, 4);
+            ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha})`;
+            ctx.fillRect(proj.x - 20, proj.y - sz - 10, 40 * p.hp/100, 4);
+        }
+        
+        // Distance label
+        ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha*0.7})`;
+        ctx.font = '10px Courier';
+        ctx.textAlign = 'center';
+        ctx.fillText(Math.floor(d)+'m', proj.x, proj.y + sz + 12);
+    }
+    
+    // Bullets
+    for (const b of G.bullets) {
+        const proj = project(b.x, b.y, b.z);
+        if (!proj) continue;
+        const sz = Math.max(2, 5 * proj.scale);
+        ctx.fillStyle = b.team === 'ally' ? '#ff0' : '#f80';
+        ctx.beginPath();
+        ctx.arc(proj.x, proj.y, sz, 0, Math.PI*2);
+        ctx.fill();
+    }
+    
+    // Explosions
+    for (let i = G.booms.length-1; i >= 0; i--) {
+        const e = G.booms[i];
+        e.life--;
+        if (e.life <= 0) { G.booms.splice(i,1); continue; }
+        
+        const proj = project(e.x, e.y, e.z);
+        if (!proj) continue;
+        
+        const prog = 1 - e.life/30;
+        const sz = e.size * (1 + prog*2) * proj.scale;
+        const a = 1 - prog;
+        
+        const g = ctx.createRadialGradient(proj.x, proj.y, 0, proj.x, proj.y, sz);
+        g.addColorStop(0, `rgba(255,255,200,${a})`);
+        g.addColorStop(0.5, `rgba(255,100,0,${a*0.6})`);
+        g.addColorStop(1, 'rgba(255,0,0,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(proj.x, proj.y, sz, 0, Math.PI*2);
+        ctx.fill();
+    }
+    
+    // HUD
+    drawHUD();
+}
+
+function drawHUD() {
+    // Crosshair
+    ctx.strokeStyle = 'rgba(0,255,255,0.8)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(W/2-25, H/2); ctx.lineTo(W/2-8, H/2);
+    ctx.moveTo(W/2+8, H/2); ctx.lineTo(W/2+25, H/2);
+    ctx.moveTo(W/2, H/2-25); ctx.lineTo(W/2, H/2-8);
+    ctx.moveTo(W/2, H/2+8); ctx.lineTo(W/2, H/2+25);
+    ctx.stroke();
+    
+    // Pitch lines
+    ctx.strokeStyle = 'rgba(0,255,0,0.4)';
+    ctx.lineWidth = 1;
+    for (let a = -30; a <= 30; a += 15) {
+        if (a === 0) continue;
+        const y = H/2 - (a - player.pitch) * 3;
+        if (y > 30 && y < H-30) {
+            ctx.beginPath();
+            ctx.moveTo(W/2-30, y); ctx.lineTo(W/2-15, y);
+            ctx.moveTo(W/2+15, y); ctx.lineTo(W/2+30, y);
+            ctx.stroke();
+        }
+    }
+    
+    // Compass
+    ctx.fillStyle = '#0f0';
+    ctx.font = '11px Courier';
+    ctx.textAlign = 'center';
+    for (let h = 0; h < 360; h += 30) {
+        let diff = h - player.heading;
+        while (diff > 180) diff -= 360;
+        while (diff < -180) diff += 360;
+        if (Math.abs(diff) < 50) {
+            const cx = W/2 + diff * 3;
+            ctx.fillStyle = h % 90 === 0 ? '#0ff' : '#0f0';
+            const lbl = h===0?'N':h===90?'E':h===180?'S':h===270?'W':h+'';
+            ctx.fillText(lbl, cx, H-25);
+        }
+    }
+    ctx.strokeStyle = '#ff0';
+    ctx.beginPath();
+    ctx.moveTo(W/2, H-35); ctx.lineTo(W/2-5, H-42); ctx.lineTo(W/2+5, H-42);
+    ctx.closePath();
+    ctx.stroke();
+    
+    // Radar
+    const rx = W-80, ry = H/2, rr = 60;
+    ctx.fillStyle = 'rgba(0,30,15,0.85)';
+    ctx.beginPath();
+    ctx.arc(rx, ry, rr, 0, Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,200,100,0.5)';
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(rx, ry, rr/2, 0, Math.PI*2);
+    ctx.stroke();
+    
+    // Forward line
+    ctx.strokeStyle = 'rgba(0,200,100,0.3)';
+    ctx.beginPath();
+    ctx.moveTo(rx, ry); ctx.lineTo(rx, ry-rr);
+    ctx.stroke();
+    
+    for (const p of G.planes) {
+        if (!p.alive) continue;
+        const dx = p.x - player.x;
+        const dz = p.z - player.z;
+        const hr = -player.heading * Math.PI/180;
+        const rdx = (dx*Math.cos(hr) - dz*Math.sin(hr)) / 25;
+        const rdz = (dx*Math.sin(hr) + dz*Math.cos(hr)) / 25;
+        
+        if (Math.abs(rdx) < rr-4 && Math.abs(rdz) < rr-4) {
+            ctx.fillStyle = p.isPlayer ? '#0ff' : p.team==='ally' ? '#0f0' : '#f00';
+            ctx.beginPath();
+            ctx.arc(rx+rdx, ry-rdz, p.isPlayer?5:3, 0, Math.PI*2);
+            ctx.fill();
+        }
+    }
+    
+    // Death screen
+    if (!player.alive) {
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(0,0,W,H);
+        ctx.fillStyle = '#f00';
+        ctx.font = 'bold 42px Courier';
+        ctx.textAlign = 'center';
+        ctx.fillText('DESTROYED', W/2, H/2);
+        ctx.fillStyle = '#fff';
+        ctx.font = '18px Courier';
+        ctx.fillText('Respawning in ' + Math.ceil(player.respawn/60) + '...', W/2, H/2+35);
+    }
+}
+
+function updateHUD() {
+    document.getElementById('hp').textContent = Math.max(0, player.hp);
+    document.getElementById('alt').textContent = Math.floor(player.y);
+    document.getElementById('spd').textContent = Math.floor(player.speed);
+    document.getElementById('hdg').textContent = Math.floor(player.heading);
+    document.getElementById('ally-k').textContent = G.allyK;
+    document.getElementById('enemy-k').textContent = G.enemyK;
+    
+    let ai = '';
+    const enemies = G.planes.filter(p => p.team==='enemy' && p.alive);
+    for (let i = 0; i < Math.min(2, enemies.length); i++) {
+        const e = enemies[i];
+        const d = Math.floor(Math.sqrt((e.x-player.x)**2+(e.z-player.z)**2));
+        ai += `<div style="color:#f66;margin-top:4px">Enemy ${i+1} (${d}m)</div>`;
+        if (e.brain) {
+            const o = e.brain.out;
+            ai += `<div>Turn:${(o[0]*100).toFixed(0)}% Pitch:${(o[1]*100).toFixed(0)}%</div>`;
+        }
+    }
+    document.getElementById('ai-info').innerHTML = ai || 'No contacts';
+}
+
+function loop() {
+    try {
+        input();
+        for (const p of G.planes) p.update();
+        updateBullets();
+        render();
+        updateHUD();
+    } catch(err) {
+        console.error(err);
+    }
+    requestAnimationFrame(loop);
+}
+
+init();
+loop();
+</script>
+</body>
+</html>

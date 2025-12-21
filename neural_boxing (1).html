@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEURAL BOXING - T+NTM vs Transformer</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #0a0a0f;
+            overflow: hidden;
+            font-family: 'Share Tech Mono', monospace;
+        }
+        
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #canvas3d {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        
+        .hud {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 20px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            pointer-events: none;
+        }
+        
+        .fighter-stats {
+            width: 380px;
+        }
+        
+        .fighter-name {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 18px;
+            font-weight: 900;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            text-shadow: 0 0 20px currentColor;
+        }
+        
+        .left-fighter .fighter-name {
+            color: #00ffaa;
+            text-align: left;
+        }
+        
+        .right-fighter .fighter-name {
+            color: #ff4466;
+            text-align: right;
+        }
+        
+        .health-bar-container {
+            height: 24px;
+            background: rgba(20, 20, 30, 0.9);
+            border: 2px solid rgba(255,255,255,0.2);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .health-bar {
+            height: 100%;
+            transition: width 0.3s ease;
+            position: relative;
+        }
+        
+        .left-fighter .health-bar {
+            background: linear-gradient(90deg, #00ffaa, #00cc88);
+            box-shadow: 0 0 20px #00ffaa88;
+        }
+        
+        .right-fighter .health-bar {
+            background: linear-gradient(90deg, #cc3355, #ff4466);
+            box-shadow: 0 0 20px #ff446688;
+            float: right;
+        }
+        
+        .health-bar::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 50%;
+            background: linear-gradient(180deg, rgba(255,255,255,0.3), transparent);
+        }
+        
+        .architecture-info {
+            font-size: 11px;
+            color: rgba(255,255,255,0.6);
+            margin-top: 6px;
+            letter-spacing: 1px;
+        }
+        
+        .left-fighter .architecture-info {
+            text-align: left;
+        }
+        
+        .right-fighter .architecture-info {
+            text-align: right;
+        }
+        
+        .center-display {
+            text-align: center;
+        }
+        
+        .round-display {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 14px;
+            color: #ffd700;
+            text-shadow: 0 0 10px #ffd70088;
+            letter-spacing: 4px;
+        }
+        
+        .timer {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 48px;
+            font-weight: 900;
+            color: #fff;
+            text-shadow: 0 0 30px rgba(255,255,255,0.5);
+            margin-top: 4px;
+        }
+        
+        .controls-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 40px;
+            pointer-events: none;
+        }
+        
+        .control-group {
+            text-align: center;
+        }
+        
+        .control-label {
+            font-size: 12px;
+            color: rgba(255,255,255,0.5);
+            margin-bottom: 8px;
+            letter-spacing: 2px;
+        }
+        
+        .keys {
+            display: flex;
+            gap: 6px;
+            justify-content: center;
+        }
+        
+        .key {
+            width: 44px;
+            height: 44px;
+            background: rgba(30, 30, 50, 0.9);
+            border: 2px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 16px;
+            font-weight: 700;
+            color: #fff;
+            text-shadow: 0 0 10px rgba(255,255,255,0.5);
+        }
+        
+        .key.active {
+            background: rgba(0, 255, 170, 0.3);
+            border-color: #00ffaa;
+            box-shadow: 0 0 20px #00ffaa44;
+        }
+        
+        .memory-display {
+            position: absolute;
+            bottom: 100px;
+            left: 40px;
+            pointer-events: none;
+        }
+        
+        .memory-label {
+            font-size: 10px;
+            color: #00ffaa;
+            letter-spacing: 2px;
+            margin-bottom: 6px;
+        }
+        
+        .memory-tape {
+            display: flex;
+            gap: 3px;
+        }
+        
+        .memory-cell {
+            width: 20px;
+            height: 20px;
+            background: rgba(0, 255, 170, 0.1);
+            border: 1px solid rgba(0, 255, 170, 0.3);
+            border-radius: 2px;
+            transition: all 0.2s;
+        }
+        
+        .memory-cell.active {
+            background: rgba(0, 255, 170, 0.6);
+            box-shadow: 0 0 10px #00ffaa88;
+        }
+        
+        .attention-display {
+            position: absolute;
+            bottom: 100px;
+            right: 40px;
+            pointer-events: none;
+        }
+        
+        .attention-label {
+            font-size: 10px;
+            color: #ff4466;
+            letter-spacing: 2px;
+            margin-bottom: 6px;
+            text-align: right;
+        }
+        
+        .attention-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 3px;
+        }
+        
+        .attention-cell {
+            width: 16px;
+            height: 16px;
+            background: rgba(255, 68, 102, 0.1);
+            border: 1px solid rgba(255, 68, 102, 0.3);
+            border-radius: 2px;
+            transition: all 0.15s;
+        }
+        
+        .attention-cell.active {
+            background: rgba(255, 68, 102, 0.7);
+            box-shadow: 0 0 8px #ff446688;
+        }
+        
+        .combo-display {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            font-family: 'Orbitron', sans-serif;
+            font-size: 72px;
+            font-weight: 900;
+            color: #ffd700;
+            text-shadow: 0 0 40px #ffd700, 0 0 80px #ffd70088;
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.3s;
+        }
+        
+        .combo-display.show {
+            opacity: 1;
+            animation: comboPop 0.5s ease-out;
+        }
+        
+        @keyframes comboPop {
+            0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+            50% { transform: translate(-50%, -50%) scale(1.2); }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+        
+        .winner-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s;
+        }
+        
+        .winner-overlay.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        
+        .winner-text {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 64px;
+            font-weight: 900;
+            text-transform: uppercase;
+            margin-bottom: 20px;
+        }
+        
+        .winner-text.hybrid {
+            color: #00ffaa;
+            text-shadow: 0 0 40px #00ffaa, 0 0 80px #00ffaa88;
+        }
+        
+        .winner-text.transformer {
+            color: #ff4466;
+            text-shadow: 0 0 40px #ff4466, 0 0 80px #ff446688;
+        }
+        
+        .restart-btn {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 18px;
+            font-weight: 700;
+            padding: 16px 48px;
+            background: transparent;
+            border: 2px solid #ffd700;
+            color: #ffd700;
+            cursor: pointer;
+            letter-spacing: 4px;
+            transition: all 0.3s;
+        }
+        
+        .restart-btn:hover {
+            background: #ffd700;
+            color: #0a0a0f;
+            box-shadow: 0 0 30px #ffd70088;
+        }
+        
+        .damage-flash {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            opacity: 0;
+        }
+        
+        .damage-flash.hybrid-hit {
+            background: radial-gradient(circle at 30% 50%, rgba(0, 255, 170, 0.4), transparent 50%);
+            animation: flashHit 0.2s ease-out;
+        }
+        
+        .damage-flash.transformer-hit {
+            background: radial-gradient(circle at 70% 50%, rgba(255, 68, 102, 0.4), transparent 50%);
+            animation: flashHit 0.2s ease-out;
+        }
+        
+        @keyframes flashHit {
+            0% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+        
+        .scanlines {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0,0,0,0.1) 2px,
+                rgba(0,0,0,0.1) 4px
+            );
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="canvas3d"></canvas>
+        
+        <div class="hud">
+            <div class="fighter-stats left-fighter">
+                <div class="fighter-name">T+NTM HYBRID</div>
+                <div class="health-bar-container">
+                    <div class="health-bar" id="hybridHealth" style="width: 100%"></div>
+                </div>
+                <div class="architecture-info">TRANSFORMER + NEURAL TURING MACHINE</div>
+            </div>
+            
+            <div class="center-display">
+                <div class="round-display">ROUND <span id="roundNum">1</span></div>
+                <div class="timer" id="timer">99</div>
+            </div>
+            
+            <div class="fighter-stats right-fighter">
+                <div class="fighter-name">TRANSFORMER</div>
+                <div class="health-bar-container">
+                    <div class="health-bar" id="transformerHealth" style="width: 100%"></div>
+                </div>
+                <div class="architecture-info">PURE SELF-ATTENTION</div>
+            </div>
+        </div>
+        
+        <div class="memory-display">
+            <div class="memory-label">MEMORY TAPE</div>
+            <div class="memory-tape" id="memoryTape"></div>
+        </div>
+        
+        <div class="attention-display">
+            <div class="attention-label">ATTENTION HEADS</div>
+            <div class="attention-grid" id="attentionGrid"></div>
+        </div>
+        
+        <div class="controls-panel">
+            <div class="control-group">
+                <div class="control-label">MOVE</div>
+                <div class="keys">
+                    <div class="key" id="keyA">A</div>
+                    <div class="key" id="keyD">D</div>
+                </div>
+            </div>
+            <div class="control-group">
+                <div class="control-label">ATTACK</div>
+                <div class="keys">
+                    <div class="key" id="keyJ">J</div>
+                    <div class="key" id="keyK">K</div>
+                </div>
+            </div>
+            <div class="control-group">
+                <div class="control-label">BLOCK/DODGE</div>
+                <div class="keys">
+                    <div class="key" id="keySpace">⎵</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="combo-display" id="comboDisplay"></div>
+        
+        <div class="damage-flash" id="damageFlash"></div>
+        
+        <div class="winner-overlay" id="winnerOverlay">
+            <div class="winner-text" id="winnerText">WINNER</div>
+            <button class="restart-btn" onclick="restartGame()">REMATCH</button>
+        </div>
+        
+        <div class="scanlines"></div>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Game state
+        const game = {
+            hybridHealth: 100,
+            transformerHealth: 100,
+            hybridPos: -3,
+            transformerPos: 3,
+            hybridState: 'idle',
+            transformerState: 'idle',
+            round: 1,
+            timer: 99,
+            gameOver: false,
+            combo: 0,
+            lastHit: 0,
+            aiMemory: [], // NTM memory for hybrid
+            aiPatternBuffer: [] // Pattern recognition
+        };
+        
+        // Initialize memory tape display
+        const memoryTape = document.getElementById('memoryTape');
+        for (let i = 0; i < 16; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'memory-cell';
+            cell.id = `mem${i}`;
+            memoryTape.appendChild(cell);
+        }
+        
+        // Initialize attention grid
+        const attentionGrid = document.getElementById('attentionGrid');
+        for (let i = 0; i < 24; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'attention-cell';
+            cell.id = `att${i}`;
+            attentionGrid.appendChild(cell);
+        }
+        
+        // Three.js setup
+        const canvas = document.getElementById('canvas3d');
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        
+        // Fog
+        scene.fog = new THREE.FogExp2(0x0a0a1a, 0.02);
+        
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0x334455, 0.4);
+        scene.add(ambientLight);
+        
+        const mainLight = new THREE.DirectionalLight(0xffffff, 1);
+        mainLight.position.set(5, 10, 5);
+        mainLight.castShadow = true;
+        mainLight.shadow.mapSize.width = 2048;
+        mainLight.shadow.mapSize.height = 2048;
+        scene.add(mainLight);
+        
+        const hybridLight = new THREE.PointLight(0x00ffaa, 2, 10);
+        hybridLight.position.set(-4, 3, 0);
+        scene.add(hybridLight);
+        
+        const transformerLight = new THREE.PointLight(0xff4466, 2, 10);
+        transformerLight.position.set(4, 3, 0);
+        scene.add(transformerLight);
+        
+        // Ring floor
+        const ringGeometry = new THREE.BoxGeometry(16, 0.3, 12);
+        const ringMaterial = new THREE.MeshStandardMaterial({
+            color: 0x1a1a2e,
+            metalness: 0.3,
+            roughness: 0.7
+        });
+        const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+        ring.position.y = -1.5;
+        ring.receiveShadow = true;
+        scene.add(ring);
+        
+        // Ring ropes
+        const ropeMaterial = new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.8, roughness: 0.2 });
+        for (let h = 0; h < 3; h++) {
+            const ropeHeight = -0.5 + h * 0.8;
+            
+            // Front and back ropes
+            for (let z of [-6, 6]) {
+                const rope = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.05, 0.05, 16, 8),
+                    ropeMaterial
+                );
+                rope.rotation.z = Math.PI / 2;
+                rope.position.set(0, ropeHeight, z);
+                scene.add(rope);
+            }
+            
+            // Side ropes
+            for (let x of [-8, 8]) {
+                const rope = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.05, 0.05, 12, 8),
+                    ropeMaterial
+                );
+                rope.rotation.x = Math.PI / 2;
+                rope.position.set(x, ropeHeight, 0);
+                scene.add(rope);
+            }
+        }
+        
+        // Corner posts
+        const postMaterial = new THREE.MeshStandardMaterial({ color: 0x333344, metalness: 0.9, roughness: 0.1 });
+        for (let x of [-8, 8]) {
+            for (let z of [-6, 6]) {
+                const post = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.15, 0.15, 3, 8),
+                    postMaterial
+                );
+                post.position.set(x, 0, z);
+                post.castShadow = true;
+                scene.add(post);
+            }
+        }
+        
+        // Create boxers
+        function createBoxer(color, isHybrid) {
+            const group = new THREE.Group();
+            
+            const bodyMaterial = new THREE.MeshStandardMaterial({
+                color: color,
+                metalness: 0.6,
+                roughness: 0.3,
+                emissive: color,
+                emissiveIntensity: 0.2
+            });
+            
+            // Body (torso)
+            const body = new THREE.Mesh(
+                new THREE.BoxGeometry(1, 1.4, 0.6),
+                bodyMaterial
+            );
+            body.position.y = 0.3;
+            body.castShadow = true;
+            group.add(body);
+            
+            // Head
+            const headGeom = isHybrid ? 
+                new THREE.BoxGeometry(0.6, 0.7, 0.5) : 
+                new THREE.SphereGeometry(0.35, 8, 6);
+            const head = new THREE.Mesh(headGeom, bodyMaterial);
+            head.position.y = 1.3;
+            head.castShadow = true;
+            group.add(head);
+            
+            // Eyes (glowing)
+            const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            for (let side of [-0.12, 0.12]) {
+                const eye = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.06, 8, 8),
+                    eyeMaterial
+                );
+                eye.position.set(side, 1.35, 0.3);
+                group.add(eye);
+            }
+            
+            // Left arm
+            const leftArm = new THREE.Group();
+            const leftUpperArm = new THREE.Mesh(
+                new THREE.BoxGeometry(0.25, 0.6, 0.25),
+                bodyMaterial
+            );
+            leftUpperArm.position.y = -0.3;
+            leftArm.add(leftUpperArm);
+            
+            const leftForearm = new THREE.Group();
+            const leftForearmMesh = new THREE.Mesh(
+                new THREE.BoxGeometry(0.22, 0.5, 0.22),
+                bodyMaterial
+            );
+            leftForearmMesh.position.y = -0.25;
+            leftForearm.add(leftForearmMesh);
+            
+            // Glove
+            const gloveMaterial = new THREE.MeshStandardMaterial({
+                color: isHybrid ? 0x00ffaa : 0xff4466,
+                metalness: 0.3,
+                roughness: 0.6,
+                emissive: isHybrid ? 0x00ffaa : 0xff4466,
+                emissiveIntensity: 0.3
+            });
+            const leftGlove = new THREE.Mesh(
+                new THREE.SphereGeometry(0.18, 8, 8),
+                gloveMaterial
+            );
+            leftGlove.position.y = -0.55;
+            leftGlove.scale.set(1.2, 1, 1);
+            leftForearm.add(leftGlove);
+            
+            leftForearm.position.y = -0.6;
+            leftArm.add(leftForearm);
+            leftArm.position.set(-0.6, 0.7, 0);
+            group.add(leftArm);
+            group.leftArm = leftArm;
+            group.leftForearm = leftForearm;
+            
+            // Right arm
+            const rightArm = new THREE.Group();
+            const rightUpperArm = new THREE.Mesh(
+                new THREE.BoxGeometry(0.25, 0.6, 0.25),
+                bodyMaterial
+            );
+            rightUpperArm.position.y = -0.3;
+            rightArm.add(rightUpperArm);
+            
+            const rightForearm = new THREE.Group();
+            const rightForearmMesh = new THREE.Mesh(
+                new THREE.BoxGeometry(0.22, 0.5, 0.22),
+                bodyMaterial
+            );
+            rightForearmMesh.position.y = -0.25;
+            rightForearm.add(rightForearmMesh);
+            
+            const rightGlove = new THREE.Mesh(
+                new THREE.SphereGeometry(0.18, 8, 8),
+                gloveMaterial
+            );
+            rightGlove.position.y = -0.55;
+            rightGlove.scale.set(1.2, 1, 1);
+            rightForearm.add(rightGlove);
+            
+            rightForearm.position.y = -0.6;
+            rightArm.add(rightForearm);
+            rightArm.position.set(0.6, 0.7, 0);
+            group.add(rightArm);
+            group.rightArm = rightArm;
+            group.rightForearm = rightForearm;
+            
+            // Legs
+            for (let side of [-0.25, 0.25]) {
+                const leg = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.3, 0.8, 0.3),
+                    bodyMaterial
+                );
+                leg.position.set(side, -0.8, 0);
+                leg.castShadow = true;
+                group.add(leg);
+            }
+            
+            // Architecture-specific details
+            if (isHybrid) {
+                // Memory tape on back (NTM component)
+                const tapeMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x00ff88,
+                    emissive: 0x00ff88,
+                    emissiveIntensity: 0.5,
+                    metalness: 0.8,
+                    roughness: 0.2
+                });
+                for (let i = 0; i < 5; i++) {
+                    const cell = new THREE.Mesh(
+                        new THREE.BoxGeometry(0.12, 0.12, 0.05),
+                        tapeMaterial
+                    );
+                    cell.position.set(-0.3 + i * 0.15, 0.5, -0.35);
+                    group.add(cell);
+                }
+            } else {
+                // Attention rings (Transformer component)
+                const ringMat = new THREE.MeshBasicMaterial({
+                    color: 0xff4466,
+                    transparent: true,
+                    opacity: 0.6
+                });
+                for (let i = 0; i < 3; i++) {
+                    const attRing = new THREE.Mesh(
+                        new THREE.TorusGeometry(0.5 + i * 0.15, 0.02, 8, 32),
+                        ringMat
+                    );
+                    attRing.position.y = 1.3;
+                    attRing.rotation.x = Math.PI / 2;
+                    group.add(attRing);
+                    group[`ring${i}`] = attRing;
+                }
+            }
+            
+            return group;
+        }
+        
+        const hybrid = createBoxer(0x00aa77, true);
+        hybrid.position.set(-3, 0, 0);
+        scene.add(hybrid);
+        
+        const transformer = createBoxer(0xaa3355, false);
+        transformer.position.set(3, 0, 0);
+        transformer.rotation.y = Math.PI;
+        scene.add(transformer);
+        
+        // Camera position
+        camera.position.set(0, 3, 10);
+        camera.lookAt(0, 0, 0);
+        
+        // Input handling
+        const keys = {
+            a: false,
+            d: false,
+            j: false,
+            k: false,
+            space: false
+        };
+        
+        document.addEventListener('keydown', (e) => {
+            const key = e.key.toLowerCase();
+            if (key === 'a') { keys.a = true; document.getElementById('keyA').classList.add('active'); }
+            if (key === 'd') { keys.d = true; document.getElementById('keyD').classList.add('active'); }
+            if (key === 'j') { keys.j = true; document.getElementById('keyJ').classList.add('active'); playerAttack('jab'); }
+            if (key === 'k') { keys.k = true; document.getElementById('keyK').classList.add('active'); playerAttack('hook'); }
+            if (key === ' ') { keys.space = true; document.getElementById('keySpace').classList.add('active'); game.hybridState = 'blocking'; }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            const key = e.key.toLowerCase();
+            if (key === 'a') { keys.a = false; document.getElementById('keyA').classList.remove('active'); }
+            if (key === 'd') { keys.d = false; document.getElementById('keyD').classList.remove('active'); }
+            if (key === 'j') { keys.j = false; document.getElementById('keyJ').classList.remove('active'); }
+            if (key === 'k') { keys.k = false; document.getElementById('keyK').classList.remove('active'); }
+            if (key === ' ') { keys.space = false; document.getElementById('keySpace').classList.remove('active'); game.hybridState = 'idle'; }
+        });
+        
+        // Player attack
+        function playerAttack(type) {
+            if (game.gameOver || game.hybridState === 'attacking') return;
+            
+            game.hybridState = 'attacking';
+            const arm = type === 'jab' ? hybrid.leftArm : hybrid.rightArm;
+            const forearm = type === 'jab' ? hybrid.leftForearm : hybrid.rightForearm;
+            
+            // Store pattern for AI learning
+            game.aiPatternBuffer.push({
+                type: type,
+                distance: Math.abs(game.hybridPos - game.transformerPos),
+                time: Date.now()
+            });
+            if (game.aiPatternBuffer.length > 10) game.aiPatternBuffer.shift();
+            
+            // Attack animation
+            const punchDistance = Math.abs(game.hybridPos - game.transformerPos);
+            if (punchDistance < 2.5) {
+                // Hit!
+                if (game.transformerState !== 'blocking') {
+                    const damage = type === 'jab' ? 5 : 12;
+                    game.transformerHealth = Math.max(0, game.transformerHealth - damage);
+                    document.getElementById('transformerHealth').style.width = game.transformerHealth + '%';
+                    
+                    // Flash
+                    const flash = document.getElementById('damageFlash');
+                    flash.className = 'damage-flash transformer-hit';
+                    setTimeout(() => flash.className = 'damage-flash', 200);
+                    
+                    // Combo
+                    if (Date.now() - game.lastHit < 1000) {
+                        game.combo++;
+                        showCombo(game.combo);
+                    } else {
+                        game.combo = 1;
+                    }
+                    game.lastHit = Date.now();
+                    
+                    // Update memory display (NTM writing to memory)
+                    const memIndex = Math.floor(Math.random() * 16);
+                    document.getElementById(`mem${memIndex}`).classList.add('active');
+                    setTimeout(() => document.getElementById(`mem${memIndex}`).classList.remove('active'), 300);
+                    
+                    // Check win
+                    if (game.transformerHealth <= 0) {
+                        endGame('hybrid');
+                    }
+                }
+            }
+            
+            // Animate punch
+            arm.rotation.x = -1.2;
+            forearm.rotation.x = 0.3;
+            setTimeout(() => {
+                arm.rotation.x = 0;
+                forearm.rotation.x = 0;
+                game.hybridState = 'idle';
+            }, 200);
+        }
+        
+        // AI opponent (Transformer)
+        let aiTimer = 0;
+        function updateAI(deltaTime) {
+            if (game.gameOver) return;
+            
+            aiTimer += deltaTime;
+            
+            // Update attention visualization
+            if (Math.random() < 0.1) {
+                const attIndex = Math.floor(Math.random() * 24);
+                document.getElementById(`att${attIndex}`).classList.add('active');
+                setTimeout(() => document.getElementById(`att${attIndex}`).classList.remove('active'), 200);
+            }
+            
+            // Spin attention rings
+            if (transformer.ring0) {
+                transformer.ring0.rotation.z += deltaTime * 2;
+                transformer.ring1.rotation.z -= deltaTime * 1.5;
+                transformer.ring2.rotation.z += deltaTime;
+            }
+            
+            const distance = Math.abs(game.hybridPos - game.transformerPos);
+            
+            // AI decision making - uses self-attention to "predict" player moves
+            if (aiTimer > 0.5 + Math.random() * 0.5) {
+                aiTimer = 0;
+                
+                // Pattern recognition from attention
+                const recentPlayerAttacks = game.aiPatternBuffer.filter(p => Date.now() - p.time < 3000);
+                const attackPrediction = recentPlayerAttacks.length > 2 ? 0.7 : 0.3;
+                
+                if (distance > 3) {
+                    // Move closer
+                    game.transformerPos -= 0.5;
+                } else if (distance < 1.5) {
+                    // Too close, might back off or attack
+                    if (Math.random() < 0.6) {
+                        aiAttack(Math.random() < 0.5 ? 'jab' : 'hook');
+                    } else {
+                        game.transformerPos += 0.3;
+                    }
+                } else {
+                    // Combat range
+                    if (game.hybridState === 'attacking' && Math.random() < attackPrediction) {
+                        // Block predicted attack
+                        game.transformerState = 'blocking';
+                        setTimeout(() => game.transformerState = 'idle', 400);
+                    } else if (Math.random() < 0.4) {
+                        aiAttack(Math.random() < 0.6 ? 'jab' : 'hook');
+                    }
+                }
+                
+                // Clamp position
+                game.transformerPos = Math.max(-6, Math.min(6, game.transformerPos));
+            }
+        }
+        
+        function aiAttack(type) {
+            if (game.transformerState === 'attacking') return;
+            
+            game.transformerState = 'attacking';
+            const arm = type === 'jab' ? transformer.rightArm : transformer.leftArm; // Mirrored
+            const forearm = type === 'jab' ? transformer.rightForearm : transformer.leftForearm;
+            
+            const punchDistance = Math.abs(game.hybridPos - game.transformerPos);
+            if (punchDistance < 2.5) {
+                if (game.hybridState !== 'blocking') {
+                    const damage = type === 'jab' ? 4 : 10;
+                    game.hybridHealth = Math.max(0, game.hybridHealth - damage);
+                    document.getElementById('hybridHealth').style.width = game.hybridHealth + '%';
+                    
+                    const flash = document.getElementById('damageFlash');
+                    flash.className = 'damage-flash hybrid-hit';
+                    setTimeout(() => flash.className = 'damage-flash', 200);
+                    
+                    if (game.hybridHealth <= 0) {
+                        endGame('transformer');
+                    }
+                }
+            }
+            
+            arm.rotation.x = -1.2;
+            forearm.rotation.x = 0.3;
+            setTimeout(() => {
+                arm.rotation.x = 0;
+                forearm.rotation.x = 0;
+                game.transformerState = 'idle';
+            }, 250);
+        }
+        
+        function showCombo(count) {
+            if (count < 2) return;
+            const display = document.getElementById('comboDisplay');
+            display.textContent = count + 'x COMBO';
+            display.classList.add('show');
+            setTimeout(() => display.classList.remove('show'), 800);
+        }
+        
+        function endGame(winner) {
+            game.gameOver = true;
+            const overlay = document.getElementById('winnerOverlay');
+            const text = document.getElementById('winnerText');
+            
+            if (winner === 'hybrid') {
+                text.textContent = 'T+NTM WINS!';
+                text.className = 'winner-text hybrid';
+            } else {
+                text.textContent = 'TRANSFORMER WINS!';
+                text.className = 'winner-text transformer';
+            }
+            
+            overlay.classList.add('show');
+        }
+        
+        function restartGame() {
+            game.hybridHealth = 100;
+            game.transformerHealth = 100;
+            game.hybridPos = -3;
+            game.transformerPos = 3;
+            game.gameOver = false;
+            game.combo = 0;
+            game.aiPatternBuffer = [];
+            
+            document.getElementById('hybridHealth').style.width = '100%';
+            document.getElementById('transformerHealth').style.width = '100%';
+            document.getElementById('winnerOverlay').classList.remove('show');
+        }
+        
+        // Timer
+        setInterval(() => {
+            if (!game.gameOver && game.timer > 0) {
+                game.timer--;
+                document.getElementById('timer').textContent = game.timer.toString().padStart(2, '0');
+                
+                if (game.timer === 0) {
+                    // Time's up - winner by health
+                    if (game.hybridHealth > game.transformerHealth) {
+                        endGame('hybrid');
+                    } else if (game.transformerHealth > game.hybridHealth) {
+                        endGame('transformer');
+                    } else {
+                        // Draw - sudden death would go here
+                        endGame('hybrid'); // Hybrid advantage tie-breaker (memory > pure attention)
+                    }
+                }
+            }
+        }, 1000);
+        
+        // Animation loop
+        let lastTime = 0;
+        function animate(currentTime) {
+            requestAnimationFrame(animate);
+            
+            const deltaTime = (currentTime - lastTime) / 1000;
+            lastTime = currentTime;
+            
+            if (!game.gameOver) {
+                // Player movement
+                if (keys.a) game.hybridPos = Math.max(-6, game.hybridPos - 4 * deltaTime);
+                if (keys.d) game.hybridPos = Math.min(6, game.hybridPos + 4 * deltaTime);
+                
+                // Update AI
+                updateAI(deltaTime);
+                
+                // Update positions
+                hybrid.position.x = game.hybridPos;
+                transformer.position.x = game.transformerPos;
+                
+                // Face each other
+                hybrid.rotation.y = game.transformerPos > game.hybridPos ? 0 : Math.PI;
+                transformer.rotation.y = game.hybridPos > game.transformerPos ? 0 : Math.PI;
+                
+                // Idle bob
+                hybrid.position.y = Math.sin(currentTime * 0.003) * 0.05;
+                transformer.position.y = Math.sin(currentTime * 0.003 + 1) * 0.05;
+                
+                // Blocking pose
+                if (game.hybridState === 'blocking') {
+                    hybrid.leftArm.rotation.x = -0.8;
+                    hybrid.leftArm.rotation.z = 0.5;
+                    hybrid.rightArm.rotation.x = -0.8;
+                    hybrid.rightArm.rotation.z = -0.5;
+                } else if (game.hybridState === 'idle') {
+                    hybrid.leftArm.rotation.z = 0;
+                    hybrid.rightArm.rotation.z = 0;
+                }
+                
+                if (game.transformerState === 'blocking') {
+                    transformer.leftArm.rotation.x = -0.8;
+                    transformer.leftArm.rotation.z = 0.5;
+                    transformer.rightArm.rotation.x = -0.8;
+                    transformer.rightArm.rotation.z = -0.5;
+                } else if (game.transformerState === 'idle') {
+                    transformer.leftArm.rotation.z = 0;
+                    transformer.rightArm.rotation.z = 0;
+                }
+            }
+            
+            // Update lights
+            hybridLight.position.x = game.hybridPos;
+            transformerLight.position.x = game.transformerPos;
+            
+            renderer.render(scene, camera);
+        }
+        
+        // Handle resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        animate(0);
+    </script>
+</body>
+</html>

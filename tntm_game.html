@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TNTM: Memory Ops</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            background: #0a0a12;
+            color: #e0e0e0;
+            font-family: 'Courier New', monospace;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+        
+        h1 {
+            color: #00ffaa;
+            text-shadow: 0 0 20px #00ffaa55;
+            margin-bottom: 5px;
+            font-size: 2.5rem;
+            letter-spacing: 4px;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 20px;
+            font-size: 0.9rem;
+        }
+        
+        .game-container {
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        .memory-bank {
+            background: linear-gradient(145deg, #12121a, #0a0a10);
+            border: 2px solid #1a1a2e;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 0 40px #00000088, inset 0 0 30px #00000044;
+        }
+        
+        .memory-bank h2 {
+            color: #00aaff;
+            margin-bottom: 15px;
+            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        .memory-grid {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 6px;
+        }
+        
+        .memory-slot {
+            width: 50px;
+            height: 50px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+            font-weight: bold;
+            transition: all 0.15s ease;
+            position: relative;
+            cursor: pointer;
+            border: 2px solid transparent;
+        }
+        
+        .memory-slot::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 6px;
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+        
+        .memory-slot.attention-high {
+            border-color: #00ffaa;
+            box-shadow: 0 0 20px #00ffaa88, inset 0 0 15px #00ffaa44;
+            transform: scale(1.1);
+            z-index: 10;
+        }
+        
+        .memory-slot.attention-med {
+            border-color: #00ffaa88;
+            box-shadow: 0 0 10px #00ffaa44;
+        }
+        
+        .memory-slot.attention-low {
+            border-color: #00ffaa33;
+        }
+        
+        .memory-slot.target {
+            animation: pulse-target 1s infinite;
+        }
+        
+        @keyframes pulse-target {
+            0%, 100% { box-shadow: 0 0 5px #ffaa00; }
+            50% { box-shadow: 0 0 25px #ffaa00, 0 0 40px #ffaa0044; }
+        }
+        
+        .memory-slot.corrupted {
+            animation: glitch 0.3s infinite;
+        }
+        
+        @keyframes glitch {
+            0%, 100% { transform: translate(0); filter: hue-rotate(0deg); }
+            25% { transform: translate(-2px, 1px); filter: hue-rotate(90deg); }
+            50% { transform: translate(2px, -1px); filter: hue-rotate(180deg); }
+            75% { transform: translate(-1px, -2px); filter: hue-rotate(270deg); }
+        }
+        
+        .memory-slot.read-success {
+            animation: read-flash 0.4s ease-out;
+        }
+        
+        @keyframes read-flash {
+            0% { background: #00ffaa !important; transform: scale(1.3); }
+            100% { transform: scale(1); }
+        }
+        
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            min-width: 280px;
+        }
+        
+        .panel {
+            background: linear-gradient(145deg, #12121a, #0a0a10);
+            border: 2px solid #1a1a2e;
+            border-radius: 15px;
+            padding: 20px;
+        }
+        
+        .panel h3 {
+            color: #ff6688;
+            margin-bottom: 15px;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        
+        .stat {
+            background: #0a0a10;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .stat-label {
+            font-size: 0.7rem;
+            color: #666;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+        
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #00ffaa;
+        }
+        
+        .stat-value.score { color: #ffaa00; }
+        .stat-value.level { color: #00aaff; }
+        .stat-value.combo { color: #ff66aa; }
+        .stat-value.beta { color: #aa66ff; }
+        
+        .controls-hint {
+            font-size: 0.75rem;
+            color: #555;
+            line-height: 1.8;
+        }
+        
+        .controls-hint kbd {
+            background: #1a1a2e;
+            padding: 3px 8px;
+            border-radius: 4px;
+            color: #00ffaa;
+        }
+        
+        .target-display {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .target-slot {
+            width: 60px;
+            height: 60px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            font-weight: bold;
+            border: 3px solid #ffaa00;
+            box-shadow: 0 0 20px #ffaa0044;
+        }
+        
+        .target-info {
+            flex: 1;
+        }
+        
+        .target-label {
+            font-size: 0.7rem;
+            color: #666;
+            text-transform: uppercase;
+        }
+        
+        .target-desc {
+            color: #ffaa00;
+            font-size: 0.9rem;
+        }
+        
+        .sharpness-bar {
+            height: 20px;
+            background: #0a0a10;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+        
+        .sharpness-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #aa66ff, #ff66aa);
+            transition: width 0.2s;
+            border-radius: 10px;
+        }
+        
+        .game-over {
+            position: fixed;
+            inset: 0;
+            background: #0a0a12ee;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s;
+        }
+        
+        .game-over.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+        
+        .game-over h2 {
+            font-size: 3rem;
+            color: #ff4466;
+            text-shadow: 0 0 30px #ff446688;
+            margin-bottom: 20px;
+        }
+        
+        .game-over .final-score {
+            font-size: 2rem;
+            color: #ffaa00;
+            margin-bottom: 30px;
+        }
+        
+        button {
+            background: linear-gradient(145deg, #00ffaa, #00aa77);
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            font-family: inherit;
+            font-weight: bold;
+            color: #0a0a12;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 30px #00ffaa88;
+        }
+        
+        .start-screen {
+            text-align: center;
+            max-width: 600px;
+        }
+        
+        .start-screen p {
+            color: #888;
+            margin: 20px 0;
+            line-height: 1.8;
+        }
+        
+        .start-screen .mechanics {
+            text-align: left;
+            background: #12121a;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        
+        .start-screen .mechanics h3 {
+            color: #00aaff;
+            margin-bottom: 10px;
+        }
+        
+        .pattern-preview {
+            display: flex;
+            gap: 8px;
+            margin: 15px 0;
+            justify-content: center;
+        }
+        
+        .pattern-preview .slot {
+            width: 40px;
+            height: 40px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+        
+        .shift-indicator {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 3rem;
+            color: #00ffaa;
+            text-shadow: 0 0 30px #00ffaa;
+            opacity: 0;
+            transition: opacity 0.2s;
+            pointer-events: none;
+            z-index: 50;
+        }
+        
+        .shift-indicator.active {
+            opacity: 1;
+            animation: shift-flash 0.3s ease-out;
+        }
+        
+        @keyframes shift-flash {
+            0% { transform: translate(-50%, -50%) scale(0.5); }
+            50% { transform: translate(-50%, -50%) scale(1.2); }
+            100% { transform: translate(-50%, -50%) scale(1); }
+        }
+    </style>
+</head>
+<body>
+    <h1>TNTM: MEMORY OPS</h1>
+    <div class="subtitle">Transformer Neural Turing Machine — Memory Interface Simulator</div>
+    
+    <div id="start-screen" class="start-screen">
+        <p>You ARE the attention mechanism. Navigate the memory bank, find patterns, and read them before corruption spreads.</p>
+        
+        <div class="mechanics">
+            <h3>⚡ Core Mechanics (from TNTM architecture)</h3>
+            <p><strong>Content Addressing:</strong> Click slots similar to your target — cosine similarity matters!</p>
+            <p><strong>Location Addressing:</strong> Use arrow keys to shift your attention focus</p>
+            <p><strong>Sharpness (β):</strong> Higher sharpness = tighter focus. Press SPACE to sharpen.</p>
+            <p><strong>Memory Corruption:</strong> Spreads over time. Don't let it consume the memory bank!</p>
+        </div>
+        
+        <div class="pattern-preview">
+            <div class="slot" style="background: #ff6666;">△</div>
+            <div class="slot" style="background: #66ff66;">◇</div>
+            <div class="slot" style="background: #6666ff;">○</div>
+            <div class="slot" style="background: #ffff66;">□</div>
+        </div>
+        
+        <button onclick="startGame()">INITIALIZE MEMORY</button>
+    </div>
+    
+    <div id="game-area" class="game-container" style="display: none;">
+        <div class="memory-bank">
+            <h2>External Memory Bank [64 slots]</h2>
+            <div id="memory-grid" class="memory-grid"></div>
+        </div>
+        
+        <div class="sidebar">
+            <div class="panel">
+                <h3>🎯 Target Pattern</h3>
+                <div class="target-display">
+                    <div id="target-slot" class="target-slot">?</div>
+                    <div class="target-info">
+                        <div class="target-label">Read this from memory</div>
+                        <div id="target-desc" class="target-desc">Finding pattern...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="panel">
+                <h3>📊 Attention State</h3>
+                <div class="stat" style="margin-bottom: 10px;">
+                    <div class="stat-label">Sharpness (β)</div>
+                    <div id="beta-value" class="stat-value beta">1.0</div>
+                </div>
+                <div class="sharpness-bar">
+                    <div id="sharpness-fill" class="sharpness-fill" style="width: 20%;"></div>
+                </div>
+                <p style="font-size: 0.7rem; color: #555; margin-top: 8px;">SPACE to sharpen • Decays over time</p>
+            </div>
+            
+            <div class="panel">
+                <h3>📈 Stats</h3>
+                <div class="stats">
+                    <div class="stat">
+                        <div class="stat-label">Score</div>
+                        <div id="score" class="stat-value score">0</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">Level</div>
+                        <div id="level" class="stat-value level">1</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">Combo</div>
+                        <div id="combo" class="stat-value combo">x1</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">Reads</div>
+                        <div id="reads" class="stat-value">0</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="panel">
+                <h3>🎮 Controls</h3>
+                <div class="controls-hint">
+                    <kbd>←↑↓→</kbd> Shift attention (location addressing)<br>
+                    <kbd>SPACE</kbd> Sharpen focus (increase β)<br>
+                    <kbd>CLICK</kbd> Read memory slot (content addressing)<br>
+                    <kbd>R</kbd> Reset memory (emergency)<br>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="shift-indicator" class="shift-indicator">→</div>
+    
+    <div id="game-over" class="game-over">
+        <h2>MEMORY CORRUPTED</h2>
+        <div class="final-score">Final Score: <span id="final-score">0</span></div>
+        <p style="color: #666; margin-bottom: 20px;">The corruption consumed the memory bank.</p>
+        <button onclick="startGame()">REINITIALIZE</button>
+    </div>
+
+    <script>
+        // Game state
+        const PATTERNS = ['△', '◇', '○', '□', '☆', '♦', '⬡', '⬢'];
+        const COLORS = [
+            '#ff6666', '#66ff66', '#6666ff', '#ffff66',
+            '#ff66ff', '#66ffff', '#ffaa66', '#aa66ff'
+        ];
+        
+        let gameState = {
+            memory: [],
+            attentionWeights: [],
+            attentionCenter: 32,
+            sharpness: 1.0,
+            target: null,
+            targetIndex: -1,
+            score: 0,
+            level: 1,
+            combo: 1,
+            reads: 0,
+            corrupted: new Set(),
+            gameOver: false,
+            lastUpdate: 0
+        };
+        
+        // Initialize memory bank
+        function initializeMemory() {
+            gameState.memory = [];
+            gameState.corrupted = new Set();
+            
+            for (let i = 0; i < 64; i++) {
+                const patternIdx = Math.floor(Math.random() * PATTERNS.length);
+                gameState.memory.push({
+                    pattern: PATTERNS[patternIdx],
+                    color: COLORS[patternIdx],
+                    patternIdx: patternIdx
+                });
+            }
+            
+            // Initialize uniform attention
+            gameState.attentionWeights = new Array(64).fill(1/64);
+            gameState.attentionCenter = 32;
+            gameState.sharpness = 1.0;
+            
+            renderMemory();
+            setNewTarget();
+        }
+        
+        // Render memory grid
+        function renderMemory() {
+            const grid = document.getElementById('memory-grid');
+            grid.innerHTML = '';
+            
+            for (let i = 0; i < 64; i++) {
+                const slot = document.createElement('div');
+                slot.className = 'memory-slot';
+                slot.dataset.index = i;
+                
+                const mem = gameState.memory[i];
+                slot.textContent = mem.pattern;
+                slot.style.background = mem.color;
+                
+                // Apply attention styling
+                const weight = gameState.attentionWeights[i];
+                if (weight > 0.1) {
+                    slot.classList.add('attention-high');
+                } else if (weight > 0.03) {
+                    slot.classList.add('attention-med');
+                } else if (weight > 0.01) {
+                    slot.classList.add('attention-low');
+                }
+                
+                // Mark target
+                if (i === gameState.targetIndex) {
+                    slot.classList.add('target');
+                }
+                
+                // Mark corrupted
+                if (gameState.corrupted.has(i)) {
+                    slot.classList.add('corrupted');
+                    slot.textContent = '☠';
+                    slot.style.background = '#442222';
+                }
+                
+                slot.onclick = () => attemptRead(i);
+                grid.appendChild(slot);
+            }
+        }
+        
+        // Content-based addressing (cosine similarity)
+        function computeContentWeights(queryIdx) {
+            const query = gameState.memory[queryIdx];
+            const weights = [];
+            
+            for (let i = 0; i < 64; i++) {
+                if (gameState.corrupted.has(i)) {
+                    weights.push(0);
+                    continue;
+                }
+                
+                const mem = gameState.memory[i];
+                // Similarity based on pattern match
+                const similarity = mem.patternIdx === query.patternIdx ? 1.0 : 0.2;
+                weights.push(similarity);
+            }
+            
+            // Apply softmax with sharpness
+            return softmaxWithTemp(weights, gameState.sharpness);
+        }
+        
+        // Location-based attention (Gaussian around center)
+        function computeLocationWeights() {
+            const weights = [];
+            const sigma = Math.max(1, 8 / gameState.sharpness);
+            
+            for (let i = 0; i < 64; i++) {
+                // Circular distance
+                let dist = Math.abs(i - gameState.attentionCenter);
+                dist = Math.min(dist, 64 - dist);
+                
+                const weight = Math.exp(-dist * dist / (2 * sigma * sigma));
+                weights.push(gameState.corrupted.has(i) ? 0 : weight);
+            }
+            
+            // Normalize
+            const sum = weights.reduce((a, b) => a + b, 0);
+            return weights.map(w => w / sum);
+        }
+        
+        // Softmax with temperature (sharpness)
+        function softmaxWithTemp(logits, temp) {
+            const maxLogit = Math.max(...logits);
+            const exps = logits.map(l => Math.exp((l - maxLogit) * temp));
+            const sum = exps.reduce((a, b) => a + b, 0);
+            return exps.map(e => e / sum);
+        }
+        
+        // Update attention based on location
+        function updateAttention() {
+            gameState.attentionWeights = computeLocationWeights();
+            renderMemory();
+        }
+        
+        // Shift attention (circular convolution!)
+        function shiftAttention(direction) {
+            const shift = direction === 'left' ? -1 : direction === 'right' ? 1 : 
+                         direction === 'up' ? -8 : direction === 'down' ? 8 : 0;
+            
+            gameState.attentionCenter = (gameState.attentionCenter + shift + 64) % 64;
+            
+            // Show shift indicator
+            const indicator = document.getElementById('shift-indicator');
+            indicator.textContent = direction === 'left' ? '←' : direction === 'right' ? '→' :
+                                   direction === 'up' ? '↑' : '↓';
+            indicator.classList.add('active');
+            setTimeout(() => indicator.classList.remove('active'), 200);
+            
+            updateAttention();
+        }
+        
+        // Attempt to read a memory slot
+        function attemptRead(index) {
+            if (gameState.gameOver || gameState.corrupted.has(index)) return;
+            
+            const slot = document.querySelector(`[data-index="${index}"]`);
+            
+            // Check if this is the target
+            if (index === gameState.targetIndex) {
+                // Success!
+                const attentionBonus = gameState.attentionWeights[index] * 100;
+                const sharpnessBonus = gameState.sharpness * 10;
+                const points = Math.floor((100 + attentionBonus + sharpnessBonus) * gameState.combo);
+                
+                gameState.score += points;
+                gameState.reads++;
+                gameState.combo = Math.min(gameState.combo + 1, 10);
+                
+                // Level up every 5 reads
+                if (gameState.reads % 5 === 0) {
+                    gameState.level++;
+                    document.getElementById('level').textContent = gameState.level;
+                }
+                
+                slot.classList.add('read-success');
+                
+                updateStats();
+                setNewTarget();
+            } else {
+                // Wrong slot - combo reset
+                gameState.combo = 1;
+                updateStats();
+                
+                // Flash red
+                slot.style.boxShadow = '0 0 20px #ff0000';
+                setTimeout(() => slot.style.boxShadow = '', 200);
+            }
+        }
+        
+        // Set new target
+        function setNewTarget() {
+            // Find non-corrupted slots
+            const valid = [];
+            for (let i = 0; i < 64; i++) {
+                if (!gameState.corrupted.has(i)) valid.push(i);
+            }
+            
+            if (valid.length === 0) {
+                endGame();
+                return;
+            }
+            
+            gameState.targetIndex = valid[Math.floor(Math.random() * valid.length)];
+            gameState.target = gameState.memory[gameState.targetIndex];
+            
+            // Update target display
+            const targetSlot = document.getElementById('target-slot');
+            targetSlot.textContent = gameState.target.pattern;
+            targetSlot.style.background = gameState.target.color;
+            
+            document.getElementById('target-desc').textContent = 
+                `Pattern ${gameState.target.pattern} at unknown location`;
+            
+            renderMemory();
+        }
+        
+        // Spread corruption
+        function spreadCorruption() {
+            if (gameState.corrupted.size === 0) {
+                // Start corruption at random edge
+                const edge = Math.random() < 0.5 ? 0 : 63;
+                gameState.corrupted.add(edge);
+            } else {
+                // Spread from existing corruption
+                const corrupted = [...gameState.corrupted];
+                const source = corrupted[Math.floor(Math.random() * corrupted.length)];
+                
+                // Neighbors (with wrapping)
+                const neighbors = [
+                    (source - 1 + 64) % 64,
+                    (source + 1) % 64,
+                    (source - 8 + 64) % 64,
+                    (source + 8) % 64
+                ];
+                
+                const uncorrupted = neighbors.filter(n => !gameState.corrupted.has(n));
+                if (uncorrupted.length > 0) {
+                    const victim = uncorrupted[Math.floor(Math.random() * uncorrupted.length)];
+                    gameState.corrupted.add(victim);
+                    
+                    // If target got corrupted, set new target
+                    if (victim === gameState.targetIndex) {
+                        setNewTarget();
+                    }
+                }
+            }
+            
+            // Check game over
+            if (gameState.corrupted.size >= 60) {
+                endGame();
+                return;
+            }
+            
+            renderMemory();
+        }
+        
+        // Update stats display
+        function updateStats() {
+            document.getElementById('score').textContent = gameState.score;
+            document.getElementById('combo').textContent = `x${gameState.combo}`;
+            document.getElementById('reads').textContent = gameState.reads;
+            document.getElementById('beta-value').textContent = gameState.sharpness.toFixed(1);
+            document.getElementById('sharpness-fill').style.width = 
+                `${Math.min(100, gameState.sharpness * 20)}%`;
+        }
+        
+        // Game loop
+        function gameLoop(timestamp) {
+            if (gameState.gameOver) return;
+            
+            const delta = timestamp - gameState.lastUpdate;
+            
+            // Decay sharpness over time
+            if (delta > 50) {
+                gameState.sharpness = Math.max(1.0, gameState.sharpness - 0.02);
+                updateStats();
+                updateAttention();
+                gameState.lastUpdate = timestamp;
+            }
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Corruption timer
+        function corruptionLoop() {
+            if (gameState.gameOver) return;
+            
+            spreadCorruption();
+            
+            // Speed up corruption with level
+            const delay = Math.max(500, 3000 - gameState.level * 200);
+            setTimeout(corruptionLoop, delay);
+        }
+        
+        // End game
+        function endGame() {
+            gameState.gameOver = true;
+            document.getElementById('final-score').textContent = gameState.score;
+            document.getElementById('game-over').classList.add('active');
+        }
+        
+        // Start game
+        function startGame() {
+            document.getElementById('start-screen').style.display = 'none';
+            document.getElementById('game-area').style.display = 'flex';
+            document.getElementById('game-over').classList.remove('active');
+            
+            gameState = {
+                memory: [],
+                attentionWeights: [],
+                attentionCenter: 32,
+                sharpness: 1.0,
+                target: null,
+                targetIndex: -1,
+                score: 0,
+                level: 1,
+                combo: 1,
+                reads: 0,
+                corrupted: new Set(),
+                gameOver: false,
+                lastUpdate: performance.now()
+            };
+            
+            initializeMemory();
+            updateStats();
+            
+            // Start loops
+            requestAnimationFrame(gameLoop);
+            setTimeout(corruptionLoop, 3000);
+        }
+        
+        // Keyboard controls
+        document.addEventListener('keydown', (e) => {
+            if (gameState.gameOver) return;
+            
+            switch(e.key) {
+                case 'ArrowLeft':
+                    shiftAttention('left');
+                    e.preventDefault();
+                    break;
+                case 'ArrowRight':
+                    shiftAttention('right');
+                    e.preventDefault();
+                    break;
+                case 'ArrowUp':
+                    shiftAttention('up');
+                    e.preventDefault();
+                    break;
+                case 'ArrowDown':
+                    shiftAttention('down');
+                    e.preventDefault();
+                    break;
+                case ' ':
+                    // Sharpen attention (increase β)
+                    gameState.sharpness = Math.min(5.0, gameState.sharpness + 0.5);
+                    updateStats();
+                    updateAttention();
+                    e.preventDefault();
+                    break;
+                case 'r':
+                case 'R':
+                    // Emergency memory reset - clears some corruption but costs points
+                    if (gameState.corrupted.size > 0 && gameState.score >= 100) {
+                        gameState.score -= 100;
+                        const toRemove = Math.min(5, gameState.corrupted.size);
+                        const corrupted = [...gameState.corrupted];
+                        for (let i = 0; i < toRemove; i++) {
+                            gameState.corrupted.delete(corrupted[i]);
+                        }
+                        updateStats();
+                        renderMemory();
+                    }
+                    break;
+            }
+        });
+    </script>
+</body>
+</html>

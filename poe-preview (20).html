@@ -1,0 +1,461 @@
+<!DOCTYPE html><html lang="en"><head><meta name="x-poe-datastore-behavior" content="local_only"><meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://code.jquery.com https://unpkg.com https://d3js.org https://threejs.org https://cdn.plot.ly https://stackpath.bootstrapcdn.com https://maps.googleapis.com https://cdn.tailwindcss.com https://ajax.googleapis.com https://kit.fontawesome.com https://cdn.datatables.net https://maxcdn.bootstrapcdn.com https://code.highcharts.com https://tako-static-assets-production.s3.amazonaws.com https://www.youtube.com https://fonts.googleapis.com https://fonts.gstatic.com https://pfst.cf2.poecdn.net https://puc.poecdn.net https://i.imgur.com https://wikimedia.org https://*.icons8.com https://*.giphy.com https://picsum.photos https://images.unsplash.com; frame-src 'self' https://www.youtube.com https://trytako.com; child-src 'self'; manifest-src 'self'; worker-src 'self'; upgrade-insecure-requests; block-all-mixed-content;">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unary (Thermometer) Neural Network — Graph &amp; Training Demo</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #0b1021;
+  --panel: rgba(255,255,255,0.06);
+  --border: rgba(255,255,255,0.12);
+  --text: #e9ecf5;
+  --muted: #9aa4c2;
+  --accent: #7dd3fc;
+  --accent2: #5eead4;
+  --pos: #60a5fa;
+  --neg: #f87171;
+  --code: rgba(255,255,255,0.08);
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f7f9fc;
+    --panel: #ffffff;
+    --border: #e2e8f0;
+    --text: #0f172a;
+    --muted: #475569;
+    --accent: #0ea5e9;
+    --accent2: #10b981;
+    --pos: #2563eb;
+    --neg: #dc2626;
+    --code: #eef2f7;
+  }
+}
+*{box-sizing:border-box;}
+body{
+  margin:0;
+  font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(125,211,252,0.12), transparent 30%),
+    radial-gradient(circle at 80% 0%, rgba(94,234,212,0.12), transparent 32%),
+    var(--bg);
+  color:var(--text);
+  line-height:1.6;
+  padding:1rem;
+}
+.container{max-width:1080px;margin:0 auto;display:grid;gap:1rem;}
+.card{
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:1rem;
+  box-shadow:0 10px 32px rgba(0,0,0,0.14);
+  backdrop-filter:blur(6px);
+}
+h1{margin:0 0 0.3em 0;font-size:clamp(1.5rem,3.6vw,2.2rem);}
+p{margin:0 0 0.6em 0;}
+.muted{color:var(--muted);}
+.controls{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+  gap:0.6rem;
+  align-items:center;
+}
+label{font-size:0.95rem;color:var(--muted);}
+select,input[type="range"],button{
+  width:100%;
+  font:inherit;
+  padding:0.55rem 0.75rem;
+  border-radius:10px;
+  border:1px solid var(--border);
+  background:var(--panel);
+  color:var(--text);
+  cursor:pointer;
+  transition:border-color 0.15s ease, transform 0.08s ease;
+}
+button:hover,select:hover{border-color:var(--accent);}
+button:active{transform:scale(0.98);}
+input[type="range"]{padding:0.35rem 0;}
+.badges{display:flex;flex-wrap:wrap;gap:0.45rem;margin-top:0.5rem;}
+.badge{
+  display:inline-flex;align-items:center;gap:0.35rem;
+  padding:0.35rem 0.65rem;
+  border-radius:999px;
+  border:1px solid var(--border);
+  background:var(--panel);
+  color:var(--muted);
+  font-size:0.92rem;
+}
+.grid-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:0.9rem;align-items:start;}
+canvas{
+  width:100%;
+  height:280px;
+  border-radius:12px;
+  border:1px solid var(--border);
+  background:var(--code);
+  display:block;
+}
+@media(max-width:560px){canvas{height:230px;}}
+.section-title{font-size:0.95rem;color:var(--muted);margin:0 0 0.35rem 0;}
+.unary-bar{display:grid;grid-template-columns:repeat(32,minmax(0,1fr));gap:4px;}
+.bit{
+  height:22px;
+  border-radius:6px;
+  border:1px solid var(--border);
+  background:var(--panel);
+}
+.small{font-size:0.9rem;}
+</style>
+</head>
+<body>
+<div class="container">
+  <div>
+    <h1>Unary Neural Network — Graph &amp; Training Demo</h1>
+    <p class="muted">
+      Thermometer (unary) inputs: first <i>x</i> bits are 1, rest 0. One hidden layer (ReLU), one output. Visualize the network graph (weights as colored edges) and the fit curve vs. target.
+    </p>
+  </div>
+
+  <div class="card">
+    <div class="controls">
+      <label>
+        Target function
+        <select id="fn">
+          <option value="slope">Slope (y=x/K)</option>
+          <option value="hill">Hill (up then down)</option>
+          <option value="step">Step</option>
+        </select>
+      </label>
+      <label>
+        Unary length K
+        <select id="k">
+          <option value="8" selected="">8</option>
+          <option value="12">12</option>
+          <option value="16">16</option>
+        </select>
+      </label>
+      <label>
+        Learning rate
+        <input id="lr" type="range" min="0.005" max="0.08" step="0.005" value="0.03">
+        <div class="small muted">lr = <span id="lr-val">0.03</span></div>
+      </label>
+      <label>
+        Inspect x
+        <input id="inspect" type="range" min="0" max="8" step="1" value="4">
+        <div class="small muted">x = <span id="inspect-val">4</span></div>
+      </label>
+      <div style="display:flex;gap:0.4rem;flex-wrap:wrap;">
+        <button id="step">Train 1 step (full batch)</button>
+        <button id="step20">Train 20 steps</button>
+        <button id="reset">Reset</button>
+      </div>
+    </div>
+
+    <div class="badges">
+      <span class="badge">Loss: <span id="loss">—</span></span>
+      <span class="badge">Steps: <span id="steps">0</span></span>
+      <span class="badge">ŷ (inspect): <span id="yhat">—</span></span>
+      <span class="badge">y (inspect): <span id="ytrue">—</span></span>
+    </div>
+
+    <div class="grid-2" style="margin-top:0.8rem;">
+      <div>
+        <div class="section-title">Target (dots) vs Prediction (line)</div>
+        <canvas id="plot" aria-label="Function plot"></canvas>
+      </div>
+      <div>
+        <div class="section-title">Network graph (weights as edges)</div>
+        <canvas id="graph" aria-label="Network graph"></canvas>
+      </div>
+    </div>
+
+    <div style="margin-top:0.8rem;">
+      <div class="section-title">Unary encoding for inspected x</div>
+      <div class="unary-bar" id="ubar"></div>
+      <p class="small muted" style="margin-top:0.4rem;">
+        Edge color: blue=positive, red=negative; thickness ∝ |weight|. ReLU hidden layer. Gradients follow the same rules as standard nets; unary just masks which first-layer weights get updates (x_j=0 ⇒ no grad to W·j for that sample).
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // --- Model sizes (hidden fixed small for clarity) ---
+  let K = 8;
+  const H = 5;
+
+  // --- Data ---
+  let xs = [];
+  let ys = [];
+  function buildXs() {
+    xs = [];
+    for (let i=0;i<=K;i++) xs.push(i);
+  }
+  function makeTargets(kind) {
+    ys = xs.map(v=>{
+      if (kind==='slope') return v / K;
+      if (kind==='hill') { const m=K/2; return v<=m ? v/m : (K-v)/m; }
+      return v < K/2 ? 0.2 : 0.9; // step
+    });
+  }
+  function unary(v) {
+    const a = new Float64Array(K);
+    for (let i=0;i<K;i++) a[i] = i < v ? 1 : 0;
+    return a;
+  }
+
+  // --- Params ---
+  let W1, b1, W2, b2;
+  function randn() {
+    let u=0,v=0;
+    while(u===0)u=Math.random();
+    while(v===0)v=Math.random();
+    return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
+  }
+  function initParams() {
+    const s1 = Math.sqrt(2/(K));
+    const s2 = Math.sqrt(2/(H));
+    W1 = Array.from({length:H}, ()=> {
+      const r=new Float64Array(K);
+      for (let j=0;j<K;j++) r[j]=randn()*s1;
+      return r;
+    });
+    b1 = new Float64Array(H);
+    W2 = new Float64Array(H);
+    for (let i=0;i<H;i++) W2[i]=randn()*s2;
+    b2 = 0;
+  }
+
+  // --- Forward ---
+  function forward(xVec, cache){
+    const z1=new Float64Array(H);
+    const a1=new Float64Array(H);
+    for (let i=0;i<H;i++){
+      let s=b1[i], w=W1[i];
+      for (let j=0;j<K;j++) s += w[j]*xVec[j];
+      z1[i]=s; a1[i]= s>0 ? s : 0;
+    }
+    let y=b2;
+    for (let i=0;i<H;i++) y+=W2[i]*a1[i];
+    if (cache){cache.z1=z1; cache.a1=a1; cache.y=y;}
+    return y;
+  }
+
+  // --- Loss & full-batch gradients ---
+  function trainStep(lr){
+    const dW1 = Array.from({length:H}, ()=> new Float64Array(K));
+    const db1 = new Float64Array(H);
+    const dW2 = new Float64Array(H);
+    let db2=0, loss=0;
+    const z1=new Float64Array(H);
+    const a1=new Float64Array(H);
+    const N = xs.length;
+
+    for (let idx=0; idx<N; idx++){
+      const xVec=unary(xs[idx]);
+      const yTrue=ys[idx];
+      // fwd
+      for (let i=0;i<H;i++){
+        let s=b1[i], w=W1[i];
+        for (let j=0;j<K;j++) s+=w[j]*xVec[j];
+        z1[i]=s; a1[i]= s>0 ? s : 0;
+      }
+      let y=b2; for (let i=0;i<H;i++) y+=W2[i]*a1[i];
+      const diff = y - yTrue;
+      loss += 0.5*diff*diff;
+      const dldy = diff;
+      for (let i=0;i<H;i++) dW2[i] += dldy * a1[i];
+      db2 += dldy;
+      const da1 = new Float64Array(H);
+      for (let i=0;i<H;i++) da1[i]= dldy * W2[i];
+      const dz1 = new Float64Array(H);
+      for (let i=0;i<H;i++) dz1[i]= z1[i]>0 ? da1[i] : 0;
+      for (let i=0;i<H;i++){
+        db1[i] += dz1[i];
+        const dW1i=dW1[i];
+        for (let j=0;j<K;j++) dW1i[j] += dz1[i]*xVec[j];
+      }
+    }
+    const invN = 1/N;
+    for (let i=0;i<H;i++){
+      for (let j=0;j<K;j++) W1[i][j] -= lr * dW1[i][j] * invN;
+      b1[i] -= lr * db1[i] * invN;
+    }
+    for (let i=0;i<H;i++) W2[i] -= lr * dW2[i] * invN;
+    b2 -= lr * db2 * invN;
+    return loss*invN;
+  }
+
+  // --- DOM ---
+  const plot = document.getElementById('plot');
+  const graph = document.getElementById('graph');
+  const pctx = plot.getContext('2d');
+  const gctx = graph.getContext('2d');
+  const lossEl = document.getElementById('loss');
+  const stepsEl = document.getElementById('steps');
+  const yhatEl = document.getElementById('yhat');
+  const ytrueEl= document.getElementById('ytrue');
+  const lrRange = document.getElementById('lr');
+  const lrVal = document.getElementById('lr-val');
+  const fnSel = document.getElementById('fn');
+  const kSel = document.getElementById('k');
+  const inspect = document.getElementById('inspect');
+  const inspectVal = document.getElementById('inspect-val');
+  const ubar = document.getElementById('ubar');
+
+  let dpr = window.devicePixelRatio || 1;
+  function fitCanvas(cv, ctx){
+    const r=cv.getBoundingClientRect();
+    cv.width=Math.round(r.width*dpr);
+    cv.height=Math.round(r.height*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+
+  function renderPlot(){
+    fitCanvas(plot,pctx);
+    const w=plot.clientWidth, h=plot.clientHeight;
+    pctx.clearRect(0,0,w,h);
+    const yMin=-0.1, yMax=1.1;
+    const xTo = x => (x / K) * w;
+    const yTo = y => h - ((y - yMin)/(yMax - yMin))*h;
+    pctx.strokeStyle='rgba(255,255,255,0.28)';
+    pctx.lineWidth=1;
+    pctx.beginPath(); pctx.moveTo(0,yTo(0)); pctx.lineTo(w,yTo(0)); pctx.stroke();
+    pctx.beginPath(); pctx.moveTo(0,0); pctx.lineTo(0,h); pctx.stroke();
+
+    // targets
+    pctx.fillStyle='rgba(94,234,212,0.9)';
+    for (let i=0;i<xs.length;i++){
+      const px=xTo(xs[i]), py=yTo(ys[i]);
+      pctx.beginPath(); pctx.arc(px,py,4,0,Math.PI*2); pctx.fill();
+    }
+    // prediction line
+    pctx.strokeStyle='rgba(125,211,252,0.95)';
+    pctx.lineWidth=2;
+    pctx.beginPath();
+    for (let i=0;i<xs.length;i++){
+      const yhat=forward(unary(xs[i]));
+      const px=xTo(xs[i]), py=yTo(yhat);
+      if (i===0) pctx.moveTo(px,py); else pctx.lineTo(px,py);
+    }
+    pctx.stroke();
+  }
+
+  function renderGraph(){
+    fitCanvas(graph,gctx);
+    const w=graph.clientWidth, h=graph.clientHeight;
+    gctx.clearRect(0,0,w,h);
+    // positions
+    const margin=30;
+    const layerX = [margin, w*0.45, w*0.85];
+    const inY = i => margin + i * ((h-2*margin)/(K-1||1));
+    const hY  = i => margin + i * ((h-2*margin)/(H-1||1));
+    const outY= h/2;
+    // edges: input->hidden
+    for (let j=0;j<H;j++){
+      for (let i=0;i<K;i++){
+        const wgt = W1[j][i];
+        const a = Math.min(1, Math.abs(wgt)/(0.8)); // scale for thickness
+        const thick = 1 + 4*a;
+        gctx.strokeStyle = wgt>=0 ? `rgba(96,165,250,${0.25+0.75*a})` : `rgba(248,113,113,${0.25+0.75*a})`;
+        gctx.lineWidth = thick;
+        gctx.beginPath();
+        gctx.moveTo(layerX[0], inY(i));
+        gctx.lineTo(layerX[1], hY(j));
+        gctx.stroke();
+      }
+    }
+    // edges: hidden->out
+    for (let j=0;j<H;j++){
+      const wgt = W2[j];
+      const a = Math.min(1, Math.abs(wgt)/(0.8));
+      const thick = 1 + 4*a;
+      gctx.strokeStyle = wgt>=0 ? `rgba(96,165,250,${0.25+0.75*a})` : `rgba(248,113,113,${0.25+0.75*a})`;
+      gctx.lineWidth = thick;
+      gctx.beginPath();
+      gctx.moveTo(layerX[1], hY(j));
+      gctx.lineTo(layerX[2], outY);
+      gctx.stroke();
+    }
+    // nodes
+    gctx.fillStyle='var(--panel)';
+    gctx.strokeStyle='rgba(255,255,255,0.6)';
+    gctx.lineWidth=1.2;
+    for (let i=0;i<K;i++){
+      gctx.beginPath(); gctx.arc(layerX[0], inY(i), 8, 0, Math.PI*2); gctx.fill(); gctx.stroke();
+    }
+    for (let j=0;j<H;j++){
+      gctx.beginPath(); gctx.arc(layerX[1], hY(j), 10, 0, Math.PI*2); gctx.fill(); gctx.stroke();
+    }
+    gctx.beginPath(); gctx.arc(layerX[2], outY, 12, 0, Math.PI*2); gctx.fill(); gctx.stroke();
+  }
+
+  function renderUnaryBar(xv){
+    ubar.innerHTML='';
+    ubar.style.gridTemplateColumns = `repeat(${K}, minmax(0,1fr))`;
+    for (let i=0;i<K;i++){
+      const d=document.createElement('div');
+      d.className='bit';
+      if (i < xv){
+        d.style.background='linear-gradient(135deg, var(--accent), var(--accent2))';
+        d.style.borderColor='rgba(255,255,255,0.5)';
+      }
+      ubar.appendChild(d);
+    }
+  }
+
+  function updateInspect(){
+    const xv=parseInt(inspect.value,10);
+    inspectVal.textContent=xv;
+    const yhat=forward(unary(xv));
+    yhatEl.textContent=yhat.toFixed(4);
+    ytrueEl.textContent=ys[xv].toFixed(4);
+    renderUnaryBar(xv);
+  }
+
+  // --- Events ---
+  document.getElementById('step').addEventListener('click', ()=>{
+    const loss=trainStep(parseFloat(lrRange.value));
+    stepsEl.textContent = (+stepsEl.textContent)+1;
+    lossEl.textContent = loss.toFixed(5);
+    renderPlot(); renderGraph(); updateInspect();
+  });
+  document.getElementById('step20').addEventListener('click', ()=>{
+    let loss=0;
+    for (let i=0;i<20;i++) loss=trainStep(parseFloat(lrRange.value));
+    stepsEl.textContent = (+stepsEl.textContent)+20;
+    lossEl.textContent = loss.toFixed(5);
+    renderPlot(); renderGraph(); updateInspect();
+  });
+  document.getElementById('reset').addEventListener('click', ()=>{
+    initParams(); stepsEl.textContent=0; lossEl.textContent='—';
+    renderPlot(); renderGraph(); updateInspect();
+  });
+  lrRange.addEventListener('input', e=>{
+    lrVal.textContent=parseFloat(e.target.value).toFixed(3);
+  });
+  fnSel.addEventListener('change', e=>{
+    makeTargets(e.target.value);
+    renderPlot(); updateInspect();
+  });
+  kSel.addEventListener('change', e=>{
+    K = parseInt(e.target.value,10);
+    inspect.max = K;
+    inspect.value = Math.min(parseInt(inspect.value,10), K);
+    buildXs(); makeTargets(fnSel.value);
+    initParams();
+    stepsEl.textContent=0; lossEl.textContent='—';
+    renderPlot(); renderGraph(); updateInspect();
+  });
+  inspect.addEventListener('input', ()=>{
+    updateInspect();
+  });
+
+  // --- Init ---
+  buildXs(); makeTargets('slope'); initParams();
+  renderPlot(); renderGraph(); updateInspect();
+})();
+</script>
+
+
+</body></html>

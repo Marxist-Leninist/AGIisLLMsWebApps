@@ -1,0 +1,631 @@
+<!DOCTYPE html><html lang="en"><head><meta name="x-poe-datastore-behavior" content="local_only"><meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://code.jquery.com https://unpkg.com https://d3js.org https://threejs.org https://cdn.plot.ly https://stackpath.bootstrapcdn.com https://maps.googleapis.com https://cdn.tailwindcss.com https://ajax.googleapis.com https://kit.fontawesome.com https://cdn.datatables.net https://maxcdn.bootstrapcdn.com https://code.highcharts.com https://tako-static-assets-production.s3.amazonaws.com https://www.youtube.com https://fonts.googleapis.com https://fonts.gstatic.com https://pfst.cf2.poecdn.net https://puc.poecdn.net https://i.imgur.com https://wikimedia.org https://*.icons8.com https://*.giphy.com https://picsum.photos https://images.unsplash.com; frame-src 'self' https://www.youtube.com https://trytako.com; child-src 'self'; manifest-src 'self'; worker-src 'self'; upgrade-insecure-requests; block-all-mixed-content;">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dodge the Squares — Pseudo-Transformer Learner</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: radial-gradient(circle at 20% 20%, #0f152a, #070a16 45%, #050712);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: #e8ecf1;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 16px;
+  }
+  .shell {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    width: 100%;
+    max-width: 1080px;
+    justify-content: center;
+  }
+  #gameWrap {
+    position: relative;
+    width: 420px;
+    height: 620px;
+    transform-origin: top left;
+  }
+  #game {
+    position: absolute;
+    inset: 0;
+    border: 2px solid #2b354a;
+    background: radial-gradient(circle at 30% 30%, #162042, #0b0f1a 70%);
+    overflow: hidden;
+    box-shadow: 0 0 30px #0a0e1a, 0 20px 80px rgba(0,0,0,0.45);
+    border-radius: 12px;
+  }
+  #hud {
+    position: absolute;
+    top: 8px; left: 10px; right: 10px;
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    font-weight: 600; font-size: 14px; color: #cdd7e3;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.35);
+    flex-wrap: wrap;
+  }
+  #player {
+    position: absolute;
+    width: 22px; height: 22px;
+    background: #5ef5ff;
+    border-radius: 6px;
+    box-shadow: 0 0 10px #5ef5ff;
+  }
+  .enemy {
+    position: absolute;
+    width: 22px; height: 22px;
+    background: #ff4f6d;
+    border-radius: 3px;
+    box-shadow: 0 0 10px #ff4f6d;
+  }
+  .tag {
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    font-size: 11px;
+    letter-spacing: 0.2px;
+  }
+  #side {
+    min-width: 260px;
+    max-width: 360px;
+    flex: 1 1 280px;
+    background: rgba(13,17,30,0.7);
+    border: 1px solid #1f2942;
+    border-radius: 12px;
+    padding: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+    backdrop-filter: blur(6px);
+  }
+  #side h3 {
+    margin: 6px 0 4px 0;
+    font-size: 14px;
+    letter-spacing: 0.3px;
+    color: #e9edf5;
+  }
+  #side small { color: #9fb2d0; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  button {
+    background: #2d3b6a;
+    color: #e8ecf1;
+    border: 1px solid #3f4f80;
+    border-radius: 6px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.25);
+    transition: background 120ms ease, transform 120ms ease;
+  }
+  button:hover { background: #3a4a7a; transform: translateY(-1px); }
+  button:active { transform: translateY(0); }
+  label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; font-size: 13px; }
+  input[type="checkbox"] { accent-color: #5ef5ff; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    font-size: 11px;
+    letter-spacing: 0.1px;
+  }
+  #attnList { display: flex; flex-direction: column; gap: 6px; }
+  .attn-item {
+    display: grid;
+    grid-template-columns: 60px 1fr 44px;
+    gap: 6px;
+    align-items: center;
+    font-size: 12px;
+  }
+  .bar {
+    position: relative;
+    height: 10px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.06);
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.07);
+  }
+  .bar-fill {
+    position: absolute; left: 0; top: 0; bottom: 0;
+    background: linear-gradient(90deg, #5ef5ff, #7df7c5);
+  }
+  #memBars { display: flex; gap: 6px; }
+  .mem {
+    flex: 1;
+    height: 46px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.07);
+    position: relative;
+    overflow: hidden;
+  }
+  .mem-fill {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: linear-gradient(180deg, #9fa8ff, #5ef5ff);
+  }
+  .mem-label {
+    position: absolute; top: 2px; left: 6px;
+    font-size: 11px; color: #cbd6ec;
+  }
+  #stats { font-size: 13px; color: #cdd7e3; display: flex; gap: 10px; flex-wrap: wrap; }
+  #statusLine { font-size: 12px; color: #9fb2d0; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div id="gameWrap">
+    <div id="game" aria-label="Dodge the Squares - Pseudo-Transformer AI">
+      <div id="hud">
+        <div>Time: <span id="time">0.0</span>s</div>
+        <div>Best: <span id="best">0.0</span>s</div>
+        <div>Top Score: <span id="topScore">0.0</span>s</div>
+        <span class="tag">Auto</span>
+      </div>
+      <div id="player" aria-label="AI-controlled player"></div>
+    </div>
+  </div>
+
+  <div id="side">
+    <h3>Controller</h3>
+    <div class="row" style="margin-bottom:6px;">
+      <label><input type="checkbox" id="learnToggle" checked=""> Learning on</label>
+      <button id="resetLearnBtn" style="padding:6px 10px;">Reset Learning</button>
+    </div>
+    <div id="stats">
+      <span>Runs: <strong id="runs">0</strong></span>
+      <span>Last: <strong id="lastScore">0.0</strong>s</span>
+      <span>Best: <strong id="bestSide">0.0</strong>s</span>
+      <span>Top: <strong id="topSide">0.0</strong>s</span>
+    </div>
+    <div id="statusLine">Toy single-head attention + tiny memory + hill-climb. Not a real Transformer/NTM.</div>
+
+    <h3 style="margin-top:10px;">Weights</h3>
+    <div id="weights" class="chips"></div>
+
+    <h3 style="margin-top:10px;">Attention (top enemies)</h3>
+    <div id="attnList"></div>
+
+    <h3 style="margin-top:10px;">Memory</h3>
+    <div id="memBars"></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ---- DOM ----
+  const gameWrap = document.getElementById('gameWrap');
+  const game = document.getElementById('game');
+  const player = document.getElementById('player');
+  const timeEl = document.getElementById('time');
+  const bestEl = document.getElementById('best');
+  const topScoreEl = document.getElementById('topScore');
+  const runsEl = document.getElementById('runs');
+  const lastScoreEl = document.getElementById('lastScore');
+  const bestSideEl = document.getElementById('bestSide');
+  const topSideEl = document.getElementById('topSide');
+  const learnToggle = document.getElementById('learnToggle');
+  const resetLearnBtn = document.getElementById('resetLearnBtn');
+  const weightsEl = document.getElementById('weights');
+  const attnList = document.getElementById('attnList');
+  const memBars = document.getElementById('memBars');
+
+  // ---- Constants ----
+  const W = 420, H = 620;
+  const pw = 22, ph = 22;
+  const baseSpeed = 3.2;
+  const aiSpeed = baseSpeed * 1.05;
+  const STORAGE_KEY = 'dodge_pseudo_transformer_weights_v2';
+  const STORAGE_TOP = 'dodge_pseudo_transformer_topscore_v2';
+  const STORAGE_MEM = 'dodge_pseudo_transformer_mem_v2';
+
+  // ---- State ----
+  let px = W/2 - pw/2, py = H - 80;
+  let enemies = [];
+  let running = false;
+  let startTime = 0;
+  let best = 0;
+  let topScore = 0;
+  let lastScore = 0;
+  let lastSpawn = 0;
+  let runCount = 0;
+  let restartTimer = null;
+  let frameCounter = 0;
+
+  // Memory vector (tiny recurrent-ish state)
+  let mem = [0,0,0,0];
+
+  // ---- Weights: pseudo single-head attention + value + memory update ----
+  let weights = {
+    distScale: 0.0020,
+    aboveBonus: 0.60,
+    centerBias: 0.0008,
+    upperBias: 0.0009,
+    noiseScale: 0.05,
+    wqX: [0.8, 0.0, 0.25, -0.1, 0.05, 0.0],  // nx, ny, m0, m1, m2, m3
+    wqY: [0.0, 0.9, -0.1, 0.2, 0.0, 0.05],
+    wkX: [1.0, 0.2, 0.1, 0.05],  // dxn, dyn, vyn, szn
+    wkY: [0.2, 1.0, 0.05, 0.05],
+    wvX: [-0.7, -0.15, -0.05, 0.0],
+    wvY: [-0.15, -0.8, -0.02, 0.0],
+    memKeep: 0.85,
+    memGain: 0.35,
+  };
+  let bestWeights = { ...weights };
+  let bestWeightsScore = 0;
+
+  // Load persisted weights/top/mem
+  (() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          weights = { ...weights, ...parsed };
+          bestWeights = { ...weights };
+        }
+      } catch {}
+    }
+    const savedTop = localStorage.getItem(STORAGE_TOP);
+    if (savedTop) topScore = parseFloat(savedTop) || 0;
+    const savedMem = localStorage.getItem(STORAGE_MEM);
+    if (savedMem) {
+      try {
+        const m = JSON.parse(savedMem);
+        if (Array.isArray(m) && m.length === 4) mem = m.map(Number);
+      } catch {}
+    }
+  })();
+
+  // Render helpers
+  const renderWeights = () => {
+    weightsEl.innerHTML = '';
+    const entries = [
+      ['dist', weights.distScale],
+      ['above', weights.aboveBonus],
+      ['center', weights.centerBias],
+      ['upper', weights.upperBias],
+      ['noise', weights.noiseScale],
+      ['memKeep', weights.memKeep],
+      ['memGain', weights.memGain],
+    ];
+    for (const [k,v] of entries) {
+      const span = document.createElement('span');
+      span.className = 'chip';
+      span.textContent = `${k}: ${v.toFixed(4)}`;
+      weightsEl.appendChild(span);
+    }
+  };
+  const renderMem = () => {
+    memBars.innerHTML = '';
+    mem.forEach((mVal, i) => {
+      const div = document.createElement('div');
+      div.className = 'mem';
+      const fill = document.createElement('div');
+      fill.className = 'mem-fill';
+      const h = Math.max(0, Math.min(1, (mVal + 1) / 2)) * 100;
+      fill.style.height = `${h}%`;
+      const lbl = document.createElement('div');
+      lbl.className = 'mem-label';
+      lbl.textContent = `m${i}: ${mVal.toFixed(2)}`;
+      div.appendChild(fill);
+      div.appendChild(lbl);
+      memBars.appendChild(div);
+    });
+  };
+  const renderAttn = (attnData) => {
+    attnList.innerHTML = '';
+    attnData.slice(0,8).forEach((a, idx) => {
+      const row = document.createElement('div');
+      row.className = 'attn-item';
+      const name = document.createElement('div');
+      name.textContent = `E${idx}`;
+      const bar = document.createElement('div');
+      bar.className = 'bar';
+      const fill = document.createElement('div');
+      fill.className = 'bar-fill';
+      fill.style.width = `${(a.weight*100).toFixed(1)}%`;
+      bar.appendChild(fill);
+      const info = document.createElement('div');
+      info.style.textAlign = 'right';
+      info.textContent = a.weight.toFixed(2);
+      row.appendChild(name);
+      row.appendChild(bar);
+      row.appendChild(info);
+      attnList.appendChild(row);
+    });
+  };
+
+  const updateScales = () => {
+    const scale = Math.min(
+      1,
+      (window.innerWidth - 40) / 420,
+      (window.innerHeight - 40) / 620
+    );
+    gameWrap.style.transform = `scale(${scale})`;
+  };
+  window.addEventListener('resize', updateScales);
+  updateScales();
+
+  // Position
+  const setPos = () => { player.style.transform = `translate(${px}px, ${py}px)`; };
+
+  // Enemies
+  const spawnEnemy = () => {
+    const e = document.createElement('div');
+    e.className = 'enemy';
+    const size = 18 + Math.random()*10;
+    e.style.width = `${size}px`;
+    e.style.height = `${size}px`;
+    const x = Math.random() * (W - size);
+    e.style.left = `${x}px`;
+    e.style.top = `-30px`;
+    e.dataset.vy = (1.4 + Math.random()*1.8).toFixed(2);
+    enemies.push(e);
+    game.appendChild(e);
+  };
+
+  const reset = () => {
+    enemies.forEach(e => e.remove());
+    enemies = [];
+    px = W/2 - pw/2; py = H - 80;
+    setPos();
+    timeEl.textContent = '0.0';
+    lastSpawn = performance.now();
+  };
+
+  const collide = (ax, ay, aw, ah, bx, by, bw, bh) =>
+    ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+
+  const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+
+  // --- Pseudo attention policy ---
+  const computeAttentionMove = () => {
+    const pcx = px + pw/2;
+    const pcy = py + ph/2;
+    const nx = (pcx / W) * 2 - 1;
+    const ny = (pcy / H) * 2 - 1;
+
+    // Build query from player + memory
+    const qX = weights.wqX[0]*nx + weights.wqX[1]*ny +
+               weights.wqX[2]*mem[0] + weights.wqX[3]*mem[1] +
+               weights.wqX[4]*mem[2] + weights.wqX[5]*mem[3];
+    const qY = weights.wqY[0]*nx + weights.wqY[1]*ny +
+               weights.wqY[2]*mem[0] + weights.wqY[3]*mem[1] +
+               weights.wqY[4]*mem[2] + weights.wqY[5]*mem[3];
+
+    if (enemies.length === 0) {
+      const dxC = (W/2 - pw/2) - px;
+      const dyT = H*0.60 - py;
+      const len = Math.hypot(dxC, dyT) || 1;
+      return { vx: (dxC/len)*aiSpeed*0.6, vy: (dyT/len)*aiSpeed*0.6, attnVis: [] };
+    }
+
+    // Features and attention
+    const feats = [];
+    for (const e of enemies) {
+      const ex = parseFloat(e.style.left);
+      const ey = parseFloat(e.style.top);
+      const ew = e.offsetWidth;
+      const eh = e.offsetHeight;
+      const vyE = parseFloat(e.dataset.vy);
+      const ecx = ex + ew/2;
+      const ecy = ey + eh/2;
+      const dx = ecx - pcx;
+      const dy = ecy - pcy;
+      const dist2 = dx*dx + dy*dy + 1e-3;
+      const dxn = dx / W;
+      const dyn = dy / H;
+      const vyn = vyE / 4;
+      const szn = ew / 30;
+      feats.push({ dx, dy, dist2, dxn, dyn, vyn, szn });
+    }
+
+    // Sort by proximity; keep top K
+    feats.sort((a,b) => a.dist2 - b.dist2);
+    const K = 8;
+    const sel = feats.slice(0, K);
+
+    const logits = [];
+    for (const f of sel) {
+      const kx = weights.wkX[0]*f.dxn + weights.wkX[1]*f.dyn + weights.wkX[2]*f.vyn + weights.wkX[3]*f.szn;
+      const ky = weights.wkY[0]*f.dxn + weights.wkY[1]*f.dyn + weights.wkY[2]*f.vyn + weights.wkY[3]*f.szn;
+      const dot = (qX*kx + qY*ky) / Math.sqrt(2);
+      const score = dot - weights.distScale * f.dist2 + (f.dy < 0 ? weights.aboveBonus : 0);
+      logits.push(score);
+    }
+    const maxLogit = Math.max(...logits);
+    const exps = logits.map(l => Math.exp(l - maxLogit));
+    const sumExp = exps.reduce((a,b)=>a+b, 0) || 1;
+    const attn = exps.map(e => e / sumExp);
+
+    // Value aggregation
+    let rx = 0, ry = 0;
+    const attnVis = [];
+    sel.forEach((f, i) => {
+      const vx = weights.wvX[0]*f.dxn + weights.wvX[1]*f.dyn + weights.wvX[2]*f.vyn + weights.wvX[3]*f.szn;
+      const vy = weights.wvY[0]*f.dxn + weights.wvY[1]*f.dyn + weights.wvY[2]*f.vyn + weights.wvY[3]*f.szn;
+      rx += attn[i] * vx;
+      ry += attn[i] * vy;
+      if (f.dy < 0) {
+        rx += (Math.random()*2 - 1) * weights.noiseScale * attn[i];
+      }
+      attnVis.push({ weight: attn[i], dy: f.dy, dist2: f.dist2 });
+    });
+
+    // Memory update (tiny, gated)
+    const ctxMag = Math.hypot(rx, ry);
+    for (let i = 0; i < mem.length; i++) {
+      const gain = weights.memGain * (i < 2 ? ctxMag : (rx + ry) * 0.5);
+      mem[i] = Math.tanh(weights.memKeep * mem[i] + gain);
+    }
+
+    // Bias toward center / upper mid
+    rx += ((W/2 - pw/2) - px) * weights.centerBias;
+    ry += ((H*0.55) - py) * weights.upperBias;
+
+    // Normalize to speed
+    const norm = Math.hypot(rx, ry);
+    if (norm > 1e-4) {
+      rx = rx / norm * aiSpeed;
+      ry = ry / norm * aiSpeed;
+    } else {
+      rx = 0; ry = 0;
+    }
+    return { vx: rx, vy: ry, attnVis };
+  };
+
+  // Simple hill-climbing over weights
+  const mutateWeights = (src) => {
+    const factor = 0.12;
+    const j = (v) => v * (1 + (Math.random()*2 - 1) * factor);
+    return {
+      distScale: Math.max(0.0004, j(src.distScale)),
+      aboveBonus: j(src.aboveBonus),
+      centerBias: Math.max(0.0001, j(src.centerBias)),
+      upperBias: Math.max(0.0001, j(src.upperBias)),
+      noiseScale: Math.max(0.0, j(src.noiseScale)),
+      wqX: src.wqX.map(j),
+      wqY: src.wqY.map(j),
+      wkX: src.wkX.map(j),
+      wkY: src.wkY.map(j),
+      wvX: src.wvX.map(j),
+      wvY: src.wvY.map(j),
+      memKeep: Math.min(0.98, Math.max(0.6, j(src.memKeep))),
+      memGain: Math.min(0.8, Math.max(0.05, j(src.memGain))),
+    };
+  };
+
+  const loop = (t) => {
+    if (!running) return;
+
+    // AI move
+    const ai = computeAttentionMove();
+    px = clamp(px + ai.vx, 0, W - pw);
+    py = clamp(py + ai.vy, 0, H - ph);
+    setPos();
+
+    // spawn
+    if (t - lastSpawn > 550) { spawnEnemy(); lastSpawn = t; }
+
+    // update enemies and collisions
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      const e = enemies[i];
+      const vyE = parseFloat(e.dataset.vy);
+      const ny = (parseFloat(e.style.top) + vyE);
+      e.style.top = `${ny}px`;
+      if (ny > H + 40) { e.remove(); enemies.splice(i,1); continue; }
+      const ex = parseFloat(e.style.left), ew = e.offsetWidth, eh = e.offsetHeight;
+      if (collide(px, py, pw, ph, ex, ny, ew, eh)) {
+        endGame();
+        return;
+      }
+    }
+
+    // time
+    const elapsed = (t - startTime)/1000;
+    timeEl.textContent = elapsed.toFixed(1);
+
+    // Visualization throttled
+    frameCounter++;
+    if (frameCounter % 6 === 0) {
+      renderMem();
+      renderAttn(ai.attnVis);
+    }
+
+    requestAnimationFrame(loop);
+  };
+
+  const endGame = () => {
+    running = false;
+    const elapsed = parseFloat(timeEl.textContent);
+    lastScore = elapsed;
+    if (elapsed > best) {
+      best = elapsed;
+      bestEl.textContent = best.toFixed(1);
+      bestSideEl.textContent = best.toFixed(1);
+    }
+    if (elapsed > topScore) {
+      topScore = elapsed;
+      topScoreEl.textContent = topScore.toFixed(1);
+      topSideEl.textContent = topScore.toFixed(1);
+      localStorage.setItem(STORAGE_TOP, topScore.toFixed(1));
+    }
+    // Learning update
+    if (learnToggle.checked) {
+      if (elapsed > bestWeightsScore) {
+        bestWeightsScore = elapsed;
+        bestWeights = { ...weights };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(bestWeights));
+      } else {
+        weights = { ...bestWeights };
+      }
+      weights = mutateWeights(weights);
+      renderWeights();
+    }
+
+    lastScoreEl.textContent = elapsed.toFixed(1);
+
+    // Persist memory (just to "remember" between runs)
+    localStorage.setItem(STORAGE_MEM, JSON.stringify(mem));
+
+    // Auto-restart
+    if (restartTimer) clearTimeout(restartTimer);
+    restartTimer = setTimeout(startGame, 450);
+  };
+
+  const startGame = () => {
+    if (restartTimer) { clearTimeout(restartTimer); restartTimer = null; }
+    reset();
+    running = true;
+    startTime = performance.now();
+    runCount += 1;
+    runsEl.textContent = runCount;
+    requestAnimationFrame(loop);
+  };
+
+  resetLearnBtn.onclick = () => {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(STORAGE_TOP);
+    localStorage.removeItem(STORAGE_MEM);
+    topScore = 0; topScoreEl.textContent = '0.0'; topSideEl.textContent = '0.0';
+    bestWeightsScore = 0;
+    weights = {
+      distScale: 0.0020,
+      aboveBonus: 0.60,
+      centerBias: 0.0008,
+      upperBias: 0.0009,
+      noiseScale: 0.05,
+      wqX: [0.8, 0.0, 0.25, -0.1, 0.05, 0.0],
+      wqY: [0.0, 0.9, -0.1, 0.2, 0.0, 0.05],
+      wkX: [1.0, 0.2, 0.1, 0.05],
+      wkY: [0.2, 1.0, 0.05, 0.05],
+      wvX: [-0.7, -0.15, -0.05, 0.0],
+      wvY: [-0.15, -0.8, -0.02, 0.0],
+      memKeep: 0.85,
+      memGain: 0.35,
+    };
+    bestWeights = { ...weights };
+    mem = [0,0,0,0];
+    renderWeights();
+    renderMem();
+  };
+
+  // Initial render
+  renderWeights();
+  renderMem();
+  bestEl.textContent = best.toFixed(1);
+  bestSideEl.textContent = best.toFixed(1);
+  topScoreEl.textContent = topScore.toFixed(1);
+  topSideEl.textContent = topScore.toFixed(1);
+
+  // Start automatically
+  startGame();
+})();
+</script>
+
+
+</body></html>

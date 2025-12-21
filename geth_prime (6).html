@@ -1,0 +1,1518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GETH PRIME - Neural Locomotion</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500;700&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #0a0a0f;
+  font-family: 'Rajdhani', sans-serif;
+  overflow: hidden;
+  color: #e0e0e0;
+}
+
+#game-container {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+}
+
+canvas { display: block; }
+
+#hud {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+#crosshair {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 24px; height: 24px;
+}
+#crosshair::before, #crosshair::after {
+  content: '';
+  position: absolute;
+  background: rgba(255, 100, 50, 0.9);
+  box-shadow: 0 0 8px rgba(255, 100, 50, 0.6);
+}
+#crosshair::before {
+  width: 2px; height: 24px;
+  left: 50%; transform: translateX(-50%);
+}
+#crosshair::after {
+  width: 24px; height: 2px;
+  top: 50%; transform: translateY(-50%);
+}
+
+#health-bar { position: absolute; bottom: 40px; left: 40px; width: 280px; }
+#shield-bar { position: absolute; bottom: 80px; left: 40px; width: 280px; }
+
+.bar-container {
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  height: 12px;
+  clip-path: polygon(0 0, 100% 0, 98% 100%, 2% 100%);
+}
+
+.bar-fill { height: 100%; transition: width 0.2s ease; }
+#health-fill { background: linear-gradient(90deg, #ff3333, #ff6644); box-shadow: 0 0 10px rgba(255, 50, 50, 0.5); }
+#shield-fill { background: linear-gradient(90deg, #3399ff, #66ccff); box-shadow: 0 0 10px rgba(50, 150, 255, 0.5); }
+
+.bar-label {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 10px;
+  letter-spacing: 2px;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+#ammo-display { position: absolute; bottom: 40px; right: 40px; text-align: right; }
+#ammo-weapon { font-family: 'Orbitron', sans-serif; font-size: 11px; letter-spacing: 2px; color: rgba(255, 255, 255, 0.5); margin-bottom: 4px; }
+#ammo-counts { display: flex; align-items: baseline; justify-content: flex-end; gap: 4px; }
+#ammo-clip { font-family: 'Orbitron', sans-serif; font-size: 52px; font-weight: 900; color: #ff6644; text-shadow: 0 0 20px rgba(255, 100, 50, 0.5); line-height: 1; }
+#ammo-separator { font-family: 'Orbitron', sans-serif; font-size: 24px; color: rgba(255, 255, 255, 0.3); }
+#ammo-reserve { font-family: 'Orbitron', sans-serif; font-size: 28px; font-weight: 700; color: rgba(255, 255, 255, 0.6); line-height: 1; }
+
+#reload-prompt { font-size: 14px; color: #ffaa33; margin-top: 8px; opacity: 0; transition: opacity 0.2s; }
+#reload-prompt.visible { opacity: 1; animation: pulse 0.8s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
+
+#wave-display { position: absolute; top: 30px; left: 50%; transform: translateX(-50%); text-align: center; }
+#wave-number { font-family: 'Orbitron', sans-serif; font-size: 14px; letter-spacing: 4px; color: rgba(255, 255, 255, 0.7); }
+#wave-objective { font-size: 18px; color: #ffaa33; margin-top: 4px; }
+
+#enemy-count { position: absolute; top: 30px; right: 40px; font-family: 'Orbitron', sans-serif; }
+#score-display { position: absolute; top: 30px; left: 40px; font-family: 'Orbitron', sans-serif; }
+#score-value { font-size: 24px; color: #66ff66; }
+
+#minimap {
+  position: absolute; top: 80px; right: 40px;
+  width: 180px; height: 180px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(100, 200, 255, 0.3);
+  border-radius: 4px;
+}
+
+#ai-stats {
+  position: absolute; bottom: 180px; left: 40px;
+  font-size: 11px; color: rgba(150, 200, 255, 0.7);
+  font-family: 'Rajdhani', monospace;
+}
+
+#locomotion-stats {
+  position: absolute; bottom: 120px; left: 40px;
+  font-size: 10px; color: rgba(255, 200, 100, 0.7);
+  font-family: monospace;
+}
+
+#damage-overlay {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 50%, rgba(255, 0, 0, 0.4) 100%);
+  opacity: 0; transition: opacity 0.1s;
+}
+
+.menu-screen {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(135deg, #0a0a15 0%, #151530 50%, #0a0a15 100%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  z-index: 100; pointer-events: auto;
+}
+.menu-screen.hidden { display: none; }
+
+#main-menu h1 {
+  font-family: 'Orbitron', sans-serif; font-size: 72px; font-weight: 900;
+  color: #ff6644; text-shadow: 0 0 40px rgba(255, 100, 50, 0.5), 0 0 80px rgba(255, 100, 50, 0.3);
+  margin-bottom: 10px; letter-spacing: 8px;
+}
+#main-menu h2 {
+  font-family: 'Rajdhani', sans-serif; font-size: 24px;
+  color: rgba(255, 255, 255, 0.5); margin-bottom: 60px;
+  letter-spacing: 6px; font-weight: 300;
+}
+
+.menu-btn {
+  font-family: 'Orbitron', sans-serif; font-size: 16px; letter-spacing: 3px;
+  padding: 16px 48px; margin: 10px; background: transparent;
+  border: 2px solid rgba(255, 100, 50, 0.6); color: #ff6644;
+  cursor: pointer; transition: all 0.2s;
+  clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
+}
+.menu-btn:hover {
+  background: rgba(255, 100, 50, 0.2); border-color: #ff6644;
+  box-shadow: 0 0 30px rgba(255, 100, 50, 0.3);
+}
+
+#controls-info { position: absolute; bottom: 40px; font-size: 14px; color: rgba(255, 255, 255, 0.4); text-align: center; }
+
+#wave-announce {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  font-family: 'Orbitron', sans-serif; font-size: 64px; color: #ff6644;
+  text-shadow: 0 0 40px rgba(255, 100, 50, 0.8); opacity: 0;
+  pointer-events: none; z-index: 50;
+}
+
+#kill-feed { position: absolute; top: 100px; left: 40px; width: 300px; }
+.kill-entry { font-size: 13px; color: #ffaa33; margin-bottom: 4px; opacity: 0; animation: killFade 3s ease-out forwards; }
+@keyframes killFade { 0% { opacity: 0; transform: translateX(-20px); } 10% { opacity: 1; transform: translateX(0); } 80% { opacity: 1; } 100% { opacity: 0; } }
+
+#pickup-notify {
+  position: absolute; bottom: 140px; right: 40px;
+  font-family: 'Orbitron', sans-serif; font-size: 14px;
+  color: #66ff66; opacity: 0; transition: opacity 0.3s;
+}
+#pickup-notify.visible { opacity: 1; }
+
+#reload-bar { position: absolute; bottom: 120px; right: 40px; width: 120px; height: 6px; background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255, 255, 255, 0.2); opacity: 0; }
+#reload-bar.active { opacity: 1; }
+#reload-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #ffaa33, #ff6644); transition: width 0.05s linear; }
+</style>
+</head>
+<body>
+
+<div id="game-container">
+  <div id="hud">
+    <div id="crosshair"></div>
+    
+    <div id="shield-bar">
+      <div class="bar-label">SHIELDS</div>
+      <div class="bar-container"><div class="bar-fill" id="shield-fill" style="width: 100%"></div></div>
+    </div>
+    
+    <div id="health-bar">
+      <div class="bar-label">HEALTH</div>
+      <div class="bar-container"><div class="bar-fill" id="health-fill" style="width: 100%"></div></div>
+    </div>
+    
+    <div id="ammo-display">
+      <div id="ammo-weapon">M-8 AVENGER</div>
+      <div id="ammo-counts">
+        <span id="ammo-clip">30</span>
+        <span id="ammo-separator">/</span>
+        <span id="ammo-reserve">210</span>
+      </div>
+      <div id="reload-prompt">[R] RELOAD</div>
+    </div>
+    
+    <div id="reload-bar"><div id="reload-fill"></div></div>
+    <div id="pickup-notify">+60 THERMAL CLIPS</div>
+    
+    <div id="wave-display">
+      <div id="wave-number">WAVE 1</div>
+      <div id="wave-objective">ELIMINATE ALL HOSTILES</div>
+    </div>
+    
+    <div id="enemy-count"><span style="color: #ff4444;">●</span> HOSTILES: <span id="hostile-num">0</span></div>
+    
+    <div id="score-display">
+      <div style="font-size: 10px; color: rgba(255,255,255,0.5); letter-spacing: 2px;">CREDITS</div>
+      <div id="score-value">0</div>
+    </div>
+    
+    <canvas id="minimap"></canvas>
+    
+    <div id="ai-stats">
+      <div>NEURAL EPOCH: <span id="epoch-num">0</span></div>
+      <div>AVG LOSS: <span id="loss-val">0.000</span></div>
+      <div>LOCOMOTION LEARNING: <span id="learning-status">ACTIVE</span></div>
+    </div>
+    
+    <div id="locomotion-stats">
+      <div>GAIT PHASE: <span id="gait-phase">0.00</span></div>
+      <div>STABILITY: <span id="stability-val">1.00</span></div>
+      <div>FALLEN: <span id="fallen-count">0</span></div>
+    </div>
+    
+    <div id="kill-feed"></div>
+    <div id="wave-announce"></div>
+    <div id="damage-overlay"></div>
+  </div>
+  
+  <div id="main-menu" class="menu-screen">
+    <h1>GETH PRIME</h1>
+    <h2>NEURAL LOCOMOTION</h2>
+    <button class="menu-btn" onclick="startGame()">DEPLOY</button>
+    <div id="controls-info">
+      WASD - Move | MOUSE - Aim | CLICK - Fire | R - Reload | SHIFT - Sprint<br><br>
+      <span style="color: #ff6644;">Geth learn to WALK using physics-based ragdoll bodies</span><br>
+      <span style="color: #ffaa33;">Transformer NN controls joint torques for locomotion</span>
+    </div>
+  </div>
+  
+  <div id="game-over" class="menu-screen hidden">
+    <h1 style="font-size: 48px;">EXTRACTION FAILED</h1>
+    <h2>NEURAL ADAPTATION COMPLETE</h2>
+    <div style="margin-bottom: 40px;">
+      <div style="font-size: 18px; color: rgba(255,255,255,0.7);">FINAL SCORE</div>
+      <div id="final-score" style="font-family: 'Orbitron'; font-size: 48px; color: #66ff66;">0</div>
+      <div style="font-size: 14px; color: rgba(255,255,255,0.5); margin-top: 10px;">WAVES SURVIVED: <span id="final-waves">0</span></div>
+    </div>
+    <button class="menu-btn" onclick="startGame()">REDEPLOY</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ============================================
+// SAFE NUMBER HELPER
+// ============================================
+function safeNum(x, fallback = 0) {
+  if (typeof x !== 'number' || !isFinite(x)) return fallback;
+  return x;
+}
+
+function clamp(x, min, max) {
+  return Math.max(min, Math.min(max, safeNum(x, (min + max) / 2)));
+}
+
+// ============================================
+// LOCOMOTION TRANSFORMER
+// ============================================
+
+class LocomotionTransformerAI {
+  constructor(inputDim = 36, dModel = 48, nHeads = 4, nLayers = 2) {
+    this.inputDim = inputDim;
+    this.dModel = dModel;
+    this.nHeads = nHeads;
+    this.nLayers = nLayers;
+    this.headDim = Math.floor(dModel / nHeads);
+    this.outputDim = 8;
+    
+    this.inputProj = this.initMatrix(inputDim, dModel);
+    this.layers = [];
+    
+    for (let l = 0; l < nLayers; l++) {
+      this.layers.push({
+        Wq: this.initMatrix(dModel, dModel),
+        Wk: this.initMatrix(dModel, dModel),
+        Wv: this.initMatrix(dModel, dModel),
+        Wo: this.initMatrix(dModel, dModel),
+        ff1: this.initMatrix(dModel, dModel * 2),
+        ff2: this.initMatrix(dModel * 2, dModel),
+        ln1_g: new Float32Array(dModel).fill(1),
+        ln1_b: new Float32Array(dModel).fill(0),
+        ln2_g: new Float32Array(dModel).fill(1),
+        ln2_b: new Float32Array(dModel).fill(0),
+      });
+    }
+    
+    this.jointHead = this.initMatrix(dModel, 5);
+    this.aimHead = this.initMatrix(dModel, 2);
+    this.fireHead = this.initMatrix(dModel, 1);
+    this.valueHead = this.initMatrix(dModel, 1);
+    
+    this.jointLogStd = new Float32Array(5).fill(-0.5);
+    this.aimLogStd = new Float32Array(2).fill(-0.8);
+    
+    this.experienceBuffer = [];
+    this.maxBufferSize = 800;
+    this.epoch = 0;
+    this.avgLoss = 0;
+    this.learningRate = 0.0005;
+    
+    this.lastOutput = { joints: [0,0,0,0,0], aim: [0,0], fire: 0 };
+    this.fallenCount = 0;
+  }
+  
+  initMatrix(rows, cols) {
+    const scale = Math.sqrt(2 / (rows + cols));
+    const mat = new Float32Array(rows * cols);
+    for (let i = 0; i < mat.length; i++) mat[i] = (Math.random() * 2 - 1) * scale;
+    return { data: mat, rows, cols };
+  }
+  
+  matmul(a, b, aRows, aCols, bCols) {
+    const result = new Float32Array(aRows * bCols);
+    for (let i = 0; i < aRows; i++) {
+      for (let j = 0; j < bCols; j++) {
+        let sum = 0;
+        for (let k = 0; k < aCols; k++) sum += safeNum(a[i * aCols + k]) * safeNum(b[k * bCols + j]);
+        result[i * bCols + j] = safeNum(sum);
+      }
+    }
+    return result;
+  }
+  
+  layerNorm(x, gamma, beta) {
+    const n = x.length;
+    let mean = 0;
+    for (let i = 0; i < n; i++) mean += safeNum(x[i]);
+    mean /= n;
+    let variance = 0;
+    for (let i = 0; i < n; i++) variance += (safeNum(x[i]) - mean) ** 2;
+    variance /= n;
+    const std = Math.sqrt(variance + 1e-5);
+    const result = new Float32Array(n);
+    for (let i = 0; i < n; i++) result[i] = safeNum(gamma[i]) * (safeNum(x[i]) - mean) / std + safeNum(beta[i]);
+    return result;
+  }
+  
+  gelu(x) {
+    const result = new Float32Array(x.length);
+    for (let i = 0; i < x.length; i++) {
+      const val = clamp(x[i], -10, 10);
+      result[i] = 0.5 * val * (1 + Math.tanh(Math.sqrt(2 / Math.PI) * (val + 0.044715 * val ** 3)));
+    }
+    return result;
+  }
+  
+  tanh(x) { return x.map(v => Math.tanh(clamp(v, -10, 10))); }
+  sigmoid(x) { return 1 / (1 + Math.exp(-clamp(x, -20, 20))); }
+  
+  softmax(x) {
+    const max = Math.max(...x.map(v => safeNum(v, -100)));
+    const exp = x.map(v => Math.exp(clamp(v - max, -50, 50)));
+    const sum = exp.reduce((a, b) => a + b, 1e-8);
+    return exp.map(v => v / sum);
+  }
+  
+  attention(x, Wq, Wk, Wv, Wo) {
+    const Q = this.matmul(x, Wq.data, 1, this.dModel, this.dModel);
+    const K = this.matmul(x, Wk.data, 1, this.dModel, this.dModel);
+    const V = this.matmul(x, Wv.data, 1, this.dModel, this.dModel);
+    const scale = Math.sqrt(this.headDim);
+    const scores = new Float32Array(this.nHeads);
+    for (let h = 0; h < this.nHeads; h++) {
+      let dot = 0;
+      for (let d = 0; d < this.headDim; d++) dot += safeNum(Q[h * this.headDim + d]) * safeNum(K[h * this.headDim + d]);
+      scores[h] = dot / scale;
+    }
+    const attnWeights = this.softmax(Array.from(scores));
+    const attended = new Float32Array(this.dModel);
+    for (let h = 0; h < this.nHeads; h++) {
+      for (let d = 0; d < this.headDim; d++) attended[h * this.headDim + d] = safeNum(attnWeights[h]) * safeNum(V[h * this.headDim + d]);
+    }
+    return this.matmul(attended, Wo.data, 1, this.dModel, this.dModel);
+  }
+  
+  feedforward(x, ff1, ff2) {
+    const hidden = this.gelu(this.matmul(x, ff1.data, 1, this.dModel, this.dModel * 2));
+    return this.matmul(hidden, ff2.data, 1, this.dModel * 2, this.dModel);
+  }
+  
+  forward(obs) {
+    // Sanitize input
+    const safeObs = obs.map(v => safeNum(v));
+    
+    let x = this.matmul(new Float32Array(safeObs), this.inputProj.data, 1, this.inputDim, this.dModel);
+    
+    for (const layer of this.layers) {
+      const normed1 = this.layerNorm(x, layer.ln1_g, layer.ln1_b);
+      const attnOut = this.attention(normed1, layer.Wq, layer.Wk, layer.Wv, layer.Wo);
+      for (let i = 0; i < this.dModel; i++) x[i] = safeNum(x[i]) + safeNum(attnOut[i]);
+      const normed2 = this.layerNorm(x, layer.ln2_g, layer.ln2_b);
+      const ffOut = this.feedforward(normed2, layer.ff1, layer.ff2);
+      for (let i = 0; i < this.dModel; i++) x[i] = safeNum(x[i]) + safeNum(ffOut[i]);
+    }
+    
+    const jointMean = this.tanh(Array.from(this.matmul(x, this.jointHead.data, 1, this.dModel, 5)));
+    const aimMean = this.tanh(Array.from(this.matmul(x, this.aimHead.data, 1, this.dModel, 2)));
+    const fireLogit = safeNum(this.matmul(x, this.fireHead.data, 1, this.dModel, 1)[0]);
+    const value = safeNum(this.matmul(x, this.valueHead.data, 1, this.dModel, 1)[0]);
+    
+    return { jointMean, aimMean, fireLogit, value };
+  }
+  
+  gaussianNoise() {
+    const u1 = Math.max(1e-10, Math.random());
+    const u2 = Math.random();
+    return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  }
+  
+  act(obs) {
+    const { jointMean, aimMean, fireLogit, value } = this.forward(obs);
+    
+    const joints = jointMean.map((m, i) => {
+      const std = Math.exp(this.jointLogStd[i]);
+      return clamp(m + std * this.gaussianNoise() * 0.3, -1, 1);
+    });
+    
+    const aim = aimMean.map((m, i) => {
+      const std = Math.exp(this.aimLogStd[i]);
+      return clamp(m + std * this.gaussianNoise() * 0.2, -1, 1);
+    });
+    
+    const fireProb = this.sigmoid(fireLogit);
+    const fire = Math.random() < fireProb;
+    
+    this.lastOutput = { joints, aim, fire: fireProb };
+    
+    return { 
+      action: { joints, aim, fire, fireProb },
+      value, jointMean, aimMean, fireLogit 
+    };
+  }
+  
+  storeExperience(obs, action, reward, done, jointMean, aimMean, fireLogit) {
+    if (!isFinite(reward)) return;
+    this.experienceBuffer.push({ 
+      obs: obs.map(v => safeNum(v)), 
+      action: {
+        joints: action.joints.map(v => safeNum(v)),
+        aim: action.aim.map(v => safeNum(v)),
+        fire: action.fire,
+        fireProb: safeNum(action.fireProb)
+      }, 
+      reward: safeNum(reward), 
+      done, 
+      jointMean: jointMean.map(v => safeNum(v)), 
+      aimMean: aimMean.map(v => safeNum(v)), 
+      fireLogit: safeNum(fireLogit) 
+    });
+    if (this.experienceBuffer.length > this.maxBufferSize) this.experienceBuffer.shift();
+  }
+  
+  gaussianLogProb(x, mean, logStd) {
+    const std = Math.exp(logStd);
+    const variance = std * std + 1e-8;
+    return -0.5 * (Math.log(2 * Math.PI * variance) + ((x - mean) ** 2) / variance);
+  }
+  
+  learn() {
+    if (this.experienceBuffer.length < 50) return;
+    
+    const batchSize = Math.min(32, this.experienceBuffer.length);
+    let totalLoss = 0;
+    
+    for (let b = 0; b < batchSize; b++) {
+      const exp = this.experienceBuffer[Math.floor(Math.random() * this.experienceBuffer.length)];
+      const { jointMean, aimMean, fireLogit, value } = this.forward(exp.obs);
+      
+      let logProb = 0;
+      for (let i = 0; i < 5; i++) {
+        logProb += this.gaussianLogProb(exp.action.joints[i], jointMean[i], this.jointLogStd[i]);
+      }
+      for (let i = 0; i < 2; i++) {
+        logProb += this.gaussianLogProb(exp.action.aim[i], aimMean[i], this.aimLogStd[i]);
+      }
+      const fireProb = this.sigmoid(fireLogit);
+      logProb += exp.action.fire ? Math.log(fireProb + 1e-8) : Math.log(1 - fireProb + 1e-8);
+      
+      const advantage = clamp(exp.reward - value, -10, 10);
+      const loss = -logProb * advantage + 0.5 * advantage ** 2;
+      totalLoss += safeNum(loss);
+      
+      // Gradient updates with clamping
+      const grad = clamp(this.learningRate * advantage, -0.01, 0.01);
+      for (let i = 0; i < 5; i++) {
+        const diff = clamp(exp.action.joints[i] - jointMean[i], -2, 2);
+        for (let j = 0; j < this.dModel; j++) {
+          this.jointHead.data[j * 5 + i] += grad * diff * 0.01;
+          this.jointHead.data[j * 5 + i] = clamp(this.jointHead.data[j * 5 + i], -5, 5);
+        }
+      }
+    }
+    
+    this.avgLoss = safeNum(totalLoss / batchSize);
+    this.epoch++;
+  }
+  
+  getStats() {
+    return { epoch: this.epoch, avgLoss: this.avgLoss, lastOutput: this.lastOutput, fallenCount: this.fallenCount };
+  }
+}
+
+// ============================================
+// PHYSICS RAGDOLL BODY - STABILIZED
+// ============================================
+
+class RagdollBody {
+  constructor(position) {
+    // Core state
+    this.pos = new THREE.Vector3(position.x, 0, position.z);
+    this.vel = new THREE.Vector3(0, 0, 0);
+    this.facing = Math.random() * Math.PI * 2;
+    
+    // Torso state  
+    this.torsoHeight = 1.4;
+    this.torsoLean = 0;
+    this.torsoLeanVel = 0;
+    
+    // Leg joint angles (relative to vertical)
+    this.hipL = 0;
+    this.hipR = 0;
+    this.kneeL = 0.3;
+    this.kneeR = 0.3;
+    
+    // Angular velocities
+    this.hipVelL = 0;
+    this.hipVelR = 0;
+    this.kneeVelL = 0;
+    this.kneeVelR = 0;
+    
+    // State
+    this.gaitPhase = Math.random() * Math.PI * 2;
+    this.stability = 1.0;
+    this.fallen = false;
+    this.fallTimer = 0;
+    
+    // Foot positions for rendering
+    this.footPosL = new THREE.Vector3();
+    this.footPosR = new THREE.Vector3();
+    
+    this.createVisuals();
+  }
+  
+  createVisuals() {
+    this.group = new THREE.Group();
+    
+    const metalMat = new THREE.MeshStandardMaterial({ 
+      color: 0x4a5568, roughness: 0.3, metalness: 0.8,
+      emissive: 0x111122, emissiveIntensity: 0.1
+    });
+    const darkMat = new THREE.MeshStandardMaterial({ color: 0x2d3748, roughness: 0.4, metalness: 0.7 });
+    const glowMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const eyeGlowMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4 });
+    
+    // TORSO - larger and more visible
+    const torsoGeo = new THREE.BoxGeometry(0.7, 1.0, 0.4);
+    this.torsoMesh = new THREE.Mesh(torsoGeo, metalMat);
+    this.torsoMesh.castShadow = true;
+    this.group.add(this.torsoMesh);
+    
+    // HEAD with flashlight eye
+    this.headGroup = new THREE.Group();
+    
+    const headGeo = new THREE.BoxGeometry(0.35, 0.4, 0.5);
+    const headMesh = new THREE.Mesh(headGeo, metalMat);
+    headMesh.castShadow = true;
+    this.headGroup.add(headMesh);
+    
+    // Eye (the iconic flashlight)
+    const eyeGeo = new THREE.CircleGeometry(0.12, 16);
+    this.eyeMesh = new THREE.Mesh(eyeGeo, glowMat);
+    this.eyeMesh.position.z = 0.26;
+    this.headGroup.add(this.eyeMesh);
+    
+    // Eye glow ring
+    const eyeRingGeo = new THREE.RingGeometry(0.12, 0.16, 16);
+    const eyeRing = new THREE.Mesh(eyeRingGeo, eyeGlowMat);
+    eyeRing.position.z = 0.25;
+    this.headGroup.add(eyeRing);
+    
+    // Head fins
+    const finGeo = new THREE.BoxGeometry(0.05, 0.2, 0.3);
+    [-1, 1].forEach(side => {
+      const fin = new THREE.Mesh(finGeo, metalMat);
+      fin.position.set(side * 0.22, 0.1, -0.05);
+      this.headGroup.add(fin);
+    });
+    
+    this.headGroup.position.y = 0.75;
+    this.group.add(this.headGroup);
+    
+    // LEGS - Upper segments
+    const upperLegGeo = new THREE.CylinderGeometry(0.08, 0.1, 0.45, 8);
+    this.upperLegL = new THREE.Mesh(upperLegGeo, metalMat);
+    this.upperLegR = new THREE.Mesh(upperLegGeo, metalMat);
+    this.upperLegL.castShadow = true;
+    this.upperLegR.castShadow = true;
+    this.group.add(this.upperLegL);
+    this.group.add(this.upperLegR);
+    
+    // Lower leg segments
+    const lowerLegGeo = new THREE.CylinderGeometry(0.06, 0.08, 0.45, 8);
+    this.lowerLegL = new THREE.Mesh(lowerLegGeo, metalMat);
+    this.lowerLegR = new THREE.Mesh(lowerLegGeo, metalMat);
+    this.lowerLegL.castShadow = true;
+    this.lowerLegR.castShadow = true;
+    this.group.add(this.lowerLegL);
+    this.group.add(this.lowerLegR);
+    
+    // Feet
+    const footGeo = new THREE.BoxGeometry(0.12, 0.06, 0.22);
+    this.footMeshL = new THREE.Mesh(footGeo, darkMat);
+    this.footMeshR = new THREE.Mesh(footGeo, darkMat);
+    this.group.add(this.footMeshL);
+    this.group.add(this.footMeshR);
+    
+    // Arms (simple, attached to torso)
+    const armGeo = new THREE.CylinderGeometry(0.04, 0.05, 0.6, 6);
+    this.armL = new THREE.Mesh(armGeo, metalMat);
+    this.armR = new THREE.Mesh(armGeo, metalMat);
+    this.armL.position.set(-0.45, 0.1, 0);
+    this.armR.position.set(0.45, 0.1, 0);
+    this.armL.rotation.z = 0.3;
+    this.armR.rotation.z = -0.3;
+    this.group.add(this.armL);
+    this.group.add(this.armR);
+    
+    // Backpack
+    const backpackGeo = new THREE.BoxGeometry(0.5, 0.6, 0.25);
+    const backpack = new THREE.Mesh(backpackGeo, metalMat);
+    backpack.position.set(0, 0.1, -0.3);
+    this.group.add(backpack);
+  }
+  
+  applyJointTorques(hipLT, kneeLT, hipRT, kneeRT, leanT, dt) {
+    if (this.fallen) return;
+    
+    const torque = 12;
+    const spring = 6;
+    const damp = 0.9;
+    
+    // Apply torques with spring-damper
+    this.hipVelL += (hipLT * torque - this.hipL * spring) * dt;
+    this.hipVelR += (hipRT * torque - this.hipR * spring) * dt;
+    this.kneeVelL += (kneeLT * torque - (this.kneeL - 0.3) * spring * 1.5) * dt;
+    this.kneeVelR += (kneeRT * torque - (this.kneeR - 0.3) * spring * 1.5) * dt;
+    this.torsoLeanVel += (leanT * 6 - this.torsoLean * 8) * dt;
+    
+    // Damping
+    this.hipVelL *= damp;
+    this.hipVelR *= damp;
+    this.kneeVelL *= damp;
+    this.kneeVelR *= damp;
+    this.torsoLeanVel *= damp;
+    
+    // Integrate with clamping
+    this.hipL = clamp(this.hipL + this.hipVelL * dt, -1.0, 1.0);
+    this.hipR = clamp(this.hipR + this.hipVelR * dt, -1.0, 1.0);
+    this.kneeL = clamp(this.kneeL + this.kneeVelL * dt, 0.1, 1.8);
+    this.kneeR = clamp(this.kneeR + this.kneeVelR * dt, 0.1, 1.8);
+    this.torsoLean = clamp(this.torsoLean + this.torsoLeanVel * dt, -0.5, 0.5);
+  }
+  
+  updatePhysics(targetDir, dt) {
+    // Sanitize dt
+    dt = clamp(dt, 0.001, 0.05);
+    
+    if (this.fallen) {
+      this.fallTimer += dt;
+      if (this.fallTimer > 2.0) {
+        this.fallen = false;
+        this.fallTimer = 0;
+        this.stability = 0.8;
+        this.torsoLean = 0;
+        this.hipL = 0;
+        this.hipR = 0;
+        this.kneeL = 0.3;
+        this.kneeR = 0.3;
+      }
+      this.updateVisuals();
+      return;
+    }
+    
+    // Calculate leg positions
+    const upperLen = 0.45;
+    const lowerLen = 0.45;
+    const hipWidth = 0.2;
+    
+    // Left leg forward kinematics
+    const hipWorldL = this.hipL + this.torsoLean;
+    const kneePosL = new THREE.Vector2(
+      -hipWidth + Math.sin(hipWorldL) * upperLen,
+      this.torsoHeight - 0.5 - Math.cos(hipWorldL) * upperLen
+    );
+    const kneeWorldL = hipWorldL + this.kneeL;
+    this.footPosL.set(
+      kneePosL.x + Math.sin(kneeWorldL) * lowerLen,
+      kneePosL.y - Math.cos(kneeWorldL) * lowerLen,
+      0
+    );
+    
+    // Right leg forward kinematics
+    const hipWorldR = this.hipR + this.torsoLean;
+    const kneePosR = new THREE.Vector2(
+      hipWidth + Math.sin(hipWorldR) * upperLen,
+      this.torsoHeight - 0.5 - Math.cos(hipWorldR) * upperLen
+    );
+    const kneeWorldR = hipWorldR + this.kneeR;
+    this.footPosR.set(
+      kneePosR.x + Math.sin(kneeWorldR) * lowerLen,
+      kneePosR.y - Math.cos(kneeWorldR) * lowerLen,
+      0
+    );
+    
+    // Ground contact
+    const groundL = this.footPosL.y <= 0.05;
+    const groundR = this.footPosR.y <= 0.05;
+    
+    // Movement from leg push
+    if (groundL || groundR) {
+      let pushX = 0;
+      if (groundL) pushX -= Math.sin(this.hipL) * 0.5;
+      if (groundR) pushX -= Math.sin(this.hipR) * 0.5;
+      
+      // Apply push in facing direction
+      this.vel.x += Math.sin(this.facing) * pushX * dt * 2;
+      this.vel.z += Math.cos(this.facing) * pushX * dt * 2;
+    }
+    
+    // Drag
+    this.vel.multiplyScalar(0.95);
+    
+    // Integrate position
+    this.pos.x = clamp(this.pos.x + this.vel.x * dt * 60, -MAP_SIZE + 3, MAP_SIZE - 3);
+    this.pos.z = clamp(this.pos.z + this.vel.z * dt * 60, -MAP_SIZE + 3, MAP_SIZE - 3);
+    
+    // Stability
+    const leanPenalty = Math.abs(this.torsoLean) * 0.8;
+    this.stability = clamp(1 - leanPenalty, 0, 1);
+    
+    // Fall check
+    if (Math.abs(this.torsoLean) > 0.7) {
+      this.fallen = true;
+      this.fallTimer = 0;
+    }
+    
+    // Gait phase
+    this.gaitPhase += dt * 4;
+    if (this.gaitPhase > Math.PI * 2) this.gaitPhase -= Math.PI * 2;
+    
+    // Turn toward target
+    if (targetDir.lengthSq() > 0.01) {
+      const targetAngle = Math.atan2(targetDir.x, targetDir.z);
+      let diff = targetAngle - this.facing;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      this.facing += clamp(diff * dt * 3, -0.1, 0.1);
+    }
+    
+    this.updateVisuals();
+  }
+  
+  updateVisuals() {
+    // Position main group
+    this.group.position.set(this.pos.x, 0, this.pos.z);
+    this.group.rotation.y = this.facing;
+    
+    // Torso
+    const torsoY = this.fallen ? 0.4 : this.torsoHeight;
+    this.torsoMesh.position.y = torsoY;
+    this.torsoMesh.rotation.x = this.fallen ? Math.PI / 2 : this.torsoLean;
+    
+    // Head
+    this.headGroup.position.y = torsoY + (this.fallen ? 0 : 0.75);
+    this.headGroup.rotation.x = this.fallen ? Math.PI / 2 : -this.torsoLean * 0.3;
+    
+    // Eye pulse
+    const pulse = this.fallen ? 0.3 : (0.9 + Math.sin(Date.now() * 0.005) * 0.1);
+    this.eyeMesh.scale.setScalar(pulse);
+    
+    if (!this.fallen) {
+      const upperLen = 0.45;
+      const lowerLen = 0.45;
+      const hipWidth = 0.2;
+      
+      // Left leg
+      const hipWorldL = this.hipL + this.torsoLean;
+      const kneeYL = this.torsoHeight - 0.5 - Math.cos(hipWorldL) * upperLen * 0.5;
+      const kneeXL = -hipWidth + Math.sin(hipWorldL) * upperLen * 0.5;
+      this.upperLegL.position.set(kneeXL, kneeYL, 0);
+      this.upperLegL.rotation.z = hipWorldL;
+      
+      const kneePosYL = this.torsoHeight - 0.5 - Math.cos(hipWorldL) * upperLen;
+      const kneePosXL = -hipWidth + Math.sin(hipWorldL) * upperLen;
+      const kneeWorldL = hipWorldL + this.kneeL;
+      const footYL = (kneePosYL + this.footPosL.y) / 2;
+      const footXL = (kneePosXL + this.footPosL.x) / 2;
+      this.lowerLegL.position.set(footXL, Math.max(0.2, footYL), 0);
+      this.lowerLegL.rotation.z = kneeWorldL;
+      
+      this.footMeshL.position.set(this.footPosL.x, Math.max(0.03, this.footPosL.y), 0.05);
+      
+      // Right leg
+      const hipWorldR = this.hipR + this.torsoLean;
+      const kneeYR = this.torsoHeight - 0.5 - Math.cos(hipWorldR) * upperLen * 0.5;
+      const kneeXR = hipWidth + Math.sin(hipWorldR) * upperLen * 0.5;
+      this.upperLegR.position.set(kneeXR, kneeYR, 0);
+      this.upperLegR.rotation.z = hipWorldR;
+      
+      const kneePosYR = this.torsoHeight - 0.5 - Math.cos(hipWorldR) * upperLen;
+      const kneePosXR = hipWidth + Math.sin(hipWorldR) * upperLen;
+      const kneeWorldR = hipWorldR + this.kneeR;
+      const footYR = (kneePosYR + this.footPosR.y) / 2;
+      const footXR = (kneePosXR + this.footPosR.x) / 2;
+      this.lowerLegR.position.set(footXR, Math.max(0.2, footYR), 0);
+      this.lowerLegR.rotation.z = kneeWorldR;
+      
+      this.footMeshR.position.set(this.footPosR.x, Math.max(0.03, this.footPosR.y), 0.05);
+      
+      // Arm swing
+      this.armL.rotation.x = this.hipR * 0.4;
+      this.armR.rotation.x = this.hipL * 0.4;
+    } else {
+      // Fallen pose
+      this.upperLegL.position.set(-0.2, 0.2, 0);
+      this.upperLegR.position.set(0.2, 0.2, 0);
+      this.lowerLegL.position.set(-0.3, 0.1, 0);
+      this.lowerLegR.position.set(0.3, 0.1, 0);
+      this.footMeshL.position.set(-0.4, 0.03, 0);
+      this.footMeshR.position.set(0.4, 0.03, 0);
+    }
+  }
+  
+  getObservation(playerPos) {
+    const toPlayer = new THREE.Vector3().subVectors(playerPos, this.pos);
+    const dist = toPlayer.length();
+    let angle = Math.atan2(toPlayer.x, toPlayer.z) - this.facing;
+    while (angle > Math.PI) angle -= Math.PI * 2;
+    while (angle < -Math.PI) angle += Math.PI * 2;
+    
+    return [
+      clamp(this.pos.x / MAP_SIZE, -1, 1),
+      clamp(this.pos.z / MAP_SIZE, -1, 1),
+      clamp(this.torsoLean, -1, 1),
+      clamp(this.torsoLeanVel * 0.1, -1, 1),
+      clamp(this.vel.x * 0.1, -1, 1),
+      clamp(this.vel.z * 0.1, -1, 1),
+      clamp(this.hipL, -1, 1),
+      clamp(this.hipR, -1, 1),
+      clamp(this.kneeL / 2, 0, 1),
+      clamp(this.kneeR / 2, 0, 1),
+      clamp(this.hipVelL * 0.1, -1, 1),
+      clamp(this.hipVelR * 0.1, -1, 1),
+      this.footPosL.y < 0.1 ? 1 : 0,
+      this.footPosR.y < 0.1 ? 1 : 0,
+      clamp(toPlayer.x / MAP_SIZE, -1, 1),
+      clamp(toPlayer.z / MAP_SIZE, -1, 1),
+      clamp(dist / MAP_SIZE, 0, 1),
+      Math.sin(angle),
+      Math.cos(angle),
+      this.stability,
+      Math.sin(this.gaitPhase),
+      Math.cos(this.gaitPhase),
+      clamp(PLAYER.health / PLAYER.maxHealth, 0, 1),
+      clamp(PLAYER.shield / PLAYER.maxShield, 0, 1),
+      clamp(PLAYER.clipAmmo / PLAYER.clipSize, 0, 1),
+      PLAYER.isReloading ? 1 : 0,
+      this.fallen ? 1 : 0,
+      clamp(wave / 10, 0, 1),
+      Math.sin(Date.now() * 0.002),
+      Math.cos(Date.now() * 0.003),
+      clamp(this.footPosL.x, -1, 1),
+      clamp(this.footPosR.x, -1, 1),
+      clamp(this.footPosL.y, 0, 1),
+      clamp(this.footPosR.y, 0, 1),
+      Math.random() * 0.2,
+      Math.random() * 0.2,
+    ];
+  }
+}
+
+// ============================================
+// GAME ENGINE
+// ============================================
+
+let scene, camera, renderer, clock;
+let enemies = [], bullets = [], pickups = [];
+let keys = {}, mouseDown = false;
+let isPlaying = false;
+let score = 0, wave = 1;
+
+let transformerAI;
+const AI_UPDATE_INTERVAL = 60;
+
+const MAP_SIZE = 80;
+const COVER_POSITIONS = [];
+
+const PLAYER = {
+  health: 100, maxHealth: 100,
+  shield: 100, maxShield: 100,
+  clipAmmo: 30, clipSize: 30,
+  reserveAmmo: 210, maxReserve: 300,
+  speed: 0.18, sprintSpeed: 0.30,
+  damage: 25, fireRate: 100,
+  lastShot: 0, shieldRegenDelay: 3000, lastDamage: 0,
+  isReloading: false, reloadTime: 1500, reloadStart: 0
+};
+
+function init() {
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0a0a15);
+  scene.fog = new THREE.FogExp2(0x0a0a15, 0.012);
+  
+  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.position.set(0, 2, 0);
+  
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  document.getElementById('game-container').insertBefore(renderer.domElement, document.getElementById('hud'));
+  
+  clock = new THREE.Clock();
+  
+  scene.add(new THREE.AmbientLight(0x404060, 0.6));
+  
+  const mainLight = new THREE.DirectionalLight(0xffffff, 0.9);
+  mainLight.position.set(30, 50, 30);
+  mainLight.castShadow = true;
+  mainLight.shadow.mapSize.width = 2048;
+  mainLight.shadow.mapSize.height = 2048;
+  mainLight.shadow.camera.left = -50;
+  mainLight.shadow.camera.right = 50;
+  mainLight.shadow.camera.top = 50;
+  mainLight.shadow.camera.bottom = -50;
+  scene.add(mainLight);
+  
+  [
+    { color: 0xff4400, pos: [-30, 6, -30] },
+    { color: 0x0066ff, pos: [30, 6, 30] },
+    { color: 0xff0044, pos: [30, 6, -30] },
+    { color: 0x00ffaa, pos: [-30, 6, 30] },
+  ].forEach(l => {
+    const pl = new THREE.PointLight(l.color, 2.5, 50);
+    pl.position.set(...l.pos);
+    scene.add(pl);
+  });
+  
+  createMap();
+  transformerAI = new LocomotionTransformerAI(36, 48, 4, 2);
+  
+  document.addEventListener('keydown', e => keys[e.code] = true);
+  document.addEventListener('keyup', e => keys[e.code] = false);
+  document.addEventListener('mousedown', () => mouseDown = true);
+  document.addEventListener('mouseup', () => mouseDown = false);
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('click', () => { if (isPlaying) renderer.domElement.requestPointerLock(); });
+  
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+  
+  animate();
+}
+
+function createMap() {
+  const floorGeo = new THREE.PlaneGeometry(MAP_SIZE * 2, MAP_SIZE * 2);
+  const floorMat = new THREE.MeshStandardMaterial({ color: 0x1a1a2e, roughness: 0.8 });
+  const floor = new THREE.Mesh(floorGeo, floorMat);
+  floor.rotation.x = -Math.PI / 2;
+  floor.receiveShadow = true;
+  scene.add(floor);
+  
+  scene.add(new THREE.GridHelper(MAP_SIZE * 2, 40, 0x333366, 0x222244));
+  
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0x2a2a4e });
+  [[0, 5, -MAP_SIZE, 0], [0, 5, MAP_SIZE, 0], [-MAP_SIZE, 5, 0, Math.PI/2], [MAP_SIZE, 5, 0, Math.PI/2]].forEach(w => {
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(MAP_SIZE * 2, 10, 2), wallMat);
+    wall.position.set(w[0], w[1], w[2]);
+    wall.rotation.y = w[3];
+    scene.add(wall);
+  });
+  
+  const coverMat = new THREE.MeshStandardMaterial({ color: 0x3a3a5e, roughness: 0.5, metalness: 0.4 });
+  [
+    [-20, 2, -20, 4, 4, 4], [20, 2, -20, 4, 4, 4], [-20, 2, 20, 4, 4, 4], [20, 2, 20, 4, 4, 4],
+    [0, 2, -35, 6, 4, 3], [0, 2, 35, 6, 4, 3], [-35, 2, 0, 3, 4, 6], [35, 2, 0, 3, 4, 6],
+    [0, 3, 0, 6, 6, 6],
+  ].forEach(c => {
+    const cover = new THREE.Mesh(new THREE.BoxGeometry(c[3], c[4], c[5]), coverMat);
+    cover.position.set(c[0], c[1], c[2]);
+    cover.castShadow = true;
+    cover.receiveShadow = true;
+    cover.userData.isCollider = true;
+    scene.add(cover);
+    COVER_POSITIONS.push(new THREE.Vector3(c[0], c[1], c[2]));
+  });
+}
+
+function startGame() {
+  document.getElementById('main-menu').classList.add('hidden');
+  document.getElementById('game-over').classList.add('hidden');
+  
+  score = 0; wave = 1;
+  PLAYER.health = PLAYER.maxHealth;
+  PLAYER.shield = PLAYER.maxShield;
+  PLAYER.clipAmmo = PLAYER.clipSize;
+  PLAYER.reserveAmmo = 210;
+  PLAYER.isReloading = false;
+  
+  camera.position.set(0, 2, 0);
+  camera.rotation.set(0, 0, 0);
+  
+  enemies.forEach(e => scene.remove(e.body.group));
+  bullets.forEach(b => scene.remove(b.mesh));
+  pickups.forEach(p => scene.remove(p.mesh));
+  enemies = []; bullets = []; pickups = [];
+  
+  isPlaying = true;
+  renderer.domElement.requestPointerLock();
+  
+  spawnWave();
+  updateHUD();
+}
+
+function spawnWave() {
+  const count = 3 + wave * 2;
+  
+  const announce = document.getElementById('wave-announce');
+  announce.textContent = `WAVE ${wave}`;
+  announce.style.opacity = 1;
+  setTimeout(() => announce.style.opacity = 0, 2000);
+  
+  for (let i = 0; i < count; i++) {
+    setTimeout(() => spawnEnemy(), i * 800);
+  }
+  
+  document.getElementById('wave-number').textContent = `WAVE ${wave}`;
+}
+
+function spawnEnemy() {
+  const side = Math.floor(Math.random() * 4);
+  const offset = (Math.random() - 0.5) * MAP_SIZE * 1.4;
+  
+  let pos = new THREE.Vector3();
+  switch(side) {
+    case 0: pos.set(offset, 0, -MAP_SIZE + 8); break;
+    case 1: pos.set(offset, 0, MAP_SIZE - 8); break;
+    case 2: pos.set(-MAP_SIZE + 8, 0, offset); break;
+    case 3: pos.set(MAP_SIZE - 8, 0, offset); break;
+  }
+  
+  const body = new RagdollBody(pos);
+  scene.add(body.group);
+  
+  enemies.push({
+    body: body,
+    health: 50 + wave * 10,
+    maxHealth: 50 + wave * 10,
+    damage: 10 + wave * 2,
+    lastShot: 0,
+    fireRate: 1800 - wave * 50,
+    lastAction: 0,
+    lastObs: null,
+    lastActionData: null,
+    currentAim: [0, 0],
+    wantsToFire: false
+  });
+}
+
+function updateEnemyAI(enemy, dt) {
+  const now = Date.now();
+  const body = enemy.body;
+  
+  // AI decision
+  if (now - enemy.lastAction > AI_UPDATE_INTERVAL) {
+    enemy.lastAction = now;
+    
+    const obs = body.getObservation(camera.position);
+    enemy.lastObs = obs;
+    
+    const { action, value, jointMean, aimMean, fireLogit } = transformerAI.act(obs);
+    enemy.lastActionData = { action, jointMean, aimMean, fireLogit };
+    
+    // Apply joint commands
+    body.applyJointTorques(
+      action.joints[0],
+      action.joints[1],
+      action.joints[2],
+      action.joints[3],
+      action.joints[4],
+      dt
+    );
+    
+    enemy.currentAim = action.aim;
+    enemy.wantsToFire = action.fire;
+  }
+  
+  // Physics
+  const toPlayer = new THREE.Vector3().subVectors(camera.position, body.pos);
+  toPlayer.y = 0;
+  body.updatePhysics(toPlayer, dt);
+  
+  // Combat
+  const dist = body.pos.distanceTo(camera.position);
+  if (!body.fallen && dist < 45 && enemy.wantsToFire && checkLOS(body.pos, camera.position)) {
+    if (now - enemy.lastShot > enemy.fireRate) {
+      enemy.lastShot = now;
+      enemyShoot(enemy);
+    }
+  }
+  
+  // Learning rewards
+  if (enemy.lastObs && enemy.lastActionData) {
+    let reward = 0;
+    reward += body.stability * 1.5;
+    reward += body.vel.length() * 0.3;
+    
+    // Gait rhythm reward
+    const idealHipL = Math.sin(body.gaitPhase) * 0.5;
+    const idealHipR = Math.sin(body.gaitPhase + Math.PI) * 0.5;
+    reward += (1 - Math.abs(body.hipL - idealHipL)) * 0.3;
+    reward += (1 - Math.abs(body.hipR - idealHipR)) * 0.3;
+    
+    if (body.fallen) {
+      reward -= 8;
+      transformerAI.fallenCount++;
+    }
+    
+    const ad = enemy.lastActionData;
+    transformerAI.storeExperience(enemy.lastObs, ad.action, reward, body.fallen, ad.jointMean, ad.aimMean, ad.fireLogit);
+  }
+}
+
+function enemyShoot(enemy) {
+  const body = enemy.body;
+  
+  const bulletGeo = new THREE.SphereGeometry(0.12, 8, 8);
+  const bulletMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const bullet = new THREE.Mesh(bulletGeo, bulletMat);
+  
+  bullet.position.set(body.pos.x, body.torsoHeight + 0.3, body.pos.z);
+  
+  const aim = enemy.currentAim || [0, 0];
+  const target = new THREE.Vector3(
+    camera.position.x + aim[0] * 2,
+    camera.position.y + aim[1],
+    camera.position.z
+  );
+  
+  const dir = new THREE.Vector3().subVectors(target, bullet.position).normalize();
+  dir.x += (Math.random() - 0.5) * 0.1;
+  dir.y += (Math.random() - 0.5) * 0.1;
+  dir.z += (Math.random() - 0.5) * 0.1;
+  
+  scene.add(bullet);
+  bullets.push({ mesh: bullet, velocity: dir.multiplyScalar(0.7), isEnemy: true, damage: enemy.damage, enemy });
+}
+
+function checkLOS(from, to) {
+  const fromVec = new THREE.Vector3(from.x, 1.5, from.z);
+  const dir = new THREE.Vector3().subVectors(to, fromVec).normalize();
+  const ray = new THREE.Raycaster(fromVec, dir, 0.1, fromVec.distanceTo(to));
+  return ray.intersectObjects(scene.children.filter(c => c.userData.isCollider)).length === 0;
+}
+
+function playerShoot() {
+  if (PLAYER.clipAmmo <= 0 || PLAYER.isReloading) return;
+  
+  const now = Date.now();
+  if (now - PLAYER.lastShot < PLAYER.fireRate) return;
+  
+  PLAYER.lastShot = now;
+  PLAYER.clipAmmo--;
+  
+  if (PLAYER.clipAmmo === 0 && PLAYER.reserveAmmo > 0) {
+    document.getElementById('reload-prompt').classList.add('visible');
+  }
+  
+  const bulletGeo = new THREE.SphereGeometry(0.08, 8, 8);
+  const bulletMat = new THREE.MeshBasicMaterial({ color: 0x66aaff });
+  const bullet = new THREE.Mesh(bulletGeo, bulletMat);
+  bullet.position.copy(camera.position);
+  
+  const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+  
+  scene.add(bullet);
+  bullets.push({ mesh: bullet, velocity: dir.multiplyScalar(1.8), isEnemy: false, damage: PLAYER.damage });
+  
+  updateHUD();
+}
+
+function startReload() {
+  if (PLAYER.isReloading || PLAYER.clipAmmo === PLAYER.clipSize || PLAYER.reserveAmmo <= 0) return;
+  PLAYER.isReloading = true;
+  PLAYER.reloadStart = Date.now();
+  document.getElementById('reload-bar').classList.add('active');
+  document.getElementById('reload-prompt').classList.remove('visible');
+}
+
+function updateReload() {
+  if (!PLAYER.isReloading) return;
+  const progress = Math.min((Date.now() - PLAYER.reloadStart) / PLAYER.reloadTime, 1);
+  document.getElementById('reload-fill').style.width = `${progress * 100}%`;
+  
+  if (progress >= 1) {
+    const needed = PLAYER.clipSize - PLAYER.clipAmmo;
+    const available = Math.min(needed, PLAYER.reserveAmmo);
+    PLAYER.clipAmmo += available;
+    PLAYER.reserveAmmo -= available;
+    PLAYER.isReloading = false;
+    document.getElementById('reload-bar').classList.remove('active');
+    document.getElementById('reload-fill').style.width = '0%';
+    updateHUD();
+  }
+}
+
+function updateBullets(dt) {
+  const toRemove = [];
+  
+  bullets.forEach((b, idx) => {
+    b.mesh.position.add(b.velocity);
+    
+    if (Math.abs(b.mesh.position.x) > MAP_SIZE + 10 || Math.abs(b.mesh.position.z) > MAP_SIZE + 10) {
+      toRemove.push(idx);
+      return;
+    }
+    
+    if (b.isEnemy) {
+      if (b.mesh.position.distanceTo(camera.position) < 1.2) {
+        damagePlayer(b.damage);
+        
+        if (b.enemy?.lastObs && b.enemy?.lastActionData) {
+          const ad = b.enemy.lastActionData;
+          transformerAI.storeExperience(b.enemy.lastObs, ad.action, 12, false, ad.jointMean, ad.aimMean, ad.fireLogit);
+        }
+        toRemove.push(idx);
+      }
+    } else {
+      enemies.forEach((e, eidx) => {
+        const hitDist = b.mesh.position.distanceTo(new THREE.Vector3(e.body.pos.x, e.body.torsoHeight, e.body.pos.z));
+        if (hitDist < 1.0) {
+          e.health -= b.damage;
+          
+          if (e.lastObs && e.lastActionData) {
+            const ad = e.lastActionData;
+            transformerAI.storeExperience(e.lastObs, ad.action, -4, false, ad.jointMean, ad.aimMean, ad.fireLogit);
+          }
+          
+          if (e.health <= 0) killEnemy(e, eidx);
+          toRemove.push(idx);
+        }
+      });
+    }
+  });
+  
+  toRemove.sort((a, b) => b - a).forEach(idx => {
+    scene.remove(bullets[idx].mesh);
+    bullets.splice(idx, 1);
+  });
+}
+
+function killEnemy(enemy, index) {
+  spawnAmmoPickup(enemy.body.pos.clone());
+  
+  scene.remove(enemy.body.group);
+  enemies.splice(index, 1);
+  
+  score += 100 * wave;
+  addKillFeed(`GETH TERMINATED [+${100 * wave}]`);
+  
+  if (enemies.length === 0) {
+    wave++;
+    setTimeout(spawnWave, 3000);
+  }
+  
+  updateHUD();
+}
+
+function spawnAmmoPickup(position) {
+  const geo = new THREE.BoxGeometry(0.4, 0.2, 0.25);
+  const mat = new THREE.MeshBasicMaterial({ color: 0x66ff66 });
+  const mesh = new THREE.Mesh(geo, mat);
+  
+  const glowGeo = new THREE.BoxGeometry(0.5, 0.3, 0.35);
+  const glowMat = new THREE.MeshBasicMaterial({ color: 0x66ff66, transparent: true, opacity: 0.3 });
+  mesh.add(new THREE.Mesh(glowGeo, glowMat));
+  
+  mesh.position.copy(position);
+  mesh.position.y = 0.4;
+  
+  scene.add(mesh);
+  pickups.push({ mesh, type: 'ammo', amount: 25 + wave * 5 });
+}
+
+function updatePickups() {
+  const toRemove = [];
+  
+  pickups.forEach((p, idx) => {
+    p.mesh.rotation.y += 0.03;
+    p.mesh.position.y = 0.4 + Math.sin(Date.now() * 0.003) * 0.1;
+    
+    if (p.mesh.position.distanceTo(camera.position) < 2) {
+      if (p.type === 'ammo') {
+        PLAYER.reserveAmmo = Math.min(PLAYER.maxReserve, PLAYER.reserveAmmo + p.amount);
+        showPickupNotify(`+${p.amount} THERMAL CLIPS`);
+      }
+      toRemove.push(idx);
+      updateHUD();
+    }
+  });
+  
+  toRemove.sort((a, b) => b - a).forEach(idx => {
+    scene.remove(pickups[idx].mesh);
+    pickups.splice(idx, 1);
+  });
+}
+
+function showPickupNotify(text) {
+  const el = document.getElementById('pickup-notify');
+  el.textContent = text;
+  el.classList.add('visible');
+  setTimeout(() => el.classList.remove('visible'), 1500);
+}
+
+function damagePlayer(amount) {
+  PLAYER.lastDamage = Date.now();
+  if (PLAYER.shield > 0) {
+    PLAYER.shield = Math.max(0, PLAYER.shield - amount);
+  } else {
+    PLAYER.health = Math.max(0, PLAYER.health - amount);
+  }
+  
+  document.getElementById('damage-overlay').style.opacity = 0.5;
+  setTimeout(() => document.getElementById('damage-overlay').style.opacity = 0, 100);
+  
+  if (PLAYER.health <= 0) gameOver();
+  updateHUD();
+}
+
+function gameOver() {
+  isPlaying = false;
+  document.exitPointerLock();
+  document.getElementById('game-over').classList.remove('hidden');
+  document.getElementById('final-score').textContent = score;
+  document.getElementById('final-waves').textContent = wave - 1;
+}
+
+function addKillFeed(text) {
+  const feed = document.getElementById('kill-feed');
+  const entry = document.createElement('div');
+  entry.className = 'kill-entry';
+  entry.textContent = text;
+  feed.appendChild(entry);
+  setTimeout(() => entry.remove(), 3000);
+}
+
+let pitch = 0, yaw = 0;
+
+function onMouseMove(e) {
+  if (!isPlaying || document.pointerLockElement !== renderer.domElement) return;
+  yaw -= e.movementX * 0.002;
+  pitch -= e.movementY * 0.002;
+  pitch = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, pitch));
+  camera.rotation.order = 'YXZ';
+  camera.rotation.y = yaw;
+  camera.rotation.x = pitch;
+}
+
+function updatePlayer(dt) {
+  const speed = keys['ShiftLeft'] ? PLAYER.sprintSpeed : PLAYER.speed;
+  const moveDir = new THREE.Vector3();
+  
+  if (keys['KeyW']) moveDir.z -= 1;
+  if (keys['KeyS']) moveDir.z += 1;
+  if (keys['KeyA']) moveDir.x -= 1;
+  if (keys['KeyD']) moveDir.x += 1;
+  
+  if (moveDir.lengthSq() > 0) {
+    moveDir.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+    camera.position.add(moveDir.multiplyScalar(speed * dt * 60));
+  }
+  
+  camera.position.x = Math.max(-MAP_SIZE + 3, Math.min(MAP_SIZE - 3, camera.position.x));
+  camera.position.z = Math.max(-MAP_SIZE + 3, Math.min(MAP_SIZE - 3, camera.position.z));
+  camera.position.y = 2;
+  
+  if (keys['KeyR']) startReload();
+  updateReload();
+  
+  if (mouseDown && !PLAYER.isReloading) playerShoot();
+  
+  if (Date.now() - PLAYER.lastDamage > PLAYER.shieldRegenDelay) {
+    PLAYER.shield = Math.min(PLAYER.maxShield, PLAYER.shield + 0.5);
+    updateHUD();
+  }
+}
+
+function updateHUD() {
+  document.getElementById('health-fill').style.width = `${(PLAYER.health / PLAYER.maxHealth) * 100}%`;
+  document.getElementById('shield-fill').style.width = `${(PLAYER.shield / PLAYER.maxShield) * 100}%`;
+  document.getElementById('ammo-clip').textContent = PLAYER.clipAmmo;
+  document.getElementById('ammo-reserve').textContent = PLAYER.reserveAmmo;
+  document.getElementById('hostile-num').textContent = enemies.length;
+  document.getElementById('score-value').textContent = score.toLocaleString();
+  
+  const reloadPrompt = document.getElementById('reload-prompt');
+  if (PLAYER.clipAmmo <= 5 && PLAYER.clipAmmo > 0 && PLAYER.reserveAmmo > 0 && !PLAYER.isReloading) {
+    reloadPrompt.classList.add('visible');
+  } else if (PLAYER.clipAmmo > 5 || PLAYER.isReloading) {
+    reloadPrompt.classList.remove('visible');
+  }
+  
+  const stats = transformerAI.getStats();
+  document.getElementById('epoch-num').textContent = stats.epoch;
+  document.getElementById('loss-val').textContent = isFinite(stats.avgLoss) ? stats.avgLoss.toFixed(3) : '0.000';
+  
+  if (enemies.length > 0) {
+    const e = enemies[0];
+    document.getElementById('gait-phase').textContent = e.body.gaitPhase.toFixed(2);
+    document.getElementById('stability-val').textContent = isFinite(e.body.stability) ? e.body.stability.toFixed(2) : '0.00';
+  }
+  document.getElementById('fallen-count').textContent = stats.fallenCount;
+}
+
+function updateMinimap() {
+  const canvas = document.getElementById('minimap');
+  const ctx = canvas.getContext('2d');
+  canvas.width = 180; canvas.height = 180;
+  
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+  ctx.fillRect(0, 0, 180, 180);
+  
+  const scale = 180 / (MAP_SIZE * 2);
+  const cx = 90, cy = 90;
+  
+  ctx.fillStyle = 'rgba(50, 50, 80, 0.6)';
+  COVER_POSITIONS.forEach(c => ctx.fillRect(cx + c.x * scale - 2, cy + c.z * scale - 2, 4, 4));
+  
+  ctx.fillStyle = '#66ff66';
+  pickups.forEach(p => {
+    ctx.beginPath();
+    ctx.arc(cx + p.mesh.position.x * scale, cy + p.mesh.position.z * scale, 3, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  
+  enemies.forEach(e => {
+    ctx.fillStyle = e.body.fallen ? '#ff6666' : '#ffffff';
+    ctx.beginPath();
+    ctx.arc(cx + e.body.pos.x * scale, cy + e.body.pos.z * scale, 4, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  
+  ctx.fillStyle = '#44ff44';
+  ctx.beginPath();
+  ctx.arc(cx + camera.position.x * scale, cy + camera.position.z * scale, 5, 0, Math.PI * 2);
+  ctx.fill();
+  
+  ctx.strokeStyle = '#44ff44';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cx + camera.position.x * scale, cy + camera.position.z * scale);
+  ctx.lineTo(cx + camera.position.x * scale - Math.sin(yaw) * 12, cy + camera.position.z * scale - Math.cos(yaw) * 12);
+  ctx.stroke();
+}
+
+let lastLearnTime = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+  
+  const dt = clamp(clock.getDelta(), 0.001, 0.05);
+  const now = Date.now();
+  
+  if (isPlaying) {
+    updatePlayer(dt);
+    enemies.forEach(e => updateEnemyAI(e, dt));
+    updateBullets(dt);
+    updatePickups();
+    
+    if (now - lastLearnTime > 500) {
+      lastLearnTime = now;
+      transformerAI.learn();
+      updateHUD();
+    }
+    
+    updateMinimap();
+  }
+  
+  renderer.render(scene, camera);
+}
+
+init();
+</script>
+</body>
+</html>

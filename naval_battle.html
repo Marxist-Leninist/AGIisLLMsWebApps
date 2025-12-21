@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neural Naval Warfare</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a1628;
+            font-family: 'Courier New', monospace;
+            color: #7fdbca;
+            overflow: hidden;
+        }
+        #container {
+            display: flex;
+            height: 100vh;
+        }
+        #gameCanvas {
+            flex: 1;
+            background: linear-gradient(180deg, #0d2137 0%, #1a3a5c 50%, #0d2137 100%);
+        }
+        #sidebar {
+            width: 320px;
+            background: #0d1a2d;
+            padding: 15px;
+            overflow-y: auto;
+            border-left: 2px solid #1e3a5f;
+        }
+        h2 {
+            color: #ff6b6b;
+            margin-bottom: 10px;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        .stats-box {
+            background: #152238;
+            border: 1px solid #2a4a6f;
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 15px;
+            font-size: 11px;
+        }
+        .team-red { border-left: 3px solid #ff4757; }
+        .team-blue { border-left: 3px solid #3498db; }
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 4px 0;
+        }
+        .health-bar {
+            width: 100%;
+            height: 8px;
+            background: #1a2a3f;
+            border-radius: 4px;
+            margin: 3px 0;
+            overflow: hidden;
+        }
+        .health-fill {
+            height: 100%;
+            transition: width 0.3s;
+        }
+        .red-fill { background: linear-gradient(90deg, #c0392b, #e74c3c); }
+        .blue-fill { background: linear-gradient(90deg, #2980b9, #3498db); }
+        #neuralViz {
+            background: #0a1420;
+            border: 1px solid #2a4a6f;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+        .controls {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+        button {
+            background: #1e3a5f;
+            color: #7fdbca;
+            border: 1px solid #3a5a7f;
+            padding: 8px 12px;
+            cursor: pointer;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 11px;
+            transition: all 0.2s;
+        }
+        button:hover {
+            background: #2a4a6f;
+            border-color: #7fdbca;
+        }
+        button.active {
+            background: #ff6b6b;
+            border-color: #ff6b6b;
+            color: #0a1628;
+        }
+        #log {
+            background: #0a1420;
+            border: 1px solid #2a4a6f;
+            border-radius: 4px;
+            padding: 8px;
+            height: 150px;
+            overflow-y: auto;
+            font-size: 10px;
+            line-height: 1.4;
+        }
+        .log-red { color: #ff6b6b; }
+        .log-blue { color: #5dade2; }
+        .log-hit { color: #f39c12; }
+        .log-sink { color: #e74c3c; font-weight: bold; }
+        #attention-display {
+            font-size: 10px;
+            color: #95a5a6;
+            margin-top: 10px;
+        }
+        .ship-select {
+            background: #152238;
+            border: 1px solid #2a4a6f;
+            border-radius: 4px;
+            padding: 8px;
+            margin-bottom: 10px;
+            cursor: pointer;
+        }
+        .ship-select:hover {
+            border-color: #7fdbca;
+        }
+        .ship-select.selected {
+            border-color: #ff6b6b;
+            background: #1a2a40;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="gameCanvas"></canvas>
+        <div id="sidebar">
+            <h2>⚓ Neural Naval Warfare</h2>
+            
+            <div class="controls">
+                <button id="btnStart">START</button>
+                <button id="btnPause">PAUSE</button>
+                <button id="btnReset">RESET</button>
+                <button id="btnSpeed1" class="active">1x</button>
+                <button id="btnSpeed2">2x</button>
+                <button id="btnSpeed4">4x</button>
+            </div>
+            
+            <h2>🔴 Red Fleet</h2>
+            <div id="redFleet"></div>
+            
+            <h2>🔵 Blue Fleet</h2>
+            <div id="blueFleet"></div>
+            
+            <h2>🧠 Transformer Attention</h2>
+            <canvas id="neuralViz" width="290" height="120"></canvas>
+            <div id="attention-display">Select a ship to view attention weights</div>
+            
+            <h2>📜 Battle Log</h2>
+            <div id="log"></div>
+        </div>
+    </div>
+
+    <script>
+    // ============ TRANSFORMER NEURAL NETWORK ============
+    class TransformerBrain {
+        constructor(inputDim = 16, hiddenDim = 32, numHeads = 4, numLayers = 2) {
+            this.inputDim = inputDim;
+            this.hiddenDim = hiddenDim;
+            this.numHeads = numHeads;
+            this.headDim = Math.floor(hiddenDim / numHeads);
+            this.numLayers = numLayers;
+            
+            // Initialize weights with Xavier initialization
+            this.layers = [];
+            for (let l = 0; l < numLayers; l++) {
+                this.layers.push({
+                    Wq: this.xavier(hiddenDim, hiddenDim),
+                    Wk: this.xavier(hiddenDim, hiddenDim),
+                    Wv: this.xavier(hiddenDim, hiddenDim),
+                    Wo: this.xavier(hiddenDim, hiddenDim),
+                    ff1: this.xavier(hiddenDim, hiddenDim * 2),
+                    ff2: this.xavier(hiddenDim * 2, hiddenDim),
+                    ln1_g: new Array(hiddenDim).fill(1),
+                    ln1_b: new Array(hiddenDim).fill(0),
+                    ln2_g: new Array(hiddenDim).fill(1),
+                    ln2_b: new Array(hiddenDim).fill(0)
+                });
+            }
+            
+            // Input projection
+            this.inputProj = this.xavier(inputDim, hiddenDim);
+            // Output heads
+            this.actionHead = this.xavier(hiddenDim, 5); // thrust, turn, fireMain, fireTorpedo, target
+            
+            this.attentionWeights = []; // For visualization
+            this.learningRate = 0.001;
+            this.experienceBuffer = [];
+            this.maxBufferSize = 500;
+        }
+        
+        xavier(inDim, outDim) {
+            const scale = Math.sqrt(2.0 / (inDim + outDim));
+            const weights = [];
+            for (let i = 0; i < inDim; i++) {
+                weights[i] = [];
+                for (let j = 0; j < outDim; j++) {
+                    weights[i][j] = (Math.random() * 2 - 1) * scale;
+                }
+            }
+            return weights;
+        }
+        
+        matmul(a, b) {
+            // a: [m, n], b: [n, p] -> [m, p]
+            if (!Array.isArray(a[0])) a = [a]; // Make 2D if 1D
+            const m = a.length, n = a[0].length, p = b[0].length;
+            const result = [];
+            for (let i = 0; i < m; i++) {
+                result[i] = [];
+                for (let j = 0; j < p; j++) {
+                    let sum = 0;
+                    for (let k = 0; k < n; k++) {
+                        sum += a[i][k] * b[k][j];
+                    }
+                    result[i][j] = sum;
+                }
+            }
+            return result;
+        }
+        
+        softmax(x) {
+            const max = Math.max(...x);
+            const exp = x.map(v => Math.exp(v - max));
+            const sum = exp.reduce((a, b) => a + b, 0);
+            return exp.map(v => v / sum);
+        }
+        
+        gelu(x) {
+            return 0.5 * x * (1 + Math.tanh(Math.sqrt(2 / Math.PI) * (x + 0.044715 * Math.pow(x, 3))));
+        }
+        
+        layerNorm(x, gamma, beta) {
+            const mean = x.reduce((a, b) => a + b, 0) / x.length;
+            const variance = x.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / x.length;
+            const std = Math.sqrt(variance + 1e-6);
+            return x.map((v, i) => gamma[i] * (v - mean) / std + beta[i]);
+        }
+        
+        multiHeadAttention(x, layer) {
+            const seq = Array.isArray(x[0]) ? x : [x];
+            const seqLen = seq.length;
+            
+            // Compute Q, K, V
+            const Q = this.matmul(seq, layer.Wq);
+            const K = this.matmul(seq, layer.Wk);
+            const V = this.matmul(seq, layer.Wv);
+            
+            // Split into heads and compute attention
+            const headOutputs = [];
+            const allAttentionWeights = [];
+            
+            for (let h = 0; h < this.numHeads; h++) {
+                const startIdx = h * this.headDim;
+                const endIdx = startIdx + this.headDim;
+                
+                // Extract head slices
+                const Qh = Q.map(row => row.slice(startIdx, endIdx));
+                const Kh = K.map(row => row.slice(startIdx, endIdx));
+                const Vh = V.map(row => row.slice(startIdx, endIdx));
+                
+                // Compute attention scores
+                const scores = [];
+                for (let i = 0; i < seqLen; i++) {
+                    scores[i] = [];
+                    for (let j = 0; j < seqLen; j++) {
+                        let dot = 0;
+                        for (let k = 0; k < this.headDim; k++) {
+                            dot += Qh[i][k] * Kh[j][k];
+                        }
+                        scores[i][j] = dot / Math.sqrt(this.headDim);
+                    }
+                    scores[i] = this.softmax(scores[i]);
+                }
+                allAttentionWeights.push(scores);
+                
+                // Apply attention to values
+                const headOut = [];
+                for (let i = 0; i < seqLen; i++) {
+                    headOut[i] = new Array(this.headDim).fill(0);
+                    for (let j = 0; j < seqLen; j++) {
+                        for (let k = 0; k < this.headDim; k++) {
+                            headOut[i][k] += scores[i][j] * Vh[j][k];
+                        }
+                    }
+                }
+                headOutputs.push(headOut);
+            }
+            
+            // Concatenate heads
+            const concat = [];
+            for (let i = 0; i < seqLen; i++) {
+                concat[i] = [];
+                for (let h = 0; h < this.numHeads; h++) {
+                    concat[i].push(...headOutputs[h][i]);
+                }
+            }
+            
+            // Output projection
+            const output = this.matmul(concat, layer.Wo);
+            
+            return { output: output[0] || output, attention: allAttentionWeights };
+        }
+        
+        feedForward(x, layer) {
+            // First linear + GELU
+            let hidden = [];
+            for (let j = 0; j < layer.ff1[0].length; j++) {
+                let sum = 0;
+                for (let i = 0; i < x.length; i++) {
+                    sum += x[i] * layer.ff1[i][j];
+                }
+                hidden.push(this.gelu(sum));
+            }
+            
+            // Second linear
+            let output = [];
+            for (let j = 0; j < layer.ff2[0].length; j++) {
+                let sum = 0;
+                for (let i = 0; i < hidden.length; i++) {
+                    sum += hidden[i] * layer.ff2[i][j];
+                }
+                output.push(sum);
+            }
+            
+            return output;
+        }
+        
+        forward(inputVec) {
+            // Project input to hidden dim
+            let x = [];
+            for (let j = 0; j < this.hiddenDim; j++) {
+                let sum = 0;
+                for (let i = 0; i < inputVec.length; i++) {
+                    sum += inputVec[i] * this.inputProj[i][j];
+                }
+                x.push(sum);
+            }
+            
+            this.attentionWeights = [];
+            
+            // Transformer layers
+            for (let l = 0; l < this.numLayers; l++) {
+                const layer = this.layers[l];
+                
+                // Self-attention with residual
+                const attnResult = this.multiHeadAttention(x, layer);
+                const attnOut = attnResult.output;
+                this.attentionWeights.push(attnResult.attention);
+                
+                // Residual + LayerNorm
+                x = this.layerNorm(x.map((v, i) => v + attnOut[i]), layer.ln1_g, layer.ln1_b);
+                
+                // FFN with residual
+                const ffOut = this.feedForward(x, layer);
+                x = this.layerNorm(x.map((v, i) => v + ffOut[i]), layer.ln2_g, layer.ln2_b);
+            }
+            
+            // Action head
+            let actions = [];
+            for (let j = 0; j < this.actionHead[0].length; j++) {
+                let sum = 0;
+                for (let i = 0; i < x.length; i++) {
+                    sum += x[i] * this.actionHead[i][j];
+                }
+                actions.push(sum);
+            }
+            
+            return {
+                thrust: Math.tanh(actions[0]),
+                turn: Math.tanh(actions[1]),
+                fireMain: this.sigmoid(actions[2]),
+                fireTorpedo: this.sigmoid(actions[3]),
+                targetPreference: Math.tanh(actions[4]),
+                hidden: x
+            };
+        }
+        
+        sigmoid(x) {
+            return 1 / (1 + Math.exp(-Math.max(-500, Math.min(500, x))));
+        }
+        
+        // Simple online learning from rewards
+        learn(state, action, reward) {
+            this.experienceBuffer.push({ state, action, reward });
+            if (this.experienceBuffer.length > this.maxBufferSize) {
+                this.experienceBuffer.shift();
+            }
+            
+            // Periodic batch update
+            if (this.experienceBuffer.length % 50 === 0 && this.experienceBuffer.length > 100) {
+                this.updateWeights();
+            }
+        }
+        
+        updateWeights() {
+            // Simple policy gradient-ish update
+            const samples = this.experienceBuffer.slice(-100);
+            const avgReward = samples.reduce((a, b) => a + b.reward, 0) / samples.length;
+            
+            for (const sample of samples) {
+                const advantage = sample.reward - avgReward;
+                if (Math.abs(advantage) < 0.01) continue;
+                
+                // Nudge weights in direction of good actions
+                const lr = this.learningRate * advantage * 0.01;
+                
+                // Update action head slightly
+                for (let i = 0; i < this.actionHead.length; i++) {
+                    for (let j = 0; j < this.actionHead[0].length; j++) {
+                        this.actionHead[i][j] += lr * (Math.random() - 0.5) * 0.1;
+                    }
+                }
+            }
+        }
+        
+        mutate(rate = 0.1) {
+            const mutateMatrix = (m) => {
+                for (let i = 0; i < m.length; i++) {
+                    for (let j = 0; j < m[i].length; j++) {
+                        if (Math.random() < rate) {
+                            m[i][j] += (Math.random() - 0.5) * 0.2;
+                        }
+                    }
+                }
+            };
+            
+            for (const layer of this.layers) {
+                mutateMatrix(layer.Wq);
+                mutateMatrix(layer.Wk);
+                mutateMatrix(layer.Wv);
+                mutateMatrix(layer.Wo);
+                mutateMatrix(layer.ff1);
+                mutateMatrix(layer.ff2);
+            }
+            mutateMatrix(this.actionHead);
+        }
+    }
+    
+    // ============ SHIP CLASS ============
+    class Warship {
+        constructor(x, y, team, type, id) {
+            this.x = x;
+            this.y = y;
+            this.team = team;
+            this.type = type;
+            this.id = id;
+            this.angle = team === 'red' ? 0 : Math.PI;
+            this.vx = 0;
+            this.vy = 0;
+            this.angularVel = 0;
+            
+            // Ship stats by type
+            const stats = {
+                battleship: { health: 200, maxSpeed: 1.5, turnRate: 0.015, mainDamage: 35, mainRange: 400, mainReload: 120, torpedoDamage: 60, torpedoReload: 300, size: 40 },
+                cruiser: { health: 120, maxSpeed: 2.2, turnRate: 0.025, mainDamage: 20, mainRange: 300, mainReload: 60, torpedoDamage: 50, torpedoReload: 200, size: 30 },
+                destroyer: { health: 60, maxSpeed: 3.5, turnRate: 0.04, mainDamage: 10, mainRange: 200, mainReload: 30, torpedoDamage: 70, torpedoReload: 150, size: 20 }
+            };
+            
+            Object.assign(this, stats[type]);
+            this.maxHealth = this.health;
+            this.mainCooldown = 0;
+            this.torpedoCooldown = 0;
+            this.alive = true;
+            
+            // Neural brain
+            this.brain = new TransformerBrain(16, 32, 4, 2);
+            this.lastState = null;
+            this.lastAction = null;
+            this.damageDealt = 0;
+            this.damageTaken = 0;
+        }
+        
+        getState(enemies, allies, projectiles) {
+            // Build observation vector
+            const obs = new Array(16).fill(0);
+            
+            // Self state (normalized)
+            obs[0] = this.health / this.maxHealth;
+            obs[1] = Math.cos(this.angle);
+            obs[2] = Math.sin(this.angle);
+            obs[3] = this.mainCooldown / 120;
+            obs[4] = this.torpedoCooldown / 300;
+            
+            // Nearest enemy
+            let nearestEnemy = null;
+            let nearestDist = Infinity;
+            for (const e of enemies) {
+                if (!e.alive) continue;
+                const d = Math.hypot(e.x - this.x, e.y - this.y);
+                if (d < nearestDist) {
+                    nearestDist = d;
+                    nearestEnemy = e;
+                }
+            }
+            
+            if (nearestEnemy) {
+                const dx = nearestEnemy.x - this.x;
+                const dy = nearestEnemy.y - this.y;
+                const angleToEnemy = Math.atan2(dy, dx);
+                const relAngle = angleToEnemy - this.angle;
+                
+                obs[5] = nearestDist / 500;
+                obs[6] = Math.cos(relAngle);
+                obs[7] = Math.sin(relAngle);
+                obs[8] = nearestEnemy.health / nearestEnemy.maxHealth;
+                obs[9] = nearestEnemy.type === 'battleship' ? 1 : nearestEnemy.type === 'cruiser' ? 0.5 : 0;
+            }
+            
+            // Second nearest enemy
+            let secondEnemy = null;
+            let secondDist = Infinity;
+            for (const e of enemies) {
+                if (!e.alive || e === nearestEnemy) continue;
+                const d = Math.hypot(e.x - this.x, e.y - this.y);
+                if (d < secondDist) {
+                    secondDist = d;
+                    secondEnemy = e;
+                }
+            }
+            
+            if (secondEnemy) {
+                obs[10] = secondDist / 500;
+                obs[11] = (Math.atan2(secondEnemy.y - this.y, secondEnemy.x - this.x) - this.angle) / Math.PI;
+            }
+            
+            // Incoming projectile threat
+            let threatLevel = 0;
+            for (const p of projectiles) {
+                if (p.team === this.team) continue;
+                const d = Math.hypot(p.x - this.x, p.y - this.y);
+                if (d < 150) {
+                    threatLevel += (150 - d) / 150;
+                }
+            }
+            obs[12] = Math.min(threatLevel, 1);
+            
+            // Ally support
+            let allyNear = 0;
+            for (const a of allies) {
+                if (!a.alive || a === this) continue;
+                const d = Math.hypot(a.x - this.x, a.y - this.y);
+                if (d < 200) allyNear++;
+            }
+            obs[13] = allyNear / 3;
+            
+            // Border awareness
+            obs[14] = Math.min(this.x, canvas.width - this.x) / 200;
+            obs[15] = Math.min(this.y, canvas.height - this.y) / 200;
+            
+            return { obs, nearestEnemy, secondEnemy };
+        }
+        
+        update(enemies, allies, projectiles, dt) {
+            if (!this.alive) return [];
+            
+            const newProjectiles = [];
+            
+            // Get state and compute action
+            const { obs, nearestEnemy, secondEnemy } = this.getState(enemies, allies, projectiles);
+            const action = this.brain.forward(obs);
+            
+            // Store for learning
+            this.lastState = obs;
+            this.lastAction = action;
+            
+            // Apply movement
+            const thrust = action.thrust * 0.1;
+            this.vx += Math.cos(this.angle) * thrust * dt;
+            this.vy += Math.sin(this.angle) * thrust * dt;
+            
+            // Speed limit
+            const speed = Math.hypot(this.vx, this.vy);
+            if (speed > this.maxSpeed) {
+                this.vx = (this.vx / speed) * this.maxSpeed;
+                this.vy = (this.vy / speed) * this.maxSpeed;
+            }
+            
+            // Drag
+            this.vx *= 0.99;
+            this.vy *= 0.99;
+            
+            // Turn
+            this.angle += action.turn * this.turnRate * dt;
+            
+            // Move
+            this.x += this.vx * dt;
+            this.y += this.vy * dt;
+            
+            // Border bounce
+            if (this.x < this.size) { this.x = this.size; this.vx *= -0.5; }
+            if (this.x > canvas.width - this.size) { this.x = canvas.width - this.size; this.vx *= -0.5; }
+            if (this.y < this.size) { this.y = this.size; this.vy *= -0.5; }
+            if (this.y > canvas.height - this.size) { this.y = canvas.height - this.size; this.vy *= -0.5; }
+            
+            // Cooldowns
+            if (this.mainCooldown > 0) this.mainCooldown -= dt;
+            if (this.torpedoCooldown > 0) this.torpedoCooldown -= dt;
+            
+            // Select target
+            const target = action.targetPreference > 0 ? nearestEnemy : (secondEnemy || nearestEnemy);
+            
+            // Fire main guns
+            if (target && action.fireMain > 0.5 && this.mainCooldown <= 0) {
+                const dist = Math.hypot(target.x - this.x, target.y - this.y);
+                if (dist < this.mainRange) {
+                    const angleToTarget = Math.atan2(target.y - this.y, target.x - this.x);
+                    // Slight spread
+                    for (let i = -1; i <= 1; i++) {
+                        newProjectiles.push({
+                            x: this.x + Math.cos(this.angle) * this.size,
+                            y: this.y + Math.sin(this.angle) * this.size,
+                            vx: Math.cos(angleToTarget + i * 0.05) * 8,
+                            vy: Math.sin(angleToTarget + i * 0.05) * 8,
+                            team: this.team,
+                            damage: this.mainDamage / 3,
+                            type: 'shell',
+                            life: 80,
+                            owner: this
+                        });
+                    }
+                    this.mainCooldown = this.mainReload;
+                }
+            }
+            
+            // Fire torpedo
+            if (target && action.fireTorpedo > 0.6 && this.torpedoCooldown <= 0) {
+                const dist = Math.hypot(target.x - this.x, target.y - this.y);
+                if (dist < 350) {
+                    const angleToTarget = Math.atan2(target.y - this.y, target.x - this.x);
+                    newProjectiles.push({
+                        x: this.x,
+                        y: this.y,
+                        vx: Math.cos(angleToTarget) * 4,
+                        vy: Math.sin(angleToTarget) * 4,
+                        team: this.team,
+                        damage: this.torpedoDamage,
+                        type: 'torpedo',
+                        life: 200,
+                        owner: this
+                    });
+                    this.torpedoCooldown = this.torpedoReload;
+                }
+            }
+            
+            return newProjectiles;
+        }
+        
+        takeDamage(amount, attacker) {
+            this.health -= amount;
+            this.damageTaken += amount;
+            if (attacker) attacker.damageDealt += amount;
+            
+            if (this.health <= 0) {
+                this.alive = false;
+                this.health = 0;
+            }
+        }
+        
+        getReward() {
+            let reward = 0;
+            reward += this.damageDealt * 0.01;
+            reward -= this.damageTaken * 0.005;
+            reward += this.alive ? 0.1 : -1;
+            return reward;
+        }
+    }
+    
+    // ============ GAME STATE ============
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const neuralCanvas = document.getElementById('neuralViz');
+    const neuralCtx = neuralCanvas.getContext('2d');
+    
+    let ships = [];
+    let projectiles = [];
+    let running = false;
+    let speedMultiplier = 1;
+    let selectedShip = null;
+    let battleLog = [];
+    let tick = 0;
+    
+    function resizeCanvas() {
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+    }
+    
+    function initBattle() {
+        ships = [];
+        projectiles = [];
+        battleLog = [];
+        tick = 0;
+        
+        const h = canvas.height;
+        const margin = 80;
+        
+        // Red fleet (left side)
+        ships.push(new Warship(150, h/2, 'red', 'battleship', 'R-BB'));
+        ships.push(new Warship(100, h/2 - 120, 'red', 'cruiser', 'R-CA1'));
+        ships.push(new Warship(100, h/2 + 120, 'red', 'cruiser', 'R-CA2'));
+        ships.push(new Warship(60, h/2 - 200, 'red', 'destroyer', 'R-DD1'));
+        ships.push(new Warship(60, h/2 + 200, 'red', 'destroyer', 'R-DD2'));
+        
+        // Blue fleet (right side)
+        ships.push(new Warship(canvas.width - 150, h/2, 'blue', 'battleship', 'B-BB'));
+        ships.push(new Warship(canvas.width - 100, h/2 - 120, 'blue', 'cruiser', 'B-CA1'));
+        ships.push(new Warship(canvas.width - 100, h/2 + 120, 'blue', 'cruiser', 'B-CA2'));
+        ships.push(new Warship(canvas.width - 60, h/2 - 200, 'blue', 'destroyer', 'B-DD1'));
+        ships.push(new Warship(canvas.width - 60, h/2 + 200, 'blue', 'destroyer', 'B-DD2'));
+        
+        updateFleetUI();
+        log('Battle initialized. Transformer brains online.', 'neutral');
+    }
+    
+    function log(msg, type = 'neutral') {
+        battleLog.unshift({ msg, type, tick });
+        if (battleLog.length > 50) battleLog.pop();
+        
+        const logDiv = document.getElementById('log');
+        logDiv.innerHTML = battleLog.slice(0, 20).map(l => 
+            `<div class="log-${l.type}">[${l.tick}] ${l.msg}</div>`
+        ).join('');
+    }
+    
+    function updateFleetUI() {
+        const redDiv = document.getElementById('redFleet');
+        const blueDiv = document.getElementById('blueFleet');
+        
+        const makeShipUI = (ship) => {
+            const healthPct = (ship.health / ship.maxHealth * 100).toFixed(0);
+            const selected = selectedShip === ship ? 'selected' : '';
+            return `
+                <div class="stats-box team-${ship.team} ship-select ${selected}" data-id="${ship.id}">
+                    <div class="stat-row">
+                        <span>${ship.id} (${ship.type})</span>
+                        <span>${ship.alive ? '🟢' : '💀'}</span>
+                    </div>
+                    <div class="health-bar">
+                        <div class="health-fill ${ship.team}-fill" style="width: ${healthPct}%"></div>
+                    </div>
+                    <div class="stat-row">
+                        <span>HP: ${ship.health.toFixed(0)}/${ship.maxHealth}</span>
+                        <span>DMG: ${ship.damageDealt.toFixed(0)}</span>
+                    </div>
+                </div>
+            `;
+        };
+        
+        redDiv.innerHTML = ships.filter(s => s.team === 'red').map(makeShipUI).join('');
+        blueDiv.innerHTML = ships.filter(s => s.team === 'blue').map(makeShipUI).join('');
+        
+        // Add click handlers
+        document.querySelectorAll('.ship-select').forEach(el => {
+            el.onclick = () => {
+                const ship = ships.find(s => s.id === el.dataset.id);
+                selectedShip = selectedShip === ship ? null : ship;
+                updateFleetUI();
+            };
+        });
+    }
+    
+    function drawShip(ship) {
+        ctx.save();
+        ctx.translate(ship.x, ship.y);
+        ctx.rotate(ship.angle);
+        
+        const color = ship.team === 'red' ? '#e74c3c' : '#3498db';
+        const darkColor = ship.team === 'red' ? '#c0392b' : '#2980b9';
+        
+        // Hull
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        if (ship.type === 'battleship') {
+            ctx.moveTo(ship.size, 0);
+            ctx.lineTo(-ship.size * 0.8, -ship.size * 0.35);
+            ctx.lineTo(-ship.size, -ship.size * 0.25);
+            ctx.lineTo(-ship.size, ship.size * 0.25);
+            ctx.lineTo(-ship.size * 0.8, ship.size * 0.35);
+        } else if (ship.type === 'cruiser') {
+            ctx.moveTo(ship.size, 0);
+            ctx.lineTo(-ship.size * 0.7, -ship.size * 0.3);
+            ctx.lineTo(-ship.size, 0);
+            ctx.lineTo(-ship.size * 0.7, ship.size * 0.3);
+        } else {
+            ctx.moveTo(ship.size, 0);
+            ctx.lineTo(-ship.size * 0.6, -ship.size * 0.25);
+            ctx.lineTo(-ship.size * 0.8, 0);
+            ctx.lineTo(-ship.size * 0.6, ship.size * 0.25);
+        }
+        ctx.closePath();
+        ctx.fill();
+        
+        // Superstructure
+        ctx.fillStyle = darkColor;
+        ctx.fillRect(-ship.size * 0.3, -ship.size * 0.15, ship.size * 0.5, ship.size * 0.3);
+        
+        // Turrets
+        ctx.fillStyle = '#2c3e50';
+        if (ship.type === 'battleship') {
+            ctx.beginPath();
+            ctx.arc(ship.size * 0.4, 0, 6, 0, Math.PI * 2);
+            ctx.arc(-ship.size * 0.2, 0, 6, 0, Math.PI * 2);
+            ctx.fill();
+        } else {
+            ctx.beginPath();
+            ctx.arc(ship.size * 0.3, 0, 4, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        ctx.restore();
+        
+        // Selection indicator
+        if (selectedShip === ship) {
+            ctx.strokeStyle = '#f39c12';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.arc(ship.x, ship.y, ship.size + 10, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+        
+        // Health bar above ship
+        const barWidth = ship.size * 1.5;
+        const barHeight = 4;
+        const barY = ship.y - ship.size - 10;
+        ctx.fillStyle = '#1a2a3f';
+        ctx.fillRect(ship.x - barWidth/2, barY, barWidth, barHeight);
+        ctx.fillStyle = ship.team === 'red' ? '#e74c3c' : '#3498db';
+        ctx.fillRect(ship.x - barWidth/2, barY, barWidth * (ship.health / ship.maxHealth), barHeight);
+    }
+    
+    function drawProjectile(p) {
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        
+        if (p.type === 'shell') {
+            ctx.fillStyle = p.team === 'red' ? '#ff6b6b' : '#74b9ff';
+            ctx.beginPath();
+            ctx.arc(0, 0, 3, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Trail
+            ctx.strokeStyle = p.team === 'red' ? 'rgba(255,107,107,0.5)' : 'rgba(116,185,255,0.5)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(-p.vx * 3, -p.vy * 3);
+            ctx.stroke();
+        } else {
+            // Torpedo
+            ctx.fillStyle = p.team === 'red' ? '#c0392b' : '#2980b9';
+            ctx.rotate(Math.atan2(p.vy, p.vx));
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 8, 3, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Wake
+            ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(-8, 0);
+            ctx.lineTo(-20, -4);
+            ctx.moveTo(-8, 0);
+            ctx.lineTo(-20, 4);
+            ctx.stroke();
+        }
+        
+        ctx.restore();
+    }
+    
+    function drawWater() {
+        // Ocean gradient
+        const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        grad.addColorStop(0, '#0d2137');
+        grad.addColorStop(0.5, '#1a3a5c');
+        grad.addColorStop(1, '#0d2137');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Wave lines
+        ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+        ctx.lineWidth = 1;
+        for (let y = 0; y < canvas.height; y += 40) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            for (let x = 0; x < canvas.width; x += 20) {
+                ctx.lineTo(x, y + Math.sin((x + tick * 2) / 50) * 5);
+            }
+            ctx.stroke();
+        }
+    }
+    
+    function drawNeuralViz() {
+        neuralCtx.fillStyle = '#0a1420';
+        neuralCtx.fillRect(0, 0, 290, 120);
+        
+        if (!selectedShip || !selectedShip.brain.attentionWeights.length) {
+            neuralCtx.fillStyle = '#3a5a7f';
+            neuralCtx.font = '11px Courier New';
+            neuralCtx.fillText('Select a ship to view attention', 50, 65);
+            return;
+        }
+        
+        const attn = selectedShip.brain.attentionWeights[0]; // First layer
+        const numHeads = attn.length;
+        const cellSize = 20;
+        const startX = 30;
+        const startY = 20;
+        
+        neuralCtx.fillStyle = '#7fdbca';
+        neuralCtx.font = '10px Courier New';
+        neuralCtx.fillText(`${selectedShip.id} - Attention Heads`, 80, 12);
+        
+        for (let h = 0; h < numHeads; h++) {
+            const x = startX + h * 70;
+            
+            neuralCtx.fillStyle = '#5a7a9f';
+            neuralCtx.fillText(`H${h+1}`, x + 15, startY - 2);
+            
+            // Draw attention weights as heatmap
+            const weights = attn[h][0] || [1]; // Self-attention to first token
+            for (let i = 0; i < Math.min(weights.length, 4); i++) {
+                const intensity = Math.floor(weights[i] * 255);
+                neuralCtx.fillStyle = `rgb(${intensity}, ${Math.floor(intensity * 0.5)}, ${Math.floor(intensity * 0.3)})`;
+                neuralCtx.fillRect(x + (i % 2) * cellSize, startY + Math.floor(i / 2) * cellSize, cellSize - 2, cellSize - 2);
+            }
+        }
+        
+        // Action outputs
+        if (selectedShip.lastAction) {
+            const a = selectedShip.lastAction;
+            neuralCtx.fillStyle = '#7fdbca';
+            neuralCtx.font = '9px Courier New';
+            neuralCtx.fillText(`Thrust: ${a.thrust.toFixed(2)}`, 10, 85);
+            neuralCtx.fillText(`Turn: ${a.turn.toFixed(2)}`, 80, 85);
+            neuralCtx.fillText(`Fire: ${a.fireMain.toFixed(2)}`, 150, 85);
+            neuralCtx.fillText(`Torp: ${a.fireTorpedo.toFixed(2)}`, 210, 85);
+            
+            // Action bars
+            const drawBar = (x, val, col) => {
+                neuralCtx.fillStyle = '#1a2a3f';
+                neuralCtx.fillRect(x, 95, 50, 8);
+                neuralCtx.fillStyle = col;
+                neuralCtx.fillRect(x, 95, 50 * Math.abs(val), 8);
+            };
+            drawBar(10, a.thrust, '#2ecc71');
+            drawBar(80, a.turn, '#9b59b6');
+            drawBar(150, a.fireMain, '#e74c3c');
+            drawBar(220, a.fireTorpedo, '#f39c12');
+        }
+    }
+    
+    function gameLoop() {
+        if (!running) return;
+        
+        for (let s = 0; s < speedMultiplier; s++) {
+            tick++;
+            
+            const redShips = ships.filter(s => s.team === 'red' && s.alive);
+            const blueShips = ships.filter(s => s.team === 'blue' && s.alive);
+            
+            // Update ships
+            for (const ship of ships) {
+                const enemies = ship.team === 'red' ? blueShips : redShips;
+                const allies = ship.team === 'red' ? redShips : blueShips;
+                const newProj = ship.update(enemies, allies, projectiles, 1);
+                projectiles.push(...newProj);
+            }
+            
+            // Update projectiles
+            for (let i = projectiles.length - 1; i >= 0; i--) {
+                const p = projectiles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+                
+                if (p.life <= 0 || p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height) {
+                    projectiles.splice(i, 1);
+                    continue;
+                }
+                
+                // Collision check
+                for (const ship of ships) {
+                    if (!ship.alive || ship.team === p.team) continue;
+                    const dist = Math.hypot(ship.x - p.x, ship.y - p.y);
+                    if (dist < ship.size) {
+                        const wasAlive = ship.alive;
+                        ship.takeDamage(p.damage, p.owner);
+                        
+                        const hitType = p.type === 'torpedo' ? 'TORPEDO HIT' : 'HIT';
+                        log(`${hitType}: ${p.owner?.id || '?'} → ${ship.id} (${p.damage.toFixed(0)} dmg)`, 'hit');
+                        
+                        if (wasAlive && !ship.alive) {
+                            log(`☠️ ${ship.id} SUNK by ${p.owner?.id}!`, 'sink');
+                        }
+                        
+                        projectiles.splice(i, 1);
+                        break;
+                    }
+                }
+            }
+            
+            // Learning step
+            if (tick % 100 === 0) {
+                for (const ship of ships) {
+                    if (ship.lastState) {
+                        ship.brain.learn(ship.lastState, ship.lastAction, ship.getReward());
+                    }
+                }
+            }
+            
+            // Check victory
+            if (tick % 60 === 0) {
+                const redAlive = ships.filter(s => s.team === 'red' && s.alive).length;
+                const blueAlive = ships.filter(s => s.team === 'blue' && s.alive).length;
+                
+                if (redAlive === 0 || blueAlive === 0) {
+                    running = false;
+                    const winner = redAlive > 0 ? 'RED' : 'BLUE';
+                    log(`🏆 ${winner} FLEET VICTORIOUS!`, 'sink');
+                }
+            }
+        }
+        
+        // Draw
+        drawWater();
+        
+        for (const p of projectiles) {
+            drawProjectile(p);
+        }
+        
+        for (const ship of ships) {
+            if (ship.alive) drawShip(ship);
+        }
+        
+        // Explosions for dead ships
+        for (const ship of ships) {
+            if (!ship.alive) {
+                ctx.fillStyle = 'rgba(255, 100, 50, 0.3)';
+                ctx.beginPath();
+                ctx.arc(ship.x, ship.y, ship.size + Math.random() * 10, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        
+        drawNeuralViz();
+        
+        if (tick % 30 === 0) updateFleetUI();
+        
+        requestAnimationFrame(gameLoop);
+    }
+    
+    // Controls
+    document.getElementById('btnStart').onclick = () => { running = true; gameLoop(); };
+    document.getElementById('btnPause').onclick = () => { running = false; };
+    document.getElementById('btnReset').onclick = () => { running = false; initBattle(); };
+    document.getElementById('btnSpeed1').onclick = () => { 
+        speedMultiplier = 1; 
+        document.querySelectorAll('[id^=btnSpeed]').forEach(b => b.classList.remove('active'));
+        document.getElementById('btnSpeed1').classList.add('active');
+    };
+    document.getElementById('btnSpeed2').onclick = () => { 
+        speedMultiplier = 2; 
+        document.querySelectorAll('[id^=btnSpeed]').forEach(b => b.classList.remove('active'));
+        document.getElementById('btnSpeed2').classList.add('active');
+    };
+    document.getElementById('btnSpeed4').onclick = () => { 
+        speedMultiplier = 4; 
+        document.querySelectorAll('[id^=btnSpeed]').forEach(b => b.classList.remove('active'));
+        document.getElementById('btnSpeed4').classList.add('active');
+    };
+    
+    // Init
+    window.addEventListener('resize', () => { resizeCanvas(); initBattle(); });
+    resizeCanvas();
+    initBattle();
+    </script>
+</body>
+</html>

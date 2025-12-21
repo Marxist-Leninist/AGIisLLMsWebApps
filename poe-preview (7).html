@@ -1,0 +1,1583 @@
+<!DOCTYPE html><html lang="en"><head><meta name="x-poe-datastore-behavior" content="local_only"><meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://code.jquery.com https://unpkg.com https://d3js.org https://threejs.org https://cdn.plot.ly https://stackpath.bootstrapcdn.com https://maps.googleapis.com https://cdn.tailwindcss.com https://ajax.googleapis.com https://kit.fontawesome.com https://cdn.datatables.net https://maxcdn.bootstrapcdn.com https://code.highcharts.com https://tako-static-assets-production.s3.amazonaws.com https://www.youtube.com https://fonts.googleapis.com https://fonts.gstatic.com https://pfst.cf2.poecdn.net https://puc.poecdn.net https://i.imgur.com https://wikimedia.org https://*.icons8.com https://*.giphy.com https://picsum.photos https://images.unsplash.com; frame-src 'self' https://www.youtube.com https://trytako.com; child-src 'self'; manifest-src 'self'; worker-src 'self'; upgrade-insecure-requests; block-all-mixed-content;">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEURAL BOXING: Architecture Beatdown</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            background: linear-gradient(180deg, #1a0a0a 0%, #0a0a12 50%, #0a0a0a 100%);
+            color: #e0e0e0;
+            font-family: 'Courier New', monospace;
+            min-height: 100vh;
+            padding: 10px;
+            overflow-x: hidden;
+        }
+        
+        .header { text-align: center; margin-bottom: 10px; }
+        
+        h1 {
+            font-size: 2.2rem;
+            background: linear-gradient(90deg, #ff4444, #ffaa00, #ff4444);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+        }
+        
+        .subtitle { color: #666; font-size: 0.8rem; }
+        
+        .ring-container {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+            align-items: flex-start;
+        }
+        
+        .corner-panel {
+            background: linear-gradient(145deg, #1a1215, #0a0808);
+            border: 2px solid #2a1a1a;
+            border-radius: 10px;
+            padding: 12px;
+            width: 200px;
+        }
+        .corner-panel.red { border-color: #ff4444; }
+        .corner-panel.blue { border-color: #4444ff; }
+        
+        .fighter-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        
+        .fighter-icon {
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+        .corner-panel.red .fighter-icon { background: #ff4444; }
+        .corner-panel.blue .fighter-icon { background: #4444ff; }
+        
+        .fighter-name { font-size: 1rem; font-weight: bold; }
+        .corner-panel.red .fighter-name { color: #ff6666; }
+        .corner-panel.blue .fighter-name { color: #6666ff; }
+        
+        .stat-bars { margin-bottom: 10px; }
+        .stat-bar { margin-bottom: 6px; }
+        .stat-bar .label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.65rem;
+            color: #666;
+            margin-bottom: 2px;
+        }
+        .bar-bg { height: 12px; background: #1a1a1a; border-radius: 6px; overflow: hidden; }
+        .bar-fill { height: 100%; transition: width 0.15s; border-radius: 6px; }
+        .bar-fill.hp { background: linear-gradient(90deg, #44ff44, #22aa22); }
+        .bar-fill.stamina { background: linear-gradient(90deg, #ffaa00, #aa7700); }
+        .bar-fill.hp.low { background: linear-gradient(90deg, #ff4444, #aa2222); }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 5px;
+            font-size: 0.7rem;
+            margin-bottom: 10px;
+        }
+        .stat-item { background: #0a0a0a; padding: 5px; border-radius: 4px; text-align: center; }
+        .stat-item .val { font-size: 1rem; font-weight: bold; color: #ffaa00; }
+        
+        .brain-panel { background: #0a0808; border-radius: 6px; padding: 8px; }
+        .brain-panel h4 {
+            font-size: 0.6rem;
+            color: #555;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+        .brain-viz { min-height: 50px; }
+        .memory-grid {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 2px;
+        }
+        .mem-cell {
+            width: 16px;
+            height: 16px;
+            border-radius: 2px;
+            background: #1a1a1a;
+        }
+        .hidden-neurons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2px;
+        }
+        .neuron {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #1a1a1a;
+        }
+        
+        .ring {
+            position: relative;
+            width: 550px;
+            height: 400px;
+            background: linear-gradient(180deg, #2a2a35 0%, #1a1a22 100%);
+            border: 8px solid #8B4513;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        .ring::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 10%;
+            right: 10%;
+            height: 2px;
+            background: #444;
+        }
+        .ropes { position: absolute; inset: 0; pointer-events: none; }
+        .rope { position: absolute; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #aa2222, #ff4444, #aa2222); }
+        .rope:nth-child(1) { top: 15%; }
+        .rope:nth-child(2) { top: 35%; }
+        .rope:nth-child(3) { bottom: 35%; }
+        .rope:nth-child(4) { bottom: 15%; }
+        
+        .corner-post { position: absolute; width: 15px; height: 100%; background: linear-gradient(90deg, #666, #888, #666); }
+        .corner-post.left { left: 0; }
+        .corner-post.right { right: 0; }
+        
+        .boxer {
+            position: absolute;
+            width: 80px;
+            height: 140px;
+            transition: left 0.08s, bottom 0.08s, transform 0.08s;
+        }
+        .boxer-body {
+            position: absolute;
+            bottom: 20px;
+            width: 60px;
+            height: 90px;
+            left: 10px;
+            border-radius: 30px 30px 20px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .boxer.red .boxer-body { background: linear-gradient(180deg, #ff6666, #cc3333); }
+        .boxer.blue .boxer-body { background: linear-gradient(180deg, #6666ff, #3333cc); }
+        
+        .boxer-head {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #ffcc99;
+            margin-top: -15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            border: 3px solid;
+            position: relative;
+            z-index: 2;
+        }
+        .boxer.red .boxer-head { border-color: #ff4444; }
+        .boxer.blue .boxer-head { border-color: #4444ff; }
+        
+        .glove {
+            position: absolute;
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            top: 50px;
+            transition: all 0.08s;
+            z-index: 2;
+        }
+        .boxer.red .glove { background: #ff4444; }
+        .boxer.blue .glove { background: #4444ff; }
+        .glove.left { left: -10px; }
+        .glove.right { right: -10px; }
+        
+        /* Legs for kicks */
+        .leg {
+            position: absolute;
+            width: 18px;
+            height: 40px;
+            bottom: 0;
+            border-radius: 10px;
+            left: 12px;
+            transition: transform 0.1s;
+        }
+        .leg.right { left: 30px; }
+        .boxer.red .leg { background: #b03030; }
+        .boxer.blue .leg { background: #3030b0; }
+        
+        /* Action states */
+        .boxer.blocking .glove { top: 25px !important; }
+        .boxer.blocking .glove.left { left: 5px !important; }
+        .boxer.blocking .glove.right { right: 5px !important; }
+        
+        .boxer.parrying .glove.left { left: -15px !important; top: 20px !important; }
+        .boxer.parrying .glove.right { right: -15px !important; top: 20px !important; }
+        .boxer.parrying { filter: drop-shadow(0 0 8px #ffaa00); }
+        
+        .boxer.dodging { transform: translateY(-10px); opacity: 0.9; }
+        
+        .boxer.dashing { transform: translateX(10px); }
+        
+        .boxer.jabbing .glove.right { right: -50px !important; top: 40px !important; }
+        .boxer.hooking .glove.right { right: -45px !important; top: 30px !important; transform: rotate(-30deg); }
+        .boxer.uppercutting .glove.right { right: -30px !important; top: 10px !important; }
+        
+        .boxer.kicking .leg.right { transform: rotate(-25deg) translate(8px, -10px); transform-origin: top left; }
+        .boxer.spin-kicking .leg.right { transform: rotate(-60deg) translate(16px, -16px); transform-origin: top left; }
+        .boxer.sweeping .leg.right { transform: rotate(-40deg) translate(10px, -6px); transform-origin: top left; }
+        
+        .boxer.specialing .boxer-body { box-shadow: 0 0 18px #ffaa00; }
+        
+        .boxer.grabbing .glove.left { left: -20px !important; top: 35px !important; }
+        .boxer.grabbing .glove.right { right: -20px !important; top: 35px !important; }
+        
+        .boxer.hit { animation: hit-shake 0.2s; }
+        @keyframes hit-shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px) rotate(-5deg); }
+            75% { transform: translateX(10px) rotate(5deg); }
+        }
+        
+        .boxer.knocked-down .boxer-body { transform: rotate(80deg) translateY(30px); }
+        .boxer.knocked-down .boxer-head { transform: rotate(-80deg); }
+        
+        .punch-effect {
+            position: absolute;
+            font-size: 2rem;
+            font-weight: bold;
+            pointer-events: none;
+            animation: punch-pop 0.4s ease-out forwards;
+            text-shadow: 2px 2px 0 #000;
+        }
+        @keyframes punch-pop {
+            0% { transform: scale(0.5); opacity: 1; }
+            100% { transform: scale(1.5) translateY(-30px); opacity: 0; }
+        }
+        
+        .damage-text {
+            position: absolute;
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #ff4444;
+            pointer-events: none;
+            animation: damage-float 0.8s ease-out forwards;
+            text-shadow: 2px 2px 0 #000;
+        }
+        @keyframes damage-float {
+            0% { transform: translateY(0); opacity: 1; }
+            100% { transform: translateY(-50px); opacity: 0; }
+        }
+        
+        .thought-bubble {
+            position: absolute;
+            background: #000000dd;
+            color: #fff;
+            padding: 4px 8px;
+            border-radius: 8px;
+            font-size: 0.65rem;
+            white-space: nowrap;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .thought-bubble.visible { opacity: 1; }
+        
+        .scoreboard {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #000000cc;
+            padding: 8px 20px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            z-index: 10;
+        }
+        .scoreboard .red { color: #ff4444; }
+        .scoreboard .blue { color: #4444ff; }
+        .scoreboard .round { color: #ffaa00; font-size: 0.8rem; }
+        
+        .round-banner {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 3rem;
+            font-weight: bold;
+            color: #ffaa00;
+            text-shadow: 3px 3px 0 #000;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 20;
+        }
+        .round-banner.visible { animation: round-announce 2s ease-out forwards; }
+        @keyframes round-announce {
+            0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+            20% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
+            80% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+            100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+        }
+        
+        .ko-banner {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 5rem;
+            font-weight: bold;
+            color: #ff0000;
+            text-shadow: 4px 4px 0 #000, 0 0 30px #ff0000;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 20;
+        }
+        .ko-banner.visible { opacity: 1; animation: ko-shake 0.5s ease-out; }
+        @keyframes ko-shake {
+            0%, 100% { transform: translate(-50%, -50%) rotate(0); }
+            25% { transform: translate(-50%, -50%) rotate(-5deg) scale(1.1); }
+            75% { transform: translate(-50%, -50%) rotate(5deg) scale(1.1); }
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin: 15px 0;
+            flex-wrap: wrap;
+        }
+        button {
+            background: linear-gradient(145deg, #2a2a3e, #1a1a2e);
+            border: 2px solid #3a3a4e;
+            padding: 10px 20px;
+            font-family: inherit;
+            font-size: 0.9rem;
+            color: #aaa;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        button:hover { border-color: #00ffaa; color: #00ffaa; }
+        button.active { background: #00aa7733; border-color: #00ffaa; color: #00ffaa; }
+        
+        .fighter-select {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            margin-bottom: 10px;
+        }
+        .fighter-option {
+            padding: 6px;
+            background: #1a1a1a;
+            border: 2px solid transparent;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.7rem;
+            transition: all 0.2s;
+        }
+        .fighter-option:hover { border-color: #444; }
+        .fighter-option.selected { border-color: #00ffaa; background: #1a2a2a; }
+        .fighter-option .name { font-weight: bold; color: #fff; }
+        .fighter-option .desc { color: #555; font-size: 0.6rem; }
+        
+        .commentary {
+            max-width: 900px;
+            margin: 15px auto;
+            background: linear-gradient(145deg, #1a1215, #0a0808);
+            border: 2px solid #2a1a1a;
+            border-radius: 10px;
+            padding: 12px;
+        }
+        .commentary h3 { color: #ffaa00; font-size: 0.8rem; margin-bottom: 8px; }
+        #commentary-text { color: #aaa; font-size: 0.85rem; line-height: 1.5; min-height: 40px; }
+        
+        .crowd {
+            position: absolute;
+            bottom: 5px;
+            left: 5px;
+            right: 5px;
+            font-size: 0.8rem;
+            opacity: 0.5;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+        
+        @media (max-width: 640px) {
+            .ring { width: 100%; height: 320px; }
+            .corner-panel { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🥊 NEURAL BOXING 🥊</h1>
+        <div class="subtitle">Architecture Beatdown — 12 Rounds of Machine Learning Mayhem</div>
+    </div>
+    
+    <div class="controls">
+        <button id="btn-fight" onclick="toggleFight()">🔔 START FIGHT</button>
+        <button onclick="resetFight()">↺ RESET</button>
+        <button onclick="setSpeed(0.5)">0.5x</button>
+        <button onclick="setSpeed(1)" class="active" id="speed-1">1x</button>
+        <button onclick="setSpeed(2)">2x</button>
+    </div>
+    
+    <div class="ring-container">
+        <div class="corner-panel red">
+            <div class="fighter-header">
+                <div class="fighter-icon">🧠</div>
+                <div class="fighter-name" id="name1">TNTM</div>
+            </div>
+            
+            <div class="fighter-select" id="select1">
+                <div class="fighter-option selected" data-type="tntm" onclick="selectFighter(1, 'tntm')">
+                    <span class="name">🧠 TNTM</span>
+                    <span class="desc">Memory + prediction</span>
+                </div>
+                <div class="fighter-option" data-type="transformer" onclick="selectFighter(1, 'transformer')">
+                    <span class="name">⚡ Transformer</span>
+                    <span class="desc">Pure attention</span>
+                </div>
+                <div class="fighter-option" data-type="lstm" onclick="selectFighter(1, 'lstm')">
+                    <span class="name">🔄 LSTM</span>
+                    <span class="desc">Gated memory</span>
+                </div>
+                <div class="fighter-option" data-type="mlp" onclick="selectFighter(1, 'mlp')">
+                    <span class="name">📊 MLP</span>
+                    <span class="desc">No memory</span>
+                </div>
+            </div>
+            
+            <div class="stat-bars">
+                <div class="stat-bar">
+                    <div class="label"><span>HP</span><span id="hp1-text">100</span></div>
+                    <div class="bar-bg"><div class="bar-fill hp" id="hp1" style="width: 100%"></div></div>
+                </div>
+                <div class="stat-bar">
+                    <div class="label"><span>STAMINA</span><span id="stam1-text">100</span></div>
+                    <div class="bar-bg"><div class="bar-fill stamina" id="stam1" style="width: 100%"></div></div>
+                </div>
+            </div>
+            
+            <div class="stats-grid">
+                <div class="stat-item"><div class="val" id="punches1">0</div>Punches</div>
+                <div class="stat-item"><div class="val" id="hits1">0</div>Hits</div>
+                <div class="stat-item"><div class="val" id="blocks1">0</div>Blocks</div>
+                <div class="stat-item"><div class="val" id="kd1">0</div>KDs</div>
+            </div>
+            
+            <div class="brain-panel">
+                <h4 id="brain1-title">External Memory</h4>
+                <div class="brain-viz" id="brain1"></div>
+            </div>
+        </div>
+        
+        <div class="ring" id="ring">
+            <div class="ropes">
+                <div class="rope"></div>
+                <div class="rope"></div>
+                <div class="rope"></div>
+                <div class="rope"></div>
+            </div>
+            <div class="corner-post left"></div>
+            <div class="corner-post right"></div>
+            
+            <div class="scoreboard">
+                <span class="red" id="score1">0</span>
+                <span class="round" id="round-display">Round 1</span>
+                <span class="blue" id="score2">0</span>
+            </div>
+            
+            <div class="boxer red" id="boxer1" style="left: 80px; bottom: 140px;">
+                <div class="thought-bubble" id="thought1"></div>
+                <div class="boxer-body">
+                    <div class="boxer-head">🧠</div>
+                </div>
+                <div class="glove left"></div>
+                <div class="glove right"></div>
+                <div class="leg left"></div>
+                <div class="leg right"></div>
+            </div>
+            
+            <div class="boxer blue" id="boxer2" style="left: 390px; bottom: 140px;">
+                <div class="thought-bubble" id="thought2"></div>
+                <div class="boxer-body">
+                    <div class="boxer-head">⚡</div>
+                </div>
+                <div class="glove left"></div>
+                <div class="glove right"></div>
+                <div class="leg left"></div>
+                <div class="leg right"></div>
+            </div>
+            
+            <div class="round-banner" id="round-banner">ROUND 1</div>
+            <div class="ko-banner" id="ko-banner">K.O.!</div>
+            
+            <div class="crowd" id="crowd"></div>
+        </div>
+        
+        <div class="corner-panel blue">
+            <div class="fighter-header">
+                <div class="fighter-icon">⚡</div>
+                <div class="fighter-name" id="name2">Transformer</div>
+            </div>
+            
+            <div class="fighter-select" id="select2">
+                <div class="fighter-option" data-type="tntm" onclick="selectFighter(2, 'tntm')">
+                    <span class="name">🧠 TNTM</span>
+                    <span class="desc">Memory + prediction</span>
+                </div>
+                <div class="fighter-option selected" data-type="transformer" onclick="selectFighter(2, 'transformer')">
+                    <span class="name">⚡ Transformer</span>
+                    <span class="desc">Pure attention</span>
+                </div>
+                <div class="fighter-option" data-type="lstm" onclick="selectFighter(2, 'lstm')">
+                    <span class="name">🔄 LSTM</span>
+                    <span class="desc">Gated memory</span>
+                </div>
+                <div class="fighter-option" data-type="mlp" onclick="selectFighter(2, 'mlp')">
+                    <span class="name">📊 MLP</span>
+                    <span class="desc">No memory</span>
+                </div>
+            </div>
+            
+            <div class="stat-bars">
+                <div class="stat-bar">
+                    <div class="label"><span>HP</span><span id="hp2-text">100</span></div>
+                    <div class="bar-bg"><div class="bar-fill hp" id="hp2" style="width: 100%"></div></div>
+                </div>
+                <div class="stat-bar">
+                    <div class="label"><span>STAMINA</span><span id="stam2-text">100</span></div>
+                    <div class="bar-bg"><div class="bar-fill stamina" id="stam2" style="width: 100%"></div></div>
+                </div>
+            </div>
+            
+            <div class="stats-grid">
+                <div class="stat-item"><div class="val" id="punches2">0</div>Punches</div>
+                <div class="stat-item"><div class="val" id="hits2">0</div>Hits</div>
+                <div class="stat-item"><div class="val" id="blocks2">0</div>Blocks</div>
+                <div class="stat-item"><div class="val" id="kd2">0</div>KDs</div>
+            </div>
+            
+            <div class="brain-panel">
+                <h4 id="brain2-title">Attention Heads</h4>
+                <div class="brain-viz" id="brain2"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="commentary">
+        <h3>📢 RINGSIDE COMMENTARY</h3>
+        <div id="commentary-text">Ladies and gentlemen, welcome to NEURAL BOXING! Select your fighters and ring the bell!</div>
+    </div>
+
+    <script>
+        // =============================================
+        // NEURAL NETWORK BOXING BRAINS
+        // =============================================
+        
+        class TNTMBoxer {
+            constructor() {
+                this.name = 'TNTM';
+                this.icon = '🧠';
+                this.style = 'Technical Outboxer';
+                
+                this.memorySlots = 32;
+                this.memory = [];
+                for (let i = 0; i < this.memorySlots; i++) {
+                    this.memory.push(new Array(8).fill(0));
+                }
+                this.readWeights = new Array(this.memorySlots).fill(1/32);
+                this.writeHead = 0;
+                this.sharpness = 2.0;
+                
+                this.patternBuffer = [];
+            }
+            
+            write(state) {
+                this.writeHead = (this.writeHead + 1) % this.memorySlots;
+                for (let i = 0; i < 8; i++) {
+                    this.memory[this.writeHead][i] = this.memory[this.writeHead][i] * 0.2 + state[i] * 0.8;
+                }
+            }
+            
+            read(query) {
+                const sims = [];
+                for (let i = 0; i < this.memorySlots; i++) {
+                    let dot = 0, nQ = 0, nM = 0;
+                    for (let j = 0; j < 8; j++) {
+                        dot += query[j] * this.memory[i][j];
+                        nQ += query[j] ** 2;
+                        nM += this.memory[i][j] ** 2;
+                    }
+                    sims.push(dot / (Math.sqrt(nQ) * Math.sqrt(nM) + 1e-8));
+                }
+                
+                const max = Math.max(...sims);
+                const exps = sims.map(s => Math.exp((s - max) * this.sharpness));
+                const sum = exps.reduce((a, b) => a + b);
+                this.readWeights = exps.map(e => e / sum);
+                
+                const result = new Array(8).fill(0);
+                for (let i = 0; i < this.memorySlots; i++) {
+                    for (let j = 0; j < 8; j++) {
+                        result[j] += this.readWeights[i] * this.memory[i][j];
+                    }
+                }
+                return result;
+            }
+            
+            decide(myState, enemyState, distance) {
+                const state = [
+                    myState.hp / 100, myState.stamina / 100,
+                    enemyState.hp / 100, enemyState.stamina / 100,
+                    distance / 300, enemyState.action === 'jab' ? 1 : 0,
+                    enemyState.action === 'hook' ? 1 : 0, enemyState.action === 'block' ? 1 : 0
+                ];
+                
+                this.patternBuffer.push(enemyState.action);
+                if (this.patternBuffer.length > 20) this.patternBuffer.shift();
+                
+                this.write(state);
+                const retrieved = this.read(state);
+                const confidence = Math.max(...this.readWeights);
+                
+                let predictedEnemyAction = null;
+                if (this.patternBuffer.length > 5) {
+                    const recent = this.patternBuffer.slice(-3);
+                    const jabCount = recent.filter(a => a === 'jab').length;
+                    const hookCount = recent.filter(a => a === 'hook').length;
+                    if (jabCount >= 2) predictedEnemyAction = 'jab';
+                    else if (hookCount >= 2) predictedEnemyAction = 'hook';
+                }
+                
+                let action = { type: 'idle', move: 0, thought: '' };
+                
+                if (myState.stamina < 18) {
+                    action.type = 'block';
+                    action.thought = 'Low stamina, blocking...';
+                } else if (predictedEnemyAction && confidence > 0.2) {
+                    if (predictedEnemyAction === 'jab') {
+                        action.type = distance < 110 ? 'kick' : 'idle';
+                        action.move = -0.5;
+                        action.thought = `Predicted jab! Kick counter!`;
+                    } else if (predictedEnemyAction === 'hook') {
+                        action.type = 'parry';
+                        action.thought = `Parry incoming hook!`;
+                    }
+                } else if (distance < 80 && myState.stamina > 40) {
+                    const r = Math.random();
+                    if (r < 0.3) action.type = 'jab';
+                    else if (r < 0.55) action.type = 'hook';
+                    else if (r < 0.75) action.type = 'uppercut';
+                    else action.type = 'kick';
+                    action.thought = 'In range, mixing strikes!';
+                } else if (distance < 120 && myState.stamina > 60 && confidence > 0.25) {
+                    action.type = 'special';
+                    action.thought = 'Pattern read: unleash special!';
+                } else if (distance > 130) {
+                    action.move = 1.5;
+                    action.type = Math.random() < 0.2 ? 'dash' : 'idle';
+                    action.thought = 'Closing distance...';
+                } else {
+                    action.type = Math.random() < 0.25 ? 'kick' : 'jab';
+                    action.move = Math.random() < 0.5 ? 0.4 : -0.4;
+                    action.thought = `Mem conf: ${(confidence * 100).toFixed(0)}%`;
+                }
+                
+                return action;
+            }
+            
+            renderBrain(container) {
+                container.innerHTML = '';
+                const grid = document.createElement('div');
+                grid.className = 'memory-grid';
+                for (let i = 0; i < this.memorySlots; i++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'mem-cell';
+                    const w = this.readWeights[i];
+                    const content = Math.sqrt(this.memory[i].reduce((a, b) => a + b*b, 0));
+                    cell.style.background = `rgb(${Math.floor(255 * w)}, ${Math.floor(100 * content)}, ${Math.floor(50 * w)})`;
+                    if (i === this.writeHead) cell.style.border = '2px solid #fff';
+                    grid.appendChild(cell);
+                }
+                container.appendChild(grid);
+            }
+        }
+        
+        class TransformerBoxer {
+            constructor() {
+                this.name = 'Transformer';
+                this.icon = '⚡';
+                this.style = 'Aggressive Brawler';
+                
+                this.nHeads = 4;
+                this.contextWindow = [];
+                this.maxContext = 8;
+                this.attentionWeights = [];
+            }
+            
+            decide(myState, enemyState, distance) {
+                const state = [
+                    myState.hp / 100, myState.stamina / 100,
+                    enemyState.hp / 100, enemyState.stamina / 100,
+                    distance / 300, Math.sin(Date.now() / 200),
+                    enemyState.action === 'block' ? 1 : 0, Math.random()
+                ];
+                
+                this.contextWindow.push(state);
+                if (this.contextWindow.length > this.maxContext) this.contextWindow.shift();
+                
+                this.attentionWeights = [];
+                for (let h = 0; h < this.nHeads; h++) {
+                    const scores = this.contextWindow.map((ctx) => {
+                        let dot = 0;
+                        for (let j = 0; j < 8; j++) {
+                            dot += state[j] * ctx[j] * Math.sin(h + j);
+                        }
+                        return dot;
+                    });
+                    const max = Math.max(...scores);
+                    const exps = scores.map(s => Math.exp(s - max));
+                    const sum = exps.reduce((a, b) => a + b);
+                    this.attentionWeights.push(exps.map(e => e / sum));
+                }
+                
+                let action = { type: 'idle', move: 0, thought: '' };
+                
+                if (enemyState.action === 'jab' || enemyState.action === 'hook') {
+                    action.type = Math.random() < 0.55 ? 'parry' : 'dodge';
+                    action.move = -1;
+                    action.thought = 'Reacting to strike!';
+                } else if (distance < 90 && myState.stamina > 30) {
+                    const r = Math.random();
+                    if (r < 0.25) action.type = 'hook';
+                    else if (r < 0.45) action.type = 'kick';
+                    else if (r < 0.65) action.type = 'spin_kick';
+                    else if (r < 0.8) action.type = 'uppercut';
+                    else action.type = 'sweep';
+                    action.thought = 'Heads aligned: attack!';
+                } else if (distance > 130) {
+                    action.move = 2.5;
+                    action.type = 'dash';
+                    action.thought = 'Rushing in!';
+                } else {
+                    action.type = Math.random() < 0.4 ? 'jab' : 'kick';
+                    action.thought = `Attending ${this.contextWindow.length} frames`;
+                }
+                
+                if (myState.stamina > 65 && distance < 120 && Math.random() < 0.25) {
+                    action.type = 'special';
+                    action.thought = 'All heads: SPECIAL!';
+                }
+                
+                return action;
+            }
+            
+            renderBrain(container) {
+                container.innerHTML = '';
+                const heads = document.createElement('div');
+                heads.style.display = 'flex';
+                heads.style.gap = '5px';
+                
+                for (let h = 0; h < this.nHeads; h++) {
+                    const head = document.createElement('div');
+                    head.style.cssText = 'flex:1;height:40px;background:#1a1a2e;border-radius:4px;position:relative;overflow:hidden;';
+                    
+                    const weights = this.attentionWeights[h] || [];
+                    const maxW = weights.length > 0 ? Math.max(...weights) : 0;
+                    
+                    const bar = document.createElement('div');
+                    bar.style.cssText = `position:absolute;bottom:0;left:0;right:0;height:${maxW * 100}%;background:hsl(${200 + h * 40}, 80%, 50%);border-radius:0 0 4px 4px;transition:height 0.1s;`;
+                    
+                    head.appendChild(bar);
+                    heads.appendChild(head);
+                }
+                
+                container.appendChild(heads);
+            }
+        }
+        
+        class LSTMBoxer {
+            constructor() {
+                this.name = 'LSTM';
+                this.icon = '🔄';
+                this.style = 'Patient Counter-Puncher';
+                
+                this.hiddenSize = 16;
+                this.hidden = new Array(16).fill(0);
+                this.cell = new Array(16).fill(0);
+                this.forgetGate = new Array(16).fill(0.5);
+            }
+            
+            sigmoid(x) { return 1 / (1 + Math.exp(-Math.max(-10, Math.min(10, x)))); }
+            
+            step(input) {
+                for (let i = 0; i < this.hiddenSize; i++) {
+                    let fIn = 0, iIn = 0, oIn = 0, cIn = 0;
+                    for (let j = 0; j < input.length; j++) {
+                        fIn += input[j] * Math.sin(i * 7 + j * 3);
+                        iIn += input[j] * Math.cos(i * 11 + j * 5);
+                        oIn += input[j] * Math.sin(i * 13 + j * 7);
+                        cIn += input[j] * Math.cos(i * 17 + j * 11);
+                    }
+                    for (let j = 0; j < this.hiddenSize; j++) {
+                        fIn += this.hidden[j] * Math.sin(i * 19 + j * 13) * 0.5;
+                    }
+                    
+                    this.forgetGate[i] = this.sigmoid(fIn);
+                    const inputGate = this.sigmoid(iIn);
+                    const outputGate = this.sigmoid(oIn);
+                    const candidate = Math.tanh(cIn);
+                    
+                    this.cell[i] = this.forgetGate[i] * this.cell[i] + inputGate * candidate;
+                    this.hidden[i] = outputGate * Math.tanh(this.cell[i]);
+                }
+            }
+            
+            decide(myState, enemyState, distance) {
+                const input = [
+                    myState.hp / 100, myState.stamina / 100,
+                    enemyState.hp / 100, enemyState.stamina / 100,
+                    distance / 300, enemyState.action === 'jab' ? 1 : 0,
+                    enemyState.action === 'hook' ? 1 : 0, myState.hp < 30 ? 1 : 0
+                ];
+                
+                this.step(input);
+                
+                let action = { type: 'idle', move: 0, thought: '' };
+                
+                const avgForget = this.forgetGate.reduce((a, b) => a + b) / this.hiddenSize;
+                
+                if (enemyState.action === 'jab' && distance < 100) {
+                    action.type = Math.random() < 0.5 ? 'hook' : 'parry';
+                    action.thought = 'Counter the jab!';
+                } else if (enemyState.action === 'hook' && distance < 100) {
+                    action.type = 'parry';
+                    action.move = -0.5;
+                    action.thought = 'Parry & step back';
+                } else if (enemyState.stamina < 30 && distance < 110) {
+                    action.type = Math.random() < 0.5 ? 'sweep' : 'uppercut';
+                    action.thought = 'Enemy tired! Attack!';
+                } else if (distance > 130) {
+                    action.move = 1;
+                    action.type = Math.random() < 0.3 ? 'dash' : 'idle';
+                    action.thought = 'Closing carefully...';
+                } else if (myState.hp < 30 && Math.random() < 0.4) {
+                    action.type = 'dodge';
+                    action.move = -0.8;
+                    action.thought = 'Need to evade!';
+                } else {
+                    const r = Math.random();
+                    if (r < 0.2) action.type = 'jab';
+                    else if (r < 0.35) action.type = 'kick';
+                    else if (r < 0.45) action.type = 'sweep';
+                    else action.type = 'idle';
+                    action.thought = `Forget: ${(avgForget * 100).toFixed(0)}%`;
+                }
+                
+                return action;
+            }
+            
+            renderBrain(container) {
+                container.innerHTML = '';
+                const neurons = document.createElement('div');
+                neurons.className = 'hidden-neurons';
+                
+                for (let i = 0; i < this.hiddenSize; i++) {
+                    const n = document.createElement('div');
+                    n.className = 'neuron';
+                    const act = this.sigmoid(this.hidden[i]);
+                    const forget = this.forgetGate[i];
+                    n.style.background = `rgb(${Math.floor(100 + 155 * forget)}, ${Math.floor(200 * act)}, ${Math.floor(100 * (1 - forget))})`;
+                    neurons.appendChild(n);
+                }
+                
+                container.appendChild(neurons);
+            }
+        }
+        
+        class MLPBoxer {
+            constructor() {
+                this.name = 'MLP';
+                this.icon = '📊';
+                this.style = 'Predictable Puncher';
+                this.activations = new Array(16).fill(0);
+            }
+            
+            relu(x) { return Math.max(0, x); }
+            
+            forward(input) {
+                for (let i = 0; i < 16; i++) {
+                    let sum = 0;
+                    for (let j = 0; j < input.length; j++) {
+                        sum += input[j] * Math.sin(i * 17 + j * 31);
+                    }
+                    this.activations[i] = this.relu(sum);
+                }
+                let output = [0, 0, 0, 0];
+                for (let i = 0; i < 4; i++) {
+                    for (let j = 0; j < 16; j++) {
+                        output[i] += this.activations[j] * Math.cos(i * 13 + j * 7);
+                    }
+                }
+                return output;
+            }
+            
+            decide(myState, enemyState, distance) {
+                const input = [
+                    myState.hp / 100, myState.stamina / 100,
+                    enemyState.hp / 100, enemyState.stamina / 100,
+                    distance / 300, 0.5, 0.5, 0.5
+                ];
+                
+                const output = this.forward(input);
+                let action = { type: 'idle', move: 0, thought: '' };
+                const activeNeurons = this.activations.filter(a => a > 0).length;
+                
+                if (distance < 80) {
+                    if (output[0] > output[1] && output[0] > output[2]) action.type = 'jab';
+                    else if (output[1] > output[2]) action.type = 'hook';
+                    else action.type = 'parry';
+                    action.thought = `${activeNeurons}/16 ReLU active`;
+                } else if (distance < 120) {
+                    action.type = Math.random() < 0.4 ? 'kick' : 'sweep';
+                    action.move = output[3] > 0 ? 0.4 : -0.4;
+                    action.thought = 'Feedforward mid-range';
+                } else {
+                    action.move = 1.2;
+                    action.type = Math.random() < 0.25 ? 'dash' : 'idle';
+                    action.thought = 'Moving in...';
+                }
+                
+                if (myState.stamina > 60 && distance < 110 && Math.random() < 0.2) {
+                    action.type = 'special';
+                    action.thought = 'Feedforward SPECIAL';
+                }
+                
+                return action;
+            }
+            
+            renderBrain(container) {
+                container.innerHTML = '';
+                const neurons = document.createElement('div');
+                neurons.className = 'hidden-neurons';
+                for (let i = 0; i < 16; i++) {
+                    const n = document.createElement('div');
+                    n.className = 'neuron';
+                    const act = Math.min(1, this.activations[i] / 2);
+                    n.style.background = act > 0 ? `rgb(${Math.floor(255 * act)}, ${Math.floor(170 * act)}, 0)` : '#1a1a1a';
+                    neurons.appendChild(n);
+                }
+                container.appendChild(neurons);
+            }
+        }
+        
+        // =============================================
+        // GAME ENGINE
+        // =============================================
+        
+        const brainTypes = { tntm: TNTMBoxer, transformer: TransformerBoxer, lstm: LSTMBoxer, mlp: MLPBoxer };
+        const brainTitles = { tntm: 'External Memory', transformer: 'Attention Heads', lstm: 'Hidden State', mlp: 'ReLU Activations' };
+        
+        const actionStats = {
+            jab:       { cost: 5,  range: 100, damage: [5, 8] },
+            hook:      { cost: 12, range: 95,  damage: [10, 15] },
+            uppercut:  { cost: 15, range: 85,  damage: [15, 23] },
+            kick:      { cost: 14, range: 130, damage: [12, 18] },
+            spin_kick: { cost: 18, range: 140, damage: [16, 26] },
+            sweep:     { cost: 12, range: 120, damage: [10, 16], knockdownChance: 0.25 },
+            special:   { cost: 24, range: 120, damage: [20, 30] },
+            grab:      { cost: 10, range: 80,  damage: [8, 14], stun: true },
+            block:     { cost: 3,  range: 0,   damage: [0, 0] },
+            parry:     { cost: 4,  range: 0,   damage: [0, 0] },
+            dodge:     { cost: 6,  range: 0,   damage: [0, 0] },
+            dash:      { cost: 4,  range: 0,   damage: [0, 0] },
+            idle:      { cost: 0,  range: 0,   damage: [0, 0] },
+            stunned:   { cost: 0,  range: 0,   damage: [0, 0] }
+        };
+        const attackTypes = new Set(['jab','hook','uppercut','kick','spin_kick','sweep','special','grab']);
+        const defenseTypes = new Set(['block','parry','dodge','dash']);
+        
+        let boxers = [];
+        let running = false;
+        let speed = 1;
+        let round = 1;
+        let roundTime = 0;
+        let scores = [0, 0];
+        let knockdowns = [0, 0];
+        
+        const commentary = {
+            jab_hit: [
+                "{attacker} lands a CRISP JAB!",
+                "Quick jab from {attacker}! That'll sting!",
+                "{attacker}'s jab finds its mark!",
+                "POP! {attacker} with the jab!"
+            ],
+            hook_hit: [
+                "OH! DEVASTATING HOOK from {attacker}!",
+                "{attacker} with a THUNDEROUS hook!",
+                "BOOM! Hook connects! {defender} felt that!",
+                "What a hook! {attacker}'s {brain} calculated that perfectly!"
+            ],
+            uppercut_hit: [
+                "UPPERCUT! {attacker} nearly takes {defender}'s head off!",
+                "HUGE uppercut from {attacker}!",
+                "{attacker} with the uppercut from HELL!",
+                "That uppercut came straight from {attacker}'s hidden state!"
+            ],
+            kick_hit: [
+                "BRUTAL ROUNDHOUSE from {attacker}!",
+                "{attacker} lands a heavy kick!",
+                "Thudding kick! {defender} rocked!",
+                "Leg kick checks out! {attacker} scores!"
+            ],
+            spin_kick_hit: [
+                "SPINNING KICK! {attacker} goes full MK!",
+                "{attacker} lands a tornado spin kick!",
+                "360° pain! {defender} eats a spin kick!",
+                "MK flair! {attacker}'s spin kick connects!"
+            ],
+            sweep_hit: [
+                "SWEEP! {defender} loses footing!",
+                "Legs gone! {attacker} sweeps clean!",
+                "{defender} tripped by a slick sweep!",
+                "Footwork denied by {attacker}'s sweep!"
+            ],
+            special_hit: [
+                "SPECIAL CONNECTS! {attacker} unleashes fury!",
+                "{attacker}'s special lights up the ring!",
+                "Arc flash! SPECIAL lands on {defender}!",
+                "Signature move! {attacker} dominates!"
+            ],
+            grab_hit: [
+                "{attacker} grapples in! {defender} is tied up!",
+                "Clinch and smack! {attacker} scores a grab!",
+                "Grapple game strong! {attacker} stuns {defender}!",
+                "{defender} caught in a grab by {attacker}!"
+            ],
+            parry: [
+                "PERFECT PARRY! {defender} turns it around!",
+                "Tekken vibes! {defender} parries clean!",
+                "{defender} reads and PARRIES!",
+                "Parry spark! {attacker} is stunned!"
+            ],
+            dodge: [
+                "{defender} slips away like smoke!",
+                "Clean dodge! {attacker} hits air!",
+                "Footwork masterclass by {defender}!",
+                "{defender} phases through the strike!"
+            ],
+            blocked: [
+                "{defender} blocks! Good defense!",
+                "BLOCKED! {defender}'s {brain} saw that coming!",
+                "{defender} with the read! Attack blocked!",
+                "No dice! {defender} had that scouted!"
+            ],
+            miss: [
+                "{attacker} swings and MISSES!",
+                "Whiff! {attacker} hit nothing but air!",
+                "{defender} dodges! {attacker}'s prediction was OFF!",
+                "{attacker} can't find the target!"
+            ],
+            knockdown: [
+                "DOWN! {defender} IS DOWN! {attacker}'s architecture is SUPERIOR!",
+                "KNOCKDOWN! {defender}'s gradients just EXPLODED!",
+                "{defender} hits the canvas! Can they recover?!",
+                "TIMBER! {defender} goes DOWN! {attacker} is a MONSTER!"
+            ],
+            round_start: [
+                "ROUND {round}! FIGHT!",
+                "Round {round} begins! Let's see those neural nets work!",
+                "DING DING! Round {round}!",
+            ],
+            general: [
+                "{attacker}'s {brain} is working overtime!",
+                "{defender} looking for patterns...",
+                "The memory banks are HEATING UP!",
+                "Attention weights shifting rapidly!",
+                "{attacker} reading {defender} like a training dataset!",
+                "These architectures are THROWING DOWN!"
+            ],
+            tntm_specific: [
+                "TNTM's external memory is STACKED with fight data!",
+                "That content-addressing found the PERFECT counter!",
+                "TNTM's pattern prediction was SPOT ON!",
+                "Write head updating... TNTM learning in real-time!"
+            ],
+            transformer_specific: [
+                "All 4 attention heads said ATTACK!",
+                "Transformer living in the MOMENT!",
+                "Pure self-attention, pure AGGRESSION!",
+                "No memory? No problem! Transformer SWINGS!"
+            ],
+            lstm_specific: [
+                "LSTM's forget gate just RESET the strategy!",
+                "Patient! LSTM waiting for the perfect moment!",
+                "Those cell states holding YEARS of boxing knowledge!",
+                "Gated recurrence paying OFF!"
+            ],
+            mlp_specific: [
+                "MLP with the feedforward FURY!",
+                "Purely reactive! MLP doesn't need memory!",
+                "16 neurons, 16 reasons to PUNCH!",
+                "Simple architecture, simple VIOLENCE!"
+            ]
+        };
+        
+        function addCommentary(type, attacker, defender) {
+            const templates = commentary[type] || commentary.general;
+            let text = templates[Math.floor(Math.random() * templates.length)];
+            if (attacker) {
+                text = text.replace(/{attacker}/g, attacker.brain.name);
+                text = text.replace(/{brain}/g, attacker.brain.name);
+            }
+            if (defender) text = text.replace(/{defender}/g, defender.brain.name);
+            text = text.replace(/{round}/g, round);
+            document.getElementById('commentary-text').textContent = text;
+        }
+        
+        function showPunchEffect(x, y, type) {
+            const effects = { 
+                jab: '💥', hook: '💫', uppercut: '⭐', block: '🛡️', 
+                kick: '🦵', spin_kick: '🌀', sweep: '🌪️', special: '⚡', grab: '🤼', parry: '✨', dodge: '💨'
+            };
+            const el = document.createElement('div');
+            el.className = 'punch-effect';
+            el.textContent = effects[type] || '💥';
+            el.style.left = `${x}px`;
+            el.style.top = `${y}px`;
+            document.getElementById('ring').appendChild(el);
+            setTimeout(() => el.remove(), 400);
+        }
+        
+        function showDamage(x, y, amount) {
+            const el = document.createElement('div');
+            el.className = 'damage-text';
+            el.textContent = `-${Math.floor(amount)}`;
+            el.style.left = `${x}px`;
+            el.style.top = `${y}px`;
+            document.getElementById('ring').appendChild(el);
+            setTimeout(() => el.remove(), 800);
+        }
+        
+        function createBoxer(id, type) {
+            const BrainClass = brainTypes[type];
+            return {
+                id,
+                brain: new BrainClass(),
+                hp: 100,
+                maxHp: 100,
+                stamina: 100,
+                maxStamina: 100,
+                x: id === 1 ? 120 : 400,
+                action: 'idle',
+                actionTimer: 0,
+                punches: 0,
+                hits: 0,
+                blocks: 0,
+                knockdowns: 0,
+                isDown: false,
+                downTimer: 0,
+                recoveryTimer: 0
+            };
+        }
+        
+        function selectFighter(slot, type) {
+            document.querySelectorAll(`#select${slot} .fighter-option`).forEach(opt => {
+                opt.classList.toggle('selected', opt.dataset.type === type);
+            });
+            boxers[slot - 1] = createBoxer(slot, type);
+            document.getElementById(`name${slot}`).textContent = boxers[slot - 1].brain.name;
+            document.getElementById(`brain${slot}-title`).textContent = brainTitles[type];
+            const boxer = document.getElementById(`boxer${slot}`);
+            boxer.querySelector('.boxer-head').textContent = boxers[slot - 1].brain.icon;
+            updateUI();
+            renderBrains();
+        }
+        
+        function processAction(attacker, defender) {
+            if (attacker.isDown) return;
+            if (attacker.action === 'stunned' && attacker.actionTimer > 0) return;
+            
+            if (attacker.actionTimer > 0) return;
+            if (attacker.stamina < 5) return;
+            
+            const distance = Math.abs(attacker.x - defender.x);
+            const myState = { hp: attacker.hp, stamina: attacker.stamina, action: attacker.action };
+            const enemyState = { hp: defender.hp, stamina: defender.stamina, action: defender.action };
+            const decision = attacker.brain.decide(myState, enemyState, distance);
+            
+            // Movement first
+            let move = decision.move || 0;
+            if (decision.type === 'dash') move *= 4;
+            const newX = attacker.x + move * speed * 2;
+            attacker.x = Math.max(50, Math.min(470, newX));
+            
+            const chosenType = decision.type || 'idle';
+            const stats = actionStats[chosenType] || actionStats.idle;
+            
+            if (attacker.stamina < stats.cost) {
+                attacker.action = 'idle';
+                attacker.actionTimer = 0;
+                return;
+            }
+            
+            attacker.action = chosenType;
+            attacker.actionTimer = attackTypes.has(chosenType) ? 20 : 16;
+            if (chosenType === 'hook') attacker.actionTimer = 24;
+            if (chosenType === 'uppercut') attacker.actionTimer = 28;
+            if (chosenType === 'kick') attacker.actionTimer = 26;
+            if (chosenType === 'spin_kick') attacker.actionTimer = 32;
+            if (chosenType === 'sweep') attacker.actionTimer = 30;
+            if (chosenType === 'special') attacker.actionTimer = 40;
+            if (chosenType === 'grab') attacker.actionTimer = 28;
+            if (chosenType === 'parry') attacker.actionTimer = 18;
+            if (chosenType === 'dodge') attacker.actionTimer = 18;
+            if (chosenType === 'dash') attacker.actionTimer = 12;
+            
+            attacker.stamina -= stats.cost;
+            if (attacker.stamina < 0) attacker.stamina = 0;
+            
+            const thought = document.getElementById(`thought${attacker.id}`);
+            if (decision.thought) {
+                thought.textContent = decision.thought;
+                thought.classList.add('visible');
+                thought.style.top = '10px';
+            }
+            
+            if (!attackTypes.has(chosenType)) {
+                // purely defensive or movement
+                return;
+            }
+            
+            attacker.punches++;
+            
+            // In-range check
+            if (distance < stats.range) {
+                // Defense interactions
+                let damage = stats.damage[0] + Math.random() * (stats.damage[1] - stats.damage[0]);
+                let blocked = false;
+                let parried = false;
+                let dodged = false;
+                
+                if (defenseTypes.has(defender.action) && defender.actionTimer > 0) {
+                    if (defender.action === 'block') {
+                        damage *= 0.25;
+                        blocked = true;
+                        defender.blocks++;
+                        showPunchEffect(defender.x, 100, 'block');
+                        addCommentary('blocked', attacker, defender);
+                    } else if (defender.action === 'parry') {
+                        damage = 0;
+                        parried = true;
+                        defender.blocks++;
+                        showPunchEffect(defender.x, 90, 'parry');
+                        attacker.action = 'stunned';
+                        attacker.actionTimer = 30;
+                        attacker.stamina = Math.max(0, attacker.stamina - 5);
+                        defender.stamina = Math.min(defender.maxStamina, defender.stamina + 5);
+                        addCommentary('parry', attacker, defender);
+                    } else if (defender.action === 'dodge') {
+                        if (Math.random() < 0.7) {
+                            damage = 0;
+                            dodged = true;
+                            showPunchEffect(defender.x, 90, 'dodge');
+                            addCommentary('dodge', attacker, defender);
+                        } else {
+                            damage *= 0.5;
+                        }
+                    } else if (defender.action === 'dash') {
+                        // small chance to evade
+                        if (Math.random() < 0.3) {
+                            damage = 0;
+                            dodged = true;
+                            showPunchEffect(defender.x, 90, 'dodge');
+                        }
+                    }
+                }
+                
+                if (!parried && !dodged) {
+                    defender.hp -= damage;
+                    attacker.hits++;
+                    showPunchEffect(defender.x, 80, chosenType);
+                    if (damage > 0) showDamage(defender.x + 20, 60, damage);
+                    
+                    const defenderEl = document.getElementById(`boxer${defender.id}`);
+                    defenderEl.classList.add('hit');
+                    setTimeout(() => defenderEl.classList.remove('hit'), 200);
+                    
+                    if (blocked) {
+                        // already commented
+                    } else {
+                        const key = `${chosenType}_hit`;
+                        if (commentary[key]) addCommentary(key, attacker, defender);
+                        else addCommentary('miss', attacker, defender);
+                    }
+                    
+                    // Grab stun
+                    if (stats.stun) {
+                        defender.action = 'stunned';
+                        defender.actionTimer = 30;
+                    }
+                    
+                    // Sweep knockdown chance
+                    if (stats.knockdownChance && Math.random() < stats.knockdownChance && defender.hp < 35) {
+                        defender.isDown = true;
+                        defender.downTimer = 100;
+                        defender.knockdowns++;
+                        knockdowns[defender.id - 1]++;
+                        addCommentary('knockdown', attacker, defender);
+                    }
+                    
+                    // General knockdown check
+                    if (defender.hp < 20 && Math.random() < 0.25) {
+                        defender.isDown = true;
+                        defender.downTimer = 100;
+                        defender.knockdowns++;
+                        knockdowns[defender.id - 1]++;
+                        addCommentary('knockdown', attacker, defender);
+                    }
+                } else if (dodged) {
+                    addCommentary('miss', attacker, defender);
+                }
+            } else {
+                if (Math.random() < 0.2) addCommentary('miss', attacker, defender);
+            }
+        }
+        
+        function updateBoxer(boxer) {
+            if (boxer.actionTimer > 0) boxer.actionTimer -= speed;
+            if (boxer.actionTimer <= 0 && !boxer.isDown) boxer.action = 'idle';
+            
+            if (boxer.isDown) {
+                boxer.downTimer -= speed;
+                if (boxer.downTimer <= 0) {
+                    boxer.isDown = false;
+                    boxer.hp = Math.max(boxer.hp, 20);
+                    boxer.action = 'idle';
+                }
+            }
+            
+            if (boxer.action === 'idle') {
+                boxer.stamina = Math.min(boxer.maxStamina, boxer.stamina + 0.35 * speed);
+            }
+        }
+        
+        function renderBoxers() {
+            boxers.forEach((b, i) => {
+                const el = document.getElementById(`boxer${i + 1}`);
+                const leftPos = b.x - 40;
+                el.style.left = `${leftPos}px`;
+                
+                el.classList.remove(
+                    'jabbing','hooking','uppercutting','blocking','knocked-down',
+                    'kicking','spin-kicking','sweeping','specialing','dodging','parrying','dashing','grabbing'
+                );
+                
+                if (b.isDown) el.classList.add('knocked-down');
+                else if (b.action === 'jab') el.classList.add('jabbing');
+                else if (b.action === 'hook') el.classList.add('hooking');
+                else if (b.action === 'uppercut') el.classList.add('uppercutting');
+                else if (b.action === 'block') el.classList.add('blocking');
+                else if (b.action === 'kick') el.classList.add('kicking');
+                else if (b.action === 'spin_kick') el.classList.add('spin-kicking');
+                else if (b.action === 'sweep') el.classList.add('sweeping');
+                else if (b.action === 'special') el.classList.add('specialing');
+                else if (b.action === 'dodge') el.classList.add('dodging');
+                else if (b.action === 'parry') el.classList.add('parrying');
+                else if (b.action === 'dash') el.classList.add('dashing');
+                else if (b.action === 'grab') el.classList.add('grabbing');
+                
+                if (i === 1) el.style.transform = 'scaleX(-1)';
+                else el.style.transform = 'scaleX(1)';
+            });
+        }
+        
+        function renderBrains() {
+            boxers.forEach((b, i) => {
+                b.brain.renderBrain(document.getElementById(`brain${i + 1}`));
+            });
+        }
+        
+        function updateUI() {
+            boxers.forEach((b, i) => {
+                const hpPct = Math.max(0, b.hp) / b.maxHp * 100;
+                const stamPct = Math.max(0, b.stamina) / b.maxStamina * 100;
+                
+                document.getElementById(`hp${i + 1}`).style.width = `${hpPct}%`;
+                document.getElementById(`hp${i + 1}`).classList.toggle('low', hpPct < 30);
+                document.getElementById(`hp${i + 1}-text`).textContent = Math.floor(Math.max(0, b.hp));
+                
+                document.getElementById(`stam${i + 1}`).style.width = `${stamPct}%`;
+                document.getElementById(`stam${i + 1}-text`).textContent = Math.floor(Math.max(0, b.stamina));
+                
+                document.getElementById(`punches${i + 1}`).textContent = b.punches;
+                document.getElementById(`hits${i + 1}`).textContent = b.hits;
+                document.getElementById(`blocks${i + 1}`).textContent = b.blocks;
+                document.getElementById(`kd${i + 1}`).textContent = b.knockdowns;
+            });
+            
+            document.getElementById('score1').textContent = scores[0];
+            document.getElementById('score2').textContent = scores[1];
+            document.getElementById('round-display').textContent = `Round ${round}`;
+        }
+        
+        function checkRoundEnd() {
+            for (let i = 0; i < 2; i++) {
+                if (boxers[i].hp <= 0) {
+                    running = false;
+                    scores[1 - i]++;
+                    document.getElementById('ko-banner').classList.add('visible');
+                    addCommentary('knockdown', boxers[1 - i], boxers[i]);
+                    document.getElementById('btn-fight').textContent = '🔔 NEW FIGHT';
+                    return true;
+                }
+            }
+            
+            roundTime += speed;
+            if (roundTime > 1000) {
+                const dmg1 = 100 - boxers[1].hp;
+                const dmg2 = 100 - boxers[0].hp;
+                
+                if (dmg1 > dmg2 + 10) scores[0]++;
+                else if (dmg2 > dmg1 + 10) scores[1]++;
+                
+                round++;
+                roundTime = 0;
+                
+                if (round > 12) {
+                    running = false;
+                    const winner = scores[0] > scores[1] ? boxers[0] : scores[1] > scores[0] ? boxers[1] : null;
+                    if (winner) {
+                        document.getElementById('commentary-text').textContent = 
+                            `DECISION! ${winner.brain.name} wins by ${Math.abs(scores[0] - scores[1])} rounds!`;
+                    } else {
+                        document.getElementById('commentary-text').textContent = 'DRAW! Both architectures are evenly matched!';
+                    }
+                    document.getElementById('btn-fight').textContent = '🔔 NEW FIGHT';
+                    return true;
+                }
+                
+                boxers.forEach(b => {
+                    b.hp = Math.min(b.maxHp, b.hp + 20);
+                    b.stamina = b.maxStamina;
+                    b.x = b.id === 1 ? 120 : 400;
+                    b.action = 'idle';
+                    b.actionTimer = 0;
+                });
+                
+                document.getElementById('round-banner').textContent = `ROUND ${round}`;
+                document.getElementById('round-banner').classList.add('visible');
+                setTimeout(() => document.getElementById('round-banner').classList.remove('visible'), 2000);
+                addCommentary('round_start', null, null);
+            }
+            
+            return false;
+        }
+        
+        function gameLoop() {
+            if (!running) return;
+            
+            processAction(boxers[0], boxers[1]);
+            processAction(boxers[1], boxers[0]);
+            
+            updateBoxer(boxers[0]);
+            updateBoxer(boxers[1]);
+            
+            renderBoxers();
+            renderBrains();
+            updateUI();
+            
+            if (Math.random() < 0.003) {
+                const types = ['general'];
+                if (boxers[0].brain.name === 'TNTM' || boxers[1].brain.name === 'TNTM') types.push('tntm_specific');
+                if (boxers[0].brain.name === 'Transformer' || boxers[1].brain.name === 'Transformer') types.push('transformer_specific');
+                if (boxers[0].brain.name === 'LSTM' || boxers[1].brain.name === 'LSTM') types.push('lstm_specific');
+                if (boxers[0].brain.name === 'MLP' || boxers[1].brain.name === 'MLP') types.push('mlp_specific');
+                
+                addCommentary(types[Math.floor(Math.random() * types.length)], 
+                    boxers[Math.floor(Math.random() * 2)], 
+                    boxers[Math.floor(Math.random() * 2)]);
+            }
+            
+            if (!checkRoundEnd()) requestAnimationFrame(gameLoop);
+        }
+        
+        function toggleFight() {
+            if (boxers[0].hp <= 0 || boxers[1].hp <= 0 || round > 12) {
+                resetFight();
+                return;
+            }
+            
+            running = !running;
+            document.getElementById('btn-fight').textContent = running ? '⏸ PAUSE' : '🔔 CONTINUE';
+            
+            if (running) {
+                if (roundTime === 0 && round === 1) {
+                    document.getElementById('round-banner').textContent = 'ROUND 1';
+                    document.getElementById('round-banner').classList.add('visible');
+                    setTimeout(() => document.getElementById('round-banner').classList.remove('visible'), 2000);
+                    addCommentary('round_start', null, null);
+                }
+                requestAnimationFrame(gameLoop);
+            }
+        }
+        
+        function resetFight() {
+            running = false;
+            round = 1;
+            roundTime = 0;
+            scores = [0, 0];
+            knockdowns = [0, 0];
+            
+            document.getElementById('ko-banner').classList.remove('visible');
+            document.getElementById('btn-fight').textContent = '🔔 START FIGHT';
+            
+            const type1 = document.querySelector('#select1 .selected').dataset.type;
+            const type2 = document.querySelector('#select2 .selected').dataset.type;
+            
+            boxers = [createBoxer(1, type1), createBoxer(2, type2)];
+            
+            renderBoxers();
+            renderBrains();
+            updateUI();
+            
+            document.getElementById('commentary-text').textContent = 
+                `${boxers[0].brain.name} vs ${boxers[1].brain.name}! In the RED corner: ${boxers[0].brain.style}. In the BLUE corner: ${boxers[1].brain.style}!`;
+        }
+        
+        function setSpeed(s) {
+            speed = s;
+            document.querySelectorAll('.controls button').forEach(btn => {
+                if (btn.textContent.includes('x')) {
+                    btn.classList.toggle('active', btn.textContent === `${s}x`);
+                }
+            });
+        }
+        
+        // Initialize
+        boxers = [createBoxer(1, 'tntm'), createBoxer(2, 'transformer')];
+        renderBoxers();
+        renderBrains();
+        updateUI();
+    </script>
+
+
+</body></html>

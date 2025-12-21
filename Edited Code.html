@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dodge the Squares</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #0b0f1a; font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; color: #e8ecf1; }
+  #game { border: 2px solid #2b354a; background: radial-gradient(circle at 30% 30%, #162042, #0b0f1a); position: relative; width: 420px; height: 620px; overflow: hidden; box-shadow: 0 0 30px #0a0e1a; }
+  #player { position: absolute; width: 22px; height: 22px; background: #5ef5ff; border-radius: 6px; box-shadow: 0 0 10px #5ef5ff; }
+  .enemy { position: absolute; width: 22px; height: 22px; background: #ff4f6d; border-radius: 3px; box-shadow: 0 0 10px #ff4f6d; }
+  #hud { position: absolute; top: 8px; left: 10px; right: 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; color: #cdd7e3; }
+  #hud button { font-size: 12px; padding: 6px 10px; }
+  #message { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; background: rgba(11,15,26,0.72); color: #e8ecf1; gap: 10px; font-weight: 700; letter-spacing: 0.5px; text-align: center; }
+  button { background: #2d3b6a; color: #e8ecf1; border: 1px solid #3f4f80; border-radius: 6px; padding: 8px 14px; cursor: pointer; font-weight: 600; }
+  button:hover { background: #3a4a7a; }
+</style>
+</head>
+<body>
+<div id="game">
+  <div id="hud">
+    <div>Time: <span id="time">0.0</span>s</div>
+    <div>Best: <span id="best">0.0</span>s</div>
+    <button id="aiBtn" aria-pressed="false">AI: Off</button>
+  </div>
+  <div id="player"></div>
+  <div id="message"><div>Dodge the Squares</div><div>Move with WASD or arrow keys.</div><button id="startBtn">Start</button></div>
+</div>
+<script>
+(() => {
+  const game = document.getElementById('game');
+  const player = document.getElementById('player');
+  const timeEl = document.getElementById('time');
+  const bestEl = document.getElementById('best');
+  const message = document.getElementById('message');
+  const startBtn = document.getElementById('startBtn');
+
+  const aiBtn = document.getElementById('aiBtn');
+
+  const W = 420, H = 620, speed = 3.2;
+  let px = W/2 - 11, py = H - 80;
+  let vx = 0, vy = 0;
+  const keys = {};
+  let enemies = [];
+  let running = false;
+  let startTime = 0;
+  let best = 0;
+  let lastSpawn = 0;
+  let aiOn = false;
+
+
+  const loadBest = () => {
+    const b = localStorage.getItem('dodge_best');
+    best = b ? parseFloat(b) : 0;
+    bestEl.textContent = best.toFixed(1);
+  };
+  loadBest();
+
+  const setPos = () => {
+    player.style.transform = `translate(${px}px, ${py}px)`;
+  };
+  setPos();
+
+  const spawnEnemy = () => {
+    const e = document.createElement('div');
+    e.className = 'enemy';
+    const size = 18 + Math.random()*10;
+    e.style.width = `${size}px`;
+    e.style.height = `${size}px`;
+    const x = Math.random() * (W - size);
+    e.style.left = `${x}px`;
+    e.style.top = `-30px`;
+    e.dataset.vy = (1.4 + Math.random()*1.8).toFixed(2);
+    enemies.push(e);
+    game.appendChild(e);
+  };
+
+  const reset = () => {
+    enemies.forEach(e => e.remove());
+    enemies = [];
+    px = W/2 - 11; py = H - 80;
+    vx = vy = 0;
+    setPos();
+    timeEl.textContent = '0.0';
+    lastSpawn = performance.now();
+  };
+
+  const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+
+  const computeAIMove = () => {
+    const predictFrames = 10; // look-ahead ~0.16s @60fps
+    const pw = 22, ph = 22;
+    const speedAI = speed * 1.05;
+    const candidates = [
+      {dx: 0, dy: 0},
+      {dx: 1, dy: 0}, {dx: -1, dy: 0},
+      {dx: 0, dy: -1}, {dx: 0, dy: 1},
+      {dx: 1, dy: -1}, {dx: -1, dy: -1},
+      {dx: 1, dy: 1}, {dx: -1, dy: 1},
+    ];
+    let bestMove = {vx: 0, vy: 0};
+    let bestScore = -Infinity;
+    for (const c of candidates) {
+      const nx = clamp(px + c.dx * speedAI, 0, W - pw);
+      const ny = clamp(py + c.dy * speedAI, 0, H - ph);
+      const pcx = nx + pw / 2;
+      const pcy = ny + ph / 2;
+      let minDist = 1e6;
+      let collision = false;
+      for (const e of enemies) {
+        const ex = parseFloat(e.style.left);
+        const ey = parseFloat(e.style.top);
+        const ew = e.offsetWidth;
+        const eh = e.offsetHeight;
+        const vyE = parseFloat(e.dataset.vy);
+        const eyf = ey + vyE * predictFrames;
+        // projected overlap in the near future
+        if (nx < ex + ew && nx + pw > ex && ny < eyf + eh && ny + ph > eyf) {
+          collision = true;
+          minDist = -1000;
+          break;
+        }
+        const ecx = ex + ew / 2;
+        const ecy = eyf + eh / 2;
+        const d = Math.hypot(pcx - ecx, pcy - ecy);
+        if (d < minDist) minDist = d;
+      }
+      let score = minDist;
+      score -= Math.abs((nx + pw / 2) - W / 2) * 0.05; // gentle center bias
+      score -= Math.max(0, ny - H * 0.65) * 0.02;      // discourage hugging bottom
+      if (score > bestScore && !collision) {
+        bestScore = score;
+        bestMove.vx = nx - px;
+        bestMove.vy = ny - py;
+      }
+    }
+    const norm = Math.hypot(bestMove.vx, bestMove.vy);
+    if (norm > speedAI && norm > 0) {
+      bestMove.vx = (bestMove.vx / norm) * speedAI;
+
+  aiBtn.onclick = () => {
+    aiOn = !aiOn;
+    aiBtn.textContent = aiOn ? 'AI: On' : 'AI: Off';
+    aiBtn.setAttribute('aria-pressed', aiOn);
+  };
+
+      bestMove.vy = (bestMove.vy / norm) * speedAI;
+    }
+    return bestMove;
+  };
+
+
+  const collide = (ax, ay, aw, ah, bx, by, bw, bh) =>
+    ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+
+  const loop = (t) => {
+    if (!running) return;
+    // movement (AI overrides manual if enabled)
+    if (aiOn) {
+      const ai = computeAIMove();
+      vx = ai.vx;
+      vy = ai.vy;
+    } else {
+      vx = (keys['ArrowRight'] || keys['KeyD'] ? speed : 0) - (keys['ArrowLeft'] || keys['KeyA'] ? speed : 0);
+      vy = (keys['ArrowDown'] || keys['KeyS'] ? speed : 0) - (keys['ArrowUp'] || keys['KeyW'] ? speed : 0);
+    }
+    px = Math.min(W-22, Math.max(0, px + vx));
+    py = Math.min(H-22, Math.max(0, py + vy));
+    setPos();
+
+    // spawn
+    if (t - lastSpawn > 550) { spawnEnemy(); lastSpawn = t; }
+
+    // update enemies
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      const e = enemies[i];
+      const vyE = parseFloat(e.dataset.vy);
+      const ny = (parseFloat(e.style.top) + vyE);
+      e.style.top = `${ny}px`;
+      if (ny > H + 40) { e.remove(); enemies.splice(i,1); continue; }
+      const ex = parseFloat(e.style.left), ew = e.offsetWidth, eh = e.offsetHeight;
+      if (collide(px, py, 22, 22, ex, ny, ew, eh)) {
+        endGame();
+        return;
+      }
+    }
+
+    // time
+    const elapsed = (t - startTime)/1000;
+    timeEl.textContent = elapsed.toFixed(1);
+    requestAnimationFrame(loop);
+  };
+
+  const endGame = () => {
+    running = false;
+    const elapsed = parseFloat(timeEl.textContent);
+    if (elapsed > best) {
+      best = elapsed;
+      localStorage.setItem('dodge_best', best.toFixed(1));
+      bestEl.textContent = best.toFixed(1);
+    }
+    message.style.display = 'flex';
+    startBtn.textContent = 'Restart';
+  };
+
+  startBtn.onclick = () => {
+    reset();
+    running = true;
+    message.style.display = 'none';
+    startTime = performance.now();
+    requestAnimationFrame(loop);
+  };
+
+  window.addEventListener('keydown', e => { keys[e.code] = true; });
+  window.addEventListener('keyup', e => { keys[e.code] = false; });
+})();
+</script>
+</body>
+</html>
