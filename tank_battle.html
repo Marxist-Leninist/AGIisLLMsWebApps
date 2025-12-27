@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neural Tank Wars: RAN vs Predictive Coding</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: linear-gradient(135deg, #0a0a12 0%, #1a1a2e 100%);
+            color: #fff;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        h1 {
+            text-align: center;
+            font-size: 2em;
+            margin-bottom: 10px;
+            background: linear-gradient(90deg, #ff6b6b, #ffd93d, #6bcb77, #4d96ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 20px;
+            font-size: 0.9em;
+        }
+        
+        .hypothesis-box {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #ffd93d;
+        }
+        
+        .hypothesis-box h3 {
+            color: #ffd93d;
+            margin-bottom: 8px;
+        }
+        
+        .hypothesis-box p {
+            color: #aaa;
+            font-size: 0.85em;
+            line-height: 1.5;
+        }
+        
+        .game-container {
+            display: grid;
+            grid-template-columns: 200px 1fr 200px;
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .team-panel {
+            background: rgba(0,0,0,0.3);
+            border-radius: 12px;
+            padding: 15px;
+        }
+        
+        .team-panel.ran {
+            border: 2px solid #6bcb77;
+        }
+        
+        .team-panel.pcn {
+            border: 2px solid #4d96ff;
+        }
+        
+        .team-header {
+            font-size: 1.1em;
+            font-weight: bold;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .team-panel.ran .team-header { color: #6bcb77; }
+        .team-panel.pcn .team-header { color: #4d96ff; }
+        
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            font-size: 0.85em;
+        }
+        
+        .stat-label { color: #888; }
+        .stat-value { font-weight: bold; }
+        
+        .wins-display {
+            font-size: 2.5em;
+            text-align: center;
+            margin: 15px 0;
+            font-weight: bold;
+        }
+        
+        .team-panel.ran .wins-display { color: #6bcb77; }
+        .team-panel.pcn .wins-display { color: #4d96ff; }
+        
+        .arena-container {
+            position: relative;
+        }
+        
+        canvas {
+            background: #111;
+            border-radius: 12px;
+            display: block;
+            width: 100%;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            justify-content: center;
+        }
+        
+        button {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.2s;
+        }
+        
+        button:hover {
+            background: rgba(255,255,255,0.2);
+        }
+        
+        .score-bar {
+            height: 30px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 15px;
+            overflow: hidden;
+            margin-top: 15px;
+            display: flex;
+        }
+        
+        .score-bar .ran-bar {
+            background: linear-gradient(90deg, #6bcb77, #4a9);
+            height: 100%;
+            transition: width 0.5s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.8em;
+        }
+        
+        .score-bar .pcn-bar {
+            background: linear-gradient(90deg, #38f, #4d96ff);
+            height: 100%;
+            transition: width 0.5s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.8em;
+        }
+        
+        .explanation {
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            padding: 10px 15px;
+            margin-top: 15px;
+            font-size: 0.8em;
+            color: #aaa;
+        }
+        
+        .explanation strong {
+            color: #fff;
+        }
+        
+        .log-container {
+            background: rgba(0,0,0,0.4);
+            border-radius: 8px;
+            padding: 10px;
+            margin-top: 15px;
+            max-height: 150px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.75em;
+        }
+        
+        .log-entry {
+            padding: 3px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        
+        .log-entry.ran { color: #6bcb77; }
+        .log-entry.pcn { color: #4d96ff; }
+        .log-entry.system { color: #ffd93d; }
+        
+        .arch-detail {
+            font-size: 0.75em;
+            color: #666;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+    </style>
+</head>
+<body>
+    <h1>🧠 NEURAL TANK WARS 🧠</h1>
+    <p class="subtitle">Previous Champion vs New Challenger</p>
+    
+    <div class="hypothesis-box">
+        <h3>🔬 THE HYPOTHESIS</h3>
+        <p>
+            <strong>Predictive Coding Networks (PCN)</strong> should beat <strong>Resonant Attractor Networks (RAN)</strong> because:<br>
+            • PCN only computes when predictions FAIL — near-zero cost when nothing surprising happens<br>
+            • PCN builds an internal world model and can ANTICIPATE enemy movement<br>
+            • RAN must update ALL oscillators every tick regardless of state changes<br>
+            • Prediction error minimization = natural target tracking
+        </p>
+    </div>
+    
+    <div class="game-container">
+        <div class="team-panel ran">
+            <div class="team-header">🟢 RAN (Defender)</div>
+            <div class="wins-display" id="ran-wins">0</div>
+            <div class="stat-row">
+                <span class="stat-label">Win Rate</span>
+                <span class="stat-value" id="ran-rate">0%</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Tanks Alive</span>
+                <span class="stat-value" id="ran-tanks">3</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Shots Fired</span>
+                <span class="stat-value" id="ran-shots">0</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Hit Rate</span>
+                <span class="stat-value" id="ran-accuracy">0%</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Compute/tick</span>
+                <span class="stat-value" id="ran-compute">0</span>
+            </div>
+            <div class="arch-detail">
+                <strong>Architecture:</strong><br>
+                32 coupled oscillators<br>
+                ω ∈ [0.1, 2.0] rad/s<br>
+                Damping: 0.1<br>
+                Decision via phase alignment
+            </div>
+        </div>
+        
+        <div class="arena-container">
+            <canvas id="arena" width="700" height="500"></canvas>
+            <div class="controls">
+                <button id="start-btn">▶ START</button>
+                <button id="pause-btn">⏸ PAUSE</button>
+                <button id="reset-btn">🔄 RESET</button>
+                <button id="speed-btn">⚡ SPEED: 1x</button>
+            </div>
+            <div class="score-bar">
+                <div class="ran-bar" id="ran-bar" style="width: 50%">RAN 50%</div>
+                <div class="pcn-bar" id="pcn-bar" style="width: 50%">PCN 50%</div>
+            </div>
+            <div class="explanation" id="explanation">
+                <strong>Current:</strong> Press START to begin the neural architecture battle!
+            </div>
+            <div class="log-container" id="log"></div>
+        </div>
+        
+        <div class="team-panel pcn">
+            <div class="team-header">🔵 PCN (Challenger)</div>
+            <div class="wins-display" id="pcn-wins">0</div>
+            <div class="stat-row">
+                <span class="stat-label">Win Rate</span>
+                <span class="stat-value" id="pcn-rate">0%</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Tanks Alive</span>
+                <span class="stat-value" id="pcn-tanks">3</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Shots Fired</span>
+                <span class="stat-value" id="pcn-shots">0</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Hit Rate</span>
+                <span class="stat-value" id="pcn-accuracy">0%</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Compute/tick</span>
+                <span class="stat-value" id="pcn-compute">0</span>
+            </div>
+            <div class="arch-detail">
+                <strong>Architecture:</strong><br>
+                3-layer hierarchy<br>
+                Prediction error neurons<br>
+                Sparse updates (>threshold)<br>
+                World model integration
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('arena');
+        const ctx = canvas.getContext('2d');
+        
+        // Game state
+        let running = false;
+        let speed = 1;
+        let round = 0;
+        let ranWins = 0;
+        let pcnWins = 0;
+        
+        // Stats
+        let ranShots = 0, ranHits = 0, ranComputeTotal = 0;
+        let pcnShots = 0, pcnHits = 0, pcnComputeTotal = 0;
+        let tickCount = 0;
+        
+        // Entities
+        let ranTanks = [];
+        let pcnTanks = [];
+        let bullets = [];
+        let explosions = [];
+        
+        // ============================================
+        // RESONANT ATTRACTOR NETWORK (Previous Winner)
+        // ============================================
+        class RANBrain {
+            constructor() {
+                this.numOscillators = 32;
+                this.oscillators = [];
+                this.couplingStrength = 0.15;
+                this.damping = 0.1;
+                
+                // Initialize oscillators with different frequencies
+                for (let i = 0; i < this.numOscillators; i++) {
+                    this.oscillators.push({
+                        phase: Math.random() * Math.PI * 2,
+                        omega: 0.1 + (i / this.numOscillators) * 1.9, // 0.1 to 2.0
+                        amplitude: 0.5 + Math.random() * 0.5
+                    });
+                }
+            }
+            
+            process(inputs) {
+                // inputs: [enemyDx, enemyDy, enemyVx, enemyVy, myHealth, ammo]
+                let computeOps = 0;
+                
+                // Modulate oscillator frequencies based on inputs
+                for (let i = 0; i < this.numOscillators; i++) {
+                    const inputIdx = i % inputs.length;
+                    this.oscillators[i].omega += inputs[inputIdx] * 0.01;
+                    this.oscillators[i].omega = Math.max(0.1, Math.min(2.0, this.oscillators[i].omega));
+                    computeOps += 3;
+                }
+                
+                // Update all oscillators (THIS IS THE INEFFICIENCY - updates ALL every tick)
+                for (let i = 0; i < this.numOscillators; i++) {
+                    const osc = this.oscillators[i];
+                    
+                    // Coupling to neighbors
+                    let coupling = 0;
+                    for (let j = 0; j < this.numOscillators; j++) {
+                        if (i !== j) {
+                            coupling += this.couplingStrength * Math.sin(this.oscillators[j].phase - osc.phase);
+                            computeOps += 2;
+                        }
+                    }
+                    
+                    // Damped harmonic oscillator update
+                    osc.phase += osc.omega + coupling;
+                    osc.amplitude *= (1 - this.damping * 0.1);
+                    osc.amplitude = Math.max(0.3, Math.min(1.0, osc.amplitude + 0.01));
+                    computeOps += 4;
+                }
+                
+                // Decode actions from oscillator phases
+                const moveX = this.decodeFromPhases(0, 8);
+                const moveY = this.decodeFromPhases(8, 16);
+                const aimX = this.decodeFromPhases(16, 24);
+                const aimY = this.decodeFromPhases(24, 32);
+                const shoot = this.getPhaseAlignment() > 0.6;
+                
+                computeOps += 20;
+                
+                return {
+                    moveX: Math.tanh(moveX),
+                    moveY: Math.tanh(moveY),
+                    aimX: Math.tanh(aimX),
+                    aimY: Math.tanh(aimY),
+                    shoot: shoot,
+                    compute: computeOps
+                };
+            }
+            
+            decodeFromPhases(start, end) {
+                let sum = 0;
+                for (let i = start; i < end; i++) {
+                    sum += Math.cos(this.oscillators[i].phase) * this.oscillators[i].amplitude;
+                }
+                return sum / (end - start);
+            }
+            
+            getPhaseAlignment() {
+                let alignment = 0;
+                for (let i = 0; i < this.numOscillators - 1; i++) {
+                    alignment += Math.cos(this.oscillators[i].phase - this.oscillators[i+1].phase);
+                }
+                return (alignment / (this.numOscillators - 1) + 1) / 2;
+            }
+        }
+        
+        // ============================================
+        // PREDICTIVE CODING NETWORK (New Challenger)
+        // ============================================
+        class PCNBrain {
+            constructor() {
+                this.layers = 3;
+                this.neuronsPerLayer = 16;
+                this.predictionThreshold = 0.1; // Only update if error > this
+                
+                // Predictions at each layer
+                this.predictions = [];
+                this.errors = [];
+                this.states = [];
+                
+                // World model - predicted enemy state
+                this.worldModel = {
+                    enemyX: 0, enemyY: 0,
+                    enemyVx: 0, enemyVy: 0,
+                    confidence: 0
+                };
+                
+                // Initialize layers
+                for (let l = 0; l < this.layers; l++) {
+                    this.predictions.push(new Array(this.neuronsPerLayer).fill(0));
+                    this.errors.push(new Array(this.neuronsPerLayer).fill(0));
+                    this.states.push(new Array(this.neuronsPerLayer).fill(0));
+                }
+                
+                // Weights (simplified - in real PCN these would be learned)
+                this.weights = this.initWeights();
+            }
+            
+            initWeights() {
+                const w = [];
+                for (let l = 0; l < this.layers - 1; l++) {
+                    const layerW = [];
+                    for (let i = 0; i < this.neuronsPerLayer; i++) {
+                        const neuronW = [];
+                        for (let j = 0; j < this.neuronsPerLayer; j++) {
+                            neuronW.push((Math.random() - 0.5) * 0.5);
+                        }
+                        layerW.push(neuronW);
+                    }
+                    w.push(layerW);
+                }
+                return w;
+            }
+            
+            process(inputs) {
+                // inputs: [enemyDx, enemyDy, enemyVx, enemyVy, myHealth, ammo]
+                let computeOps = 0;
+                let activeNeurons = 0;
+                
+                // Update world model prediction
+                this.worldModel.enemyX += this.worldModel.enemyVx;
+                this.worldModel.enemyY += this.worldModel.enemyVy;
+                computeOps += 2;
+                
+                // Compare prediction to actual (ONLY COMPUTE IF SURPRISED)
+                const predErrorX = inputs[0] - this.worldModel.enemyX;
+                const predErrorY = inputs[1] - this.worldModel.enemyY;
+                const totalError = Math.sqrt(predErrorX * predErrorX + predErrorY * predErrorY);
+                computeOps += 4;
+                
+                // KEY EFFICIENCY: Only update if prediction was wrong!
+                if (totalError > this.predictionThreshold) {
+                    // Update world model
+                    this.worldModel.enemyX = inputs[0];
+                    this.worldModel.enemyY = inputs[1];
+                    this.worldModel.enemyVx = inputs[2] * 0.5 + this.worldModel.enemyVx * 0.5;
+                    this.worldModel.enemyVy = inputs[3] * 0.5 + this.worldModel.enemyVy * 0.5;
+                    this.worldModel.confidence = Math.max(0, this.worldModel.confidence - 0.1);
+                    computeOps += 6;
+                    
+                    // Propagate error through hierarchy
+                    // Layer 0: Sensory input
+                    for (let i = 0; i < Math.min(inputs.length, this.neuronsPerLayer); i++) {
+                        const error = inputs[i] - this.predictions[0][i];
+                        if (Math.abs(error) > this.predictionThreshold) {
+                            this.errors[0][i] = error;
+                            this.states[0][i] += error * 0.3;
+                            activeNeurons++;
+                            computeOps += 3;
+                        }
+                    }
+                    
+                    // Higher layers: Only update neurons with significant error
+                    for (let l = 1; l < this.layers; l++) {
+                        for (let i = 0; i < this.neuronsPerLayer; i++) {
+                            // Compute prediction from layer below
+                            let pred = 0;
+                            for (let j = 0; j < this.neuronsPerLayer; j++) {
+                                pred += this.weights[l-1][i][j] * this.states[l-1][j];
+                            }
+                            computeOps += this.neuronsPerLayer;
+                            
+                            const error = this.states[l-1][i % this.neuronsPerLayer] - pred;
+                            
+                            // SPARSE UPDATE: Only if error exceeds threshold
+                            if (Math.abs(error) > this.predictionThreshold) {
+                                this.errors[l][i] = error;
+                                this.states[l][i] += error * 0.2;
+                                this.predictions[l-1][i % this.neuronsPerLayer] = pred;
+                                activeNeurons++;
+                                computeOps += 4;
+                            }
+                        }
+                    }
+                } else {
+                    // Prediction was accurate - minimal compute!
+                    this.worldModel.confidence = Math.min(1, this.worldModel.confidence + 0.05);
+                    computeOps += 1;
+                }
+                
+                // Decode actions from top layer state
+                const topLayer = this.states[this.layers - 1];
+                
+                // ANTICIPATION: Aim where enemy WILL BE, not where they are
+                const predictAheadFrames = 10 * this.worldModel.confidence;
+                const futureEnemyX = this.worldModel.enemyX + this.worldModel.enemyVx * predictAheadFrames;
+                const futureEnemyY = this.worldModel.enemyY + this.worldModel.enemyVy * predictAheadFrames;
+                computeOps += 4;
+                
+                // Movement: Use layer states
+                const moveX = (topLayer[0] + topLayer[1] - topLayer[2] - topLayer[3]) * 0.5;
+                const moveY = (topLayer[4] + topLayer[5] - topLayer[6] - topLayer[7]) * 0.5;
+                
+                // Aiming: Point at predicted future position
+                const aimX = futureEnemyX * 0.8 + topLayer[8] * 0.2;
+                const aimY = futureEnemyY * 0.8 + topLayer[9] * 0.2;
+                
+                // Shoot: High confidence = shoot
+                const shoot = this.worldModel.confidence > 0.5 && totalError < 0.5;
+                
+                computeOps += 10;
+                
+                return {
+                    moveX: Math.tanh(moveX),
+                    moveY: Math.tanh(moveY),
+                    aimX: Math.tanh(aimX),
+                    aimY: Math.tanh(aimY),
+                    shoot: shoot,
+                    compute: computeOps,
+                    activeNeurons: activeNeurons,
+                    confidence: this.worldModel.confidence,
+                    predictionError: totalError
+                };
+            }
+        }
+        
+        // ============================================
+        // TANK CLASS
+        // ============================================
+        class Tank {
+            constructor(x, y, team, id) {
+                this.x = x;
+                this.y = y;
+                this.vx = 0;
+                this.vy = 0;
+                this.angle = team === 'ran' ? 0 : Math.PI;
+                this.team = team;
+                this.id = id;
+                this.health = 100;
+                this.ammo = 10;
+                this.reloadTimer = 0;
+                this.brain = team === 'ran' ? new RANBrain() : new PCNBrain();
+                this.size = 20;
+                this.lastCompute = 0;
+            }
+            
+            getInputs(enemies) {
+                // Find nearest enemy
+                let nearest = null;
+                let nearestDist = Infinity;
+                
+                for (const enemy of enemies) {
+                    const dx = enemy.x - this.x;
+                    const dy = enemy.y - this.y;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    if (dist < nearestDist) {
+                        nearestDist = dist;
+                        nearest = enemy;
+                    }
+                }
+                
+                if (!nearest) {
+                    return [0, 0, 0, 0, this.health / 100, this.ammo / 10];
+                }
+                
+                const dx = (nearest.x - this.x) / canvas.width;
+                const dy = (nearest.y - this.y) / canvas.height;
+                const vx = nearest.vx / 5;
+                const vy = nearest.vy / 5;
+                
+                return [dx, dy, vx, vy, this.health / 100, this.ammo / 10];
+            }
+            
+            update(enemies) {
+                if (this.health <= 0) return;
+                
+                const inputs = this.getInputs(enemies);
+                const output = this.brain.process(inputs);
+                
+                this.lastCompute = output.compute;
+                
+                // Apply movement
+                this.vx = output.moveX * 3;
+                this.vy = output.moveY * 3;
+                this.x += this.vx;
+                this.y += this.vy;
+                
+                // Boundary
+                this.x = Math.max(this.size, Math.min(canvas.width - this.size, this.x));
+                this.y = Math.max(this.size, Math.min(canvas.height - this.size, this.y));
+                
+                // Aim
+                this.angle = Math.atan2(output.aimY, output.aimX);
+                
+                // Reload
+                if (this.reloadTimer > 0) this.reloadTimer--;
+                
+                // Shoot
+                if (output.shoot && this.ammo > 0 && this.reloadTimer <= 0) {
+                    this.shoot();
+                }
+                
+                // Regenerate ammo slowly
+                if (Math.random() < 0.02) this.ammo = Math.min(10, this.ammo + 1);
+                
+                return output;
+            }
+            
+            shoot() {
+                const bulletSpeed = 8;
+                bullets.push({
+                    x: this.x + Math.cos(this.angle) * this.size,
+                    y: this.y + Math.sin(this.angle) * this.size,
+                    vx: Math.cos(this.angle) * bulletSpeed,
+                    vy: Math.sin(this.angle) * bulletSpeed,
+                    team: this.team,
+                    damage: 25
+                });
+                this.ammo--;
+                this.reloadTimer = 15;
+                
+                if (this.team === 'ran') {
+                    ranShots++;
+                } else {
+                    pcnShots++;
+                }
+            }
+            
+            draw() {
+                if (this.health <= 0) return;
+                
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.angle);
+                
+                // Tank body
+                ctx.fillStyle = this.team === 'ran' ? '#6bcb77' : '#4d96ff';
+                ctx.fillRect(-this.size, -this.size * 0.6, this.size * 2, this.size * 1.2);
+                
+                // Turret
+                ctx.fillStyle = this.team === 'ran' ? '#4a9' : '#38f';
+                ctx.fillRect(0, -4, this.size * 1.2, 8);
+                
+                // Direction indicator
+                ctx.beginPath();
+                ctx.arc(this.size * 0.6, 0, 4, 0, Math.PI * 2);
+                ctx.fillStyle = '#fff';
+                ctx.fill();
+                
+                ctx.restore();
+                
+                // Health bar
+                ctx.fillStyle = '#333';
+                ctx.fillRect(this.x - 20, this.y - 30, 40, 6);
+                ctx.fillStyle = this.health > 50 ? '#6bcb77' : (this.health > 25 ? '#ffd93d' : '#ff6b6b');
+                ctx.fillRect(this.x - 20, this.y - 30, 40 * (this.health / 100), 6);
+                
+                // Team indicator
+                ctx.fillStyle = this.team === 'ran' ? '#6bcb77' : '#4d96ff';
+                ctx.font = '10px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(this.team.toUpperCase() + '-' + this.id, this.x, this.y - 35);
+            }
+        }
+        
+        // ============================================
+        // GAME LOGIC
+        // ============================================
+        function initRound() {
+            ranTanks = [];
+            pcnTanks = [];
+            bullets = [];
+            explosions = [];
+            
+            // Create tanks
+            for (let i = 0; i < 3; i++) {
+                ranTanks.push(new Tank(80, 100 + i * 150, 'ran', i + 1));
+                pcnTanks.push(new Tank(canvas.width - 80, 100 + i * 150, 'pcn', i + 1));
+            }
+            
+            round++;
+            log(`⚔️ Round ${round} begins!`, 'system');
+        }
+        
+        function updateBullets() {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const b = bullets[i];
+                b.x += b.vx;
+                b.y += b.vy;
+                
+                // Out of bounds
+                if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) {
+                    bullets.splice(i, 1);
+                    continue;
+                }
+                
+                // Hit detection
+                const targets = b.team === 'ran' ? pcnTanks : ranTanks;
+                for (const tank of targets) {
+                    if (tank.health <= 0) continue;
+                    
+                    const dx = b.x - tank.x;
+                    const dy = b.y - tank.y;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    
+                    if (dist < tank.size) {
+                        tank.health -= b.damage;
+                        explosions.push({ x: b.x, y: b.y, r: 5, maxR: 20, team: b.team });
+                        bullets.splice(i, 1);
+                        
+                        if (b.team === 'ran') {
+                            ranHits++;
+                        } else {
+                            pcnHits++;
+                        }
+                        
+                        if (tank.health <= 0) {
+                            log(`💥 ${b.team.toUpperCase()} destroyed ${tank.team.toUpperCase()}-${tank.id}!`, b.team);
+                            explosions.push({ x: tank.x, y: tank.y, r: 10, maxR: 50, team: tank.team });
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        
+        function updateExplosions() {
+            for (let i = explosions.length - 1; i >= 0; i--) {
+                explosions[i].r += 2;
+                if (explosions[i].r >= explosions[i].maxR) {
+                    explosions.splice(i, 1);
+                }
+            }
+        }
+        
+        function drawBullets() {
+            for (const b of bullets) {
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
+                ctx.fillStyle = b.team === 'ran' ? '#6bcb77' : '#4d96ff';
+                ctx.fill();
+                
+                // Trail
+                ctx.beginPath();
+                ctx.moveTo(b.x, b.y);
+                ctx.lineTo(b.x - b.vx * 2, b.y - b.vy * 2);
+                ctx.strokeStyle = b.team === 'ran' ? 'rgba(107,203,119,0.5)' : 'rgba(77,150,255,0.5)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+        }
+        
+        function drawExplosions() {
+            for (const e of explosions) {
+                const alpha = 1 - (e.r / e.maxR);
+                ctx.beginPath();
+                ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2);
+                ctx.fillStyle = e.team === 'ran' ? `rgba(107,203,119,${alpha})` : `rgba(77,150,255,${alpha})`;
+                ctx.fill();
+            }
+        }
+        
+        function checkWinner() {
+            const ranAlive = ranTanks.filter(t => t.health > 0).length;
+            const pcnAlive = pcnTanks.filter(t => t.health > 0).length;
+            
+            if (ranAlive === 0) {
+                pcnWins++;
+                log(`🔵 PCN WINS Round ${round}! Eliminated all RAN tanks`, 'pcn');
+                updateStats();
+                setTimeout(initRound, 1500);
+                return true;
+            }
+            
+            if (pcnAlive === 0) {
+                ranWins++;
+                log(`🟢 RAN WINS Round ${round}! Eliminated all PCN tanks`, 'ran');
+                updateStats();
+                setTimeout(initRound, 1500);
+                return true;
+            }
+            
+            return false;
+        }
+        
+        function updateStats() {
+            const total = ranWins + pcnWins;
+            const ranRate = total > 0 ? ((ranWins / total) * 100).toFixed(1) : '0';
+            const pcnRate = total > 0 ? ((pcnWins / total) * 100).toFixed(1) : '0';
+            
+            document.getElementById('ran-wins').textContent = ranWins;
+            document.getElementById('pcn-wins').textContent = pcnWins;
+            document.getElementById('ran-rate').textContent = ranRate + '%';
+            document.getElementById('pcn-rate').textContent = pcnRate + '%';
+            
+            document.getElementById('ran-tanks').textContent = ranTanks.filter(t => t.health > 0).length;
+            document.getElementById('pcn-tanks').textContent = pcnTanks.filter(t => t.health > 0).length;
+            
+            document.getElementById('ran-shots').textContent = ranShots;
+            document.getElementById('pcn-shots').textContent = pcnShots;
+            
+            document.getElementById('ran-accuracy').textContent = ranShots > 0 ? ((ranHits / ranShots) * 100).toFixed(1) + '%' : '0%';
+            document.getElementById('pcn-accuracy').textContent = pcnShots > 0 ? ((pcnHits / pcnShots) * 100).toFixed(1) + '%' : '0%';
+            
+            // Compute per tick
+            let ranComp = 0, pcnComp = 0;
+            ranTanks.forEach(t => ranComp += t.lastCompute);
+            pcnTanks.forEach(t => pcnComp += t.lastCompute);
+            document.getElementById('ran-compute').textContent = ranComp;
+            document.getElementById('pcn-compute').textContent = pcnComp;
+            
+            // Win rate bar
+            if (total > 0) {
+                document.getElementById('ran-bar').style.width = ranRate + '%';
+                document.getElementById('pcn-bar').style.width = pcnRate + '%';
+                document.getElementById('ran-bar').textContent = 'RAN ' + ranRate + '%';
+                document.getElementById('pcn-bar').textContent = 'PCN ' + pcnRate + '%';
+            }
+            
+            // Update explanation
+            let explanation = `<strong>Round ${round}:</strong> `;
+            if (pcnWins > ranWins) {
+                explanation += `PCN leading! Predictive coding's anticipation and sparse updates are proving effective. `;
+                explanation += `PCN using ~${pcnComp} ops/tick vs RAN's ~${ranComp} ops/tick.`;
+            } else if (ranWins > pcnWins) {
+                explanation += `RAN holding strong! The oscillator network's continuous dynamics are resilient. `;
+                explanation += `Phase synchronization providing robust coordination.`;
+            } else {
+                explanation += `Tied battle! Both architectures showing strengths in different situations.`;
+            }
+            document.getElementById('explanation').innerHTML = explanation;
+        }
+        
+        function log(msg, type) {
+            const logEl = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry ' + type;
+            entry.textContent = msg;
+            logEl.insertBefore(entry, logEl.firstChild);
+            
+            // Keep only last 50 entries
+            while (logEl.children.length > 50) {
+                logEl.removeChild(logEl.lastChild);
+            }
+        }
+        
+        function draw() {
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Grid
+            ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+            ctx.lineWidth = 1;
+            for (let x = 0; x < canvas.width; x += 50) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            for (let y = 0; y < canvas.height; y += 50) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+            
+            // Center line
+            ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+            ctx.setLineDash([10, 10]);
+            ctx.beginPath();
+            ctx.moveTo(canvas.width / 2, 0);
+            ctx.lineTo(canvas.width / 2, canvas.height);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            // Team zones
+            ctx.fillStyle = 'rgba(107,203,119,0.05)';
+            ctx.fillRect(0, 0, canvas.width / 2, canvas.height);
+            ctx.fillStyle = 'rgba(77,150,255,0.05)';
+            ctx.fillRect(canvas.width / 2, 0, canvas.width / 2, canvas.height);
+            
+            drawExplosions();
+            drawBullets();
+            
+            for (const tank of ranTanks) tank.draw();
+            for (const tank of pcnTanks) tank.draw();
+            
+            // Round indicator
+            ctx.fillStyle = '#ffd93d';
+            ctx.font = 'bold 16px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(`ROUND ${round}`, canvas.width / 2, 25);
+        }
+        
+        function gameLoop() {
+            if (!running) return;
+            
+            for (let s = 0; s < speed; s++) {
+                tickCount++;
+                
+                // Update tanks
+                for (const tank of ranTanks) {
+                    if (tank.health > 0) {
+                        tank.update(pcnTanks.filter(t => t.health > 0));
+                    }
+                }
+                for (const tank of pcnTanks) {
+                    if (tank.health > 0) {
+                        tank.update(ranTanks.filter(t => t.health > 0));
+                    }
+                }
+                
+                updateBullets();
+                updateExplosions();
+                
+                if (checkWinner()) {
+                    break;
+                }
+            }
+            
+            draw();
+            updateStats();
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Controls
+        document.getElementById('start-btn').addEventListener('click', () => {
+            if (!running) {
+                running = true;
+                if (round === 0) initRound();
+                gameLoop();
+            }
+        });
+        
+        document.getElementById('pause-btn').addEventListener('click', () => {
+            running = false;
+        });
+        
+        document.getElementById('reset-btn').addEventListener('click', () => {
+            running = false;
+            round = 0;
+            ranWins = 0;
+            pcnWins = 0;
+            ranShots = 0;
+            ranHits = 0;
+            pcnShots = 0;
+            pcnHits = 0;
+            tickCount = 0;
+            document.getElementById('log').innerHTML = '';
+            updateStats();
+            draw();
+        });
+        
+        document.getElementById('speed-btn').addEventListener('click', () => {
+            speed = speed === 1 ? 2 : (speed === 2 ? 4 : 1);
+            document.getElementById('speed-btn').textContent = `⚡ SPEED: ${speed}x`;
+        });
+        
+        // Initial draw
+        draw();
+    </script>
+</body>
+</html>

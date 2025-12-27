@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neural Wars: PCN vs Active Inference Network</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #000;
+            color: #fff;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            overflow: hidden;
+        }
+        
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        /* Collapsible panels */
+        .panel {
+            position: absolute;
+            background: rgba(0,0,0,0.85);
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+            z-index: 100;
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+        
+        .panel.collapsed {
+            width: auto !important;
+            height: auto !important;
+        }
+        
+        .panel.collapsed .panel-content {
+            display: none;
+        }
+        
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        .panel-header:hover {
+            background: rgba(255,255,255,0.1);
+        }
+        
+        .panel-title {
+            font-weight: bold;
+            font-size: 0.85em;
+        }
+        
+        .collapse-btn {
+            background: none;
+            border: none;
+            color: #888;
+            font-size: 1.2em;
+            cursor: pointer;
+            padding: 0 4px;
+        }
+        
+        .collapse-btn:hover { color: #fff; }
+        
+        .panel-content {
+            padding: 0 12px 10px 12px;
+        }
+        
+        /* Left panel - PCN */
+        .panel.pcn {
+            top: 10px;
+            left: 10px;
+            border: 2px solid #4d96ff;
+            min-width: 140px;
+        }
+        
+        .panel.pcn .panel-title { color: #4d96ff; }
+        
+        /* Right panel - AIN */
+        .panel.ain {
+            top: 10px;
+            right: 10px;
+            border: 2px solid #ff6b9d;
+            min-width: 140px;
+        }
+        
+        .panel.ain .panel-title { color: #ff6b9d; }
+        
+        /* Center panel */
+        .panel.center {
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 2px solid #ffd93d;
+            min-width: 160px;
+        }
+        
+        .panel.center.collapsed {
+            transform: translateX(-50%);
+        }
+        
+        .panel.center .panel-title { color: #ffd93d; }
+        
+        .wins {
+            font-size: 2.2em;
+            font-weight: bold;
+            text-align: center;
+            line-height: 1;
+            margin: 4px 0;
+        }
+        
+        .panel.pcn .wins { color: #4d96ff; }
+        .panel.ain .wins { color: #ff6b9d; }
+        
+        .stat {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.7em;
+            padding: 2px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .stat-label { color: #666; }
+        .stat-value { font-weight: bold; }
+        .stat-value.good { color: #6bcb77; }
+        .stat-value.bad { color: #ff6b6b; }
+        
+        .fitness-bar {
+            height: 6px;
+            background: #222;
+            border-radius: 3px;
+            margin-top: 6px;
+            overflow: hidden;
+        }
+        
+        .fitness-fill {
+            height: 100%;
+            transition: width 0.3s;
+            border-radius: 3px;
+        }
+        
+        .panel.pcn .fitness-fill { background: linear-gradient(90deg, #38f, #4d96ff); }
+        .panel.ain .fitness-fill { background: linear-gradient(90deg, #ff3366, #ff6b9d); }
+        
+        /* Compact score display when collapsed */
+        .mini-score {
+            display: none;
+            font-size: 1.4em;
+            font-weight: bold;
+            padding: 0 8px;
+        }
+        
+        .panel.collapsed .mini-score {
+            display: inline;
+        }
+        
+        .panel.pcn .mini-score { color: #4d96ff; }
+        .panel.ain .mini-score { color: #ff6b9d; }
+        .panel.center .mini-score { color: #ffd93d; }
+        
+        /* Controls */
+        .controls {
+            position: absolute;
+            bottom: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 6px;
+            z-index: 100;
+        }
+        
+        button {
+            background: rgba(0,0,0,0.8);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: #fff;
+            padding: 8px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8em;
+        }
+        
+        button:hover { background: rgba(255,255,255,0.2); }
+        
+        .info {
+            position: absolute;
+            bottom: 55px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.7);
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 0.65em;
+            color: #666;
+        }
+        
+        #log {
+            position: absolute;
+            bottom: 90px;
+            right: 10px;
+            width: 220px;
+            max-height: 100px;
+            overflow-y: auto;
+            background: rgba(0,0,0,0.8);
+            border-radius: 6px;
+            padding: 6px;
+            font-family: monospace;
+            font-size: 0.58em;
+            z-index: 100;
+            border: 1px solid #333;
+        }
+        
+        #log.hidden { display: none; }
+        
+        .log-entry { padding: 1px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .log-entry.pcn { color: #4d96ff; }
+        .log-entry.ain { color: #ff6b9d; }
+        .log-entry.system { color: #ffd93d; }
+        .log-entry.snipe { color: #ff44ff; }
+        
+        /* Toggle all button */
+        #toggle-ui {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            margin-left: 100px;
+            z-index: 101;
+            background: rgba(0,0,0,0.6);
+            border: 1px solid #555;
+            padding: 4px 8px;
+            font-size: 0.7em;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <button id="toggle-ui">👁 HIDE UI</button>
+        
+        <!-- PCN Panel -->
+        <div class="panel pcn" id="panel-pcn">
+            <div class="panel-header" onclick="togglePanel('pcn')">
+                <span class="panel-title">🔵 PCN</span>
+                <span class="mini-score" id="pcn-mini">0</span>
+                <span class="collapse-btn" id="pcn-btn">−</span>
+            </div>
+            <div class="panel-content">
+                <div class="wins" id="pcn-wins">0</div>
+                <div class="stat">
+                    <span class="stat-label">Tanks</span>
+                    <span class="stat-value" id="pcn-tanks">4</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Accuracy</span>
+                    <span class="stat-value" id="pcn-accuracy">0%</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Avg Kill Dist</span>
+                    <span class="stat-value" id="pcn-avgdist">0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Snipe</span>
+                    <span class="stat-value good" id="pcn-snipe">+0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Prox Pen</span>
+                    <span class="stat-value bad" id="pcn-prox">-0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Fitness</span>
+                    <span class="stat-value" id="pcn-fitness">0</span>
+                </div>
+                <div class="fitness-bar">
+                    <div class="fitness-fill" id="pcn-fitness-bar" style="width: 50%"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Center Panel -->
+        <div class="panel center" id="panel-center">
+            <div class="panel-header" onclick="togglePanel('center')">
+                <span class="panel-title">ROUND</span>
+                <span class="mini-score" id="round-mini">0</span>
+                <span class="collapse-btn" id="center-btn">−</span>
+            </div>
+            <div class="panel-content">
+                <div style="text-align:center; font-size:1.4em; color:#ffd93d; margin:4px 0;">
+                    <span id="round">0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Map</span>
+                    <span class="stat-value">500×400</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Danger</span>
+                    <span class="stat-value bad">&lt;40u</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Snipe</span>
+                    <span class="stat-value good">&gt;120u</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- AIN Panel -->
+        <div class="panel ain" id="panel-ain">
+            <div class="panel-header" onclick="togglePanel('ain')">
+                <span class="panel-title">🔴 AIN</span>
+                <span class="mini-score" id="ain-mini">0</span>
+                <span class="collapse-btn" id="ain-btn">−</span>
+            </div>
+            <div class="panel-content">
+                <div class="wins" id="ain-wins">0</div>
+                <div class="stat">
+                    <span class="stat-label">Tanks</span>
+                    <span class="stat-value" id="ain-tanks">4</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Accuracy</span>
+                    <span class="stat-value" id="ain-accuracy">0%</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Avg Kill Dist</span>
+                    <span class="stat-value" id="ain-avgdist">0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Snipe</span>
+                    <span class="stat-value good" id="ain-snipe">+0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Prox Pen</span>
+                    <span class="stat-value bad" id="ain-prox">-0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Fitness</span>
+                    <span class="stat-value" id="ain-fitness">0</span>
+                </div>
+                <div class="fitness-bar">
+                    <div class="fitness-fill" id="ain-fitness-bar" style="width: 50%"></div>
+                </div>
+                <div style="font-size:0.65em; color:#ff6b9d; margin-top:4px;">
+                    FE: <span id="ain-fe">0</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button id="start-btn">▶ START</button>
+            <button id="pause-btn">⏸ PAUSE</button>
+            <button id="reset-btn">🔄 RESET</button>
+            <button id="speed-btn">⚡ 1x</button>
+            <button id="camera-btn">📷 AUTO</button>
+            <button id="log-btn">📜 LOG</button>
+        </div>
+        
+        <div class="info">🖱️ Drag=orbit | Scroll=zoom | Click headers to minimize panels</div>
+        
+        <div id="log"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Panel toggle functions
+        function togglePanel(name) {
+            const panel = document.getElementById('panel-' + name);
+            const btn = document.getElementById(name + '-btn');
+            panel.classList.toggle('collapsed');
+            btn.textContent = panel.classList.contains('collapsed') ? '+' : '−';
+        }
+        
+        document.getElementById('toggle-ui').onclick = function() {
+            const panels = document.querySelectorAll('.panel');
+            const allCollapsed = Array.from(panels).every(p => p.classList.contains('collapsed'));
+            panels.forEach(p => {
+                if (allCollapsed) {
+                    p.classList.remove('collapsed');
+                } else {
+                    p.classList.add('collapsed');
+                }
+            });
+            document.querySelectorAll('.collapse-btn').forEach(b => {
+                b.textContent = allCollapsed ? '−' : '+';
+            });
+            this.textContent = allCollapsed ? '👁 HIDE UI' : '👁 SHOW UI';
+        };
+        
+        document.getElementById('log-btn').onclick = function() {
+            document.getElementById('log').classList.toggle('hidden');
+        };
+        
+        // ============================================
+        // THREE.JS SETUP
+        // ============================================
+        const ARENA_WIDTH = 500;
+        const ARENA_HEIGHT = 400;
+        const TANK_SIZE = 4;
+        const PROXIMITY_DANGER_DIST = 40;
+        const PROXIMITY_DAMAGE_RATE = 0.5;
+        const SNIPE_RANGE = 120;
+        const SNIPE_BONUS = 50;
+        
+        const container = document.getElementById('container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x050508);
+        scene.fog = new THREE.Fog(0x050508, 100, 600);
+        
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 2000);
+        camera.position.set(0, 300, 400);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        container.appendChild(renderer.domElement);
+        
+        // Lights
+        scene.add(new THREE.AmbientLight(0x303050, 0.6));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(100, 200, 100);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        dirLight.shadow.camera.near = 10;
+        dirLight.shadow.camera.far = 600;
+        dirLight.shadow.camera.left = -300;
+        dirLight.shadow.camera.right = 300;
+        dirLight.shadow.camera.top = 250;
+        dirLight.shadow.camera.bottom = -250;
+        scene.add(dirLight);
+        
+        // Ground
+        const ground = new THREE.Mesh(
+            new THREE.PlaneGeometry(ARENA_WIDTH, ARENA_HEIGHT),
+            new THREE.MeshStandardMaterial({ color: 0x151520, roughness: 0.9 })
+        );
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+        
+        scene.add(new THREE.GridHelper(Math.max(ARENA_WIDTH, ARENA_HEIGHT), 50, 0x333355, 0x222233));
+        
+        // Boundary
+        const boundaryGeo = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(-ARENA_WIDTH/2, 0.5, -ARENA_HEIGHT/2),
+            new THREE.Vector3(ARENA_WIDTH/2, 0.5, -ARENA_HEIGHT/2),
+            new THREE.Vector3(ARENA_WIDTH/2, 0.5, ARENA_HEIGHT/2),
+            new THREE.Vector3(-ARENA_WIDTH/2, 0.5, ARENA_HEIGHT/2),
+            new THREE.Vector3(-ARENA_WIDTH/2, 0.5, -ARENA_HEIGHT/2)
+        ]);
+        scene.add(new THREE.Line(boundaryGeo, new THREE.LineBasicMaterial({ color: 0x444488 })));
+        
+        // Camera controls
+        let isDragging = false, isPanning = false;
+        let prevMouse = { x: 0, y: 0 };
+        let cameraOrbit = { theta: 0, phi: Math.PI / 5, radius: 450 };
+        let cameraTarget = new THREE.Vector3(0, 0, 0);
+        let autoCamera = true;
+        
+        function updateCameraFromOrbit() {
+            camera.position.x = cameraTarget.x + cameraOrbit.radius * Math.sin(cameraOrbit.theta) * Math.cos(cameraOrbit.phi);
+            camera.position.y = cameraTarget.y + cameraOrbit.radius * Math.sin(cameraOrbit.phi);
+            camera.position.z = cameraTarget.z + cameraOrbit.radius * Math.cos(cameraOrbit.theta) * Math.cos(cameraOrbit.phi);
+            camera.lookAt(cameraTarget);
+        }
+        
+        renderer.domElement.addEventListener('mousedown', (e) => {
+            if (e.button === 0) isDragging = true;
+            if (e.button === 2) isPanning = true;
+            prevMouse = { x: e.clientX, y: e.clientY };
+            autoCamera = false;
+            document.getElementById('camera-btn').textContent = '📷 MANUAL';
+        });
+        
+        renderer.domElement.addEventListener('mouseup', () => { isDragging = false; isPanning = false; });
+        
+        renderer.domElement.addEventListener('mousemove', (e) => {
+            const dx = e.clientX - prevMouse.x;
+            const dy = e.clientY - prevMouse.y;
+            if (isDragging) {
+                cameraOrbit.theta -= dx * 0.005;
+                cameraOrbit.phi = Math.max(0.1, Math.min(Math.PI/2.2, cameraOrbit.phi + dy * 0.005));
+                updateCameraFromOrbit();
+            }
+            if (isPanning) {
+                const right = new THREE.Vector3();
+                camera.getWorldDirection(right);
+                right.crossVectors(new THREE.Vector3(0,1,0), right).normalize();
+                cameraTarget.addScaledVector(right, -dx * 0.5);
+                cameraTarget.y = Math.max(0, cameraTarget.y + dy * 0.5);
+                updateCameraFromOrbit();
+            }
+            prevMouse = { x: e.clientX, y: e.clientY };
+        });
+        
+        renderer.domElement.addEventListener('wheel', (e) => {
+            cameraOrbit.radius = Math.max(50, Math.min(800, cameraOrbit.radius + e.deltaY * 0.5));
+            updateCameraFromOrbit();
+            autoCamera = false;
+            document.getElementById('camera-btn').textContent = '📷 MANUAL';
+        });
+        
+        renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+        
+        // Game state
+        let running = false;
+        let speed = 1;
+        let roundNum = 0;
+        let pcnWins = 0, ainWins = 0;
+        let tickCount = 0;
+        
+        let tanks = [];
+        let bullets = [];
+        let explosions = [];
+        let inContact = new Set();
+        
+        let stats = {
+            pcn: { shots: 0, hits: 0, kills: 0, killDists: [], snipeBonus: 0, proximityPenalty: 0, deaths: 0 },
+            ain: { shots: 0, hits: 0, kills: 0, killDists: [], snipeBonus: 0, proximityPenalty: 0, deaths: 0 }
+        };
+        
+        let ainFreeEnergy = 0;
+        
+        // Tank mesh
+        function createTankMesh(team) {
+            const group = new THREE.Group();
+            const color = team === 'pcn' ? 0x4d96ff : 0xff6b9d;
+            const darkColor = team === 'pcn' ? 0x3a7acc : 0xcc4477;
+            
+            const body = new THREE.Mesh(
+                new THREE.BoxGeometry(6, 2.5, 4.5),
+                new THREE.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.4 })
+            );
+            body.position.y = 1.5;
+            body.castShadow = true;
+            group.add(body);
+            
+            const turret = new THREE.Mesh(
+                new THREE.CylinderGeometry(1.5, 1.8, 1.2, 8),
+                new THREE.MeshStandardMaterial({ color: darkColor, roughness: 0.5, metalness: 0.5 })
+            );
+            turret.position.y = 3.2;
+            turret.castShadow = true;
+            group.add(turret);
+            
+            const barrel = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.3, 0.4, 5, 8),
+                new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.3, metalness: 0.7 })
+            );
+            barrel.rotation.z = -Math.PI / 2;
+            barrel.position.set(2.5, 3.2, 0);
+            barrel.castShadow = true;
+            group.add(barrel);
+            
+            [-2.2, 2.2].forEach(z => {
+                const track = new THREE.Mesh(
+                    new THREE.BoxGeometry(7, 1.2, 0.8),
+                    new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9 })
+                );
+                track.position.set(0, 0.7, z);
+                track.castShadow = true;
+                group.add(track);
+            });
+            
+            const dangerMesh = new THREE.Mesh(
+                new THREE.RingGeometry(PROXIMITY_DANGER_DIST - 2, PROXIMITY_DANGER_DIST, 32),
+                new THREE.MeshBasicMaterial({ color: 0xff4444, transparent: true, opacity: 0.05, side: THREE.DoubleSide })
+            );
+            dangerMesh.rotation.x = -Math.PI / 2;
+            dangerMesh.position.y = 0.1;
+            group.add(dangerMesh);
+            group.dangerZone = dangerMesh;
+            
+            return group;
+        }
+        
+        // PCN Brain
+        class PCNBrain {
+            constructor() {
+                this.model = { x: null, z: null, vx: 0, vz: 0, confidence: 0.5 };
+                this.tick = 0;
+                this.optimalDist = 100;
+            }
+            
+            process(dx, dz, dist, targetVx, targetVz, myVx, myVz, targetX, targetZ, myX, myZ) {
+                this.tick++;
+                
+                if (this.model.x === null) {
+                    this.model.x = targetX;
+                    this.model.z = targetZ;
+                }
+                
+                const predX = this.model.x + this.model.vx;
+                const predZ = this.model.z + this.model.vz;
+                const totalErr = Math.sqrt(Math.pow(targetX - predX, 2) + Math.pow(targetZ - predZ, 2));
+                
+                if (totalErr > 3) {
+                    this.model.x = targetX;
+                    this.model.z = targetZ;
+                    this.model.vx = this.model.vx * 0.6 + targetVx * 0.4;
+                    this.model.vz = this.model.vz * 0.6 + targetVz * 0.4;
+                    this.model.confidence = Math.max(0.2, this.model.confidence - 0.1);
+                } else {
+                    this.model.x = predX;
+                    this.model.z = predZ;
+                    this.model.confidence = Math.min(1, this.model.confidence + 0.015);
+                }
+                
+                let moveX, moveZ;
+                const angleToTarget = Math.atan2(dz, dx);
+                
+                if (dist < PROXIMITY_DANGER_DIST * 1.2) {
+                    moveX = -Math.cos(angleToTarget) * 1.0;
+                    moveZ = -Math.sin(angleToTarget) * 1.0;
+                } else if (dist < this.optimalDist * 0.8) {
+                    const strafeDir = (this.tick % 100 < 50) ? 1 : -1;
+                    moveX = -Math.cos(angleToTarget) * 0.5 + Math.cos(angleToTarget + Math.PI/2) * strafeDir * 0.5;
+                    moveZ = -Math.sin(angleToTarget) * 0.5 + Math.sin(angleToTarget + Math.PI/2) * strafeDir * 0.5;
+                } else if (dist > this.optimalDist * 1.3) {
+                    moveX = Math.cos(angleToTarget) * 0.4;
+                    moveZ = Math.sin(angleToTarget) * 0.4;
+                } else {
+                    const strafeDir = (this.tick % 80 < 40) ? 1 : -1;
+                    moveX = Math.cos(angleToTarget + Math.PI/2) * strafeDir * 0.7;
+                    moveZ = Math.sin(angleToTarget + Math.PI/2) * strafeDir * 0.7;
+                }
+                
+                const bulletSpeed = 2.5;
+                const timeToHit = dist / bulletSpeed;
+                const leadFactor = this.model.confidence * 0.8;
+                const leadX = targetX + this.model.vx * timeToHit * leadFactor;
+                const leadZ = targetZ + this.model.vz * timeToHit * leadFactor;
+                const aimAngle = Math.atan2(leadZ - myZ, leadX - myX);
+                
+                const shoot = this.model.confidence > 0.4 && dist > PROXIMITY_DANGER_DIST && dist < 180 && this.tick % 6 === 0;
+                
+                return { moveX, moveZ, aimAngle, shoot };
+            }
+        }
+        
+        // AIN Brain - Active Inference
+        class AINBrain {
+            constructor() {
+                this.beliefs = { enemyX: null, enemyZ: null, enemyVx: 0, enemyVz: 0 };
+                this.preferences = {
+                    preferredDistance: 110,
+                    distanceTolerance: 30,
+                    avoidDistance: PROXIMITY_DANGER_DIST * 1.5
+                };
+                this.precision = { sensory: 1.0, prediction: 0.5, preference: 2.0 };
+                this.tick = 0;
+                this.freeEnergy = 0;
+            }
+            
+            computeFreeEnergy(sensoryState) {
+                const predX = this.beliefs.enemyX + this.beliefs.enemyVx;
+                const predZ = this.beliefs.enemyZ + this.beliefs.enemyVz;
+                const predictionError = Math.pow(sensoryState.enemyX - predX, 2) + Math.pow(sensoryState.enemyZ - predZ, 2);
+                
+                const currentDist = Math.sqrt(
+                    Math.pow(sensoryState.enemyX - sensoryState.myX, 2) +
+                    Math.pow(sensoryState.enemyZ - sensoryState.myZ, 2)
+                );
+                
+                const distanceError = Math.pow(currentDist - this.preferences.preferredDistance, 2) / 1000;
+                const proximityPenalty = currentDist < this.preferences.avoidDistance 
+                    ? Math.pow(this.preferences.avoidDistance - currentDist, 2) / 100 : 0;
+                
+                return this.precision.sensory * predictionError * 0.001 +
+                       this.precision.preference * (distanceError + proximityPenalty);
+            }
+            
+            selectAction(sensoryState, possibleActions) {
+                let bestAction = possibleActions[0];
+                let lowestExpectedFE = Infinity;
+                
+                for (const action of possibleActions) {
+                    const predictedState = {
+                        myX: sensoryState.myX + action.moveX * 2,
+                        myZ: sensoryState.myZ + action.moveZ * 2,
+                        enemyX: sensoryState.enemyX + this.beliefs.enemyVx,
+                        enemyZ: sensoryState.enemyZ + this.beliefs.enemyVz
+                    };
+                    
+                    const expectedFE = this.computeFreeEnergy(predictedState);
+                    const actionCost = (Math.abs(action.moveX) + Math.abs(action.moveZ)) * 0.1;
+                    const totalFE = expectedFE + actionCost;
+                    
+                    if (totalFE < lowestExpectedFE) {
+                        lowestExpectedFE = totalFE;
+                        bestAction = action;
+                    }
+                }
+                
+                this.freeEnergy = lowestExpectedFE;
+                return bestAction;
+            }
+            
+            process(dx, dz, dist, targetVx, targetVz, myVx, myVz, targetX, targetZ, myX, myZ) {
+                this.tick++;
+                
+                if (this.beliefs.enemyX === null) {
+                    this.beliefs.enemyX = targetX;
+                    this.beliefs.enemyZ = targetZ;
+                }
+                
+                const sensoryState = { enemyX: targetX, enemyZ: targetZ, myX, myZ };
+                
+                const predX = this.beliefs.enemyX + this.beliefs.enemyVx;
+                const predZ = this.beliefs.enemyZ + this.beliefs.enemyVz;
+                const predError = Math.sqrt(Math.pow(targetX - predX, 2) + Math.pow(targetZ - predZ, 2));
+                
+                const learningRate = 0.3 * this.precision.sensory / (this.precision.sensory + this.precision.prediction);
+                this.beliefs.enemyX = this.beliefs.enemyX * (1 - learningRate) + targetX * learningRate;
+                this.beliefs.enemyZ = this.beliefs.enemyZ * (1 - learningRate) + targetZ * learningRate;
+                this.beliefs.enemyVx = this.beliefs.enemyVx * 0.8 + targetVx * 0.2;
+                this.beliefs.enemyVz = this.beliefs.enemyVz * 0.8 + targetVz * 0.2;
+                
+                if (predError < 5) {
+                    this.precision.prediction = Math.min(2, this.precision.prediction + 0.02);
+                } else {
+                    this.precision.prediction = Math.max(0.3, this.precision.prediction - 0.05);
+                }
+                
+                const angleToTarget = Math.atan2(dz, dx);
+                const possibleActions = [];
+                const moveOptions = [-1, -0.5, 0, 0.5, 1];
+                for (const mx of moveOptions) {
+                    for (const mz of moveOptions) {
+                        if (mx === 0 && mz === 0) continue;
+                        possibleActions.push({
+                            moveX: Math.cos(angleToTarget) * mx + Math.cos(angleToTarget + Math.PI/2) * mz,
+                            moveZ: Math.sin(angleToTarget) * mx + Math.sin(angleToTarget + Math.PI/2) * mz
+                        });
+                    }
+                }
+                
+                const selectedAction = this.selectAction(sensoryState, possibleActions);
+                
+                const bulletSpeed = 2.5;
+                const timeToHit = dist / bulletSpeed;
+                const leadX = this.beliefs.enemyX + this.beliefs.enemyVx * timeToHit * this.precision.prediction;
+                const leadZ = this.beliefs.enemyZ + this.beliefs.enemyVz * timeToHit * this.precision.prediction;
+                const aimAngle = Math.atan2(leadZ - myZ, leadX - myX);
+                
+                const distFromPreferred = Math.abs(dist - this.preferences.preferredDistance);
+                const inGoodRange = distFromPreferred < this.preferences.distanceTolerance * 2;
+                const shoot = inGoodRange && this.precision.prediction > 0.5 && dist > PROXIMITY_DANGER_DIST && this.tick % 5 === 0;
+                
+                return { moveX: selectedAction.moveX, moveZ: selectedAction.moveZ, aimAngle, shoot, freeEnergy: this.freeEnergy };
+            }
+        }
+        
+        // Tank class
+        class Tank {
+            constructor(x, z, team, id) {
+                this.x = x; this.z = z; this.vx = 0; this.vz = 0;
+                this.angle = team === 'pcn' ? 0 : Math.PI;
+                this.team = team; this.id = id;
+                this.health = 200; this.maxHealth = 200;
+                this.ammo = 50; this.reloadTimer = 0;
+                this.brain = team === 'pcn' ? new PCNBrain() : new AINBrain();
+                this.mesh = createTankMesh(team);
+                this.mesh.position.set(x, 0, z);
+                scene.add(this.mesh);
+            }
+            
+            findTarget(enemies) {
+                let nearest = null, nearestDist = Infinity;
+                for (const e of enemies) {
+                    if (e.health <= 0) continue;
+                    const d = Math.hypot(e.x - this.x, e.z - this.z);
+                    if (d < nearestDist) { nearestDist = d; nearest = e; }
+                }
+                return nearest;
+            }
+            
+            update(enemies) {
+                if (this.health <= 0) return;
+                const target = this.findTarget(enemies);
+                if (!target) return;
+                
+                const dx = target.x - this.x;
+                const dz = target.z - this.z;
+                const dist = Math.sqrt(dx * dx + dz * dz);
+                
+                if (dist < PROXIMITY_DANGER_DIST) {
+                    this.health -= PROXIMITY_DAMAGE_RATE;
+                    stats[this.team].proximityPenalty += PROXIMITY_DAMAGE_RATE;
+                    this.mesh.dangerZone.material.opacity = 0.3;
+                } else {
+                    this.mesh.dangerZone.material.opacity = 0.05;
+                }
+                
+                const output = this.brain.process(dx, dz, dist, target.vx, target.vz, this.vx, this.vz, target.x, target.z, this.x, this.z);
+                
+                if (this.team === 'ain' && output.freeEnergy !== undefined) {
+                    ainFreeEnergy = ainFreeEnergy * 0.99 + output.freeEnergy * 0.01;
+                }
+                
+                const accel = 0.06, maxSpeed = 0.8, friction = 0.96;
+                this.vx += output.moveX * accel;
+                this.vz += output.moveZ * accel;
+                const speed = Math.hypot(this.vx, this.vz);
+                if (speed > maxSpeed) { this.vx = (this.vx / speed) * maxSpeed; this.vz = (this.vz / speed) * maxSpeed; }
+                this.vx *= friction; this.vz *= friction;
+                this.x += this.vx; this.z += this.vz;
+                
+                const hw = ARENA_WIDTH / 2 - TANK_SIZE, hh = ARENA_HEIGHT / 2 - TANK_SIZE;
+                if (this.x < -hw) { this.x = -hw; this.vx *= -0.5; }
+                if (this.x > hw) { this.x = hw; this.vx *= -0.5; }
+                if (this.z < -hh) { this.z = -hh; this.vz *= -0.5; }
+                if (this.z > hh) { this.z = hh; this.vz *= -0.5; }
+                
+                this.angle = output.aimAngle;
+                if (this.reloadTimer > 0) this.reloadTimer--;
+                if (output.shoot && this.ammo > 0 && this.reloadTimer <= 0) this.shoot();
+                if (Math.random() < 0.005) this.ammo = Math.min(50, this.ammo + 1);
+                
+                this.mesh.position.set(this.x, 0, this.z);
+                this.mesh.rotation.y = -this.angle + Math.PI / 2;
+            }
+            
+            shoot() {
+                const bulletSpeed = 2.5;
+                bullets.push(new Bullet(
+                    this.x + Math.cos(this.angle) * (TANK_SIZE + 2),
+                    this.z + Math.sin(this.angle) * (TANK_SIZE + 2),
+                    Math.cos(this.angle) * bulletSpeed + this.vx * 0.2,
+                    Math.sin(this.angle) * bulletSpeed + this.vz * 0.2,
+                    this.team, { x: this.x, z: this.z }
+                ));
+                this.ammo--; this.reloadTimer = 12;
+                stats[this.team].shots++;
+            }
+            
+            destroy() { scene.remove(this.mesh); }
+        }
+        
+        // Bullet class
+        class Bullet {
+            constructor(x, z, vx, vz, team, origin) {
+                this.x = x; this.z = z; this.vx = vx; this.vz = vz;
+                this.team = team; this.origin = origin;
+                const color = team === 'pcn' ? 0x99ccff : 0xff99bb;
+                this.mesh = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 8), new THREE.MeshBasicMaterial({ color }));
+                this.mesh.position.set(x, 3, z);
+                scene.add(this.mesh);
+                const tracerGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(-vx*3, 0, -vz*3)]);
+                this.tracer = new THREE.Line(tracerGeo, new THREE.LineBasicMaterial({ color: team === 'pcn' ? 0x6699ff : 0xff6699, transparent: true, opacity: 0.5 }));
+                this.tracer.position.set(x, 3, z);
+                scene.add(this.tracer);
+            }
+            update() { this.x += this.vx; this.z += this.vz; this.mesh.position.set(this.x, 3, this.z); this.tracer.position.set(this.x, 3, this.z); }
+            getDistanceFromOrigin() { return Math.hypot(this.x - this.origin.x, this.z - this.origin.z); }
+            destroy() { scene.remove(this.mesh); scene.remove(this.tracer); }
+        }
+        
+        // Collisions & effects
+        function handleCollisions() {
+            const aliveTanks = tanks.filter(t => t.health > 0);
+            for (let i = 0; i < aliveTanks.length; i++) {
+                for (let j = i + 1; j < aliveTanks.length; j++) {
+                    const t1 = aliveTanks[i], t2 = aliveTanks[j];
+                    const dx = t2.x - t1.x, dz = t2.z - t1.z;
+                    const dist = Math.sqrt(dx*dx + dz*dz);
+                    const minDist = TANK_SIZE * 2;
+                    const key = t1.team + t1.id + '-' + t2.team + t2.id;
+                    if (dist > TANK_SIZE * 2 + 2) inContact.delete(key);
+                    if (dist < minDist && dist > 0) {
+                        const nx = dx/dist, nz = dz/dist;
+                        const dvx = t1.vx - t2.vx, dvz = t1.vz - t2.vz;
+                        const dvn = dvx * nx + dvz * nz;
+                        if (dvn < 0) {
+                            const j = -(1 + 0.5) * dvn / 0.2;
+                            t1.vx += j * nx * 0.1; t1.vz += j * nz * 0.1;
+                            t2.vx -= j * nx * 0.1; t2.vz -= j * nz * 0.1;
+                            const overlap = minDist - dist + 1;
+                            t1.x -= nx * overlap * 0.5; t1.z -= nz * overlap * 0.5;
+                            t2.x += nx * overlap * 0.5; t2.z += nz * overlap * 0.5;
+                            if (!inContact.has(key)) {
+                                const impactSpeed = Math.sqrt(dvx*dvx + dvz*dvz);
+                                const damage = impactSpeed * 15;
+                                t1.health -= damage; t2.health -= damage;
+                                inContact.add(key);
+                                if (damage > 5) createExplosion((t1.x+t2.x)/2, (t1.z+t2.z)/2, damage);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        function createExplosion(x, z, intensity) {
+            const mesh = new THREE.Mesh(
+                new THREE.SphereGeometry(Math.min(5, 1 + intensity * 0.2), 8, 8),
+                new THREE.MeshBasicMaterial({ color: 0xffaa44, transparent: true, opacity: 0.8 })
+            );
+            mesh.position.set(x, 2, z);
+            scene.add(mesh);
+            explosions.push({ mesh, life: 25, maxLife: 25 });
+        }
+        
+        function updateExplosions() {
+            for (let i = explosions.length - 1; i >= 0; i--) {
+                const e = explosions[i];
+                e.life--;
+                const scale = 1 + (1 - e.life / e.maxLife) * 3;
+                e.mesh.scale.set(scale, scale, scale);
+                e.mesh.material.opacity = e.life / e.maxLife * 0.8;
+                if (e.life <= 0) { scene.remove(e.mesh); explosions.splice(i, 1); }
+            }
+        }
+        
+        function updateBullets() {
+            const hw = ARENA_WIDTH / 2, hh = ARENA_HEIGHT / 2;
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const b = bullets[i];
+                b.update();
+                if (b.x < -hw || b.x > hw || b.z < -hh || b.z > hh) { b.destroy(); bullets.splice(i, 1); continue; }
+                const targets = tanks.filter(t => t.team !== b.team && t.health > 0);
+                for (const tank of targets) {
+                    const d = Math.hypot(b.x - tank.x, b.z - tank.z);
+                    if (d < TANK_SIZE + 1) {
+                        const killDist = b.getDistanceFromOrigin();
+                        tank.health -= 20;
+                        stats[b.team].hits++;
+                        createExplosion(b.x, b.z, 2);
+                        if (tank.health <= 0) {
+                            stats[b.team].kills++;
+                            stats[b.team].killDists.push(killDist);
+                            stats[tank.team].deaths++;
+                            if (killDist > SNIPE_RANGE) {
+                                const bonus = SNIPE_BONUS * (killDist / SNIPE_RANGE);
+                                stats[b.team].snipeBonus += bonus;
+                                log(`🎯 SNIPE! ${b.team.toUpperCase()} at ${killDist.toFixed(0)}u`, 'snipe');
+                            } else {
+                                log(`💀 ${b.team.toUpperCase()} killed ${tank.team.toUpperCase()}-${tank.id}`, b.team);
+                            }
+                            createExplosion(tank.x, tank.z, 10);
+                        }
+                        b.destroy(); bullets.splice(i, 1); break;
+                    }
+                }
+            }
+        }
+        
+        function computeFitness(s) {
+            const avg = s.killDists.length > 0 ? s.killDists.reduce((a,b)=>a+b,0)/s.killDists.length : 0;
+            return Math.max(0, s.kills * (avg/100) * 30 + s.snipeBonus - s.proximityPenalty - s.deaths * 50);
+        }
+        
+        function initRound() {
+            tanks.forEach(t => t.destroy()); bullets.forEach(b => b.destroy()); explosions.forEach(e => scene.remove(e.mesh));
+            tanks = []; bullets = []; explosions = []; inContact.clear(); ainFreeEnergy = 0;
+            stats = {
+                pcn: { shots: 0, hits: 0, kills: 0, killDists: [], snipeBonus: 0, proximityPenalty: 0, deaths: 0 },
+                ain: { shots: 0, hits: 0, kills: 0, killDists: [], snipeBonus: 0, proximityPenalty: 0, deaths: 0 }
+            };
+            for (let i = 0; i < 4; i++) {
+                tanks.push(new Tank(-ARENA_WIDTH/2 + 50 + Math.random() * 60, -ARENA_HEIGHT/2 + 50 + i * (ARENA_HEIGHT - 100) / 3 + Math.random() * 30, 'pcn', i + 1));
+                tanks.push(new Tank(ARENA_WIDTH/2 - 50 - Math.random() * 60, -ARENA_HEIGHT/2 + 50 + i * (ARENA_HEIGHT - 100) / 3 + Math.random() * 30, 'ain', i + 1));
+            }
+            roundNum++;
+            log(`⚔️ Round ${roundNum}`, 'system');
+        }
+        
+        function checkWinner() {
+            const pcnAlive = tanks.filter(t => t.team === 'pcn' && t.health > 0).length;
+            const ainAlive = tanks.filter(t => t.team === 'ain' && t.health > 0).length;
+            if (pcnAlive === 0) { ainWins++; log(`🔴 AIN WINS!`, 'ain'); setTimeout(initRound, 1500); return true; }
+            if (ainAlive === 0) { pcnWins++; log(`🔵 PCN WINS!`, 'pcn'); setTimeout(initRound, 1500); return true; }
+            return false;
+        }
+        
+        function updateStats() {
+            document.getElementById('pcn-wins').textContent = pcnWins;
+            document.getElementById('ain-wins').textContent = ainWins;
+            document.getElementById('pcn-mini').textContent = pcnWins;
+            document.getElementById('ain-mini').textContent = ainWins;
+            document.getElementById('round-mini').textContent = roundNum;
+            document.getElementById('pcn-tanks').textContent = tanks.filter(t => t.team === 'pcn' && t.health > 0).length;
+            document.getElementById('ain-tanks').textContent = tanks.filter(t => t.team === 'ain' && t.health > 0).length;
+            document.getElementById('pcn-accuracy').textContent = stats.pcn.shots > 0 ? ((stats.pcn.hits / stats.pcn.shots) * 100).toFixed(0) + '%' : '0%';
+            document.getElementById('ain-accuracy').textContent = stats.ain.shots > 0 ? ((stats.ain.hits / stats.ain.shots) * 100).toFixed(0) + '%' : '0%';
+            const pcnAvg = stats.pcn.killDists.length > 0 ? (stats.pcn.killDists.reduce((a,b)=>a+b,0)/stats.pcn.killDists.length).toFixed(0) : '0';
+            const ainAvg = stats.ain.killDists.length > 0 ? (stats.ain.killDists.reduce((a,b)=>a+b,0)/stats.ain.killDists.length).toFixed(0) : '0';
+            document.getElementById('pcn-avgdist').textContent = pcnAvg;
+            document.getElementById('ain-avgdist').textContent = ainAvg;
+            document.getElementById('pcn-snipe').textContent = '+' + stats.pcn.snipeBonus.toFixed(0);
+            document.getElementById('ain-snipe').textContent = '+' + stats.ain.snipeBonus.toFixed(0);
+            document.getElementById('pcn-prox').textContent = '-' + stats.pcn.proximityPenalty.toFixed(0);
+            document.getElementById('ain-prox').textContent = '-' + stats.ain.proximityPenalty.toFixed(0);
+            const pcnFit = computeFitness(stats.pcn), ainFit = computeFitness(stats.ain);
+            document.getElementById('pcn-fitness').textContent = pcnFit.toFixed(0);
+            document.getElementById('ain-fitness').textContent = ainFit.toFixed(0);
+            const maxFit = Math.max(pcnFit, ainFit, 1);
+            document.getElementById('pcn-fitness-bar').style.width = (pcnFit/maxFit*100) + '%';
+            document.getElementById('ain-fitness-bar').style.width = (ainFit/maxFit*100) + '%';
+            document.getElementById('ain-fe').textContent = ainFreeEnergy.toFixed(2);
+            document.getElementById('round').textContent = roundNum;
+        }
+        
+        function log(msg, type) {
+            const el = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry ' + type;
+            entry.textContent = msg;
+            el.insertBefore(entry, el.firstChild);
+            while (el.children.length > 20) el.removeChild(el.lastChild);
+        }
+        
+        function autoCameraUpdate() {
+            if (!autoCamera) return;
+            const aliveTanks = tanks.filter(t => t.health > 0);
+            if (aliveTanks.length === 0) return;
+            let cx = 0, cz = 0;
+            aliveTanks.forEach(t => { cx += t.x; cz += t.z; });
+            cx /= aliveTanks.length; cz /= aliveTanks.length;
+            cameraTarget.x = cx * 0.03 + cameraTarget.x * 0.97;
+            cameraTarget.z = cz * 0.03 + cameraTarget.z * 0.97;
+            cameraOrbit.theta += 0.001;
+            updateCameraFromOrbit();
+        }
+        
+        function gameLoop() {
+            if (running) {
+                for (let s = 0; s < speed; s++) {
+                    tickCount++;
+                    const pcnTanks = tanks.filter(t => t.team === 'pcn');
+                    const ainTanks = tanks.filter(t => t.team === 'ain');
+                    pcnTanks.forEach(t => t.update(ainTanks));
+                    ainTanks.forEach(t => t.update(pcnTanks));
+                    handleCollisions();
+                    updateBullets();
+                    updateExplosions();
+                    tanks.forEach(t => { if (t.health <= 0) t.mesh.visible = false; });
+                    if (checkWinner()) break;
+                }
+                updateStats();
+            }
+            autoCameraUpdate();
+            renderer.render(scene, camera);
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Controls
+        document.getElementById('start-btn').onclick = () => { if (!running) { running = true; if (roundNum === 0) initRound(); } };
+        document.getElementById('pause-btn').onclick = () => { running = false; };
+        document.getElementById('reset-btn').onclick = () => {
+            running = false; roundNum = 0; pcnWins = ainWins = 0; tickCount = 0;
+            tanks.forEach(t => t.destroy()); bullets.forEach(b => b.destroy()); explosions.forEach(e => scene.remove(e.mesh));
+            tanks = []; bullets = []; explosions = []; inContact.clear();
+            stats = { pcn: { shots:0, hits:0, kills:0, killDists:[], snipeBonus:0, proximityPenalty:0, deaths:0 }, ain: { shots:0, hits:0, kills:0, killDists:[], snipeBonus:0, proximityPenalty:0, deaths:0 } };
+            document.getElementById('log').innerHTML = '';
+            updateStats();
+        };
+        document.getElementById('speed-btn').onclick = function() { speed = speed === 1 ? 2 : (speed === 2 ? 4 : (speed === 4 ? 8 : 1)); this.textContent = `⚡ ${speed}x`; };
+        document.getElementById('camera-btn').onclick = function() { autoCamera = !autoCamera; this.textContent = autoCamera ? '📷 AUTO' : '📷 MANUAL'; if (autoCamera) { cameraOrbit = { theta: 0, phi: Math.PI / 5, radius: 450 }; cameraTarget.set(0, 0, 0); } };
+        
+        window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+        
+        updateCameraFromOrbit();
+        gameLoop();
+    </script>
+</body>
+</html>

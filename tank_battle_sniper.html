@@ -1,0 +1,1324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Neural Tank Wars - Sniper Edition</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #000;
+            color: #fff;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            overflow: hidden;
+        }
+        
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+            z-index: 100;
+            gap: 10px;
+        }
+        
+        .panel {
+            background: rgba(0,0,0,0.85);
+            border-radius: 8px;
+            padding: 10px 14px;
+            pointer-events: auto;
+            backdrop-filter: blur(10px);
+            min-width: 170px;
+        }
+        
+        .panel.ran { border: 2px solid #6bcb77; }
+        .panel.pcn { border: 2px solid #4d96ff; }
+        .panel.center { border: 2px solid #ffd93d; min-width: 220px; }
+        
+        .team-name {
+            font-size: 0.95em;
+            font-weight: bold;
+            margin-bottom: 6px;
+        }
+        
+        .panel.ran .team-name { color: #6bcb77; }
+        .panel.pcn .team-name { color: #4d96ff; }
+        
+        .wins {
+            font-size: 1.8em;
+            font-weight: bold;
+            text-align: center;
+        }
+        
+        .panel.ran .wins { color: #6bcb77; }
+        .panel.pcn .wins { color: #4d96ff; }
+        
+        .stat {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75em;
+            padding: 2px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .stat-label { color: #777; }
+        .stat-value { font-weight: bold; }
+        .stat-value.good { color: #6bcb77; }
+        .stat-value.bad { color: #ff6b6b; }
+        
+        .fitness-bar {
+            height: 8px;
+            background: #222;
+            border-radius: 4px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+        
+        .fitness-fill {
+            height: 100%;
+            transition: width 0.3s;
+            border-radius: 4px;
+        }
+        
+        .panel.ran .fitness-fill { background: linear-gradient(90deg, #4a9, #6bcb77); }
+        .panel.pcn .fitness-fill { background: linear-gradient(90deg, #38f, #4d96ff); }
+        
+        .controls {
+            position: absolute;
+            bottom: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 8px;
+            z-index: 100;
+        }
+        
+        button {
+            background: rgba(0,0,0,0.85);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85em;
+        }
+        
+        button:hover { background: rgba(255,255,255,0.2); }
+        
+        .info {
+            position: absolute;
+            bottom: 55px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.85);
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 0.75em;
+            color: #888;
+        }
+        
+        .round-display {
+            text-align: center;
+            font-size: 1.1em;
+            color: #ffd93d;
+            margin-bottom: 8px;
+        }
+        
+        .rules {
+            font-size: 0.68em;
+            color: #999;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid rgba(255,255,255,0.15);
+            line-height: 1.5;
+        }
+        
+        .rules .bad { color: #ff6b6b; }
+        .rules .good { color: #6bcb77; }
+        
+        .classical-box {
+            background: rgba(255,200,0,0.1);
+            border: 1px solid rgba(255,200,0,0.3);
+            border-radius: 4px;
+            padding: 6px 8px;
+            margin-top: 8px;
+            font-size: 0.65em;
+        }
+        
+        .classical-box h4 {
+            color: #ffd93d;
+            font-size: 1.1em;
+            margin-bottom: 4px;
+        }
+        
+        #log {
+            position: absolute;
+            bottom: 100px;
+            right: 15px;
+            width: 280px;
+            max-height: 140px;
+            overflow-y: auto;
+            background: rgba(0,0,0,0.85);
+            border-radius: 6px;
+            padding: 8px;
+            font-family: monospace;
+            font-size: 0.65em;
+            z-index: 100;
+        }
+        
+        .log-entry { padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .log-entry.ran { color: #6bcb77; }
+        .log-entry.pcn { color: #4d96ff; }
+        .log-entry.system { color: #ffd93d; }
+        .log-entry.snipe { color: #ff44ff; }
+        .log-entry.penalty { color: #ff6b6b; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="ui">
+            <div class="panel ran">
+                <div class="team-name">🟢 RAN (Oscillator Net)</div>
+                <div class="wins" id="ran-wins">0</div>
+                <div class="stat">
+                    <span class="stat-label">Tanks Alive</span>
+                    <span class="stat-value" id="ran-tanks">4</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Accuracy</span>
+                    <span class="stat-value" id="ran-accuracy">0%</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Avg Kill Dist</span>
+                    <span class="stat-value" id="ran-avgdist">0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Snipe Bonus</span>
+                    <span class="stat-value good" id="ran-snipe">+0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Proximity Pen.</span>
+                    <span class="stat-value bad" id="ran-prox">-0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Fitness Score</span>
+                    <span class="stat-value" id="ran-fitness">0</span>
+                </div>
+                <div class="fitness-bar">
+                    <div class="fitness-fill" id="ran-fitness-bar" style="width: 50%"></div>
+                </div>
+            </div>
+            
+            <div class="panel center">
+                <div class="round-display">ROUND <span id="round">0</span></div>
+                <div class="stat">
+                    <span class="stat-label">Map Size</span>
+                    <span class="stat-value">500 × 400</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Danger Zone</span>
+                    <span class="stat-value bad">&lt; 40 units</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Snipe Range</span>
+                    <span class="stat-value good">&gt; 120 units</span>
+                </div>
+                <div class="rules">
+                    <span class="bad">⚠️ PROXIMITY PENALTY:</span> &lt;40 units = 0.5 dmg/tick<br>
+                    <span class="good">🎯 SNIPE BONUS:</span> Kill &gt;120 units = +50 pts<br>
+                    <span class="good">🏆 DISTANCE MULTIPLIER:</span> pts × (dist/100)
+                </div>
+                <div class="classical-box">
+                    <h4>🤖 Classical AI Training Signal</h4>
+                    <div>Optimal: maintain 80-150 unit range</div>
+                    <div>Fitness = kills×dist - proxPen - deaths×50</div>
+                </div>
+            </div>
+            
+            <div class="panel pcn">
+                <div class="team-name">🔵 PCN (Predictive Net)</div>
+                <div class="wins" id="pcn-wins">0</div>
+                <div class="stat">
+                    <span class="stat-label">Tanks Alive</span>
+                    <span class="stat-value" id="pcn-tanks">4</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Accuracy</span>
+                    <span class="stat-value" id="pcn-accuracy">0%</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Avg Kill Dist</span>
+                    <span class="stat-value" id="pcn-avgdist">0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Snipe Bonus</span>
+                    <span class="stat-value good" id="pcn-snipe">+0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Proximity Pen.</span>
+                    <span class="stat-value bad" id="pcn-prox">-0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Fitness Score</span>
+                    <span class="stat-value" id="pcn-fitness">0</span>
+                </div>
+                <div class="fitness-bar">
+                    <div class="fitness-fill" id="pcn-fitness-bar" style="width: 50%"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button id="start-btn">▶ START</button>
+            <button id="pause-btn">⏸ PAUSE</button>
+            <button id="reset-btn">🔄 RESET</button>
+            <button id="speed-btn">⚡ 1x</button>
+            <button id="camera-btn">📷 AUTO</button>
+        </div>
+        
+        <div class="info">
+            🖱️ Drag=orbit | Scroll=zoom | Right-drag=pan | MASSIVE MAP - zoom out to see all!
+        </div>
+        
+        <div id="log"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // ============================================
+        // THREE.JS SETUP - MASSIVE MAP
+        // ============================================
+        const ARENA_WIDTH = 500;
+        const ARENA_HEIGHT = 400;
+        const TANK_SIZE = 4;
+        
+        // Game rules
+        const PROXIMITY_DANGER_DIST = 40;
+        const PROXIMITY_DAMAGE_RATE = 0.5;
+        const SNIPE_RANGE = 120;
+        const SNIPE_BONUS = 50;
+        
+        const container = document.getElementById('container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x050510);
+        scene.fog = new THREE.Fog(0x050510, 100, 600);
+        
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 2000);
+        camera.position.set(0, 300, 400);
+        camera.lookAt(0, 0, 0);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+        
+        // Lights
+        const ambientLight = new THREE.AmbientLight(0x303050, 0.6);
+        scene.add(ambientLight);
+        
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(100, 200, 100);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 4096;
+        dirLight.shadow.mapSize.height = 4096;
+        dirLight.shadow.camera.near = 10;
+        dirLight.shadow.camera.far = 600;
+        dirLight.shadow.camera.left = -300;
+        dirLight.shadow.camera.right = 300;
+        dirLight.shadow.camera.top = 250;
+        dirLight.shadow.camera.bottom = -250;
+        scene.add(dirLight);
+        
+        // Ground
+        const groundGeo = new THREE.PlaneGeometry(ARENA_WIDTH, ARENA_HEIGHT, 50, 40);
+        const groundMat = new THREE.MeshStandardMaterial({ 
+            color: 0x1a1a2e,
+            roughness: 0.9,
+            metalness: 0.1
+        });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+        
+        // Grid
+        const gridHelper = new THREE.GridHelper(Math.max(ARENA_WIDTH, ARENA_HEIGHT), 50, 0x333366, 0x222244);
+        scene.add(gridHelper);
+        
+        // Arena boundary visualization
+        const boundaryMat = new THREE.LineBasicMaterial({ color: 0x444488 });
+        const boundaryGeo = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(-ARENA_WIDTH/2, 0.5, -ARENA_HEIGHT/2),
+            new THREE.Vector3(ARENA_WIDTH/2, 0.5, -ARENA_HEIGHT/2),
+            new THREE.Vector3(ARENA_WIDTH/2, 0.5, ARENA_HEIGHT/2),
+            new THREE.Vector3(-ARENA_WIDTH/2, 0.5, ARENA_HEIGHT/2),
+            new THREE.Vector3(-ARENA_WIDTH/2, 0.5, -ARENA_HEIGHT/2)
+        ]);
+        const boundary = new THREE.Line(boundaryGeo, boundaryMat);
+        scene.add(boundary);
+        
+        // Danger zone rings (visual indicator around tanks showing proximity zone)
+        const dangerZoneMat = new THREE.MeshBasicMaterial({ 
+            color: 0xff0000, 
+            transparent: true, 
+            opacity: 0.1,
+            side: THREE.DoubleSide
+        });
+        
+        // Snipe range indicator
+        const snipeRingMat = new THREE.MeshBasicMaterial({
+            color: 0x00ff00,
+            transparent: true,
+            opacity: 0.05,
+            side: THREE.DoubleSide
+        });
+        
+        // ============================================
+        // CAMERA CONTROLS
+        // ============================================
+        let isDragging = false;
+        let isPanning = false;
+        let prevMouse = { x: 0, y: 0 };
+        let cameraOrbit = { theta: 0, phi: Math.PI / 5, radius: 450 };
+        let cameraTarget = new THREE.Vector3(0, 0, 0);
+        let autoCamera = true;
+        
+        function updateCameraFromOrbit() {
+            camera.position.x = cameraTarget.x + cameraOrbit.radius * Math.sin(cameraOrbit.theta) * Math.cos(cameraOrbit.phi);
+            camera.position.y = cameraTarget.y + cameraOrbit.radius * Math.sin(cameraOrbit.phi);
+            camera.position.z = cameraTarget.z + cameraOrbit.radius * Math.cos(cameraOrbit.theta) * Math.cos(cameraOrbit.phi);
+            camera.lookAt(cameraTarget);
+        }
+        
+        renderer.domElement.addEventListener('mousedown', (e) => {
+            if (e.button === 0) isDragging = true;
+            if (e.button === 2) isPanning = true;
+            prevMouse = { x: e.clientX, y: e.clientY };
+            autoCamera = false;
+            document.getElementById('camera-btn').textContent = '📷 MANUAL';
+        });
+        
+        renderer.domElement.addEventListener('mouseup', () => { isDragging = false; isPanning = false; });
+        
+        renderer.domElement.addEventListener('mousemove', (e) => {
+            const dx = e.clientX - prevMouse.x;
+            const dy = e.clientY - prevMouse.y;
+            if (isDragging) {
+                cameraOrbit.theta -= dx * 0.005;
+                cameraOrbit.phi = Math.max(0.1, Math.min(Math.PI/2.2, cameraOrbit.phi + dy * 0.005));
+                updateCameraFromOrbit();
+            }
+            if (isPanning) {
+                const right = new THREE.Vector3();
+                camera.getWorldDirection(right);
+                right.crossVectors(new THREE.Vector3(0,1,0), right).normalize();
+                cameraTarget.addScaledVector(right, -dx * 0.5);
+                cameraTarget.y = Math.max(0, cameraTarget.y + dy * 0.5);
+                updateCameraFromOrbit();
+            }
+            prevMouse = { x: e.clientX, y: e.clientY };
+        });
+        
+        renderer.domElement.addEventListener('wheel', (e) => {
+            cameraOrbit.radius = Math.max(50, Math.min(800, cameraOrbit.radius + e.deltaY * 0.5));
+            updateCameraFromOrbit();
+            autoCamera = false;
+            document.getElementById('camera-btn').textContent = '📷 MANUAL';
+        });
+        
+        renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+        
+        // ============================================
+        // GAME STATE
+        // ============================================
+        let running = false;
+        let speed = 1;
+        let roundNum = 0;
+        let ranWins = 0, pcnWins = 0;
+        let tickCount = 0;
+        
+        let tanks = [];
+        let bullets = [];
+        let explosions = [];
+        let inContact = new Set();
+        
+        // Stats
+        let stats = {
+            ran: { shots: 0, hits: 0, kills: 0, killDists: [], snipeBonus: 0, proximityPenalty: 0, deaths: 0 },
+            pcn: { shots: 0, hits: 0, kills: 0, killDists: [], snipeBonus: 0, proximityPenalty: 0, deaths: 0 }
+        };
+        
+        // ============================================
+        // CLASSICAL AI - TRAINING SIGNAL / FITNESS FUNCTION
+        // ============================================
+        const ClassicalAI = {
+            // Compute optimal action for a given state
+            computeOptimalAction(myX, myZ, myVx, myVz, targetX, targetZ, targetVx, targetVz) {
+                const dx = targetX - myX;
+                const dz = targetZ - myZ;
+                const dist = Math.sqrt(dx * dx + dz * dz);
+                
+                const optimalMinDist = 80;
+                const optimalMaxDist = 150;
+                
+                let moveX = 0, moveZ = 0;
+                
+                // Distance management - stay in optimal range
+                if (dist < optimalMinDist) {
+                    // Too close - retreat!
+                    moveX = -dx / dist;
+                    moveZ = -dz / dist;
+                } else if (dist > optimalMaxDist) {
+                    // Too far - approach
+                    moveX = dx / dist * 0.5;
+                    moveZ = dz / dist * 0.5;
+                } else {
+                    // Good range - strafe
+                    moveX = -dz / dist * 0.7;
+                    moveZ = dx / dist * 0.7;
+                }
+                
+                // Lead targeting - predict where target will be
+                const bulletSpeed = 2.5;
+                const timeToHit = dist / bulletSpeed;
+                const predictedX = targetX + targetVx * timeToHit;
+                const predictedZ = targetZ + targetVz * timeToHit;
+                const aimAngle = Math.atan2(predictedZ - myZ, predictedX - myX);
+                
+                // Shoot if in good range
+                const shouldShoot = dist > optimalMinDist * 0.8 && dist < optimalMaxDist * 1.5;
+                
+                return { moveX, moveZ, aimAngle, shouldShoot, optimalDist: (optimalMinDist + optimalMaxDist) / 2 };
+            },
+            
+            // Compute fitness score for a team
+            computeFitness(teamStats) {
+                const avgKillDist = teamStats.killDists.length > 0 
+                    ? teamStats.killDists.reduce((a,b) => a+b, 0) / teamStats.killDists.length 
+                    : 0;
+                
+                // Fitness function:
+                // + Points for kills weighted by distance
+                // + Snipe bonus
+                // - Proximity penalty
+                // - Deaths penalty
+                const killScore = teamStats.kills * (avgKillDist / 100) * 30;
+                const snipeScore = teamStats.snipeBonus;
+                const proxPenalty = teamStats.proximityPenalty;
+                const deathPenalty = teamStats.deaths * 50;
+                
+                return Math.max(0, killScore + snipeScore - proxPenalty - deathPenalty);
+            },
+            
+            // Evaluate how well a neural network's action matches optimal
+            evaluateAction(neuralAction, optimalAction) {
+                const moveDiff = Math.hypot(
+                    neuralAction.moveX - optimalAction.moveX,
+                    neuralAction.moveZ - optimalAction.moveZ
+                );
+                const aimDiff = Math.abs(neuralAction.aimAngle - optimalAction.aimAngle);
+                
+                // Score from 0-1 (1 = perfect match)
+                const moveScore = Math.max(0, 1 - moveDiff);
+                const aimScore = Math.max(0, 1 - aimDiff / Math.PI);
+                
+                return (moveScore + aimScore) / 2;
+            }
+        };
+        
+        // ============================================
+        // TANK MESH
+        // ============================================
+        function createTankMesh(team) {
+            const group = new THREE.Group();
+            const color = team === 'ran' ? 0x6bcb77 : 0x4d96ff;
+            const darkColor = team === 'ran' ? 0x4a9959 : 0x3a7acc;
+            
+            // Body
+            const bodyGeo = new THREE.BoxGeometry(6, 2.5, 4.5);
+            const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.4 });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 1.5;
+            body.castShadow = true;
+            group.add(body);
+            
+            // Turret
+            const turretGeo = new THREE.CylinderGeometry(1.5, 1.8, 1.2, 8);
+            const turretMat = new THREE.MeshStandardMaterial({ color: darkColor, roughness: 0.5, metalness: 0.5 });
+            const turret = new THREE.Mesh(turretGeo, turretMat);
+            turret.position.y = 3.2;
+            turret.castShadow = true;
+            group.add(turret);
+            
+            // Long barrel for sniping
+            const barrelGeo = new THREE.CylinderGeometry(0.3, 0.4, 5, 8);
+            const barrelMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.3, metalness: 0.7 });
+            const barrel = new THREE.Mesh(barrelGeo, barrelMat);
+            barrel.rotation.z = -Math.PI / 2;
+            barrel.position.set(2.5, 3.2, 0);
+            barrel.castShadow = true;
+            group.add(barrel);
+            
+            // Tracks
+            const trackGeo = new THREE.BoxGeometry(7, 1.2, 0.8);
+            const trackMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9 });
+            [-2.2, 2.2].forEach(z => {
+                const track = new THREE.Mesh(trackGeo, trackMat);
+                track.position.set(0, 0.7, z);
+                track.castShadow = true;
+                group.add(track);
+            });
+            
+            // Danger zone indicator (red ring on ground)
+            const dangerGeo = new THREE.RingGeometry(PROXIMITY_DANGER_DIST - 2, PROXIMITY_DANGER_DIST, 32);
+            const dangerMesh = new THREE.Mesh(dangerGeo, dangerZoneMat.clone());
+            dangerMesh.rotation.x = -Math.PI / 2;
+            dangerMesh.position.y = 0.1;
+            group.add(dangerMesh);
+            group.dangerZone = dangerMesh;
+            
+            return group;
+        }
+        
+        // ============================================
+        // NEURAL NETWORK BRAINS
+        // ============================================
+        
+        // RAN - Resonant Attractor Network (Coupled Oscillators)
+        class RANBrain {
+            constructor() {
+                this.oscillators = [];
+                for (let i = 0; i < 48; i++) {
+                    this.oscillators.push({
+                        phase: Math.random() * Math.PI * 2,
+                        omega: 0.05 + (i / 48) * 1.5,
+                        amp: 0.5 + Math.random() * 0.5
+                    });
+                }
+                this.distanceMemory = 100; // Try to remember good distance
+            }
+            
+            process(dx, dz, dist, targetVx, targetVz, myVx, myVz) {
+                const angle = Math.atan2(dz, dx);
+                
+                // Inject sensory data
+                for (let i = 0; i < 12; i++) {
+                    this.oscillators[i].omega += (dx / dist) * 0.02;
+                    this.oscillators[i + 12].omega += (dz / dist) * 0.02;
+                    this.oscillators[i + 24].omega += (dist - this.distanceMemory) * 0.0001;
+                    
+                    this.oscillators[i].omega = Math.max(0.05, Math.min(1.5, this.oscillators[i].omega));
+                    this.oscillators[i + 12].omega = Math.max(0.05, Math.min(1.5, this.oscillators[i + 12].omega));
+                    this.oscillators[i + 24].omega = Math.max(0.05, Math.min(1.5, this.oscillators[i + 24].omega));
+                }
+                
+                // Update oscillators
+                for (let i = 0; i < 48; i++) {
+                    let coupling = 0;
+                    const neighbors = [(i-1+48)%48, (i+1)%48, (i+6)%48];
+                    for (const j of neighbors) {
+                        coupling += 0.08 * Math.sin(this.oscillators[j].phase - this.oscillators[i].phase);
+                    }
+                    this.oscillators[i].phase += this.oscillators[i].omega + coupling;
+                }
+                
+                // Distance-based behavior from oscillator bank
+                const distanceSignal = Math.cos(this.oscillators[36].phase) + Math.cos(this.oscillators[37].phase);
+                
+                // Retreat if too close, approach if too far
+                let moveScale = 0.6;
+                if (dist < PROXIMITY_DANGER_DIST * 1.5) {
+                    // DANGER! Retreat - oscillators should learn this hurts
+                    moveScale = -0.8;
+                    this.distanceMemory = this.distanceMemory * 0.99 + dist * 0.01;
+                } else if (dist > SNIPE_RANGE * 1.5) {
+                    moveScale = 0.4;
+                }
+                
+                const chaosX = Math.cos(this.oscillators[0].phase) * 0.2 + Math.cos(this.oscillators[6].phase) * 0.15;
+                const chaosZ = Math.cos(this.oscillators[12].phase) * 0.2 + Math.cos(this.oscillators[18].phase) * 0.15;
+                
+                const moveX = Math.cos(angle) * moveScale + chaosX + distanceSignal * 0.1 * (dist < 80 ? -1 : 1);
+                const moveZ = Math.sin(angle) * moveScale + chaosZ;
+                
+                // Aiming with less noise for long range
+                const noiseScale = Math.max(0.05, 0.15 - dist * 0.0005);
+                const aimNoise = Math.cos(this.oscillators[30].phase) * noiseScale;
+                
+                // Lead targeting attempt
+                const bulletTime = dist / 2.5;
+                const leadX = dx + targetVx * bulletTime * 0.5;
+                const leadZ = dz + targetVz * bulletTime * 0.5;
+                const aimAngle = Math.atan2(leadZ, leadX) + aimNoise;
+                
+                // Shoot when aligned and at good distance
+                let alignment = 0;
+                for (let i = 40; i < 48; i++) {
+                    alignment += Math.cos(this.oscillators[i].phase - this.oscillators[40].phase);
+                }
+                const shoot = alignment > 3 && dist > PROXIMITY_DANGER_DIST && dist < 200;
+                
+                return { moveX, moveZ, aimAngle, shoot };
+            }
+        }
+        
+        // PCN - Predictive Coding Network
+        class PCNBrain {
+            constructor() {
+                this.model = { x: null, z: null, vx: 0, vz: 0, confidence: 0.5 };
+                this.tick = 0;
+                this.optimalDist = 100;
+                this.layers = [
+                    new Array(16).fill(0),
+                    new Array(8).fill(0),
+                    new Array(4).fill(0)
+                ];
+            }
+            
+            process(dx, dz, dist, targetVx, targetVz, myVx, myVz, targetX, targetZ, myX, myZ) {
+                this.tick++;
+                
+                if (this.model.x === null) {
+                    this.model.x = targetX;
+                    this.model.z = targetZ;
+                }
+                
+                // Prediction
+                const predX = this.model.x + this.model.vx;
+                const predZ = this.model.z + this.model.vz;
+                const errX = targetX - predX;
+                const errZ = targetZ - predZ;
+                const totalErr = Math.sqrt(errX * errX + errZ * errZ);
+                
+                if (totalErr > 3) {
+                    this.model.x = targetX;
+                    this.model.z = targetZ;
+                    this.model.vx = this.model.vx * 0.6 + targetVx * 0.4;
+                    this.model.vz = this.model.vz * 0.6 + targetVz * 0.4;
+                    this.model.confidence = Math.max(0.2, this.model.confidence - 0.1);
+                    
+                    // Update prediction layers
+                    this.layers[0][0] = errX * 0.1;
+                    this.layers[0][1] = errZ * 0.1;
+                    for (let l = 1; l < this.layers.length; l++) {
+                        for (let i = 0; i < this.layers[l].length; i++) {
+                            let sum = 0;
+                            for (let j = 0; j < this.layers[l-1].length; j++) {
+                                sum += this.layers[l-1][j] * 0.2;
+                            }
+                            this.layers[l][i] = Math.tanh(sum);
+                        }
+                    }
+                } else {
+                    this.model.x = predX;
+                    this.model.z = predZ;
+                    this.model.confidence = Math.min(1, this.model.confidence + 0.015);
+                }
+                
+                // Distance management - KEY FOR SNIPING
+                let moveX, moveZ;
+                const angleToTarget = Math.atan2(dz, dx);
+                
+                if (dist < PROXIMITY_DANGER_DIST * 1.2) {
+                    // DANGER - full retreat!
+                    moveX = -Math.cos(angleToTarget) * 1.0;
+                    moveZ = -Math.sin(angleToTarget) * 1.0;
+                } else if (dist < this.optimalDist * 0.8) {
+                    // Too close - back off while strafing
+                    const strafeDir = (this.tick % 100 < 50) ? 1 : -1;
+                    moveX = -Math.cos(angleToTarget) * 0.5 + Math.cos(angleToTarget + Math.PI/2) * strafeDir * 0.5;
+                    moveZ = -Math.sin(angleToTarget) * 0.5 + Math.sin(angleToTarget + Math.PI/2) * strafeDir * 0.5;
+                } else if (dist > this.optimalDist * 1.3) {
+                    // Too far - approach
+                    moveX = Math.cos(angleToTarget) * 0.4;
+                    moveZ = Math.sin(angleToTarget) * 0.4;
+                } else {
+                    // Good range - pure strafe
+                    const strafeDir = (this.tick % 80 < 40) ? 1 : -1;
+                    moveX = Math.cos(angleToTarget + Math.PI/2) * strafeDir * 0.7;
+                    moveZ = Math.sin(angleToTarget + Math.PI/2) * strafeDir * 0.7;
+                }
+                
+                // Lead targeting
+                const bulletSpeed = 2.5;
+                const timeToHit = dist / bulletSpeed;
+                const leadFactor = this.model.confidence * 0.8;
+                const leadX = targetX + this.model.vx * timeToHit * leadFactor;
+                const leadZ = targetZ + this.model.vz * timeToHit * leadFactor;
+                const aimAngle = Math.atan2(leadZ - myZ, leadX - myX);
+                
+                // Shoot when confident and at good range
+                const shoot = this.model.confidence > 0.4 && 
+                              dist > PROXIMITY_DANGER_DIST && 
+                              dist < 180 && 
+                              this.tick % 6 === 0;
+                
+                return { moveX, moveZ, aimAngle, shoot };
+            }
+        }
+        
+        // ============================================
+        // TANK CLASS
+        // ============================================
+        class Tank {
+            constructor(x, z, team, id) {
+                this.x = x;
+                this.z = z;
+                this.vx = 0;
+                this.vz = 0;
+                this.angle = team === 'ran' ? 0 : Math.PI;
+                this.team = team;
+                this.id = id;
+                this.health = 200;
+                this.maxHealth = 200;
+                this.ammo = 50;
+                this.reloadTimer = 0;
+                this.brain = team === 'ran' ? new RANBrain() : new PCNBrain();
+                
+                this.mesh = createTankMesh(team);
+                this.mesh.position.set(x, 0, z);
+                scene.add(this.mesh);
+                
+                this.inDanger = false;
+            }
+            
+            findTarget(enemies) {
+                let nearest = null;
+                let nearestDist = Infinity;
+                for (const e of enemies) {
+                    if (e.health <= 0) continue;
+                    const d = Math.hypot(e.x - this.x, e.z - this.z);
+                    if (d < nearestDist) {
+                        nearestDist = d;
+                        nearest = e;
+                    }
+                }
+                return nearest;
+            }
+            
+            update(enemies) {
+                if (this.health <= 0) return;
+                
+                const target = this.findTarget(enemies);
+                if (!target) return;
+                
+                const dx = target.x - this.x;
+                const dz = target.z - this.z;
+                const dist = Math.sqrt(dx * dx + dz * dz);
+                
+                // PROXIMITY PENALTY - take damage when too close!
+                this.inDanger = dist < PROXIMITY_DANGER_DIST;
+                if (this.inDanger) {
+                    this.health -= PROXIMITY_DAMAGE_RATE;
+                    stats[this.team].proximityPenalty += PROXIMITY_DAMAGE_RATE;
+                    
+                    // Visual feedback
+                    this.mesh.dangerZone.material.opacity = 0.3;
+                    this.mesh.dangerZone.material.color.setHex(0xff0000);
+                } else {
+                    this.mesh.dangerZone.material.opacity = 0.05;
+                    this.mesh.dangerZone.material.color.setHex(0xff4444);
+                }
+                
+                const output = this.brain.process(
+                    dx, dz, dist,
+                    target.vx, target.vz,
+                    this.vx, this.vz,
+                    target.x, target.z,
+                    this.x, this.z
+                );
+                
+                // Movement
+                const accel = 0.06;
+                const maxSpeed = 0.8;
+                const friction = 0.96;
+                
+                this.vx += output.moveX * accel;
+                this.vz += output.moveZ * accel;
+                
+                const speed = Math.hypot(this.vx, this.vz);
+                if (speed > maxSpeed) {
+                    this.vx = (this.vx / speed) * maxSpeed;
+                    this.vz = (this.vz / speed) * maxSpeed;
+                }
+                
+                this.vx *= friction;
+                this.vz *= friction;
+                this.x += this.vx;
+                this.z += this.vz;
+                
+                // Walls
+                const hw = ARENA_WIDTH / 2 - TANK_SIZE;
+                const hh = ARENA_HEIGHT / 2 - TANK_SIZE;
+                if (this.x < -hw) { this.x = -hw; this.vx *= -0.5; }
+                if (this.x > hw) { this.x = hw; this.vx *= -0.5; }
+                if (this.z < -hh) { this.z = -hh; this.vz *= -0.5; }
+                if (this.z > hh) { this.z = hh; this.vz *= -0.5; }
+                
+                this.angle = output.aimAngle;
+                
+                if (this.reloadTimer > 0) this.reloadTimer--;
+                
+                if (output.shoot && this.ammo > 0 && this.reloadTimer <= 0) {
+                    this.shoot();
+                }
+                
+                if (Math.random() < 0.005) this.ammo = Math.min(50, this.ammo + 1);
+                
+                // Update mesh
+                this.mesh.position.set(this.x, 0, this.z);
+                this.mesh.rotation.y = -this.angle + Math.PI / 2;
+            }
+            
+            shoot() {
+                const bulletSpeed = 2.5;
+                const bx = this.x + Math.cos(this.angle) * (TANK_SIZE + 2);
+                const bz = this.z + Math.sin(this.angle) * (TANK_SIZE + 2);
+                
+                bullets.push(new Bullet(bx, bz,
+                    Math.cos(this.angle) * bulletSpeed + this.vx * 0.2,
+                    Math.sin(this.angle) * bulletSpeed + this.vz * 0.2,
+                    this.team,
+                    { x: this.x, z: this.z } // Store shooter position for distance calc
+                ));
+                
+                this.ammo--;
+                this.reloadTimer = 12;
+                stats[this.team].shots++;
+            }
+            
+            destroy() {
+                scene.remove(this.mesh);
+            }
+        }
+        
+        // ============================================
+        // BULLET CLASS
+        // ============================================
+        class Bullet {
+            constructor(x, z, vx, vz, team, origin) {
+                this.x = x;
+                this.z = z;
+                this.vx = vx;
+                this.vz = vz;
+                this.team = team;
+                this.origin = origin;
+                
+                const geo = new THREE.SphereGeometry(0.5, 8, 8);
+                const mat = new THREE.MeshBasicMaterial({
+                    color: team === 'ran' ? 0x99ff99 : 0x99ccff
+                });
+                this.mesh = new THREE.Mesh(geo, mat);
+                this.mesh.position.set(x, 3, z);
+                scene.add(this.mesh);
+                
+                // Tracer line
+                const tracerMat = new THREE.LineBasicMaterial({ 
+                    color: team === 'ran' ? 0x66ff66 : 0x6699ff,
+                    transparent: true,
+                    opacity: 0.5
+                });
+                const tracerGeo = new THREE.BufferGeometry().setFromPoints([
+                    new THREE.Vector3(0, 0, 0),
+                    new THREE.Vector3(-vx * 3, 0, -vz * 3)
+                ]);
+                this.tracer = new THREE.Line(tracerGeo, tracerMat);
+                this.tracer.position.set(x, 3, z);
+                scene.add(this.tracer);
+            }
+            
+            update() {
+                this.x += this.vx;
+                this.z += this.vz;
+                this.mesh.position.set(this.x, 3, this.z);
+                this.tracer.position.set(this.x, 3, this.z);
+            }
+            
+            getDistanceFromOrigin() {
+                return Math.hypot(this.x - this.origin.x, this.z - this.origin.z);
+            }
+            
+            destroy() {
+                scene.remove(this.mesh);
+                scene.remove(this.tracer);
+            }
+        }
+        
+        // ============================================
+        // COLLISION PHYSICS
+        // ============================================
+        function getContactKey(t1, t2) {
+            const id1 = t1.team + t1.id;
+            const id2 = t2.team + t2.id;
+            return id1 < id2 ? id1 + '-' + id2 : id2 + '-' + id1;
+        }
+        
+        function handleCollisions() {
+            const aliveTanks = tanks.filter(t => t.health > 0);
+            const SEPARATION_DIST = TANK_SIZE * 2 + 2;
+            
+            for (let i = 0; i < aliveTanks.length; i++) {
+                for (let j = i + 1; j < aliveTanks.length; j++) {
+                    const t1 = aliveTanks[i];
+                    const t2 = aliveTanks[j];
+                    
+                    const dx = t2.x - t1.x;
+                    const dz = t2.z - t1.z;
+                    const dist = Math.sqrt(dx * dx + dz * dz);
+                    const minDist = TANK_SIZE * 2;
+                    const key = getContactKey(t1, t2);
+                    
+                    if (dist > SEPARATION_DIST) {
+                        inContact.delete(key);
+                    }
+                    
+                    if (dist < minDist && dist > 0) {
+                        const nx = dx / dist;
+                        const nz = dz / dist;
+                        const dvx = t1.vx - t2.vx;
+                        const dvz = t1.vz - t2.vz;
+                        const dvn = dvx * nx + dvz * nz;
+                        
+                        if (dvn < 0) {
+                            // Physics bounce
+                            const restitution = 0.5;
+                            const j = -(1 + restitution) * dvn / 0.2;
+                            t1.vx += j * nx * 0.1;
+                            t1.vz += j * nz * 0.1;
+                            t2.vx -= j * nx * 0.1;
+                            t2.vz -= j * nz * 0.1;
+                            
+                            // Separate
+                            const overlap = minDist - dist + 1;
+                            t1.x -= nx * overlap * 0.5;
+                            t1.z -= nz * overlap * 0.5;
+                            t2.x += nx * overlap * 0.5;
+                            t2.z += nz * overlap * 0.5;
+                            
+                            // Impact damage only on first contact
+                            if (!inContact.has(key)) {
+                                const impactSpeed = Math.sqrt(dvx*dvx + dvz*dvz);
+                                const damage = impactSpeed * 15;
+                                t1.health -= damage;
+                                t2.health -= damage;
+                                inContact.add(key);
+                                
+                                if (damage > 5) {
+                                    createExplosion((t1.x + t2.x)/2, (t1.z + t2.z)/2, damage);
+                                    log(`💥 Impact! ${damage.toFixed(0)} dmg each`, 'penalty');
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // ============================================
+        // EFFECTS
+        // ============================================
+        function createExplosion(x, z, intensity) {
+            const size = Math.min(5, 1 + intensity * 0.2);
+            const geo = new THREE.SphereGeometry(size, 8, 8);
+            const mat = new THREE.MeshBasicMaterial({
+                color: 0xffaa44,
+                transparent: true,
+                opacity: 0.8
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(x, 2, z);
+            scene.add(mesh);
+            explosions.push({ mesh, life: 25, maxLife: 25 });
+        }
+        
+        function updateExplosions() {
+            for (let i = explosions.length - 1; i >= 0; i--) {
+                const e = explosions[i];
+                e.life--;
+                const scale = 1 + (1 - e.life / e.maxLife) * 3;
+                e.mesh.scale.set(scale, scale, scale);
+                e.mesh.material.opacity = e.life / e.maxLife * 0.8;
+                if (e.life <= 0) {
+                    scene.remove(e.mesh);
+                    explosions.splice(i, 1);
+                }
+            }
+        }
+        
+        function updateBullets() {
+            const hw = ARENA_WIDTH / 2;
+            const hh = ARENA_HEIGHT / 2;
+            
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const b = bullets[i];
+                b.update();
+                
+                if (b.x < -hw || b.x > hw || b.z < -hh || b.z > hh) {
+                    b.destroy();
+                    bullets.splice(i, 1);
+                    continue;
+                }
+                
+                const targets = tanks.filter(t => t.team !== b.team && t.health > 0);
+                for (const tank of targets) {
+                    const d = Math.hypot(b.x - tank.x, b.z - tank.z);
+                    if (d < TANK_SIZE + 1) {
+                        const killDist = b.getDistanceFromOrigin();
+                        const baseDamage = 20;
+                        
+                        tank.health -= baseDamage;
+                        stats[b.team].hits++;
+                        
+                        createExplosion(b.x, b.z, 2);
+                        
+                        if (tank.health <= 0) {
+                            stats[b.team].kills++;
+                            stats[b.team].killDists.push(killDist);
+                            stats[tank.team].deaths++;
+                            
+                            // SNIPE BONUS
+                            if (killDist > SNIPE_RANGE) {
+                                const bonus = SNIPE_BONUS * (killDist / SNIPE_RANGE);
+                                stats[b.team].snipeBonus += bonus;
+                                log(`🎯 SNIPE! ${b.team.toUpperCase()} killed at ${killDist.toFixed(0)} units! +${bonus.toFixed(0)}pts`, 'snipe');
+                            } else {
+                                log(`💀 ${b.team.toUpperCase()} killed ${tank.team.toUpperCase()}-${tank.id} (${killDist.toFixed(0)}u)`, b.team);
+                            }
+                            
+                            createExplosion(tank.x, tank.z, 10);
+                        }
+                        
+                        b.destroy();
+                        bullets.splice(i, 1);
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // ============================================
+        // GAME LOGIC
+        // ============================================
+        function initRound() {
+            tanks.forEach(t => t.destroy());
+            bullets.forEach(b => b.destroy());
+            explosions.forEach(e => scene.remove(e.mesh));
+            tanks = [];
+            bullets = [];
+            explosions = [];
+            inContact.clear();
+            
+            // Reset round stats
+            stats = {
+                ran: { shots: 0, hits: 0, kills: 0, killDists: [], snipeBonus: 0, proximityPenalty: 0, deaths: 0 },
+                pcn: { shots: 0, hits: 0, kills: 0, killDists: [], snipeBonus: 0, proximityPenalty: 0, deaths: 0 }
+            };
+            
+            // Spawn tanks spread out across the massive map
+            for (let i = 0; i < 4; i++) {
+                const ranX = -ARENA_WIDTH/2 + 50 + Math.random() * 60;
+                const ranZ = -ARENA_HEIGHT/2 + 50 + i * (ARENA_HEIGHT - 100) / 3 + Math.random() * 30;
+                tanks.push(new Tank(ranX, ranZ, 'ran', i + 1));
+                
+                const pcnX = ARENA_WIDTH/2 - 50 - Math.random() * 60;
+                const pcnZ = -ARENA_HEIGHT/2 + 50 + i * (ARENA_HEIGHT - 100) / 3 + Math.random() * 30;
+                tanks.push(new Tank(pcnX, pcnZ, 'pcn', i + 1));
+            }
+            
+            roundNum++;
+            log(`⚔️ Round ${roundNum} - SNIPER BATTLE!`, 'system');
+        }
+        
+        function checkWinner() {
+            const ranAlive = tanks.filter(t => t.team === 'ran' && t.health > 0).length;
+            const pcnAlive = tanks.filter(t => t.team === 'pcn' && t.health > 0).length;
+            
+            if (ranAlive === 0) {
+                pcnWins++;
+                log(`🔵 PCN WINS Round ${roundNum}!`, 'pcn');
+                logFitnessScores();
+                setTimeout(initRound, 2000);
+                return true;
+            }
+            if (pcnAlive === 0) {
+                ranWins++;
+                log(`🟢 RAN WINS Round ${roundNum}!`, 'ran');
+                logFitnessScores();
+                setTimeout(initRound, 2000);
+                return true;
+            }
+            return false;
+        }
+        
+        function logFitnessScores() {
+            const ranFitness = ClassicalAI.computeFitness(stats.ran);
+            const pcnFitness = ClassicalAI.computeFitness(stats.pcn);
+            log(`📊 Fitness - RAN: ${ranFitness.toFixed(0)} | PCN: ${pcnFitness.toFixed(0)}`, 'system');
+        }
+        
+        function updateStats() {
+            const total = ranWins + pcnWins;
+            document.getElementById('ran-wins').textContent = ranWins;
+            document.getElementById('pcn-wins').textContent = pcnWins;
+            document.getElementById('ran-tanks').textContent = tanks.filter(t => t.team === 'ran' && t.health > 0).length;
+            document.getElementById('pcn-tanks').textContent = tanks.filter(t => t.team === 'pcn' && t.health > 0).length;
+            
+            document.getElementById('ran-accuracy').textContent = stats.ran.shots > 0 
+                ? ((stats.ran.hits / stats.ran.shots) * 100).toFixed(0) + '%' : '0%';
+            document.getElementById('pcn-accuracy').textContent = stats.pcn.shots > 0 
+                ? ((stats.pcn.hits / stats.pcn.shots) * 100).toFixed(0) + '%' : '0%';
+            
+            const ranAvgDist = stats.ran.killDists.length > 0 
+                ? (stats.ran.killDists.reduce((a,b) => a+b, 0) / stats.ran.killDists.length).toFixed(0) : '0';
+            const pcnAvgDist = stats.pcn.killDists.length > 0 
+                ? (stats.pcn.killDists.reduce((a,b) => a+b, 0) / stats.pcn.killDists.length).toFixed(0) : '0';
+            
+            document.getElementById('ran-avgdist').textContent = ranAvgDist;
+            document.getElementById('pcn-avgdist').textContent = pcnAvgDist;
+            
+            document.getElementById('ran-snipe').textContent = '+' + stats.ran.snipeBonus.toFixed(0);
+            document.getElementById('pcn-snipe').textContent = '+' + stats.pcn.snipeBonus.toFixed(0);
+            
+            document.getElementById('ran-prox').textContent = '-' + stats.ran.proximityPenalty.toFixed(0);
+            document.getElementById('pcn-prox').textContent = '-' + stats.pcn.proximityPenalty.toFixed(0);
+            
+            const ranFitness = ClassicalAI.computeFitness(stats.ran);
+            const pcnFitness = ClassicalAI.computeFitness(stats.pcn);
+            
+            document.getElementById('ran-fitness').textContent = ranFitness.toFixed(0);
+            document.getElementById('pcn-fitness').textContent = pcnFitness.toFixed(0);
+            
+            const maxFitness = Math.max(ranFitness, pcnFitness, 1);
+            document.getElementById('ran-fitness-bar').style.width = (ranFitness / maxFitness * 100) + '%';
+            document.getElementById('pcn-fitness-bar').style.width = (pcnFitness / maxFitness * 100) + '%';
+            
+            document.getElementById('round').textContent = roundNum;
+        }
+        
+        function log(msg, type) {
+            const el = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry ' + type;
+            entry.textContent = msg;
+            el.insertBefore(entry, el.firstChild);
+            while (el.children.length > 25) el.removeChild(el.lastChild);
+        }
+        
+        function autoCameraUpdate() {
+            if (!autoCamera) return;
+            
+            const aliveTanks = tanks.filter(t => t.health > 0);
+            if (aliveTanks.length === 0) return;
+            
+            let cx = 0, cz = 0;
+            aliveTanks.forEach(t => { cx += t.x; cz += t.z; });
+            cx /= aliveTanks.length;
+            cz /= aliveTanks.length;
+            
+            cameraTarget.x = cx * 0.03 + cameraTarget.x * 0.97;
+            cameraTarget.z = cz * 0.03 + cameraTarget.z * 0.97;
+            
+            cameraOrbit.theta += 0.001;
+            updateCameraFromOrbit();
+        }
+        
+        // ============================================
+        // MAIN LOOP
+        // ============================================
+        function gameLoop() {
+            if (running) {
+                for (let s = 0; s < speed; s++) {
+                    tickCount++;
+                    
+                    const ranTanks = tanks.filter(t => t.team === 'ran');
+                    const pcnTanks = tanks.filter(t => t.team === 'pcn');
+                    
+                    ranTanks.forEach(t => t.update(pcnTanks));
+                    pcnTanks.forEach(t => t.update(ranTanks));
+                    
+                    handleCollisions();
+                    updateBullets();
+                    updateExplosions();
+                    
+                    tanks.forEach(t => {
+                        if (t.health <= 0) t.mesh.visible = false;
+                    });
+                    
+                    if (checkWinner()) break;
+                }
+                
+                updateStats();
+            }
+            
+            autoCameraUpdate();
+            renderer.render(scene, camera);
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // ============================================
+        // CONTROLS
+        // ============================================
+        document.getElementById('start-btn').onclick = () => {
+            if (!running) {
+                running = true;
+                if (roundNum === 0) initRound();
+            }
+        };
+        
+        document.getElementById('pause-btn').onclick = () => { running = false; };
+        
+        document.getElementById('reset-btn').onclick = () => {
+            running = false;
+            roundNum = 0;
+            ranWins = pcnWins = 0;
+            tickCount = 0;
+            tanks.forEach(t => t.destroy());
+            bullets.forEach(b => b.destroy());
+            explosions.forEach(e => scene.remove(e.mesh));
+            tanks = [];
+            bullets = [];
+            explosions = [];
+            inContact.clear();
+            stats = {
+                ran: { shots: 0, hits: 0, kills: 0, killDists: [], snipeBonus: 0, proximityPenalty: 0, deaths: 0 },
+                pcn: { shots: 0, hits: 0, kills: 0, killDists: [], snipeBonus: 0, proximityPenalty: 0, deaths: 0 }
+            };
+            document.getElementById('log').innerHTML = '';
+            updateStats();
+        };
+        
+        document.getElementById('speed-btn').onclick = function() {
+            speed = speed === 1 ? 2 : (speed === 2 ? 4 : (speed === 4 ? 8 : 1));
+            this.textContent = `⚡ ${speed}x`;
+        };
+        
+        document.getElementById('camera-btn').onclick = function() {
+            autoCamera = !autoCamera;
+            this.textContent = autoCamera ? '📷 AUTO' : '📷 MANUAL';
+            if (autoCamera) {
+                cameraOrbit = { theta: 0, phi: Math.PI / 5, radius: 450 };
+                cameraTarget.set(0, 0, 0);
+            }
+        };
+        
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        updateCameraFromOrbit();
+        gameLoop();
+    </script>
+</body>
+</html>

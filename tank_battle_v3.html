@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neural Tank Wars: RAN vs PCN (Newtonian Physics)</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: linear-gradient(135deg, #0a0a12 0%, #1a1a2e 100%);
+            color: #fff;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        h1 {
+            text-align: center;
+            font-size: 1.8em;
+            margin-bottom: 8px;
+            background: linear-gradient(90deg, #ff6b6b, #ffd93d, #6bcb77, #4d96ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 15px;
+            font-size: 0.85em;
+        }
+        
+        .physics-box {
+            background: rgba(255,100,100,0.1);
+            border-radius: 10px;
+            padding: 12px 15px;
+            margin-bottom: 15px;
+            border-left: 4px solid #ff6b6b;
+            font-size: 0.8em;
+        }
+        
+        .physics-box h3 {
+            color: #ff6b6b;
+            margin-bottom: 5px;
+            font-size: 1em;
+        }
+        
+        .physics-box code {
+            background: rgba(0,0,0,0.3);
+            padding: 2px 6px;
+            border-radius: 3px;
+            color: #ffd93d;
+        }
+        
+        .game-container {
+            display: grid;
+            grid-template-columns: 180px 1fr 180px;
+            gap: 15px;
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+        
+        .team-panel {
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+            padding: 12px;
+            font-size: 0.85em;
+        }
+        
+        .team-panel.ran { border: 2px solid #6bcb77; }
+        .team-panel.pcn { border: 2px solid #4d96ff; }
+        
+        .team-header {
+            font-size: 1em;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        
+        .team-panel.ran .team-header { color: #6bcb77; }
+        .team-panel.pcn .team-header { color: #4d96ff; }
+        
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            font-size: 0.8em;
+        }
+        
+        .stat-label { color: #888; }
+        .stat-value { font-weight: bold; }
+        
+        .wins-display {
+            font-size: 2.2em;
+            text-align: center;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        
+        .team-panel.ran .wins-display { color: #6bcb77; }
+        .team-panel.pcn .wins-display { color: #4d96ff; }
+        
+        canvas {
+            background: #080810;
+            border-radius: 10px;
+            display: block;
+            width: 100%;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85em;
+            transition: all 0.2s;
+        }
+        
+        button:hover { background: rgba(255,255,255,0.2); }
+        
+        .score-bar {
+            height: 25px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 12px;
+            overflow: hidden;
+            margin-top: 12px;
+            display: flex;
+        }
+        
+        .score-bar .ran-bar {
+            background: linear-gradient(90deg, #6bcb77, #4a9);
+            transition: width 0.5s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.75em;
+        }
+        
+        .score-bar .pcn-bar {
+            background: linear-gradient(90deg, #38f, #4d96ff);
+            transition: width 0.5s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.75em;
+        }
+        
+        .log-container {
+            background: rgba(0,0,0,0.4);
+            border-radius: 6px;
+            padding: 8px;
+            margin-top: 12px;
+            max-height: 120px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.7em;
+        }
+        
+        .log-entry { padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .log-entry.ran { color: #6bcb77; }
+        .log-entry.pcn { color: #4d96ff; }
+        .log-entry.system { color: #ffd93d; }
+        .log-entry.collision { color: #ff6b6b; }
+        
+        .collision-stats {
+            background: rgba(255,100,100,0.1);
+            border-radius: 6px;
+            padding: 8px;
+            margin-top: 8px;
+            font-size: 0.75em;
+        }
+        
+        .collision-stats h4 {
+            color: #ff6b6b;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧠 NEURAL TANK WARS 🧠</h1>
+    <p class="subtitle">RAN vs PCN — Now with Newtonian Collision Physics!</p>
+    
+    <div class="physics-box">
+        <h3>⚛️ COLLISION PHYSICS</h3>
+        <p>
+            <code>KE = ½mv²</code> — Kinetic energy determines damage<br>
+            <code>p = mv</code> — Momentum conserved in collisions<br>
+            <code>Damage = ΔKE × coefficient</code> — Energy dissipated = pain<br>
+            Heavier/faster tank deals MORE damage, takes LESS. Ramming is risky!
+        </p>
+    </div>
+    
+    <div class="game-container">
+        <div class="team-panel ran">
+            <div class="team-header">🟢 RAN (Defender)</div>
+            <div class="wins-display" id="ran-wins">0</div>
+            <div class="stat-row">
+                <span class="stat-label">Win Rate</span>
+                <span class="stat-value" id="ran-rate">0%</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Tanks Alive</span>
+                <span class="stat-value" id="ran-tanks">3</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Shots Fired</span>
+                <span class="stat-value" id="ran-shots">0</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Hit Rate</span>
+                <span class="stat-value" id="ran-accuracy">0%</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Compute/tick</span>
+                <span class="stat-value" id="ran-compute">0</span>
+            </div>
+            <div class="collision-stats">
+                <h4>💥 Collision Stats</h4>
+                <div class="stat-row">
+                    <span class="stat-label">Ram Damage Dealt</span>
+                    <span class="stat-value" id="ran-ram-dealt">0</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Ram Damage Taken</span>
+                    <span class="stat-value" id="ran-ram-taken">0</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="arena-container">
+            <canvas id="arena" width="650" height="450"></canvas>
+            <div class="controls">
+                <button id="start-btn">▶ START</button>
+                <button id="pause-btn">⏸ PAUSE</button>
+                <button id="reset-btn">🔄 RESET</button>
+                <button id="speed-btn">⚡ 1x</button>
+            </div>
+            <div class="score-bar">
+                <div class="ran-bar" id="ran-bar" style="width: 50%">RAN 50%</div>
+                <div class="pcn-bar" id="pcn-bar" style="width: 50%">PCN 50%</div>
+            </div>
+            <div class="log-container" id="log"></div>
+        </div>
+        
+        <div class="team-panel pcn">
+            <div class="team-header">🔵 PCN (Challenger)</div>
+            <div class="wins-display" id="pcn-wins">0</div>
+            <div class="stat-row">
+                <span class="stat-label">Win Rate</span>
+                <span class="stat-value" id="pcn-rate">0%</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Tanks Alive</span>
+                <span class="stat-value" id="pcn-tanks">3</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Shots Fired</span>
+                <span class="stat-value" id="pcn-shots">0</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Hit Rate</span>
+                <span class="stat-value" id="pcn-accuracy">0%</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Compute/tick</span>
+                <span class="stat-value" id="pcn-compute">0</span>
+            </div>
+            <div class="collision-stats">
+                <h4>💥 Collision Stats</h4>
+                <div class="stat-row">
+                    <span class="stat-label">Ram Damage Dealt</span>
+                    <span class="stat-value" id="pcn-ram-dealt">0</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Ram Damage Taken</span>
+                    <span class="stat-value" id="pcn-ram-taken">0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('arena');
+        const ctx = canvas.getContext('2d');
+        
+        let running = false;
+        let speed = 1;
+        let round = 0;
+        let ranWins = 0, pcnWins = 0;
+        let ranShots = 0, ranHits = 0;
+        let pcnShots = 0, pcnHits = 0;
+        let ranRamDealt = 0, ranRamTaken = 0;
+        let pcnRamDealt = 0, pcnRamTaken = 0;
+        let tickCount = 0;
+        
+        let ranTanks = [];
+        let pcnTanks = [];
+        let bullets = [];
+        let explosions = [];
+        let collisionSparks = [];
+        
+        // Physics constants
+        const TANK_MASS = 10; // Base mass
+        const COLLISION_DAMAGE_COEFFICIENT = 0.8; // How much KE converts to damage
+        const RESTITUTION = 0.5; // Bounciness (0 = inelastic, 1 = elastic)
+        
+        // ============================================
+        // NEWTONIAN COLLISION PHYSICS
+        // ============================================
+        function resolveCollision(tank1, tank2) {
+            const dx = tank2.x - tank1.x;
+            const dy = tank2.y - tank1.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const minDist = tank1.size + tank2.size;
+            
+            if (dist >= minDist || dist === 0) return null;
+            
+            // Collision normal
+            const nx = dx / dist;
+            const ny = dy / dist;
+            
+            // Relative velocity
+            const dvx = tank1.vx - tank2.vx;
+            const dvy = tank1.vy - tank2.vy;
+            
+            // Relative velocity along collision normal
+            const dvn = dvx * nx + dvy * ny;
+            
+            // Only resolve if tanks are approaching
+            if (dvn > 0) return null;
+            
+            // Masses (could vary by tank type later)
+            const m1 = TANK_MASS * (1 + tank1.health / 200); // Healthier = slightly heavier
+            const m2 = TANK_MASS * (1 + tank2.health / 200);
+            
+            // Calculate impulse scalar (with restitution)
+            const j = -(1 + RESTITUTION) * dvn / (1/m1 + 1/m2);
+            
+            // Apply impulse to velocities
+            const impulse1x = (j / m1) * nx;
+            const impulse1y = (j / m1) * ny;
+            const impulse2x = (j / m2) * nx;
+            const impulse2y = (j / m2) * ny;
+            
+            tank1.vx += impulse1x;
+            tank1.vy += impulse1y;
+            tank2.vx -= impulse2x;
+            tank2.vy -= impulse2y;
+            
+            // Separate tanks (prevent overlap)
+            const overlap = minDist - dist;
+            const separationRatio1 = m2 / (m1 + m2);
+            const separationRatio2 = m1 / (m1 + m2);
+            
+            tank1.x -= nx * overlap * separationRatio1;
+            tank1.y -= ny * overlap * separationRatio1;
+            tank2.x += nx * overlap * separationRatio2;
+            tank2.y += ny * overlap * separationRatio2;
+            
+            // Calculate kinetic energy before collision (in collision frame)
+            const reducedMass = (m1 * m2) / (m1 + m2);
+            const relativeSpeed = Math.sqrt(dvx * dvx + dvy * dvy);
+            const collisionKE = 0.5 * reducedMass * relativeSpeed * relativeSpeed;
+            
+            // Energy dissipated (inelastic loss)
+            const energyDissipated = collisionKE * (1 - RESTITUTION * RESTITUTION);
+            
+            // Damage proportional to energy, but distributed by mass ratio
+            // Lighter tank takes more damage (like a car vs truck)
+            const totalMass = m1 + m2;
+            const damage1 = energyDissipated * COLLISION_DAMAGE_COEFFICIENT * (m2 / totalMass);
+            const damage2 = energyDissipated * COLLISION_DAMAGE_COEFFICIENT * (m1 / totalMass);
+            
+            // Apply damage
+            tank1.health -= damage1;
+            tank2.health -= damage2;
+            
+            // Collision point for sparks
+            const collisionX = tank1.x + nx * tank1.size;
+            const collisionY = tank1.y + ny * tank1.size;
+            
+            return {
+                x: collisionX,
+                y: collisionY,
+                energy: collisionKE,
+                damage1: damage1,
+                damage2: damage2,
+                tank1: tank1,
+                tank2: tank2
+            };
+        }
+        
+        function handleAllCollisions() {
+            const allTanks = [...ranTanks, ...pcnTanks].filter(t => t.health > 0);
+            
+            for (let i = 0; i < allTanks.length; i++) {
+                for (let j = i + 1; j < allTanks.length; j++) {
+                    const collision = resolveCollision(allTanks[i], allTanks[j]);
+                    
+                    if (collision) {
+                        // Create sparks
+                        for (let k = 0; k < 8; k++) {
+                            const angle = Math.random() * Math.PI * 2;
+                            const speed = 2 + Math.random() * 4;
+                            collisionSparks.push({
+                                x: collision.x,
+                                y: collision.y,
+                                vx: Math.cos(angle) * speed,
+                                vy: Math.sin(angle) * speed,
+                                life: 20 + Math.random() * 10,
+                                color: collision.energy > 50 ? '#ff6b6b' : '#ffd93d'
+                            });
+                        }
+                        
+                        // Track collision damage
+                        if (collision.tank1.team === 'ran') {
+                            ranRamTaken += collision.damage1;
+                            ranRamDealt += collision.damage2;
+                        } else {
+                            pcnRamTaken += collision.damage1;
+                            pcnRamDealt += collision.damage2;
+                        }
+                        
+                        if (collision.tank2.team === 'ran') {
+                            ranRamTaken += collision.damage2;
+                            ranRamDealt += collision.damage1;
+                        } else {
+                            pcnRamTaken += collision.damage2;
+                            pcnRamDealt += collision.damage1;
+                        }
+                        
+                        // Log significant collisions
+                        if (collision.energy > 30) {
+                            log(`💥 COLLISION! ${collision.tank1.team.toUpperCase()}-${collision.tank1.id} ↔ ${collision.tank2.team.toUpperCase()}-${collision.tank2.id} (${collision.energy.toFixed(0)} KE)`, 'collision');
+                        }
+                        
+                        // Check for deaths
+                        if (collision.tank1.health <= 0) {
+                            log(`☠️ ${collision.tank1.team.toUpperCase()}-${collision.tank1.id} destroyed by collision!`, 'collision');
+                            explosions.push({ x: collision.tank1.x, y: collision.tank1.y, r: 5, maxR: 40 });
+                        }
+                        if (collision.tank2.health <= 0) {
+                            log(`☠️ ${collision.tank2.team.toUpperCase()}-${collision.tank2.id} destroyed by collision!`, 'collision');
+                            explosions.push({ x: collision.tank2.x, y: collision.tank2.y, r: 5, maxR: 40 });
+                        }
+                    }
+                }
+            }
+        }
+        
+        // ============================================
+        // RAN BRAIN - Coupled Oscillators
+        // ============================================
+        class RANBrain {
+            constructor() {
+                this.oscillators = [];
+                for (let i = 0; i < 32; i++) {
+                    this.oscillators.push({
+                        phase: Math.random() * Math.PI * 2,
+                        omega: 0.1 + (i / 32) * 1.9,
+                        amp: 0.5 + Math.random() * 0.5
+                    });
+                }
+            }
+            
+            process(targetX, targetY, targetVx, targetVy, myX, myY, myVx, myVy) {
+                let ops = 0;
+                
+                const dx = targetX - myX;
+                const dy = targetY - myY;
+                const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                const angle = Math.atan2(dy, dx);
+                
+                // Inject sensory data into oscillators
+                for (let i = 0; i < 8; i++) {
+                    this.oscillators[i].omega += dx / dist * 0.03;
+                    this.oscillators[i + 8].omega += dy / dist * 0.03;
+                    this.oscillators[i].omega = Math.max(0.1, Math.min(2.0, this.oscillators[i].omega));
+                    this.oscillators[i + 8].omega = Math.max(0.1, Math.min(2.0, this.oscillators[i + 8].omega));
+                    ops += 6;
+                }
+                
+                // Update ALL oscillators (inefficient but that's RAN's nature)
+                for (let i = 0; i < 32; i++) {
+                    let coupling = 0;
+                    const neighbors = [(i-1+32)%32, (i+1)%32, (i+4)%32, (i-4+32)%32];
+                    for (const j of neighbors) {
+                        coupling += 0.1 * Math.sin(this.oscillators[j].phase - this.oscillators[i].phase);
+                        ops += 2;
+                    }
+                    this.oscillators[i].phase += this.oscillators[i].omega + coupling;
+                    ops += 2;
+                }
+                
+                // Decode movement - approach enemy with some chaos
+                const chaosX = Math.cos(this.oscillators[0].phase) * 0.3;
+                const chaosY = Math.cos(this.oscillators[8].phase) * 0.3;
+                const moveX = Math.cos(angle) * 0.7 + chaosX;
+                const moveY = Math.sin(angle) * 0.7 + chaosY;
+                
+                // Aim with oscillator noise (causes inaccuracy)
+                const aimNoise = Math.cos(this.oscillators[20].phase) * 0.2;
+                const aimAngle = angle + aimNoise;
+                
+                // Shoot based on phase alignment
+                let alignment = 0;
+                for (let i = 24; i < 32; i++) {
+                    alignment += Math.cos(this.oscillators[i].phase - this.oscillators[24].phase);
+                    ops++;
+                }
+                const shoot = alignment > 3 && dist < 400;
+                
+                ops += 15;
+                
+                return { moveX, moveY, aimAngle, shoot, compute: ops };
+            }
+        }
+        
+        // ============================================
+        // PCN BRAIN - Predictive Coding (FIXED!)
+        // ============================================
+        class PCNBrain {
+            constructor() {
+                this.model = {
+                    x: null, y: null,
+                    vx: 0, vy: 0,
+                    confidence: 0.5 // Start with some confidence!
+                };
+                this.tick = 0;
+                this.errorThreshold = 5; // More lenient threshold
+            }
+            
+            process(targetX, targetY, targetVx, targetVy, myX, myY, myVx, myVy) {
+                let ops = 0;
+                this.tick++;
+                
+                // Initialize on first sight
+                if (this.model.x === null) {
+                    this.model.x = targetX;
+                    this.model.y = targetY;
+                    this.model.vx = targetVx;
+                    this.model.vy = targetVy;
+                    ops += 4;
+                }
+                
+                // Predict where target should be
+                const predX = this.model.x + this.model.vx;
+                const predY = this.model.y + this.model.vy;
+                ops += 2;
+                
+                // Calculate prediction error
+                const errX = targetX - predX;
+                const errY = targetY - predY;
+                const totalErr = Math.sqrt(errX * errX + errY * errY);
+                ops += 4;
+                
+                // Update model based on error
+                if (totalErr > this.errorThreshold) {
+                    // Large error - full update
+                    this.model.x = targetX;
+                    this.model.y = targetY;
+                    this.model.vx = this.model.vx * 0.5 + targetVx * 0.5;
+                    this.model.vy = this.model.vy * 0.5 + targetVy * 0.5;
+                    this.model.confidence = Math.max(0.2, this.model.confidence - 0.1);
+                    ops += 10;
+                } else {
+                    // Good prediction - minimal update, increase confidence
+                    this.model.x = predX;
+                    this.model.y = predY;
+                    this.model.confidence = Math.min(1, this.model.confidence + 0.02);
+                    ops += 3;
+                }
+                
+                // Calculate aim with LEAD TARGETING
+                const dx = targetX - myX;
+                const dy = targetY - myY;
+                const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                
+                const bulletSpeed = 8;
+                const timeToHit = dist / bulletSpeed;
+                
+                // Predict future position
+                const leadX = targetX + this.model.vx * timeToHit * 8 * this.model.confidence;
+                const leadY = targetY + this.model.vy * timeToHit * 8 * this.model.confidence;
+                
+                const aimAngle = Math.atan2(leadY - myY, leadX - myX);
+                ops += 10;
+                
+                // Movement - strafe while approaching
+                const angleToTarget = Math.atan2(dy, dx);
+                const strafeDir = (this.tick % 120 < 60) ? 1 : -1;
+                const strafeAngle = angleToTarget + (Math.PI / 3) * strafeDir;
+                
+                const moveX = Math.cos(angleToTarget) * 0.5 + Math.cos(strafeAngle) * 0.5;
+                const moveY = Math.sin(angleToTarget) * 0.5 + Math.sin(strafeAngle) * 0.5;
+                ops += 8;
+                
+                // SHOOT! More aggressive - always shoot when in range
+                const shoot = dist < 450 && this.tick % 3 === 0; // Fire every 3 ticks when in range
+                
+                return {
+                    moveX, moveY, aimAngle, shoot,
+                    compute: ops,
+                    confidence: this.model.confidence,
+                    leadX, leadY // For visualization
+                };
+            }
+        }
+        
+        // ============================================
+        // TANK CLASS
+        // ============================================
+        class Tank {
+            constructor(x, y, team, id) {
+                this.x = x;
+                this.y = y;
+                this.vx = 0;
+                this.vy = 0;
+                this.angle = team === 'ran' ? 0 : Math.PI;
+                this.team = team;
+                this.id = id;
+                this.health = 100;
+                this.maxHealth = 100;
+                this.ammo = 20;
+                this.reloadTimer = 0;
+                this.brain = team === 'ran' ? new RANBrain() : new PCNBrain();
+                this.size = 18;
+                this.lastCompute = 0;
+                this.lastOutput = null;
+            }
+            
+            findTarget(enemies) {
+                let nearest = null;
+                let nearestDist = Infinity;
+                for (const e of enemies) {
+                    if (e.health <= 0) continue;
+                    const d = Math.hypot(e.x - this.x, e.y - this.y);
+                    if (d < nearestDist) {
+                        nearestDist = d;
+                        nearest = e;
+                    }
+                }
+                return nearest;
+            }
+            
+            update(enemies) {
+                if (this.health <= 0) return;
+                
+                const target = this.findTarget(enemies);
+                if (!target) return;
+                
+                const output = this.brain.process(
+                    target.x, target.y, target.vx, target.vy,
+                    this.x, this.y, this.vx, this.vy
+                );
+                this.lastOutput = output;
+                this.lastCompute = output.compute;
+                
+                // Apply movement with momentum
+                const accel = 0.3;
+                const maxSpeed = 3;
+                const friction = 0.95;
+                
+                this.vx += output.moveX * accel;
+                this.vy += output.moveY * accel;
+                
+                // Clamp speed
+                const speed = Math.hypot(this.vx, this.vy);
+                if (speed > maxSpeed) {
+                    this.vx = (this.vx / speed) * maxSpeed;
+                    this.vy = (this.vy / speed) * maxSpeed;
+                }
+                
+                // Apply friction
+                this.vx *= friction;
+                this.vy *= friction;
+                
+                // Update position
+                this.x += this.vx;
+                this.y += this.vy;
+                
+                // Boundary collision (bounce off walls)
+                if (this.x < this.size) { this.x = this.size; this.vx *= -0.5; }
+                if (this.x > canvas.width - this.size) { this.x = canvas.width - this.size; this.vx *= -0.5; }
+                if (this.y < this.size) { this.y = this.size; this.vy *= -0.5; }
+                if (this.y > canvas.height - this.size) { this.y = canvas.height - this.size; this.vy *= -0.5; }
+                
+                // Aim
+                this.angle = output.aimAngle;
+                
+                // Reload
+                if (this.reloadTimer > 0) this.reloadTimer--;
+                
+                // Shoot
+                if (output.shoot && this.ammo > 0 && this.reloadTimer <= 0) {
+                    this.shoot();
+                }
+                
+                // Regen ammo
+                if (Math.random() < 0.015) this.ammo = Math.min(20, this.ammo + 1);
+            }
+            
+            shoot() {
+                const bulletSpeed = 8;
+                bullets.push({
+                    x: this.x + Math.cos(this.angle) * (this.size + 5),
+                    y: this.y + Math.sin(this.angle) * (this.size + 5),
+                    vx: Math.cos(this.angle) * bulletSpeed + this.vx * 0.3,
+                    vy: Math.sin(this.angle) * bulletSpeed + this.vy * 0.3,
+                    team: this.team,
+                    damage: 18
+                });
+                this.ammo--;
+                this.reloadTimer = 15;
+                
+                if (this.team === 'ran') ranShots++;
+                else pcnShots++;
+            }
+            
+            draw() {
+                if (this.health <= 0) return;
+                
+                // Draw lead targeting line for PCN
+                if (this.team === 'pcn' && this.lastOutput && this.lastOutput.leadX) {
+                    ctx.strokeStyle = 'rgba(77, 150, 255, 0.4)';
+                    ctx.setLineDash([4, 4]);
+                    ctx.beginPath();
+                    ctx.moveTo(this.x, this.y);
+                    ctx.lineTo(this.lastOutput.leadX, this.lastOutput.leadY);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    
+                    // Target marker
+                    ctx.beginPath();
+                    ctx.arc(this.lastOutput.leadX, this.lastOutput.leadY, 6, 0, Math.PI * 2);
+                    ctx.strokeStyle = 'rgba(77, 150, 255, 0.6)';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    ctx.lineWidth = 1;
+                }
+                
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.angle);
+                
+                // Tank body
+                const color = this.team === 'ran' ? '#6bcb77' : '#4d96ff';
+                const darkColor = this.team === 'ran' ? '#4a9959' : '#3a7acc';
+                
+                // Tracks
+                ctx.fillStyle = '#333';
+                ctx.fillRect(-this.size, -this.size * 0.8, this.size * 2, this.size * 0.3);
+                ctx.fillRect(-this.size, this.size * 0.5, this.size * 2, this.size * 0.3);
+                
+                // Body
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.roundRect(-this.size * 0.8, -this.size * 0.5, this.size * 1.6, this.size, 3);
+                ctx.fill();
+                
+                // Turret
+                ctx.fillStyle = darkColor;
+                ctx.beginPath();
+                ctx.arc(0, 0, this.size * 0.45, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Barrel
+                ctx.fillStyle = '#222';
+                ctx.fillRect(0, -3, this.size * 1.2, 6);
+                ctx.fillStyle = color;
+                ctx.fillRect(2, -2, this.size * 1.1, 4);
+                
+                ctx.restore();
+                
+                // Health bar
+                const hbWidth = 36;
+                const hbHeight = 4;
+                ctx.fillStyle = '#222';
+                ctx.fillRect(this.x - hbWidth/2, this.y - this.size - 12, hbWidth, hbHeight);
+                const hpRatio = this.health / this.maxHealth;
+                ctx.fillStyle = hpRatio > 0.5 ? '#6bcb77' : (hpRatio > 0.25 ? '#ffd93d' : '#ff6b6b');
+                ctx.fillRect(this.x - hbWidth/2, this.y - this.size - 12, hbWidth * hpRatio, hbHeight);
+                
+                // Label
+                ctx.fillStyle = color;
+                ctx.font = 'bold 9px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(`${this.team.toUpperCase()}-${this.id}`, this.x, this.y - this.size - 16);
+            }
+        }
+        
+        // ============================================
+        // GAME LOGIC
+        // ============================================
+        function initRound() {
+            ranTanks = [];
+            pcnTanks = [];
+            bullets = [];
+            explosions = [];
+            collisionSparks = [];
+            
+            // Spread out spawn positions
+            for (let i = 0; i < 3; i++) {
+                ranTanks.push(new Tank(
+                    60 + Math.random() * 30,
+                    60 + i * 130 + Math.random() * 30,
+                    'ran', i + 1
+                ));
+                pcnTanks.push(new Tank(
+                    canvas.width - 60 - Math.random() * 30,
+                    60 + i * 130 + Math.random() * 30,
+                    'pcn', i + 1
+                ));
+            }
+            
+            round++;
+            log(`⚔️ Round ${round} begins!`, 'system');
+        }
+        
+        function updateBullets() {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const b = bullets[i];
+                b.x += b.vx;
+                b.y += b.vy;
+                
+                if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) {
+                    bullets.splice(i, 1);
+                    continue;
+                }
+                
+                const targets = b.team === 'ran' ? pcnTanks : ranTanks;
+                for (const tank of targets) {
+                    if (tank.health <= 0) continue;
+                    const d = Math.hypot(b.x - tank.x, b.y - tank.y);
+                    if (d < tank.size + 3) {
+                        tank.health -= b.damage;
+                        explosions.push({ x: b.x, y: b.y, r: 3, maxR: 12 });
+                        bullets.splice(i, 1);
+                        
+                        if (b.team === 'ran') ranHits++;
+                        else pcnHits++;
+                        
+                        if (tank.health <= 0) {
+                            log(`💀 ${b.team.toUpperCase()} destroyed ${tank.team.toUpperCase()}-${tank.id}!`, b.team);
+                            explosions.push({ x: tank.x, y: tank.y, r: 5, maxR: 35 });
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        
+        function updateEffects() {
+            for (let i = explosions.length - 1; i >= 0; i--) {
+                explosions[i].r += 2;
+                if (explosions[i].r >= explosions[i].maxR) explosions.splice(i, 1);
+            }
+            
+            for (let i = collisionSparks.length - 1; i >= 0; i--) {
+                const s = collisionSparks[i];
+                s.x += s.vx;
+                s.y += s.vy;
+                s.vy += 0.2; // Gravity
+                s.life--;
+                if (s.life <= 0) collisionSparks.splice(i, 1);
+            }
+        }
+        
+        function draw() {
+            ctx.fillStyle = '#080810';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Grid
+            ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+            for (let x = 0; x < canvas.width; x += 40) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+            }
+            for (let y = 0; y < canvas.height; y += 40) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+            }
+            
+            // Center line
+            ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(canvas.width/2, 0);
+            ctx.lineTo(canvas.width/2, canvas.height);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            // Team zones
+            ctx.fillStyle = 'rgba(107,203,119,0.02)';
+            ctx.fillRect(0, 0, canvas.width/2, canvas.height);
+            ctx.fillStyle = 'rgba(77,150,255,0.02)';
+            ctx.fillRect(canvas.width/2, 0, canvas.width/2, canvas.height);
+            
+            // Explosions
+            for (const e of explosions) {
+                const alpha = 1 - e.r / e.maxR;
+                ctx.beginPath();
+                ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 200, 100, ${alpha})`;
+                ctx.fill();
+            }
+            
+            // Collision sparks
+            for (const s of collisionSparks) {
+                const alpha = s.life / 30;
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, 2, 0, Math.PI * 2);
+                ctx.fillStyle = s.color.replace(')', `, ${alpha})`).replace('rgb', 'rgba');
+                ctx.fill();
+            }
+            
+            // Bullets
+            for (const b of bullets) {
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
+                ctx.fillStyle = b.team === 'ran' ? '#afa' : '#acf';
+                ctx.fill();
+                
+                ctx.beginPath();
+                ctx.moveTo(b.x, b.y);
+                ctx.lineTo(b.x - b.vx * 2, b.y - b.vy * 2);
+                ctx.strokeStyle = b.team === 'ran' ? 'rgba(150,255,150,0.4)' : 'rgba(150,200,255,0.4)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.lineWidth = 1;
+            }
+            
+            // Tanks
+            for (const t of ranTanks) t.draw();
+            for (const t of pcnTanks) t.draw();
+            
+            // Round indicator
+            ctx.fillStyle = '#ffd93d';
+            ctx.font = 'bold 12px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(`ROUND ${round}`, canvas.width/2, 16);
+        }
+        
+        function checkWinner() {
+            const ranAlive = ranTanks.filter(t => t.health > 0).length;
+            const pcnAlive = pcnTanks.filter(t => t.health > 0).length;
+            
+            if (ranAlive === 0) {
+                pcnWins++;
+                log(`🔵 PCN WINS Round ${round}!`, 'pcn');
+                setTimeout(initRound, 1200);
+                return true;
+            }
+            if (pcnAlive === 0) {
+                ranWins++;
+                log(`🟢 RAN WINS Round ${round}!`, 'ran');
+                setTimeout(initRound, 1200);
+                return true;
+            }
+            return false;
+        }
+        
+        function updateStats() {
+            const total = ranWins + pcnWins;
+            const ranRate = total > 0 ? ((ranWins / total) * 100).toFixed(1) : '0';
+            const pcnRate = total > 0 ? ((pcnWins / total) * 100).toFixed(1) : '0';
+            
+            document.getElementById('ran-wins').textContent = ranWins;
+            document.getElementById('pcn-wins').textContent = pcnWins;
+            document.getElementById('ran-rate').textContent = ranRate + '%';
+            document.getElementById('pcn-rate').textContent = pcnRate + '%';
+            document.getElementById('ran-tanks').textContent = ranTanks.filter(t => t.health > 0).length;
+            document.getElementById('pcn-tanks').textContent = pcnTanks.filter(t => t.health > 0).length;
+            document.getElementById('ran-shots').textContent = ranShots;
+            document.getElementById('pcn-shots').textContent = pcnShots;
+            document.getElementById('ran-accuracy').textContent = ranShots > 0 ? ((ranHits / ranShots) * 100).toFixed(1) + '%' : '0%';
+            document.getElementById('pcn-accuracy').textContent = pcnShots > 0 ? ((pcnHits / pcnShots) * 100).toFixed(1) + '%' : '0%';
+            
+            let ranComp = 0, pcnComp = 0;
+            ranTanks.forEach(t => { if (t.health > 0) ranComp += t.lastCompute; });
+            pcnTanks.forEach(t => { if (t.health > 0) pcnComp += t.lastCompute; });
+            document.getElementById('ran-compute').textContent = ranComp;
+            document.getElementById('pcn-compute').textContent = pcnComp;
+            
+            document.getElementById('ran-ram-dealt').textContent = ranRamDealt.toFixed(0);
+            document.getElementById('ran-ram-taken').textContent = ranRamTaken.toFixed(0);
+            document.getElementById('pcn-ram-dealt').textContent = pcnRamDealt.toFixed(0);
+            document.getElementById('pcn-ram-taken').textContent = pcnRamTaken.toFixed(0);
+            
+            if (total > 0) {
+                document.getElementById('ran-bar').style.width = ranRate + '%';
+                document.getElementById('pcn-bar').style.width = pcnRate + '%';
+                document.getElementById('ran-bar').textContent = ranRate > 8 ? 'RAN ' + ranRate + '%' : '';
+                document.getElementById('pcn-bar').textContent = pcnRate > 8 ? 'PCN ' + pcnRate + '%' : '';
+            }
+        }
+        
+        function log(msg, type) {
+            const el = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry ' + type;
+            entry.textContent = msg;
+            el.insertBefore(entry, el.firstChild);
+            while (el.children.length > 40) el.removeChild(el.lastChild);
+        }
+        
+        function gameLoop() {
+            if (!running) return;
+            
+            for (let s = 0; s < speed; s++) {
+                tickCount++;
+                
+                for (const t of ranTanks) if (t.health > 0) t.update(pcnTanks);
+                for (const t of pcnTanks) if (t.health > 0) t.update(ranTanks);
+                
+                handleAllCollisions();
+                updateBullets();
+                updateEffects();
+                
+                if (checkWinner()) break;
+            }
+            
+            draw();
+            updateStats();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Controls
+        document.getElementById('start-btn').onclick = () => {
+            if (!running) {
+                running = true;
+                if (round === 0) initRound();
+                gameLoop();
+            }
+        };
+        document.getElementById('pause-btn').onclick = () => { running = false; };
+        document.getElementById('reset-btn').onclick = () => {
+            running = false;
+            round = 0;
+            ranWins = pcnWins = 0;
+            ranShots = ranHits = pcnShots = pcnHits = 0;
+            ranRamDealt = ranRamTaken = pcnRamDealt = pcnRamTaken = 0;
+            tickCount = 0;
+            document.getElementById('log').innerHTML = '';
+            updateStats();
+            draw();
+        };
+        document.getElementById('speed-btn').onclick = function() {
+            speed = speed === 1 ? 2 : (speed === 2 ? 4 : 1);
+            this.textContent = `⚡ ${speed}x`;
+        };
+        
+        draw();
+    </script>
+</body>
+</html>

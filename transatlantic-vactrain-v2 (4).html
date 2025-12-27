@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>TRANSATLANTIC VACTRAIN | Tamworth → New York | 2065</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #000; font-family: 'Segoe UI', Arial, sans-serif; }
+    #c { width: 100vw; height: 100vh; display: block; }
+    
+    .hud { position: absolute; pointer-events: none; }
+    
+    #speed-panel {
+      top: 20px; left: 20px;
+      background: rgba(0,10,20,0.9);
+      border: 1px solid rgba(0,150,255,0.4);
+      border-radius: 8px;
+      padding: 15px 20px;
+    }
+    #speed-panel .label { font-size: 8px; letter-spacing: 3px; color: rgba(0,180,255,0.6); }
+    #speed-value { font-size: 56px; font-weight: 200; color: #fff; line-height: 1; }
+    #speed-value.fast { color: #00d4ff; text-shadow: 0 0 30px rgba(0,200,255,0.5); }
+    #speed-value.vfast { color: #ff9900; text-shadow: 0 0 30px rgba(255,150,0,0.5); }
+    #speed-value.hyper { color: #ff00aa; text-shadow: 0 0 40px rgba(255,0,170,0.6); animation: pulse 0.5s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.8; } }
+    #speed-panel .unit { font-size: 10px; color: rgba(0,180,255,0.4); }
+    #mach { font-size: 14px; color: #0af; margin-top: 5px; }
+    
+    #route-panel {
+      top: 20px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,10,20,0.9);
+      border: 1px solid rgba(0,150,255,0.3);
+      border-radius: 8px;
+      padding: 12px 25px;
+      text-align: center;
+    }
+    #route-panel h1 { font-size: 10px; letter-spacing: 4px; color: rgba(0,180,255,0.7); font-weight: 400; }
+    #route-panel .location { font-size: 18px; color: #fff; margin-top: 4px; font-weight: 500; }
+    #route-panel .subtitle { font-size: 9px; color: rgba(0,180,255,0.5); margin-top: 2px; }
+    #route-panel .progress { font-size: 11px; color: rgba(0,180,255,0.6); margin-top: 6px; }
+    #eta { color: #0f8; }
+    
+    #map-panel {
+      top: 100px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,15,30,0.95);
+      border: 1px solid rgba(0,100,200,0.4);
+      border-radius: 8px;
+      padding: 10px;
+    }
+    #map-canvas { display: block; border-radius: 4px; }
+    
+    #tech-panel {
+      top: 20px; right: 20px;
+      background: rgba(0,10,20,0.9);
+      border: 1px solid rgba(0,255,150,0.3);
+      border-radius: 8px;
+      padding: 12px 15px;
+      min-width: 210px;
+    }
+    #tech-panel .title { font-size: 7px; letter-spacing: 2px; color: rgba(0,255,150,0.6); margin-bottom: 6px; }
+    .tech-row { display: flex; justify-content: space-between; font-size: 10px; margin-bottom: 3px; }
+    .tech-row .lbl { color: rgba(0,200,150,0.5); }
+    .tech-row .val { color: #0fa; font-family: monospace; }
+    .tech-row .val.warn { color: #fa0; }
+    .tech-row .val.danger { color: #f55; }
+    
+    #biome-panel {
+      top: 340px; right: 20px;
+      background: rgba(0,10,20,0.9);
+      border: 1px solid rgba(100,150,255,0.3);
+      border-radius: 8px;
+      padding: 12px 15px;
+      min-width: 160px;
+    }
+    #biome-panel .title { font-size: 7px; letter-spacing: 2px; color: rgba(100,150,255,0.6); margin-bottom: 6px; }
+    #biome-name { font-size: 14px; color: #4af; margin-bottom: 4px; }
+    #biome-desc { font-size: 9px; color: rgba(100,150,200,0.6); line-height: 1.4; }
+    #depth-display { font-size: 11px; color: #0af; margin-top: 6px; }
+    
+    #nn-panel {
+      bottom: 20px; left: 20px;
+      background: rgba(0,15,10,0.9);
+      border: 1px solid rgba(0,255,100,0.4);
+      border-radius: 8px;
+      padding: 12px 15px;
+      min-width: 320px;
+    }
+    #nn-panel .header { font-size: 9px; letter-spacing: 2px; color: rgba(0,255,150,0.8); margin-bottom: 8px; }
+    #nn-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .nn-section { background: rgba(0,40,30,0.4); border-radius: 4px; padding: 6px; }
+    .nn-section .stitle { font-size: 6px; letter-spacing: 1px; color: rgba(0,200,150,0.5); margin-bottom: 4px; }
+    .nn-row { display: flex; justify-content: space-between; font-size: 9px; }
+    .nn-row .lbl { color: rgba(0,180,120,0.4); }
+    .nn-row .val { color: #0c8; font-family: monospace; }
+    
+    #controls-panel {
+      bottom: 20px; right: 20px;
+      background: rgba(0,10,20,0.85);
+      border: 1px solid rgba(0,150,255,0.3);
+      border-radius: 6px;
+      padding: 10px 15px;
+      font-size: 10px;
+      color: rgba(0,180,255,0.6);
+    }
+    .key { color: #0af; }
+    
+    #tunnel-effect {
+      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      pointer-events: none;
+      background: radial-gradient(ellipse at center, transparent 30%, rgba(0,20,40,0.4) 70%, rgba(0,0,0,0.8) 100%);
+      opacity: 0;
+      transition: opacity 0.1s;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="tunnel-effect"></div>
+  
+  <div id="speed-panel" class="hud">
+    <div class="label">VELOCITY</div>
+    <div id="speed-value">0</div>
+    <div class="unit">km/h</div>
+    <div id="mach">MACH 0.00</div>
+  </div>
+  
+  <div id="route-panel" class="hud">
+    <h1>🌍 TRANSATLANTIC VACTRAIN 2065 🗽</h1>
+    <div class="location" id="location">Tamworth, UK</div>
+    <div class="subtitle" id="subtitle">Departure Terminal • B77 2EZ</div>
+    <div class="progress">
+      <span id="dist">0</span> / 5,847 km • ETA: <span id="eta">--:--</span>
+    </div>
+  </div>
+  
+  <div id="map-panel" class="hud">
+    <canvas id="map-canvas" width="400" height="100"></canvas>
+  </div>
+  
+  <div id="tech-panel" class="hud">
+    <div class="title">TUBE SYSTEMS</div>
+    <div class="tech-row"><span class="lbl">Vacuum</span><span class="val" id="vacuum">99.97%</span></div>
+    <div class="tech-row"><span class="lbl">Pressure</span><span class="val" id="pressure">0.03 kPa</span></div>
+    <div class="tech-row"><span class="lbl">Mag Field</span><span class="val" id="mag-field">2.4 T</span></div>
+    <div class="tech-row"><span class="lbl">G-Force (accel)</span><span class="val" id="gforce">0.0 g</span></div>
+    <div class="tech-row"><span class="lbl">G Lateral</span><span class="val" id="gforce-lat">0.0 g</span></div>
+    <div class="tech-row"><span class="lbl">G Vertical</span><span class="val" id="gforce-vert">1.0 g</span></div>
+    <div class="tech-row"><span class="lbl">G Total</span><span class="val" id="gforce-total">1.0 g</span></div>
+    <div class="tech-row"><span class="lbl">Jerk</span><span class="val" id="jerk">0.0 g/s</span></div>
+    <div class="tech-row"><span class="lbl">Power</span><span class="val" id="power-draw">0 MW</span></div>
+    <div class="tech-row"><span class="lbl">Min Curve R</span><span class="val" id="curve-radius">-- km</span></div>
+  </div>
+  
+  <div id="biome-panel" class="hud">
+    <div class="title">CURRENT BIOME</div>
+    <div id="biome-name">🏙️ Urban UK</div>
+    <div id="biome-desc">Dense cityscape<br>Industrial Midlands</div>
+    <div id="depth-display">Altitude: +85m</div>
+  </div>
+  
+  <div id="nn-panel" class="hud">
+    <div class="header">🧠 HARP-3 QUANTUM-HYBRID CONTROLLER</div>
+    <div id="nn-grid">
+      <div class="nn-section">
+        <div class="stitle">RENDERING</div>
+        <div class="nn-row"><span class="lbl">LOD</span><span class="val" id="nn-lod">3</span></div>
+        <div class="nn-row"><span class="lbl">Range</span><span class="val" id="nn-range">800m</span></div>
+      </div>
+      <div class="nn-section">
+        <div class="stitle">SELF-OPTIM</div>
+        <div class="nn-row"><span class="lbl">Mods</span><span class="val" id="nn-mods">0</span></div>
+        <div class="nn-row"><span class="lbl">Score</span><span class="val" id="nn-score">0.00</span></div>
+      </div>
+      <div class="nn-section">
+        <div class="stitle">BIOME AI</div>
+        <div class="nn-row"><span class="lbl">Expert</span><span class="val" id="nn-expert">urban</span></div>
+        <div class="nn-row"><span class="lbl">NAS</span><span class="val" id="nn-nas">explore</span></div>
+      </div>
+    </div>
+  </div>
+  
+  <div id="controls-panel" class="hud">
+    <span class="key">[W]</span> Thrust <span class="key">[S]</span> Brake <span class="key">[C]</span> Camera
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+// ==================== SCIENCE PARAMETERS ====================
+const SCIENCE = {
+  tubeDiameter: 4.5,
+  maxSpeed: 8000,
+  maxAcceleration: 0.5,
+  maxDeceleration: 1.0,
+  totalDistance: 5847,
+  powerPerKmh: 0.015,
+};
+
+// ==================== BIOMES ====================
+const BIOMES = {
+  urban_uk: {
+    name: "🏙️ Urban UK",
+    desc: "Dense cityscape\nIndustrial Midlands",
+    skyColor: 0x6080a0,
+    fogColor: 0x506080,
+    fogDensity: 0.002,
+    groundColor: 0x404040,
+    ambient: 0.6,
+    features: ['buildings', 'roads']
+  },
+  countryside_uk: {
+    name: "🌳 British Countryside", 
+    desc: "Rolling green hills\nFarmland & hedgerows",
+    skyColor: 0x87a5b8,
+    fogColor: 0x708090,
+    fogDensity: 0.0015,
+    groundColor: 0x3a6030,
+    ambient: 0.7,
+    features: ['trees', 'fields', 'farms']
+  },
+  coastal: {
+    name: "🌊 Coastal Waters",
+    desc: "Continental shelf\nDepth: 50-200m",
+    skyColor: 0x4080a0,
+    fogColor: 0x205060,
+    fogDensity: 0.003,
+    groundColor: 0x304050,
+    ambient: 0.4,
+    features: ['kelp', 'fish', 'rocks']
+  },
+  deep_ocean: {
+    name: "🌑 Abyssal Zone",
+    desc: "Mid-Atlantic depths\nDepth: 200-450m",
+    skyColor: 0x0a1520,
+    fogColor: 0x050a10,
+    fogDensity: 0.005,
+    groundColor: 0x101520,
+    ambient: 0.15,
+    features: ['vents', 'bioluminescence']
+  },
+  mid_atlantic: {
+    name: "🌋 Mid-Atlantic Ridge",
+    desc: "Volcanic ridge\nTectonic boundary",
+    skyColor: 0x101820,
+    fogColor: 0x080c12,
+    fogDensity: 0.004,
+    groundColor: 0x1a1510,
+    ambient: 0.2,
+    features: ['vents', 'lava_glow', 'smokers']
+  },
+  coastal_us: {
+    name: "🏖️ US Atlantic Coast",
+    desc: "Continental shelf\nApproaching America",
+    skyColor: 0x4888b0,
+    fogColor: 0x306080,
+    fogDensity: 0.0025,
+    groundColor: 0x405060,
+    ambient: 0.5,
+    features: ['kelp', 'fish', 'shipwrecks']
+  },
+  suburban_us: {
+    name: "🏡 Long Island",
+    desc: "American suburbs\nNew York State",
+    skyColor: 0x7090b0,
+    fogColor: 0x607090,
+    fogDensity: 0.0018,
+    groundColor: 0x3a5030,
+    ambient: 0.65,
+    features: ['houses', 'trees', 'roads']
+  },
+  urban_us: {
+    name: "🗽 New York City",
+    desc: "Manhattan skyline\nPenn Station arrival",
+    skyColor: 0x6080a0,
+    fogColor: 0x506080,
+    fogDensity: 0.0025,
+    groundColor: 0x353535,
+    ambient: 0.55,
+    features: ['skyscrapers', 'roads']
+  }
+};
+
+// ==================== WAYPOINTS ====================
+const WAYPOINTS = [
+  { km: 0,    name: "Tamworth",           depth: 0,    biome: 'urban_uk',     lat: 52.63, lon: -1.69 },
+  { km: 25,   name: "Birmingham",         depth: -30,  biome: 'urban_uk',     lat: 52.48, lon: -1.89 },
+  { km: 80,   name: "Cotswolds",          depth: -50,  biome: 'countryside_uk', lat: 51.90, lon: -1.70 },
+  { km: 150,  name: "Bristol",            depth: -80,  biome: 'urban_uk',     lat: 51.45, lon: -2.58 },
+  { km: 220,  name: "Celtic Sea Entry",   depth: -120, biome: 'coastal',      lat: 51.00, lon: -5.00 },
+  { km: 500,  name: "Celtic Shelf",       depth: -180, biome: 'coastal',      lat: 50.50, lon: -9.00 },
+  { km: 1000, name: "Porcupine Abyssal",  depth: -350, biome: 'deep_ocean',   lat: 51.00, lon: -14.0 },
+  { km: 2000, name: "Mid-Atlantic Ridge", depth: -450, biome: 'mid_atlantic', lat: 48.00, lon: -29.0 },
+  { km: 3000, name: "Abyssal Plain",      depth: -420, biome: 'deep_ocean',   lat: 43.00, lon: -44.0 },
+  { km: 4200, name: "Sohm Abyssal",       depth: -380, biome: 'deep_ocean',   lat: 40.00, lon: -58.0 },
+  { km: 5000, name: "Continental Rise",   depth: -200, biome: 'coastal_us',   lat: 40.20, lon: -68.0 },
+  { km: 5400, name: "US Shelf",           depth: -80,  biome: 'coastal_us',   lat: 40.40, lon: -72.0 },
+  { km: 5600, name: "Long Island",        depth: -30,  biome: 'suburban_us',  lat: 40.65, lon: -73.2 },
+  { km: 5750, name: "Queens",             depth: -20,  biome: 'urban_us',     lat: 40.72, lon: -73.8 },
+  { km: 5847, name: "Penn Station NYC",   depth: 0,    biome: 'urban_us',     lat: 40.75, lon: -74.0 },
+];
+
+function getWaypoint(km) {
+  km = Math.max(0, Math.min(SCIENCE.totalDistance, km));
+  for (let i = 0; i < WAYPOINTS.length - 1; i++) {
+    if (km <= WAYPOINTS[i + 1].km) {
+      const a = WAYPOINTS[i], b = WAYPOINTS[i + 1];
+      const t = (km - a.km) / (b.km - a.km);
+      return {
+        name: t < 0.5 ? a.name : b.name,
+        depth: a.depth + (b.depth - a.depth) * t,
+        biome: t < 0.5 ? a.biome : b.biome,
+        lat: a.lat + (b.lat - a.lat) * t,
+        lon: a.lon + (b.lon - a.lon) * t,
+      };
+    }
+  }
+  return WAYPOINTS[WAYPOINTS.length - 1];
+}
+
+// ==================== MAP RENDERER ====================
+const mapCanvas = document.getElementById('map-canvas');
+const mapCtx = mapCanvas.getContext('2d');
+
+function drawMap(currentKm) {
+  const W = mapCanvas.width, H = mapCanvas.height;
+  mapCtx.fillStyle = '#0a1525';
+  mapCtx.fillRect(0, 0, W, H);
+  
+  // Draw land masses
+  mapCtx.fillStyle = '#2a4020';
+  // UK (left)
+  mapCtx.beginPath();
+  mapCtx.ellipse(30, 50, 25, 35, 0, 0, Math.PI * 2);
+  mapCtx.fill();
+  // US (right)
+  mapCtx.beginPath();
+  mapCtx.moveTo(340, 10);
+  mapCtx.lineTo(400, 10);
+  mapCtx.lineTo(400, 90);
+  mapCtx.lineTo(350, 90);
+  mapCtx.lineTo(340, 50);
+  mapCtx.closePath();
+  mapCtx.fill();
+  
+  // Draw ocean with depth gradient
+  const gradient = mapCtx.createLinearGradient(60, 0, 330, 0);
+  gradient.addColorStop(0, '#1a3040');
+  gradient.addColorStop(0.3, '#0a1525');
+  gradient.addColorStop(0.5, '#050a10'); // Deepest
+  gradient.addColorStop(0.7, '#0a1525');
+  gradient.addColorStop(1, '#1a3040');
+  mapCtx.fillStyle = gradient;
+  mapCtx.fillRect(55, 30, 280, 40);
+  
+  // Draw route line
+  mapCtx.strokeStyle = '#0066aa';
+  mapCtx.lineWidth = 2;
+  mapCtx.beginPath();
+  mapCtx.moveTo(30, 50); // Tamworth
+  
+  // Route through waypoints
+  for (const wp of WAYPOINTS) {
+    const x = 30 + (wp.km / SCIENCE.totalDistance) * 340;
+    const y = 50 + (wp.depth / 500) * 30;
+    mapCtx.lineTo(x, y);
+  }
+  mapCtx.stroke();
+  
+  // Draw waypoint dots
+  mapCtx.fillStyle = '#004488';
+  for (const wp of WAYPOINTS) {
+    const x = 30 + (wp.km / SCIENCE.totalDistance) * 340;
+    const y = 50 + (wp.depth / 500) * 30;
+    mapCtx.beginPath();
+    mapCtx.arc(x, y, 3, 0, Math.PI * 2);
+    mapCtx.fill();
+  }
+  
+  // Draw current position
+  const currentX = 30 + (currentKm / SCIENCE.totalDistance) * 340;
+  const currentWp = getWaypoint(currentKm);
+  const currentY = 50 + (currentWp.depth / 500) * 30;
+  
+  // Glow effect
+  mapCtx.beginPath();
+  mapCtx.arc(currentX, currentY, 8, 0, Math.PI * 2);
+  mapCtx.fillStyle = 'rgba(0, 200, 255, 0.3)';
+  mapCtx.fill();
+  
+  // Train marker
+  mapCtx.beginPath();
+  mapCtx.arc(currentX, currentY, 5, 0, Math.PI * 2);
+  mapCtx.fillStyle = '#00ddff';
+  mapCtx.fill();
+  mapCtx.strokeStyle = '#fff';
+  mapCtx.lineWidth = 1;
+  mapCtx.stroke();
+  
+  // Labels
+  mapCtx.fillStyle = '#88aacc';
+  mapCtx.font = '9px Arial';
+  mapCtx.textAlign = 'center';
+  mapCtx.fillText('UK', 30, 95);
+  mapCtx.fillText('USA', 370, 95);
+  mapCtx.fillText('Atlantic Ocean', 180, 20);
+  
+  // Depth scale
+  mapCtx.fillStyle = '#446688';
+  mapCtx.font = '8px Arial';
+  mapCtx.textAlign = 'left';
+  mapCtx.fillText('0m', 5, 35);
+  mapCtx.fillText('-450m', 5, 80);
+}
+
+// ==================== NEURAL NETWORK ====================
+class HARP3 {
+  constructor() {
+    this.experts = Object.keys(BIOMES);
+    this.activeExpert = 'urban_uk';
+    this.selfMods = 0;
+    this.bestScore = 0;
+    this.nasPhase = 'explore';
+    this.history = [];
+  }
+  
+  update(state) {
+    this.activeExpert = state.biome;
+    
+    const biome = BIOMES[state.biome];
+    const perfScale = state.frameTime > 25 ? 0.6 : state.frameTime > 18 ? 0.8 : 1.0;
+    const speedScale = Math.max(0.3, 1 - state.speed / 10000);
+    
+    const score = (60 / Math.max(10, state.frameTime)) * 0.5 + speedScale * 0.5;
+    this.history.push(score);
+    if (this.history.length > 50) this.history.shift();
+    
+    if (score > this.bestScore) {
+      this.bestScore = score;
+      this.selfMods++;
+    }
+    
+    if (this.history.length > 30 && this.nasPhase === 'explore') {
+      this.nasPhase = 'exploit';
+      this.selfMods++;
+    }
+    
+    return {
+      renderDist: 300 + 500 * perfScale * speedScale,
+      lod: Math.max(1, Math.round(3 * perfScale)),
+      fogDensity: biome.fogDensity * (1 + (1 - speedScale) * 0.5),
+      expert: this.activeExpert,
+      selfMods: this.selfMods,
+      bestScore: this.bestScore,
+      nasPhase: this.nasPhase
+    };
+  }
+}
+
+const nn = new HARP3();
+
+// ==================== THREE.JS SETUP ====================
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a1525);
+scene.fog = new THREE.FogExp2(0x0a1525, 0.001);
+
+const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 1, 3000);
+
+// Lighting
+const ambient = new THREE.AmbientLight(0x404060, 0.5);
+scene.add(ambient);
+
+const tubeLight = new THREE.PointLight(0x00aaff, 1, 150);
+scene.add(tubeLight);
+
+const sunLight = new THREE.DirectionalLight(0xffffff, 0.5);
+sunLight.position.set(100, 100, 50);
+scene.add(sunLight);
+
+// ==================== INFINITE TRACK SYSTEM ====================
+// Train stays at origin, track chunks scroll backward
+// Chunks seamlessly tile - each chunk's end matches next chunk's start
+
+const CHUNK_LEN = 4000; // 4km per chunk - longer = gentler curves
+
+// PHYSICS: At 6000 km/h = 1667 m/s
+// For sine wave track: x = A × sin(2πz/λ)
+// Curvature κ = A × (2π/λ)² × sin(...)
+// Centripetal accel = v² × κ
+// Jerk (da/dt) = v³ × A × (2π/λ)³ × cos(...)
+//
+// For max ±0.05g and max jerk 0.3 g/s at 1667 m/s:
+// Amplitude must be ~2-3cm with 4km wavelength!
+
+const SAFE_AMPLITUDE = 0.025; // 2.5 centimeters! Nearly perfectly straight
+
+// Generate a seamless track segment
+function generateChunkPoints(startZ, seed) {
+  const pts = [];
+  const SEGS = 80;
+  
+  for (let i = 0; i <= SEGS; i++) {
+    const t = i / SEGS;
+    const z = startZ + t * CHUNK_LEN;
+    
+    // Use global z for seamless tiling
+    const globalPhase = z / CHUNK_LEN;
+    const x = Math.sin(globalPhase * Math.PI * 2) * SAFE_AMPLITUDE;
+    const y = Math.cos(globalPhase * Math.PI * 2) * SAFE_AMPLITUDE * 0.5 + 5;
+    
+    pts.push(new THREE.Vector3(x, y, z));
+  }
+  return pts;
+}
+
+// Track chunk class
+class TrackChunk {
+  constructor(startZ) {
+    this.startZ = startZ;
+    this.group = new THREE.Group();
+    this.build();
+  }
+  
+  build() {
+    // Clear old geometry
+    while (this.group.children.length) {
+      const child = this.group.children[0];
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) child.material.dispose();
+      this.group.remove(child);
+    }
+    
+    const pts = generateChunkPoints(this.startZ, 0);
+    const curve = new THREE.CatmullRomCurve3(pts);
+    
+    // Tube
+    const tubeGeo = new THREE.TubeGeometry(curve, 80, SCIENCE.tubeDiameter / 2 + 0.5, 10, false);
+    const tubeMat = new THREE.MeshPhongMaterial({
+      color: 0x102030, transparent: true, opacity: 0.25,
+      side: THREE.DoubleSide, emissive: 0x001020, emissiveIntensity: 0.2
+    });
+    this.group.add(new THREE.Mesh(tubeGeo, tubeMat));
+    
+    // Rail
+    const railGeo = new THREE.TubeGeometry(curve, 80, 0.4, 6, false);
+    const railMat = new THREE.MeshStandardMaterial({ color: 0x555555, metalness: 0.8, roughness: 0.3 });
+    this.group.add(new THREE.Mesh(railGeo, railMat));
+    
+    // Rings
+    const ringMat = new THREE.MeshStandardMaterial({ color: 0x1a3050, metalness: 0.6, roughness: 0.4 });
+    for (let i = 0; i <= 80; i += 8) {
+      const t = i / 80;
+      const p = curve.getPoint(t);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(SCIENCE.tubeDiameter / 2 + 0.15, 0.08, 6, 16), ringMat);
+      ring.position.copy(p);
+      const tan = curve.getTangent(t);
+      ring.lookAt(p.clone().add(tan));
+      this.group.add(ring);
+    }
+  }
+  
+  // Move chunk to new start position and rebuild
+  moveTo(newStartZ) {
+    this.startZ = newStartZ;
+    this.build();
+  }
+  
+  // Shift chunk's position (scrolling)
+  shift(deltaZ) {
+    this.group.position.z += deltaZ;
+  }
+  
+  // Get current effective z range
+  getRange() {
+    return {
+      start: this.startZ + this.group.position.z,
+      end: this.startZ + CHUNK_LEN + this.group.position.z
+    };
+  }
+}
+
+// Create chunks
+const chunks = [];
+for (let i = -1; i < 3; i++) { // 4 chunks: one behind, three ahead
+  const chunk = new TrackChunk(i * CHUNK_LEN);
+  chunks.push(chunk);
+  scene.add(chunk.group);
+}
+
+// World scroll offset (how far we've scrolled)
+let worldScroll = 0;
+let lastWorldScroll = 0;
+
+// Get track position at given z (after scroll)
+function getTrackPosition(z) {
+  const globalZ = z + worldScroll;
+  const globalPhase = globalZ / CHUNK_LEN;
+  const x = Math.sin(globalPhase * Math.PI * 2) * SAFE_AMPLITUDE;
+  const y = Math.cos(globalPhase * Math.PI * 2) * SAFE_AMPLITUDE * 0.5 + 5;
+  
+  // Tangent (derivative)
+  const dPhase = Math.PI * 2 / CHUNK_LEN;
+  const tx = Math.cos(globalPhase * Math.PI * 2) * SAFE_AMPLITUDE * dPhase;
+  const ty = -Math.sin(globalPhase * Math.PI * 2) * SAFE_AMPLITUDE * 0.5 * dPhase;
+  const tz = 1;
+  const len = Math.sqrt(tx*tx + ty*ty + tz*tz);
+  
+  return {
+    pos: new THREE.Vector3(x, y, z),
+    tan: new THREE.Vector3(tx/len, ty/len, tz/len)
+  };
+}
+
+// Calculate g-force AND jerk (rate of g-force change)
+function calculate3DGForceAndJerk(speedKmh, dt) {
+  const speedMs = speedKmh / 3.6;
+  const globalPhase = worldScroll / CHUNK_LEN;
+  const omega = Math.PI * 2 / CHUNK_LEN; // angular frequency
+  
+  // Second derivative of position (curvature)
+  // For x = A*sin(ωz): d²x/dz² = -A*ω²*sin(ωz)
+  // For y = A*cos(ωz): d²y/dz² = -A*ω²*cos(ωz)
+  const d2x = -Math.sin(globalPhase * Math.PI * 2) * SAFE_AMPLITUDE * omega * omega;
+  const d2y = -Math.cos(globalPhase * Math.PI * 2) * SAFE_AMPLITUDE * 0.5 * omega * omega;
+  
+  // Centripetal acceleration = v² * curvature
+  const ax = speedMs * speedMs * d2x;
+  const ay = speedMs * speedMs * d2y;
+  
+  // G-force components
+  const gLateral = -ax / 9.81;
+  const gVertical = 1.0 - ay / 9.81;
+  
+  // Third derivative (jerk in space) = rate of curvature change
+  // d³x/dz³ = -A*ω³*cos(ωz)
+  // d³y/dz³ = A*ω³*sin(ωz)
+  const d3x = -Math.cos(globalPhase * Math.PI * 2) * SAFE_AMPLITUDE * omega * omega * omega;
+  const d3y = Math.sin(globalPhase * Math.PI * 2) * SAFE_AMPLITUDE * 0.5 * omega * omega * omega;
+  
+  // Jerk = v³ * d³pos/dz³ (rate of acceleration change)
+  const jerkX = speedMs * speedMs * speedMs * d3x / 9.81; // in g/s
+  const jerkY = speedMs * speedMs * speedMs * d3y / 9.81;
+  const jerkMag = Math.sqrt(jerkX * jerkX + jerkY * jerkY);
+  
+  return {
+    lateral: gLateral,
+    vertical: gVertical,
+    longitudinal: 0,
+    total: Math.sqrt(gLateral * gLateral + gVertical * gVertical),
+    jerkLateral: jerkX,
+    jerkVertical: jerkY,
+    jerkTotal: jerkMag
+  };
+}
+
+// Update chunks - recycle ones that scroll behind camera
+function updateChunks() {
+  // Find chunk most behind and most ahead
+  let minChunk = chunks[0], maxChunk = chunks[0];
+  for (const c of chunks) {
+    const range = c.getRange();
+    if (range.end < minChunk.getRange().end) minChunk = c;
+    if (range.start > maxChunk.getRange().start) maxChunk = c;
+  }
+  
+  // If the back chunk is far behind, move it to front
+  if (minChunk.getRange().end < -CHUNK_LEN) {
+    const newStart = maxChunk.startZ + CHUNK_LEN;
+    minChunk.moveTo(newStart);
+    minChunk.group.position.z = -worldScroll;
+  }
+}
+
+// Tube geometry now handled by TrackChunk class above
+
+// ==================== TRAIN ====================
+const train = new THREE.Group();
+const bodyMat = new THREE.MeshStandardMaterial({ color: 0xf0f0f0, metalness: 0.6, roughness: 0.3 });
+const stripeMat = new THREE.MeshStandardMaterial({ color: 0x0066cc, metalness: 0.8, roughness: 0.2 });
+
+// Nose
+const nose = new THREE.Mesh(new THREE.ConeGeometry(1.4, 18, 12), bodyMat);
+nose.rotation.x = -Math.PI / 2;
+nose.position.z = 14;
+train.add(nose);
+
+// Capsules
+for (let i = 0; i < 3; i++) {
+  const capsule = new THREE.Mesh(new THREE.CylinderGeometry(1.35, 1.35, 22, 16), bodyMat);
+  capsule.rotation.x = Math.PI / 2;
+  capsule.position.z = -i * 24;
+  train.add(capsule);
+  
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(2.75, 0.1, 22), stripeMat);
+  stripe.position.set(0, 1.3, -i * 24);
+  train.add(stripe);
+}
+
+// Maglev coils
+const coilMat = new THREE.MeshStandardMaterial({ color: 0x00aaff, emissive: 0x004488, emissiveIntensity: 0.5 });
+for (let i = 0; i < 8; i++) {
+  const coil = new THREE.Mesh(new THREE.TorusGeometry(1.45, 0.06, 8, 24), coilMat);
+  coil.position.z = 8 - i * 10;
+  coil.rotation.y = Math.PI / 2;
+  train.add(coil);
+}
+
+scene.add(train);
+
+// ==================== BIOME OBJECTS ====================
+const biomeObjects = new THREE.Group();
+scene.add(biomeObjects);
+
+// Materials for different biomes
+const materials = {
+  building: new THREE.MeshLambertMaterial({ color: 0x606070 }),
+  skyscraper: new THREE.MeshLambertMaterial({ color: 0x404550 }),
+  tree: new THREE.MeshLambertMaterial({ color: 0x2a5525 }),
+  field: new THREE.MeshLambertMaterial({ color: 0x4a7540 }),
+  rock: new THREE.MeshLambertMaterial({ color: 0x3a4550 }),
+  kelp: new THREE.MeshLambertMaterial({ color: 0x1a4030, transparent: true, opacity: 0.7 }),
+  coral: new THREE.MeshLambertMaterial({ color: 0x6a3040 }),
+  vent: new THREE.MeshLambertMaterial({ color: 0x2a2015, emissive: 0x331100, emissiveIntensity: 0.5 }),
+  biolum: new THREE.MeshBasicMaterial({ color: 0x00ffaa }),
+  house: new THREE.MeshLambertMaterial({ color: 0x8a7060 }),
+  lava: new THREE.MeshBasicMaterial({ color: 0xff4400 }),
+};
+
+let currentBiome = null;
+let seed = 1;
+const rand = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+
+function generateBiomeObjects(biomeKey, centerZ) {
+  // Clear old objects
+  while (biomeObjects.children.length > 0) {
+    const child = biomeObjects.children[0];
+    if (child.geometry) child.geometry.dispose();
+    if (child.material) child.material.dispose();
+    biomeObjects.remove(child);
+  }
+  
+  // Reset position when regenerating
+  biomeObjects.position.z = 0;
+  
+  const biome = BIOMES[biomeKey];
+  if (!biome) return;
+  
+  seed = Math.floor(worldScroll || 0);
+  
+  // Ground plane - extends far ahead (12km visible)
+  const groundGeo = new THREE.PlaneGeometry(600, 14000);
+  const groundMat = new THREE.MeshLambertMaterial({ color: biome.groundColor });
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.set(0, -20, 5000); // Centered ahead of train
+  biomeObjects.add(ground);
+  
+  // Generate features along the track (from behind to far ahead)
+  const features = biome.features;
+  
+  for (let i = 0; i < 200; i++) {
+    const z = -1000 + rand() * 12000; // From behind to far ahead
+    const side = rand() > 0.5 ? 1 : -1;
+    const dist = 15 + rand() * 80;
+    const x = side * dist;
+    
+    if (features.includes('buildings') && rand() > 0.6) {
+      const h = 15 + rand() * 40;
+      const w = 8 + rand() * 12;
+      const bld = new THREE.Mesh(new THREE.BoxGeometry(w, h, w * 0.8), materials.building);
+      bld.position.set(x, h/2 - 15, z);
+      biomeObjects.add(bld);
+    }
+    
+    if (features.includes('skyscrapers') && rand() > 0.7) {
+      const h = 50 + rand() * 150;
+      const w = 15 + rand() * 20;
+      const sky = new THREE.Mesh(new THREE.BoxGeometry(w, h, w * 0.6), materials.skyscraper);
+      sky.position.set(x, h/2 - 15, z);
+      biomeObjects.add(sky);
+    }
+    
+    if (features.includes('trees') && rand() > 0.4) {
+      const tree = new THREE.Group();
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.5, 6, 6), materials.building);
+      trunk.position.y = 3;
+      tree.add(trunk);
+      const leaves = new THREE.Mesh(new THREE.SphereGeometry(3, 6, 5), materials.tree);
+      leaves.position.y = 7;
+      tree.add(leaves);
+      tree.position.set(x, -15, z);
+      biomeObjects.add(tree);
+    }
+    
+    if (features.includes('houses') && rand() > 0.5) {
+      const h = 6 + rand() * 4;
+      const house = new THREE.Mesh(new THREE.BoxGeometry(10, h, 12), materials.house);
+      house.position.set(x, h/2 - 15, z);
+      biomeObjects.add(house);
+    }
+    
+    if (features.includes('kelp') && rand() > 0.5) {
+      const h = 10 + rand() * 20;
+      const kelp = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.4, h, 5), materials.kelp);
+      kelp.position.set(x, h/2 - 15, z);
+      kelp.rotation.x = (rand() - 0.5) * 0.3;
+      biomeObjects.add(kelp);
+    }
+    
+    if (features.includes('rocks') && rand() > 0.6) {
+      const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(2 + rand() * 4), materials.rock);
+      rock.position.set(x, -15, z);
+      rock.rotation.set(rand(), rand(), rand());
+      biomeObjects.add(rock);
+    }
+    
+    if (features.includes('vents') && rand() > 0.85) {
+      const vent = new THREE.Mesh(new THREE.ConeGeometry(3, 8, 8), materials.vent);
+      vent.position.set(x, -11, z);
+      biomeObjects.add(vent);
+      
+      // Smoke particles
+      for (let p = 0; p < 5; p++) {
+        const smoke = new THREE.Mesh(new THREE.SphereGeometry(0.5 + rand()), 
+          new THREE.MeshBasicMaterial({ color: 0x222222, transparent: true, opacity: 0.4 }));
+        smoke.position.set(x + (rand()-0.5)*2, -5 + rand() * 10, z + (rand()-0.5)*2);
+        biomeObjects.add(smoke);
+      }
+    }
+    
+    if (features.includes('bioluminescence') && rand() > 0.7) {
+      const glow = new THREE.Mesh(new THREE.SphereGeometry(0.3 + rand() * 0.5), materials.biolum);
+      glow.position.set(x + (rand()-0.5) * 20, -10 + rand() * 25, z);
+      biomeObjects.add(glow);
+    }
+    
+    if (features.includes('lava_glow') && rand() > 0.9) {
+      const lava = new THREE.Mesh(new THREE.PlaneGeometry(5 + rand() * 10, 5 + rand() * 10), materials.lava);
+      lava.rotation.x = -Math.PI / 2;
+      lava.position.set(x, -19, z);
+      biomeObjects.add(lava);
+      
+      // Glow light
+      const glow = new THREE.PointLight(0xff4400, 0.5, 30);
+      glow.position.set(x, -15, z);
+      biomeObjects.add(glow);
+    }
+    
+    if (features.includes('fish') && rand() > 0.8) {
+      const fish = new THREE.Mesh(new THREE.ConeGeometry(0.3, 1, 4), 
+        new THREE.MeshLambertMaterial({ color: 0x8888aa }));
+      fish.rotation.z = Math.PI / 2;
+      fish.position.set(x * 0.3, -5 + rand() * 15, z);
+      biomeObjects.add(fish);
+    }
+  }
+  
+  currentBiome = biomeKey;
+}
+
+// ==================== STATE ====================
+const state = {
+  t: 0,
+  speed: 0,
+  power: 0,
+  brake: 0,
+  camMode: 0,
+  lastSpeed: 0
+};
+
+const keys = {};
+addEventListener('keydown', e => {
+  keys[e.key.toLowerCase()] = true;
+  if (e.key === 'c') state.camMode = (state.camMode + 1) % 3;
+});
+addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+// ==================== ANIMATION ====================
+let lastTime = performance.now();
+let frameTime = 16, fps = 60;
+let pred = {};
+
+function animate() {
+  requestAnimationFrame(animate);
+  
+  const now = performance.now();
+  const dt = Math.min((now - lastTime) / 1000, 0.1);
+  lastTime = now;
+  frameTime = frameTime * 0.9 + (1000 / Math.max(1, 1/dt)) * 0.1;
+
+  // Input
+  if (keys['w'] || keys['arrowup']) {
+    state.power = Math.min(1, state.power + dt * 1.5);
+    state.brake = 0;
+  } else state.power = Math.max(0, state.power - dt * 0.5);
+  
+  if (keys['s'] || keys['arrowdown']) {
+    state.brake = Math.min(1, state.brake + dt * 2);
+    state.power = 0;
+  } else state.brake = Math.max(0, state.brake - dt * 0.8);
+
+  // Physics
+  const accel = state.power * SCIENCE.maxAcceleration * 9.81 * 1.5;
+  const braking = state.brake * SCIENCE.maxDeceleration * 9.81 * 1.2;
+  const drag = 0.0000001 * state.speed * state.speed;
+  state.speed = Math.max(0, Math.min(SCIENCE.maxSpeed, state.speed + (accel - braking - drag) * dt * 3.6));
+  
+  // Longitudinal g-force (from acceleration/braking)
+  const longG = Math.abs(state.speed - state.lastSpeed) / (dt * 3.6) / 9.81;
+  state.lastSpeed = state.speed;
+
+  // Scroll the world backward (train stays near z=0)
+  const metersPerSecond = state.speed / 3.6;
+  const scrollDelta = -metersPerSecond * dt;
+  
+  // Update world scroll total
+  worldScroll += metersPerSecond * dt;
+  
+  // Scroll all chunks backward
+  for (const chunk of chunks) {
+    chunk.shift(scrollDelta);
+  }
+  
+  // Recycle chunks that go too far behind
+  updateChunks();
+  
+  // Journey progress for waypoints/biomes
+  const journeyMeters = SCIENCE.totalDistance * 1000;
+  const journeyProgress = (worldScroll % journeyMeters) / journeyMeters;
+  const km = journeyProgress * SCIENCE.totalDistance;
+  const wp = getWaypoint(km);
+  
+  // Train position - always at z=0, but follows track shape
+  const trackData = getTrackPosition(0);
+  const pos = trackData.pos;
+  const tan = trackData.tan;
+  
+  // Calculate g-force AND jerk
+  const curveG = calculate3DGForceAndJerk(state.speed, dt);
+  
+  // Add longitudinal g from acceleration/braking
+  const accelG = longG * (state.power > state.brake ? 1 : -1);
+  const totalLongG = curveG.longitudinal + accelG;
+  
+  // Total felt g-force magnitude
+  const totalGMag = Math.sqrt(
+    curveG.lateral * curveG.lateral + 
+    curveG.vertical * curveG.vertical + 
+    totalLongG * totalLongG
+  );
+  
+  train.position.copy(pos);
+  train.rotation.y = Math.atan2(tan.x, tan.z);
+
+  // Update biome if changed
+  if (wp.biome !== currentBiome) {
+    generateBiomeObjects(wp.biome, 0);
+    const biome = BIOMES[wp.biome];
+    scene.background.setHex(biome.skyColor);
+    scene.fog.color.setHex(biome.fogColor);
+    ambient.intensity = biome.ambient;
+  }
+  
+  // Scroll biome objects with world
+  biomeObjects.position.z += scrollDelta;
+  
+  // Regenerate biome objects if scrolled too far behind
+  if (biomeObjects.position.z < -6000) {
+    generateBiomeObjects(wp.biome, 0);
+  }
+  
+  // Neural network
+  pred = nn.update({ biome: wp.biome, frameTime, speed: state.speed });
+  scene.fog.density = pred.fogDensity;
+
+  // Camera - train is always near z=0, so no discontinuities
+  const speedRatio = state.speed / SCIENCE.maxSpeed;
+  camera.fov = 75 + speedRatio * 25;
+  camera.updateProjectionMatrix();
+
+  let targetCamPos, lookAtPos;
+  
+  if (state.camMode === 0) {
+    // Cab view - inside train looking forward
+    targetCamPos = pos.clone().add(tan.clone().multiplyScalar(8));
+    targetCamPos.y += 0.5;
+    lookAtPos = pos.clone().add(tan.clone().multiplyScalar(200));
+  } else if (state.camMode === 1) {
+    // Chase view - behind train
+    targetCamPos = pos.clone().add(tan.clone().multiplyScalar(-25));
+    targetCamPos.y += 5;
+    lookAtPos = pos.clone().add(tan.clone().multiplyScalar(50));
+  } else {
+    // Side view
+    const side = new THREE.Vector3(-tan.z, 0, tan.x).normalize().multiplyScalar(12);
+    targetCamPos = pos.clone().add(side);
+    targetCamPos.y += 3;
+    lookAtPos = pos.clone();
+  }
+  
+  // Smooth follow - no snapping needed since train never teleports
+  camera.position.lerp(targetCamPos, 0.08);
+  
+  if (!camera.userData.lookTarget) camera.userData.lookTarget = lookAtPos.clone();
+  camera.userData.lookTarget.lerp(lookAtPos, 0.1);
+  camera.lookAt(camera.userData.lookTarget);
+
+  tubeLight.position.copy(pos);
+  
+  // Effects
+  document.getElementById('tunnel-effect').style.opacity = 0.2 + speedRatio * 0.5;
+
+  // HUD
+  const speedEl = document.getElementById('speed-value');
+  speedEl.textContent = Math.round(state.speed);
+  speedEl.className = state.speed >= 6000 ? 'hyper' : state.speed >= 4000 ? 'vfast' : state.speed >= 2000 ? 'fast' : '';
+  
+  document.getElementById('mach').textContent = `MACH ${(state.speed / 1235).toFixed(2)}`;
+  document.getElementById('location').textContent = wp.name;
+  document.getElementById('subtitle').textContent = `${wp.lat.toFixed(2)}°N, ${Math.abs(wp.lon).toFixed(2)}°W`;
+  document.getElementById('dist').textContent = Math.round(km).toLocaleString();
+  
+  const remaining = SCIENCE.totalDistance - km;
+  const etaMins = state.speed > 100 ? remaining / state.speed * 60 : 999;
+  document.getElementById('eta').textContent = etaMins < 999 ? 
+    `${Math.floor(etaMins)}:${String(Math.floor((etaMins % 1) * 60)).padStart(2, '0')}` : '--:--';
+  
+  // Tech panel
+  document.getElementById('vacuum').textContent = (99.97 - speedRatio * 0.02).toFixed(2) + '%';
+  document.getElementById('pressure').textContent = (0.03 + speedRatio * 0.01).toFixed(3) + ' kPa';
+  document.getElementById('mag-field').textContent = (2.4 + speedRatio * 0.8).toFixed(1) + ' T';
+  
+  // Acceleration g-force (from throttle/brake)
+  const gEl = document.getElementById('gforce');
+  gEl.textContent = longG.toFixed(2) + ' g';
+  gEl.className = 'val' + (longG > 0.8 ? ' danger' : longG > 0.4 ? ' warn' : '');
+  
+  // Lateral g-force (from horizontal curves)
+  const latEl = document.getElementById('gforce-lat');
+  latEl.textContent = curveG.lateral.toFixed(3) + ' g';
+  latEl.className = 'val' + (Math.abs(curveG.lateral) > 0.3 ? ' danger' : Math.abs(curveG.lateral) > 0.1 ? ' warn' : '');
+  
+  // Vertical g-force (1.0 = normal gravity)
+  const vertEl = document.getElementById('gforce-vert');
+  vertEl.textContent = curveG.vertical.toFixed(3) + ' g';
+  vertEl.className = 'val' + (curveG.vertical < 0.7 || curveG.vertical > 1.3 ? ' danger' : 
+                              curveG.vertical < 0.9 || curveG.vertical > 1.1 ? ' warn' : '');
+  
+  // Total g-force magnitude (should stay close to 1.0)
+  const totalEl = document.getElementById('gforce-total');
+  totalEl.textContent = totalGMag.toFixed(3) + ' g';
+  totalEl.className = 'val' + (totalGMag < 0.7 || totalGMag > 1.5 ? ' danger' : 
+                               totalGMag < 0.85 || totalGMag > 1.15 ? ' warn' : '');
+  
+  // Jerk (rate of g-force change) - should stay under 0.5 g/s for comfort
+  const jerkEl = document.getElementById('jerk');
+  jerkEl.textContent = curveG.jerkTotal.toFixed(3) + ' g/s';
+  jerkEl.className = 'val' + (curveG.jerkTotal > 1.0 ? ' danger' : 
+                              curveG.jerkTotal > 0.5 ? ' warn' : '');
+  
+  document.getElementById('power-draw').textContent = Math.round(state.speed * SCIENCE.powerPerKmh) + ' MW';
+  
+  // Minimum curve radius at current speed for 0.1g max deviation
+  // r = v² / a where a = 0.1 * 9.81 m/s²
+  const currentSpeedMs = state.speed / 3.6;
+  const minRadius = (currentSpeedMs * currentSpeedMs) / (0.1 * 9.81) / 1000; // in km
+  document.getElementById('curve-radius').textContent = minRadius > 1 ? Math.round(minRadius) + ' km' : '< 1 km';
+  
+  // Biome panel
+  const biome = BIOMES[wp.biome];
+  document.getElementById('biome-name').textContent = biome.name;
+  document.getElementById('biome-desc').innerHTML = biome.desc;
+  document.getElementById('depth-display').textContent = wp.depth >= 0 ? 
+    `Altitude: +${Math.round(-wp.depth)}m` : `Depth: ${Math.round(wp.depth)}m`;
+  
+  // NN panel
+  document.getElementById('nn-lod').textContent = pred.lod;
+  document.getElementById('nn-range').textContent = Math.round(pred.renderDist) + 'm';
+  document.getElementById('nn-mods').textContent = pred.selfMods;
+  document.getElementById('nn-score').textContent = pred.bestScore.toFixed(2);
+  document.getElementById('nn-expert').textContent = pred.expert;
+  document.getElementById('nn-nas').textContent = pred.nasPhase;
+  
+  // Map
+  drawMap(km);
+
+  renderer.render(scene, camera);
+}
+
+// Initialize - train starts at z=0
+const startTrack = getTrackPosition(0);
+camera.position.set(startTrack.pos.x, startTrack.pos.y + 5, startTrack.pos.z - 20);
+camera.userData.lookTarget = startTrack.pos.clone().add(startTrack.tan.clone().multiplyScalar(100));
+camera.lookAt(camera.userData.lookTarget);
+generateBiomeObjects('urban_uk', 0);
+drawMap(0);
+animate();
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+console.log('%c🚄 TRANSATLANTIC VACTRAIN 2065', 'font-size: 20px; color: #0af;');
+console.log('%cTamworth UK → NYC with 8 distinct biomes', 'font-size: 14px; color: #0fa;');
+console.log('%c⚠️ PHYSICS: G-force AND Jerk calculations', 'font-size: 11px; color: #fa0;');
+console.log('%c   G-force: centripetal acceleration from curves = v² × curvature', 'font-size: 10px; color: #888;');
+console.log('%c   Jerk: rate of g-force change = v³ × d(curvature)/dz', 'font-size: 10px; color: #888;');
+console.log('%c   At 6000 km/h, for safe jerk (<0.5 g/s): amplitude must be ~2.5cm!', 'font-size: 10px; color: #888;');
+console.log('%c   Track is essentially PERFECTLY STRAIGHT at hypersonic speeds', 'font-size: 10px; color: #888;');
+  </script>
+</body>
+</html>
