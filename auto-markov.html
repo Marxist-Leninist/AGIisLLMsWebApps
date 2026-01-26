@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auto-Learning Markov</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            min-height: 100vh;
+            background: #0a0a0f;
+            color: #e0e0e0;
+            font-family: 'Consolas', monospace;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #00ffaa;
+            margin-bottom: 5px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .stats {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat {
+            background: #12121a;
+            border: 1px solid #2a2a3a;
+            border-radius: 6px;
+            padding: 15px 20px;
+            text-align: center;
+            flex: 1;
+        }
+
+        .stat-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #00ffaa;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: #666;
+        }
+
+        .chat-box {
+            background: #12121a;
+            border: 1px solid #2a2a3a;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        input {
+            width: 100%;
+            background: #0a0a0f;
+            border: 2px solid #2a2a3a;
+            border-radius: 6px;
+            color: #fff;
+            padding: 15px;
+            font-family: inherit;
+            font-size: 16px;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #00ffaa;
+        }
+
+        .response {
+            background: #0a0a0f;
+            border: 1px solid #2a2a3a;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 15px;
+            min-height: 60px;
+        }
+
+        .response-label {
+            color: #00ffaa;
+            font-size: 11px;
+            margin-bottom: 8px;
+        }
+
+        .response-text {
+            color: #fff;
+            font-size: 15px;
+            line-height: 1.5;
+        }
+
+        .chain-box {
+            background: #12121a;
+            border: 1px solid #2a2a3a;
+            border-radius: 8px;
+            padding: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .chain-box h2 {
+            color: #00ffaa;
+            font-size: 13px;
+            margin-bottom: 12px;
+        }
+
+        .chain-entry {
+            padding: 6px 10px;
+            margin: 3px 0;
+            background: #0a0a0f;
+            border-radius: 4px;
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .chain-key { color: #ffaa00; }
+        .chain-arrow { color: #444; margin: 0 8px; }
+        .chain-values { color: #00aaff; }
+
+        .info {
+            background: #0f1a0f;
+            border: 1px solid #00ffaa;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 20px;
+            font-size: 12px;
+            color: #88ffaa;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧠 Auto-Learning Markov</h1>
+        <p class="subtitle">Type anything → learns it → generates response from what it learned</p>
+
+        <div class="info">
+            Every message you type gets added to the chain. The more you type, the smarter it gets. It learns your patterns.
+        </div>
+
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-value" id="states">0</div>
+                <div class="stat-label">States</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="transitions">0</div>
+                <div class="stat-label">Transitions</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="words">0</div>
+                <div class="stat-label">Words Learned</div>
+            </div>
+        </div>
+
+        <div class="chat-box">
+            <input type="text" id="input" placeholder="Type anything and press Enter..." autofocus>
+            <div class="response">
+                <div class="response-label">📎 Response:</div>
+                <div class="response-text" id="response">Start typing! I'll learn from everything you say.</div>
+            </div>
+        </div>
+
+        <div class="chain-box">
+            <h2>🔗 Learned Chain (newest first)</h2>
+            <div id="chain"></div>
+        </div>
+    </div>
+
+    <script>
+        // Super simple auto-learning Markov chain
+        // Every input: 1) adds to chain 2) generates response
+
+        let chain = {};  // "word1 word2" → {word3: count, word4: count}
+        let totalWords = 0;
+        const N = 2;  // bigram
+
+        function tokenize(text) {
+            return text.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/).filter(w => w);
+        }
+
+        // Learn from text
+        function learn(text) {
+            const words = tokenize(text);
+            if (words.length <= N) return;
+
+            for (let i = 0; i <= words.length - N - 1; i++) {
+                const key = words.slice(i, i + N).join(' ');
+                const next = words[i + N];
+
+                if (!chain[key]) chain[key] = {};
+                if (!chain[key][next]) chain[key][next] = 0;
+                chain[key][next]++;
+            }
+
+            totalWords += words.length;
+        }
+
+        // Generate response
+        function generate(seed, maxLen = 20) {
+            const words = tokenize(seed);
+            const keys = Object.keys(chain);
+            
+            if (keys.length === 0) return "I need more input to learn from!";
+
+            // Find starting point
+            let start = null;
+            
+            // Try to find key containing seed words
+            for (const word of words) {
+                for (const key of keys) {
+                    if (key.includes(word)) {
+                        start = key;
+                        break;
+                    }
+                }
+                if (start) break;
+            }
+
+            // Random start if nothing found
+            if (!start) start = keys[Math.floor(Math.random() * keys.length)];
+
+            // Generate
+            const output = start.split(' ');
+
+            for (let i = 0; i < maxLen; i++) {
+                const key = output.slice(-N).join(' ');
+                const options = chain[key];
+                if (!options) break;
+
+                // Weighted random pick
+                let total = 0;
+                for (const w in options) total += options[w];
+                let r = Math.random() * total;
+                
+                for (const w in options) {
+                    r -= options[w];
+                    if (r <= 0) {
+                        output.push(w);
+                        break;
+                    }
+                }
+            }
+
+            return output.join(' ');
+        }
+
+        // Process input
+        function process() {
+            const input = document.getElementById('input').value.trim();
+            if (!input) return;
+
+            // LEARN from input
+            learn(input);
+
+            // GENERATE response
+            const response = generate(input);
+            document.getElementById('response').textContent = response;
+
+            document.getElementById('input').value = '';
+            updateUI();
+        }
+
+        // Update display
+        function updateUI() {
+            const states = Object.keys(chain).length;
+            let trans = 0;
+            for (const k in chain) trans += Object.keys(chain[k]).length;
+
+            document.getElementById('states').textContent = states;
+            document.getElementById('transitions').textContent = trans;
+            document.getElementById('words').textContent = totalWords;
+
+            // Show chain (newest = added most recently, but we'll show all sorted)
+            const chainEl = document.getElementById('chain');
+            
+            if (states === 0) {
+                chainEl.innerHTML = '<div style="color:#555;padding:20px;text-align:center">No patterns yet</div>';
+                return;
+            }
+
+            let html = '';
+            const entries = Object.entries(chain).slice(-30).reverse();
+            
+            for (const [key, vals] of entries) {
+                const valStr = Object.entries(vals)
+                    .sort((a,b) => b[1] - a[1])
+                    .map(([w,c]) => `${w}(${c})`)
+                    .join(', ');
+                
+                html += `<div class="chain-entry">
+                    <span class="chain-key">"${key}"</span>
+                    <span><span class="chain-arrow">→</span> <span class="chain-values">${valStr}</span></span>
+                </div>`;
+            }
+
+            if (states > 30) {
+                html += `<div style="color:#555;padding:10px;text-align:center">...${states - 30} more</div>`;
+            }
+
+            chainEl.innerHTML = html;
+        }
+
+        // Enter to send
+        document.getElementById('input').addEventListener('keydown', e => {
+            if (e.key === 'Enter') process();
+        });
+
+        updateUI();
+    </script>
+</body>
+</html>

@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3-Layer Cognitive Architecture v2</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            min-height: 100vh;
+            background: #08080c;
+            color: #e0e0e0;
+            font-family: 'Consolas', monospace;
+            padding: 15px;
+        }
+
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { color: #fff; margin-bottom: 5px; font-size: 1.5em; }
+        .subtitle { color: #666; margin-bottom: 15px; font-size: 12px; }
+
+        .top-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .btn-green { background: #00ff88; color: #000; }
+        .btn-blue { background: #0088ff; color: #fff; }
+        .btn-purple { background: #aa55ff; color: #fff; }
+        .btn-gray { background: #333; color: #fff; }
+        .btn:hover { opacity: 0.8; }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 12px;
+        }
+
+        .layer {
+            background: #0d0d12;
+            border: 2px solid #222;
+            border-radius: 8px;
+            padding: 12px;
+            transition: all 0.3s;
+        }
+
+        .layer.active { 
+            box-shadow: 0 0 30px rgba(0,255,136,0.4);
+        }
+
+        .layer-1 { border-color: #ff6600; }
+        .layer-1.active { box-shadow: 0 0 30px rgba(255,102,0,0.4); }
+        .layer-2 { border-color: #00aaff; }
+        .layer-2.active { box-shadow: 0 0 30px rgba(0,170,255,0.4); }
+        .layer-3 { border-color: #aa55ff; }
+        .layer-3.active { box-shadow: 0 0 30px rgba(170,85,255,0.4); }
+
+        .layer h2 {
+            font-size: 12px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .layer-1 h2 { color: #ff6600; }
+        .layer-2 h2 { color: #00aaff; }
+        .layer-3 h2 { color: #aa55ff; }
+
+        .layer-badge {
+            font-size: 9px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            background: #222;
+        }
+
+        .stats-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .stat {
+            background: #08080c;
+            padding: 8px;
+            border-radius: 4px;
+            text-align: center;
+            flex: 1;
+        }
+
+        .stat-value { font-size: 1.2em; font-weight: bold; }
+        .stat-label { font-size: 9px; color: #666; }
+        .layer-1 .stat-value { color: #ff6600; }
+        .layer-2 .stat-value { color: #00aaff; }
+        .layer-3 .stat-value { color: #aa55ff; }
+
+        .layer-content {
+            background: #08080c;
+            border-radius: 4px;
+            padding: 8px;
+            max-height: 180px;
+            overflow-y: auto;
+            font-size: 11px;
+        }
+
+        .rule-item, .chain-item, .pattern-item {
+            padding: 5px 8px;
+            margin: 3px 0;
+            border-radius: 3px;
+            background: #111;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .rule-item { border-left: 3px solid #ff6600; }
+        .chain-item { border-left: 3px solid #00aaff; }
+        .pattern-item { border-left: 3px solid #aa55ff; }
+
+        .item-key { color: #ffaa00; }
+        .item-arrow { color: #444; margin: 0 5px; }
+        .item-value { color: #88ff88; }
+        .item-score { 
+            color: #000; 
+            background: #00ff88; 
+            padding: 2px 5px; 
+            border-radius: 3px; 
+            font-size: 9px;
+            font-weight: bold;
+        }
+
+        .chat-panel {
+            grid-column: 1 / -1;
+            background: #0d0d12;
+            border: 2px solid #00ff88;
+            border-radius: 8px;
+            padding: 12px;
+        }
+
+        .chat-panel h2 { color: #00ff88; font-size: 12px; margin-bottom: 10px; }
+
+        .chat-input-row {
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input-row input {
+            flex: 1;
+            background: #08080c;
+            border: 1px solid #333;
+            border-radius: 4px;
+            color: #fff;
+            padding: 12px;
+            font-family: inherit;
+            font-size: 14px;
+        }
+
+        .chat-input-row input:focus { outline: none; border-color: #00ff88; }
+
+        .response-box {
+            background: #08080c;
+            border-radius: 4px;
+            padding: 12px;
+            margin-top: 10px;
+        }
+
+        .response-meta {
+            font-size: 10px;
+            color: #666;
+            margin-bottom: 8px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .layer-badge-response {
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-weight: bold;
+            font-size: 10px;
+        }
+
+        .layer-badge-response.l1 { background: #ff6600; color: #000; }
+        .layer-badge-response.l2 { background: #00aaff; color: #000; }
+        .layer-badge-response.l3 { background: #aa55ff; color: #fff; }
+
+        .response-text { color: #fff; font-size: 14px; line-height: 1.5; }
+
+        .feedback-row {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #222;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .feedback-row span { font-size: 11px; color: #666; }
+
+        .feedback-btn {
+            padding: 5px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+
+        .feedback-btn.good { background: #00ff88; color: #000; }
+        .feedback-btn.bad { background: #ff4444; color: #fff; }
+
+        .log-panel {
+            grid-column: 1 / -1;
+            background: #0d0d12;
+            border: 1px solid #222;
+            border-radius: 8px;
+            padding: 12px;
+        }
+
+        .log-panel h2 { color: #666; font-size: 11px; margin-bottom: 8px; }
+
+        .log {
+            background: #08080c;
+            border-radius: 4px;
+            padding: 8px;
+            height: 100px;
+            overflow-y: auto;
+            font-size: 10px;
+        }
+
+        .log-entry { padding: 2px 0; }
+        .log-entry.l1 { color: #ff6600; }
+        .log-entry.l2 { color: #00aaff; }
+        .log-entry.l3 { color: #aa55ff; }
+        .log-entry.promote { color: #00ff88; font-weight: bold; }
+        .log-entry.train { color: #ffaa00; }
+        .log-entry.info { color: #666; }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.show { display: flex; }
+
+        .modal-content {
+            background: #0d0d12;
+            border: 2px solid #00ff88;
+            border-radius: 8px;
+            padding: 20px;
+            width: 90%;
+            max-width: 600px;
+        }
+
+        .modal h3 { color: #00ff88; margin-bottom: 15px; }
+
+        .modal textarea {
+            width: 100%;
+            height: 300px;
+            background: #08080c;
+            border: 1px solid #333;
+            border-radius: 4px;
+            color: #0f0;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 11px;
+        }
+
+        .modal-buttons { margin-top: 15px; display: flex; gap: 10px; }
+
+        .confidence-bar {
+            height: 4px;
+            background: #222;
+            border-radius: 2px;
+            margin-top: 5px;
+            overflow: hidden;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            transition: width 0.3s;
+        }
+
+        .confidence-fill.high { background: #00ff88; }
+        .confidence-fill.med { background: #ffaa00; }
+        .confidence-fill.low { background: #ff4444; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧠 3-Layer Cognitive Architecture v2</h1>
+        <p class="subtitle">L3 Transformer = Router + Responder + Promoter | Training from feedback</p>
+
+        <div class="top-bar">
+            <button class="btn btn-green" onclick="saveState()">💾 Save</button>
+            <button class="btn btn-blue" onclick="loadState()">📂 Load</button>
+            <button class="btn btn-gray" onclick="resetAll()">🗑️ Reset</button>
+            <span style="color:#666;font-size:11px;padding:8px;">👍/👎 feedback trains the system</span>
+        </div>
+
+        <div class="main-grid">
+            <!-- Layer 1: Symbolic -->
+            <div class="layer layer-1" id="layer1">
+                <h2>⚡ L1: SYMBOLIC <span class="layer-badge">0ms</span></h2>
+                <div class="stats-row">
+                    <div class="stat">
+                        <div class="stat-value" id="l1-rules">0</div>
+                        <div class="stat-label">Rules</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="l1-hits">0</div>
+                        <div class="stat-label">Hits</div>
+                    </div>
+                </div>
+                <div class="layer-content" id="l1-content">
+                    <div style="color:#555;text-align:center;padding:15px;">Promoted rules appear here</div>
+                </div>
+            </div>
+
+            <!-- Layer 2: Markov -->
+            <div class="layer layer-2" id="layer2">
+                <h2>🔗 L2: MARKOV <span class="layer-badge">~1ms</span></h2>
+                <div class="stats-row">
+                    <div class="stat">
+                        <div class="stat-value" id="l2-states">0</div>
+                        <div class="stat-label">States</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="l2-hits">0</div>
+                        <div class="stat-label">Hits</div>
+                    </div>
+                </div>
+                <div class="layer-content" id="l2-content">
+                    <div style="color:#555;text-align:center;padding:15px;">Markov chains build here</div>
+                </div>
+            </div>
+
+            <!-- Layer 3: Transformer -->
+            <div class="layer layer-3" id="layer3">
+                <h2>🤖 L3: TRANSFORMER <span class="layer-badge">router+responder</span></h2>
+                <div class="stats-row">
+                    <div class="stat">
+                        <div class="stat-value" id="l3-vocab">0</div>
+                        <div class="stat-label">Vocab</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="l3-promoted">0</div>
+                        <div class="stat-label">Promoted</div>
+                    </div>
+                </div>
+                <div class="layer-content" id="l3-content">
+                    <div style="color:#555;text-align:center;padding:15px;">Embeddings + attention here</div>
+                </div>
+                <div style="margin-top:8px;font-size:10px;color:#666;">
+                    Routing confidence:
+                    <div class="confidence-bar">
+                        <div class="confidence-fill high" id="l3-confidence" style="width:0%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Panel -->
+            <div class="chat-panel">
+                <h2>💬 Chat</h2>
+                <div class="chat-input-row">
+                    <input type="text" id="input" placeholder="Type anything..." autofocus>
+                    <button class="btn btn-green" onclick="process()">Send</button>
+                </div>
+                <div class="response-box">
+                    <div class="response-meta" id="response-meta">
+                        <span>Waiting...</span>
+                    </div>
+                    <div class="response-text" id="response">Type something to start!</div>
+                    <div class="feedback-row" id="feedback-row" style="display:none;">
+                        <span>Was this good?</span>
+                        <button class="feedback-btn good" onclick="feedback(1)">👍 Good</button>
+                        <button class="feedback-btn bad" onclick="feedback(-1)">👎 Bad</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Log -->
+            <div class="log-panel">
+                <h2>📜 System Log</h2>
+                <div class="log" id="log"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div class="modal" id="modal">
+        <div class="modal-content">
+            <h3 id="modal-title">State</h3>
+            <textarea id="modal-text"></textarea>
+            <div class="modal-buttons">
+                <button class="btn btn-green" onclick="modalAction()">Action</button>
+                <button class="btn btn-gray" onclick="closeModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // =============================================
+        // 3-LAYER COGNITIVE ARCHITECTURE v2
+        // L3 = Router + Responder + Promoter
+        // =============================================
+
+        // === STATE ===
+        let state = {
+            // L1: Symbolic rules
+            l1: {
+                rules: {},      // pattern → { response, score, hits }
+                hits: 0
+            },
+            
+            // L2: Markov chain
+            l2: {
+                chain: {},      // "w1 w2" → { w3: count }
+                hits: 0
+            },
+            
+            // L3: Tiny transformer
+            l3: {
+                // Word embeddings (co-occurrence vectors)
+                embeddings: {},  // word → { coword: count }
+                
+                // Attention patterns (what predicts what)
+                attention: {},   // input_pattern → { response_pattern: score }
+                
+                // Training data
+                examples: [],    // { input, response, layer, feedback }
+                
+                promoted: 0
+            },
+            
+            lastInteraction: null
+        };
+
+        const NGRAM = 2;
+        const PROMOTE_THRESHOLD = 0.7;  // confidence threshold
+        const MIN_EXAMPLES = 3;         // min examples before promoting
+
+        // === DOM ===
+        const inputEl = document.getElementById('input');
+        const responseEl = document.getElementById('response');
+        const responseMetaEl = document.getElementById('response-meta');
+        const logEl = document.getElementById('log');
+
+        // === UTILS ===
+        function log(msg, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logEl.insertBefore(entry, logEl.firstChild);
+        }
+
+        function tokenize(text) {
+            return text.toLowerCase()
+                .replace(/([+\-*/=<>!?.,])/g, ' $1 ')
+                .split(/\s+/)
+                .filter(w => w.length > 0);
+        }
+
+        // === L1: SYMBOLIC ===
+        function l1Check(input) {
+            const tokens = tokenize(input);
+            const inputLower = input.toLowerCase();
+            
+            let bestMatch = null;
+            let bestScore = 0;
+            
+            for (const pattern in state.l1.rules) {
+                const rule = state.l1.rules[pattern];
+                
+                // Exact contains
+                if (inputLower.includes(pattern)) {
+                    const score = pattern.length / inputLower.length;
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestMatch = { pattern, ...rule };
+                    }
+                }
+            }
+            
+            if (bestMatch && bestScore > 0.3) {
+                state.l1.hits++;
+                state.l1.rules[bestMatch.pattern].hits++;
+                return { match: true, response: bestMatch.response, confidence: bestScore, pattern: bestMatch.pattern };
+            }
+            
+            return { match: false, confidence: 0 };
+        }
+
+        // === L2: MARKOV ===
+        function l2Learn(text) {
+            const words = tokenize(text);
+            if (words.length <= NGRAM) return;
+
+            for (let i = 0; i <= words.length - NGRAM - 1; i++) {
+                const key = words.slice(i, i + NGRAM).join(' ');
+                const next = words[i + NGRAM];
+                if (!state.l2.chain[key]) state.l2.chain[key] = {};
+                if (!state.l2.chain[key][next]) state.l2.chain[key][next] = 0;
+                state.l2.chain[key][next]++;
+            }
+        }
+
+        function l2Generate(seed, maxLen = 15) {
+            const words = tokenize(seed);
+            const keys = Object.keys(state.l2.chain);
+            if (keys.length < 3) return { response: null, confidence: 0 };
+
+            // Find best starting key
+            let start = null;
+            let startScore = 0;
+            
+            for (const word of words) {
+                for (const key of keys) {
+                    if (key.includes(word)) {
+                        const score = word.length / key.length;
+                        if (score > startScore) {
+                            start = key;
+                            startScore = score;
+                        }
+                    }
+                }
+            }
+
+            if (!start) {
+                start = keys[Math.floor(Math.random() * keys.length)];
+                startScore = 0.1;
+            }
+
+            const output = start.split(' ');
+            let totalProb = 0;
+            let steps = 0;
+
+            for (let i = 0; i < maxLen; i++) {
+                const key = output.slice(-NGRAM).join(' ');
+                const options = state.l2.chain[key];
+                if (!options) break;
+
+                let total = 0;
+                for (const w in options) total += options[w];
+                let r = Math.random() * total;
+                
+                for (const w in options) {
+                    r -= options[w];
+                    if (r <= 0) {
+                        output.push(w);
+                        totalProb += options[w] / total;
+                        steps++;
+                        break;
+                    }
+                }
+            }
+
+            const confidence = steps > 0 ? (totalProb / steps) * startScore : 0;
+            state.l2.hits++;
+            
+            return { response: output.join(' '), confidence: Math.min(confidence, 0.8) };
+        }
+
+        // === L3: TINY TRANSFORMER ===
+        
+        // Update embeddings (word co-occurrence)
+        function l3UpdateEmbeddings(text) {
+            const words = tokenize(text);
+            const window = 3;  // context window
+            
+            for (let i = 0; i < words.length; i++) {
+                const word = words[i];
+                if (!state.l3.embeddings[word]) state.l3.embeddings[word] = {};
+                
+                // Look at surrounding words
+                for (let j = Math.max(0, i - window); j < Math.min(words.length, i + window + 1); j++) {
+                    if (i !== j) {
+                        const coword = words[j];
+                        if (!state.l3.embeddings[word][coword]) state.l3.embeddings[word][coword] = 0;
+                        state.l3.embeddings[word][coword]++;
+                    }
+                }
+            }
+        }
+
+        // Update attention (input → response patterns)
+        function l3UpdateAttention(input, response, feedback) {
+            const inputKey = tokenize(input).slice(0, 3).join(' ');
+            const responseKey = tokenize(response).slice(0, 3).join(' ');
+            
+            if (!state.l3.attention[inputKey]) state.l3.attention[inputKey] = {};
+            if (!state.l3.attention[inputKey][responseKey]) {
+                state.l3.attention[inputKey][responseKey] = { score: 0, count: 0 };
+            }
+            
+            const att = state.l3.attention[inputKey][responseKey];
+            att.count++;
+            att.score += feedback * 0.1;  // adjust by feedback
+            att.score = Math.max(-1, Math.min(1, att.score));  // clamp
+        }
+
+        // L3 routing decision
+        function l3Route(input) {
+            const l1Result = l1Check(input);
+            const l2Result = l2Generate(input);
+            
+            // Calculate routing scores
+            const l1Score = l1Result.confidence;
+            const l2Score = l2Result.confidence;
+            const l3Score = l3Confidence(input);
+            
+            log(`Routing: L1=${l1Score.toFixed(2)} L2=${l2Score.toFixed(2)} L3=${l3Score.toFixed(2)}`, 'l3');
+            
+            // Update confidence bar
+            const maxConf = Math.max(l1Score, l2Score, l3Score);
+            const confBar = document.getElementById('l3-confidence');
+            confBar.style.width = (maxConf * 100) + '%';
+            confBar.className = 'confidence-fill ' + (maxConf > 0.6 ? 'high' : maxConf > 0.3 ? 'med' : 'low');
+            
+            // Route to highest confidence
+            if (l1Score > 0.4 && l1Score >= l2Score) {
+                return { layer: 1, response: l1Result.response, confidence: l1Score };
+            }
+            
+            if (l2Score > 0.3 && l2Result.response) {
+                return { layer: 2, response: l2Result.response, confidence: l2Score };
+            }
+            
+            // L3 generates
+            return { layer: 3, response: l3Generate(input), confidence: l3Score };
+        }
+
+        // L3 confidence based on similar past examples
+        function l3Confidence(input) {
+            const inputTokens = tokenize(input);
+            let totalSim = 0;
+            let count = 0;
+            
+            for (const ex of state.l3.examples) {
+                const exTokens = tokenize(ex.input);
+                const overlap = inputTokens.filter(t => exTokens.includes(t)).length;
+                const sim = overlap / Math.max(inputTokens.length, exTokens.length);
+                
+                if (sim > 0.3) {
+                    totalSim += sim * (ex.feedback > 0 ? 1 : 0.5);
+                    count++;
+                }
+            }
+            
+            return count > 0 ? Math.min(totalSim / count, 0.9) : 0.1;
+        }
+
+        // L3 generate response (using embeddings + attention)
+        function l3Generate(input) {
+            const inputTokens = tokenize(input);
+            const inputKey = inputTokens.slice(0, 3).join(' ');
+            
+            // Check attention for learned response
+            if (state.l3.attention[inputKey]) {
+                let bestResp = null;
+                let bestScore = -Infinity;
+                
+                for (const respKey in state.l3.attention[inputKey]) {
+                    const att = state.l3.attention[inputKey][respKey];
+                    if (att.score > bestScore && att.count >= 2) {
+                        bestScore = att.score;
+                        bestResp = respKey;
+                    }
+                }
+                
+                if (bestResp && bestScore > 0) {
+                    return bestResp + "...";  // indicate it's learned
+                }
+            }
+            
+            // Fallback: find similar words from embeddings
+            const related = [];
+            for (const word of inputTokens) {
+                if (state.l3.embeddings[word]) {
+                    const cowords = Object.entries(state.l3.embeddings[word])
+                        .sort((a, b) => b[1] - a[1])
+                        .slice(0, 3)
+                        .map(([w]) => w);
+                    related.push(...cowords);
+                }
+            }
+            
+            if (related.length > 0) {
+                const unique = [...new Set(related)].slice(0, 5);
+                return unique.join(' ') + "?";
+            }
+            
+            return "I'm still learning... keep talking to me!";
+        }
+
+        // L3 check for promotions
+        function l3CheckPromotions() {
+            // Find patterns with high positive feedback
+            for (const inputKey in state.l3.attention) {
+                // Skip if already in L1
+                if (state.l1.rules[inputKey]) continue;
+                
+                for (const respKey in state.l3.attention[inputKey]) {
+                    const att = state.l3.attention[inputKey][respKey];
+                    
+                    if (att.count >= MIN_EXAMPLES && att.score >= PROMOTE_THRESHOLD) {
+                        // PROMOTE TO L1!
+                        state.l1.rules[inputKey] = {
+                            response: respKey,
+                            score: att.score,
+                            hits: 0
+                        };
+                        state.l3.promoted++;
+                        log(`⬆️ PROMOTED: "${inputKey}" → "${respKey}"`, 'promote');
+                    }
+                }
+            }
+        }
+
+        // === MAIN PROCESS ===
+        function process() {
+            const input = inputEl.value.trim();
+            if (!input) return;
+
+            // L3 routes the request
+            const result = l3Route(input);
+            
+            // Always learn
+            l2Learn(input);
+            l3UpdateEmbeddings(input);
+            
+            // Store for feedback
+            state.lastInteraction = {
+                input,
+                response: result.response,
+                layer: result.layer
+            };
+            
+            // Add to examples (neutral feedback initially)
+            state.l3.examples.push({
+                input,
+                response: result.response,
+                layer: result.layer,
+                feedback: 0,
+                time: Date.now()
+            });
+            
+            // Keep examples bounded
+            if (state.l3.examples.length > 100) {
+                state.l3.examples = state.l3.examples.slice(-100);
+            }
+
+            // Display
+            responseEl.textContent = result.response;
+            
+            const layerNames = ['', 'L1 SYMBOLIC', 'L2 MARKOV', 'L3 TRANSFORMER'];
+            responseMetaEl.innerHTML = `
+                <span class="layer-badge-response l${result.layer}">${layerNames[result.layer]}</span>
+                <span>confidence: ${(result.confidence * 100).toFixed(0)}%</span>
+            `;
+            
+            document.getElementById('feedback-row').style.display = 'flex';
+            
+            // Highlight active layer
+            document.querySelectorAll('.layer').forEach(l => l.classList.remove('active'));
+            document.getElementById(`layer${result.layer}`).classList.add('active');
+            
+            log(`[L${result.layer}] "${input}" → "${result.response.substring(0, 30)}..."`, `l${result.layer}`);
+
+            inputEl.value = '';
+            updateUI();
+        }
+
+        // === FEEDBACK ===
+        function feedback(value) {
+            if (!state.lastInteraction) return;
+            
+            const { input, response, layer } = state.lastInteraction;
+            
+            // Update the last example's feedback
+            if (state.l3.examples.length > 0) {
+                state.l3.examples[state.l3.examples.length - 1].feedback = value;
+            }
+            
+            // Update attention weights
+            l3UpdateAttention(input, response, value);
+            
+            // Check for promotions
+            l3CheckPromotions();
+            
+            log(`Feedback: ${value > 0 ? '👍' : '👎'} for "${input.substring(0, 20)}..."`, 'train');
+            
+            document.getElementById('feedback-row').style.display = 'none';
+            updateUI();
+        }
+
+        // === UI UPDATE ===
+        function updateUI() {
+            // L1
+            document.getElementById('l1-rules').textContent = Object.keys(state.l1.rules).length;
+            document.getElementById('l1-hits').textContent = state.l1.hits;
+            
+            const l1Content = document.getElementById('l1-content');
+            const l1Rules = Object.entries(state.l1.rules);
+            if (l1Rules.length === 0) {
+                l1Content.innerHTML = '<div style="color:#555;text-align:center;padding:15px;">Promoted rules appear here</div>';
+            } else {
+                l1Content.innerHTML = l1Rules.map(([k, v]) => `
+                    <div class="rule-item">
+                        <span><span class="item-key">"${k}"</span><span class="item-arrow">→</span><span class="item-value">"${v.response}"</span></span>
+                        <span class="item-score">${v.hits} hits</span>
+                    </div>
+                `).join('');
+            }
+
+            // L2
+            document.getElementById('l2-states').textContent = Object.keys(state.l2.chain).length;
+            document.getElementById('l2-hits').textContent = state.l2.hits;
+            
+            const l2Content = document.getElementById('l2-content');
+            const l2Chains = Object.entries(state.l2.chain).slice(-15);
+            if (l2Chains.length === 0) {
+                l2Content.innerHTML = '<div style="color:#555;text-align:center;padding:15px;">Markov chains build here</div>';
+            } else {
+                l2Content.innerHTML = l2Chains.map(([k, v]) => {
+                    const vals = Object.entries(v).slice(0, 3).map(([w, c]) => `${w}(${c})`).join(', ');
+                    return `<div class="chain-item"><span class="item-key">"${k}"</span><span class="item-arrow">→</span><span class="item-value">${vals}</span></div>`;
+                }).join('');
+            }
+
+            // L3
+            document.getElementById('l3-vocab').textContent = Object.keys(state.l3.embeddings).length;
+            document.getElementById('l3-promoted').textContent = state.l3.promoted;
+            
+            const l3Content = document.getElementById('l3-content');
+            const attentions = Object.entries(state.l3.attention).slice(-10);
+            if (attentions.length === 0) {
+                l3Content.innerHTML = '<div style="color:#555;text-align:center;padding:15px;">Embeddings + attention here</div>';
+            } else {
+                l3Content.innerHTML = attentions.map(([k, v]) => {
+                    const best = Object.entries(v).sort((a, b) => b[1].score - a[1].score)[0];
+                    if (!best) return '';
+                    return `<div class="pattern-item">
+                        <span><span class="item-key">"${k}"</span><span class="item-arrow">→</span><span class="item-value">"${best[0]}"</span></span>
+                        <span class="item-score">${best[1].score.toFixed(2)}</span>
+                    </div>`;
+                }).join('');
+            }
+        }
+
+        // === SAVE/LOAD ===
+        let modalMode = 'save';
+
+        function saveState() {
+            document.getElementById('modal-title').textContent = '💾 Save State';
+            document.getElementById('modal-text').value = JSON.stringify(state, null, 2);
+            document.getElementById('modal-text').readOnly = true;
+            modalMode = 'save';
+            document.getElementById('modal').classList.add('show');
+        }
+
+        function loadState() {
+            document.getElementById('modal-title').textContent = '📂 Load State';
+            document.getElementById('modal-text').value = '';
+            document.getElementById('modal-text').readOnly = false;
+            modalMode = 'load';
+            document.getElementById('modal').classList.add('show');
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.remove('show');
+        }
+
+        function modalAction() {
+            if (modalMode === 'save') {
+                const json = document.getElementById('modal-text').value;
+                const blob = new Blob([json], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `cognitive-${new Date().toISOString().slice(0, 10)}.json`;
+                a.click();
+            } else {
+                try {
+                    state = JSON.parse(document.getElementById('modal-text').value);
+                    updateUI();
+                    log('State loaded!', 'promote');
+                } catch (e) {
+                    alert('Invalid JSON: ' + e.message);
+                    return;
+                }
+            }
+            closeModal();
+        }
+
+        function resetAll() {
+            if (confirm('Reset everything?')) {
+                state = {
+                    l1: { rules: {}, hits: 0 },
+                    l2: { chain: {}, hits: 0 },
+                    l3: { embeddings: {}, attention: {}, examples: [], promoted: 0 },
+                    lastInteraction: null
+                };
+                updateUI();
+                log('Reset complete', 'info');
+            }
+        }
+
+        // === INIT ===
+        inputEl.addEventListener('keydown', e => {
+            if (e.key === 'Enter') process();
+        });
+
+        updateUI();
+        log('3-Layer Architecture v2 ready', 'info');
+        log('L3 = Router + Responder + Promoter', 'l3');
+    </script>
+</body>
+</html>

@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Markov Clippy - Symbolic + Statistical AI</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            min-height: 100vh;
+            background: #0a0a0f;
+            color: #e0e0e0;
+            font-family: 'Consolas', 'Monaco', monospace;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #00ffaa;
+            margin-bottom: 5px;
+            font-size: 1.8em;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 20px;
+            font-size: 0.9em;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .panel {
+            background: #12121a;
+            border: 1px solid #2a2a3a;
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .panel h2 {
+            color: #00ffaa;
+            font-size: 13px;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #2a2a3a;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .full { grid-column: 1 / -1; }
+
+        textarea, input[type="text"] {
+            width: 100%;
+            background: #0a0a0f;
+            border: 1px solid #2a2a3a;
+            border-radius: 6px;
+            color: #fff;
+            padding: 12px;
+            font-family: inherit;
+            font-size: 14px;
+            resize: vertical;
+        }
+
+        textarea:focus, input:focus {
+            outline: none;
+            border-color: #00ffaa;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            background: #00ffaa;
+            color: #000;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: bold;
+            font-size: 13px;
+            margin-top: 10px;
+            margin-right: 8px;
+        }
+
+        .btn:hover { background: #00dd88; }
+        .btn.secondary { background: #333; color: #fff; }
+        .btn.secondary:hover { background: #444; }
+
+        .response-box {
+            background: #0a0a0f;
+            border: 1px solid #2a2a3a;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 12px;
+            min-height: 100px;
+        }
+
+        .response-label {
+            color: #00ffaa;
+            font-size: 11px;
+            margin-bottom: 8px;
+        }
+
+        .response-text {
+            color: #fff;
+            line-height: 1.6;
+            font-size: 15px;
+        }
+
+        .response-meta {
+            color: #555;
+            font-size: 10px;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #1a1a2a;
+        }
+
+        .stats-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .stat {
+            flex: 1;
+            background: #0a0a0f;
+            border: 1px solid #2a2a3a;
+            border-radius: 6px;
+            padding: 12px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #00ffaa;
+        }
+
+        .stat-label {
+            font-size: 10px;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .chain-display {
+            background: #0a0a0f;
+            border: 1px solid #2a2a3a;
+            border-radius: 6px;
+            padding: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-size: 11px;
+        }
+
+        .chain-entry {
+            padding: 4px 8px;
+            margin: 2px 0;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .chain-entry:hover {
+            background: #1a1a2a;
+        }
+
+        .chain-key {
+            color: #ffaa00;
+        }
+
+        .chain-arrow {
+            color: #555;
+            margin: 0 8px;
+        }
+
+        .chain-values {
+            color: #00aaff;
+        }
+
+        .chain-count {
+            color: #555;
+            font-size: 10px;
+        }
+
+        .log {
+            background: #0a0a0f;
+            border: 1px solid #2a2a3a;
+            border-radius: 6px;
+            padding: 10px;
+            height: 150px;
+            overflow-y: auto;
+            font-size: 11px;
+        }
+
+        .log-entry { padding: 3px 0; }
+        .log-entry.learn { color: #ff00ff; }
+        .log-entry.match { color: #00ffaa; }
+        .log-entry.generate { color: #00aaff; }
+        .log-entry.info { color: #666; }
+
+        .mode-toggle {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .mode-btn {
+            flex: 1;
+            padding: 10px;
+            background: #1a1a2a;
+            border: 2px solid #2a2a3a;
+            border-radius: 6px;
+            color: #888;
+            cursor: pointer;
+            text-align: center;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+
+        .mode-btn.active {
+            border-color: #00ffaa;
+            color: #00ffaa;
+            background: #0a1a0f;
+        }
+
+        .mode-btn:hover {
+            border-color: #00ffaa;
+        }
+
+        .example-btns {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 10px;
+        }
+
+        .example-btn {
+            padding: 5px 10px;
+            background: #1a1a2a;
+            border: 1px solid #2a2a3a;
+            border-radius: 4px;
+            color: #888;
+            cursor: pointer;
+            font-size: 11px;
+        }
+
+        .example-btn:hover {
+            border-color: #00ffaa;
+            color: #00ffaa;
+        }
+
+        .training-area {
+            background: #0f0a1a;
+            border: 1px solid #5a2a8a;
+            border-radius: 6px;
+            padding: 12px;
+            margin-top: 12px;
+        }
+
+        .training-area h3 {
+            color: #aa55ff;
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧠 Markov Clippy</h1>
+        <p class="subtitle">Symbolic AI rules + Markov chain learning = emergent smartness</p>
+
+        <div class="stats-row">
+            <div class="stat">
+                <div class="stat-value" id="stat-states">0</div>
+                <div class="stat-label">Markov States</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="stat-transitions">0</div>
+                <div class="stat-label">Transitions</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="stat-words">0</div>
+                <div class="stat-label">Words Learned</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="stat-generated">0</div>
+                <div class="stat-label">Responses Generated</div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <!-- Input Panel -->
+            <div class="panel">
+                <h2>💬 Chat</h2>
+                
+                <div class="mode-toggle">
+                    <div class="mode-btn active" id="mode-chat" onclick="setMode('chat')">Chat Mode</div>
+                    <div class="mode-btn" id="mode-train" onclick="setMode('train')">Train Mode</div>
+                </div>
+
+                <input type="text" id="input" placeholder="Type something...">
+                
+                <div class="example-btns">
+                    <button class="example-btn" onclick="setInput('hello how are you')">hello how are you</button>
+                    <button class="example-btn" onclick="setInput('what is ai')">what is ai</button>
+                    <button class="example-btn" onclick="setInput('tell me a story')">tell me a story</button>
+                    <button class="example-btn" onclick="setInput('i like cats')">i like cats</button>
+                </div>
+
+                <div class="response-box">
+                    <div class="response-label">📎 Markov Clippy says:</div>
+                    <div class="response-text" id="response">Feed me text to learn from, then chat with me!</div>
+                    <div class="response-meta" id="response-meta"></div>
+                </div>
+
+                <div class="training-area">
+                    <h3>📚 Quick Train (paste text here)</h3>
+                    <textarea id="training-text" rows="4" placeholder="Paste any text here and click Train. I'll learn word patterns from it."></textarea>
+                    <button class="btn" onclick="trainFromText()">Train on Text</button>
+                    <button class="btn secondary" onclick="loadSampleCorpus()">Load Sample Corpus</button>
+                </div>
+            </div>
+
+            <!-- Markov Chain Panel -->
+            <div class="panel">
+                <h2>🔗 Markov Chain (n-gram: <span id="ngram-display">2</span>)</h2>
+                
+                <div style="margin-bottom: 10px;">
+                    <label style="font-size: 11px; color: #666;">N-gram size: </label>
+                    <input type="range" id="ngram-slider" min="1" max="4" value="2" onchange="updateNgram(this.value)" style="width: 100px; vertical-align: middle;">
+                    <span style="font-size: 11px; color: #888;">(1=random, 4=more coherent)</span>
+                </div>
+
+                <div class="chain-display" id="chain-display">
+                    <div style="color: #555; text-align: center; padding: 20px;">
+                        No transitions learned yet.<br>Train me with some text!
+                    </div>
+                </div>
+            </div>
+
+            <!-- Log Panel -->
+            <div class="panel full">
+                <h2>📜 Learning Log</h2>
+                <div class="log" id="log"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ================================================
+        // MARKOV CLIPPY
+        // Symbolic AI + Markov Chains = Hybrid Intelligence
+        // ================================================
+
+        // Markov chain storage
+        // Key: n-gram (e.g., "hello world"), Value: {nextWord: count}
+        let markovChain = {};
+        let ngramSize = 2;
+        let totalWords = 0;
+        let generatedCount = 0;
+        let mode = 'chat';
+
+        // DOM elements
+        const inputEl = document.getElementById('input');
+        const responseEl = document.getElementById('response');
+        const responseMetaEl = document.getElementById('response-meta');
+        const logEl = document.getElementById('log');
+        const chainDisplayEl = document.getElementById('chain-display');
+        const trainingTextEl = document.getElementById('training-text');
+
+        // Logging
+        function log(msg, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logEl.insertBefore(entry, logEl.firstChild);
+        }
+
+        // Tokenize text into words
+        function tokenize(text) {
+            return text.toLowerCase()
+                .replace(/[^\w\s']/g, ' ')
+                .split(/\s+/)
+                .filter(w => w.length > 0);
+        }
+
+        // Train markov chain on text
+        function train(text) {
+            const words = tokenize(text);
+            if (words.length <= ngramSize) return 0;
+
+            let transitions = 0;
+
+            for (let i = 0; i <= words.length - ngramSize - 1; i++) {
+                // Create n-gram key
+                const key = words.slice(i, i + ngramSize).join(' ');
+                const nextWord = words[i + ngramSize];
+
+                if (!markovChain[key]) {
+                    markovChain[key] = {};
+                }
+
+                if (!markovChain[key][nextWord]) {
+                    markovChain[key][nextWord] = 0;
+                }
+
+                markovChain[key][nextWord]++;
+                transitions++;
+            }
+
+            totalWords += words.length;
+            return transitions;
+        }
+
+        // Pick next word based on probabilities
+        function pickNext(key) {
+            const options = markovChain[key];
+            if (!options) return null;
+
+            // Calculate total
+            let total = 0;
+            for (const word in options) {
+                total += options[word];
+            }
+
+            // Random weighted selection
+            let rand = Math.random() * total;
+            for (const word in options) {
+                rand -= options[word];
+                if (rand <= 0) return word;
+            }
+
+            // Fallback
+            const keys = Object.keys(options);
+            return keys[Math.floor(Math.random() * keys.length)];
+        }
+
+        // Generate text starting from a seed
+        function generate(seed, maxLength = 30) {
+            const words = tokenize(seed);
+            
+            // If seed is too short, find a random starting point
+            if (words.length < ngramSize) {
+                const keys = Object.keys(markovChain);
+                if (keys.length === 0) return "I need more training data!";
+                
+                // Try to find a key containing any seed word
+                let startKey = null;
+                for (const key of keys) {
+                    for (const word of words) {
+                        if (key.includes(word)) {
+                            startKey = key;
+                            break;
+                        }
+                    }
+                    if (startKey) break;
+                }
+                
+                // Random start if no match
+                if (!startKey) {
+                    startKey = keys[Math.floor(Math.random() * keys.length)];
+                }
+                
+                words.length = 0;
+                words.push(...startKey.split(' '));
+            }
+
+            // Generate!
+            const output = [...words];
+            let iterations = 0;
+
+            while (output.length < maxLength && iterations < maxLength * 2) {
+                iterations++;
+                
+                // Get last n words as key
+                const key = output.slice(-ngramSize).join(' ');
+                const next = pickNext(key);
+                
+                if (!next) break;
+                output.push(next);
+            }
+
+            generatedCount++;
+            return output.join(' ');
+        }
+
+        // Process user input
+        function process() {
+            const input = inputEl.value.trim();
+            if (!input) return;
+
+            if (mode === 'train') {
+                // Training mode - learn from input
+                const transitions = train(input);
+                log(`Trained on ${tokenize(input).length} words, ${transitions} new transitions`, 'learn');
+                responseEl.textContent = `Learned! I found ${transitions} new word patterns in your text.`;
+                responseMetaEl.textContent = `Total states: ${Object.keys(markovChain).length}`;
+            } else {
+                // Chat mode - generate response
+                log(`Input: "${input}"`, 'info');
+                
+                // Also learn from user input (always learning!)
+                const transitions = train(input);
+                if (transitions > 0) {
+                    log(`Also learned ${transitions} patterns from your message`, 'learn');
+                }
+
+                // Generate response
+                const response = generate(input, 25);
+                responseEl.textContent = response;
+                responseMetaEl.textContent = `Generated from ${Object.keys(markovChain).length} states, n-gram=${ngramSize}`;
+                log(`Generated: "${response.substring(0, 50)}..."`, 'generate');
+            }
+
+            inputEl.value = '';
+            updateUI();
+        }
+
+        // Train from textarea
+        function trainFromText() {
+            const text = trainingTextEl.value.trim();
+            if (!text) return;
+
+            const transitions = train(text);
+            const words = tokenize(text).length;
+            
+            log(`Bulk trained on ${words} words, ${transitions} transitions`, 'learn');
+            responseEl.textContent = `Trained on ${words} words! I learned ${transitions} word transition patterns.`;
+            responseMetaEl.textContent = `Total Markov states: ${Object.keys(markovChain).length}`;
+            
+            trainingTextEl.value = '';
+            updateUI();
+        }
+
+        // Load sample corpus
+        function loadSampleCorpus() {
+            const corpus = `
+                Hello there! How are you doing today? I am doing well, thank you for asking.
+                The weather is nice today. I like nice weather because it makes me happy.
+                Artificial intelligence is fascinating. Machine learning helps computers learn from data.
+                Neural networks are inspired by the brain. The brain has many neurons connected together.
+                I like cats and dogs. Cats are furry and dogs are friendly. Both cats and dogs make good pets.
+                Programming is fun. I like to write code that solves problems. Code helps us build amazing things.
+                The quick brown fox jumps over the lazy dog. This sentence contains every letter.
+                Science helps us understand the world. Scientists discover new things every day.
+                Music makes people happy. I like listening to music when I work. Good music inspires creativity.
+                Books contain knowledge and stories. Reading books helps us learn and imagine new worlds.
+                The universe is vast and mysterious. Stars and galaxies fill the cosmic void.
+                Learning new things is exciting. Every day brings opportunities to grow and improve.
+                Friends are important in life. Good friends support each other through difficult times.
+                Technology changes how we live. Computers and phones connect us to the world.
+                Nature is beautiful and complex. Trees, rivers, and mountains inspire wonder and peace.
+            `;
+            
+            trainingTextEl.value = corpus.trim();
+            trainFromText();
+        }
+
+        // Update n-gram size
+        function updateNgram(value) {
+            ngramSize = parseInt(value);
+            document.getElementById('ngram-display').textContent = value;
+            
+            // Clear chain and retrain would be needed for proper update
+            log(`N-gram size changed to ${ngramSize}. Note: existing chain uses old n-gram.`, 'info');
+        }
+
+        // Mode toggle
+        function setMode(m) {
+            mode = m;
+            document.getElementById('mode-chat').classList.toggle('active', m === 'chat');
+            document.getElementById('mode-train').classList.toggle('active', m === 'train');
+            inputEl.placeholder = m === 'chat' ? 'Type something...' : 'Enter text to learn from...';
+        }
+
+        // Set input helper
+        function setInput(text) {
+            inputEl.value = text;
+            inputEl.focus();
+        }
+
+        // Update UI
+        function updateUI() {
+            const states = Object.keys(markovChain).length;
+            let transitions = 0;
+            for (const key in markovChain) {
+                transitions += Object.keys(markovChain[key]).length;
+            }
+
+            document.getElementById('stat-states').textContent = states;
+            document.getElementById('stat-transitions').textContent = transitions;
+            document.getElementById('stat-words').textContent = totalWords;
+            document.getElementById('stat-generated').textContent = generatedCount;
+
+            // Update chain display
+            if (states === 0) {
+                chainDisplayEl.innerHTML = '<div style="color: #555; text-align: center; padding: 20px;">No transitions learned yet.</div>';
+                return;
+            }
+
+            // Show top transitions
+            let html = '';
+            const entries = Object.entries(markovChain).slice(0, 50);
+            
+            for (const [key, values] of entries) {
+                const valueStr = Object.entries(values)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 3)
+                    .map(([w, c]) => `${w}(${c})`)
+                    .join(', ');
+                
+                html += `
+                    <div class="chain-entry">
+                        <span><span class="chain-key">"${key}"</span> <span class="chain-arrow">→</span> <span class="chain-values">${valueStr}</span></span>
+                    </div>
+                `;
+            }
+
+            if (states > 50) {
+                html += `<div style="color: #555; text-align: center; padding: 10px;">...and ${states - 50} more states</div>`;
+            }
+
+            chainDisplayEl.innerHTML = html;
+        }
+
+        // Event listeners
+        inputEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') process();
+        });
+
+        // Initialize
+        log('Markov Clippy ready! Train me with text to learn word patterns.', 'info');
+        updateUI();
+    </script>
+</body>
+</html>

@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meta-Clippy: Self-Modifying Symbolic AI</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            min-height: 100vh;
+            background: #0d1117;
+            color: #c9d1d9;
+            font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .panel {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            background: #21262d;
+            padding: 12px 16px;
+            border-bottom: 1px solid #30363d;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .panel-body {
+            padding: 16px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #58a6ff;
+            margin-bottom: 10px;
+            font-size: 1.5em;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #8b949e;
+            margin-bottom: 20px;
+            font-size: 0.9em;
+        }
+
+        /* Input area */
+        .input-section textarea {
+            width: 100%;
+            height: 120px;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            color: #c9d1d9;
+            padding: 12px;
+            font-family: inherit;
+            font-size: 14px;
+            resize: vertical;
+        }
+
+        .input-section textarea:focus {
+            outline: none;
+            border-color: #58a6ff;
+        }
+
+        .btn-row {
+            display: flex;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            background: #21262d;
+            color: #c9d1d9;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            background: #30363d;
+        }
+
+        .btn.primary {
+            background: #238636;
+            border-color: #238636;
+        }
+
+        .btn.primary:hover {
+            background: #2ea043;
+        }
+
+        .btn.danger {
+            background: #da3633;
+            border-color: #da3633;
+        }
+
+        .btn.learn {
+            background: #8957e5;
+            border-color: #8957e5;
+        }
+
+        /* Rule table */
+        .rule-table {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .rule-entry {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
+
+        .rule-entry.learned {
+            border-color: #8957e5;
+            background: #1a1226;
+        }
+
+        .rule-entry.base {
+            border-color: #30363d;
+        }
+
+        .rule-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+
+        .rule-name {
+            color: #58a6ff;
+            font-weight: 600;
+        }
+
+        .rule-badge {
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            background: #30363d;
+        }
+
+        .rule-badge.learned {
+            background: #8957e5;
+            color: white;
+        }
+
+        .rule-badge.base {
+            background: #238636;
+            color: white;
+        }
+
+        .rule-pattern {
+            color: #7ee787;
+            font-size: 11px;
+            word-break: break-all;
+        }
+
+        .rule-response {
+            color: #8b949e;
+            font-size: 11px;
+            margin-top: 4px;
+        }
+
+        .rule-stats {
+            color: #6e7681;
+            font-size: 10px;
+            margin-top: 6px;
+            display: flex;
+            gap: 10px;
+        }
+
+        /* Log */
+        .log-area {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 12px;
+            height: 300px;
+            overflow-y: auto;
+            font-size: 12px;
+        }
+
+        .log-entry {
+            padding: 4px 0;
+            border-bottom: 1px solid #21262d;
+        }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .log-time {
+            color: #6e7681;
+        }
+
+        .log-match { color: #7ee787; }
+        .log-learn { color: #d2a8ff; }
+        .log-info { color: #8b949e; }
+        .log-warn { color: #d29922; }
+        .log-response { color: #58a6ff; }
+
+        /* Clippy response */
+        .response-area {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 16px;
+            min-height: 100px;
+        }
+
+        .response-area .clippy-says {
+            color: #58a6ff;
+            margin-bottom: 8px;
+        }
+
+        .response-area .response-text {
+            color: #c9d1d9;
+            line-height: 1.5;
+        }
+
+        .response-area .matched-rule {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #30363d;
+            font-size: 11px;
+            color: #8b949e;
+        }
+
+        /* Stats */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .stat-box {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 12px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #58a6ff;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: #8b949e;
+            margin-top: 4px;
+        }
+
+        /* Teaching section */
+        .teach-section {
+            background: #1a1226;
+            border: 1px solid #8957e5;
+            border-radius: 6px;
+            padding: 12px;
+            margin-top: 15px;
+        }
+
+        .teach-section h4 {
+            color: #d2a8ff;
+            margin-bottom: 10px;
+            font-size: 13px;
+        }
+
+        .teach-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .teach-row input {
+            flex: 1;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 4px;
+            color: #c9d1d9;
+            padding: 8px;
+            font-family: inherit;
+            font-size: 12px;
+        }
+
+        .teach-row input:focus {
+            outline: none;
+            border-color: #8957e5;
+        }
+
+        /* Full width panels */
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        /* Pattern suggestions */
+        .pattern-suggestion {
+            background: #21262d;
+            border: 1px dashed #8957e5;
+            border-radius: 6px;
+            padding: 10px;
+            margin-top: 10px;
+        }
+
+        .pattern-suggestion h5 {
+            color: #d2a8ff;
+            font-size: 12px;
+            margin-bottom: 8px;
+        }
+
+        .suggested-pattern {
+            background: #0d1117;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            color: #7ee787;
+            margin: 4px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .suggested-pattern .btn {
+            padding: 4px 8px;
+            font-size: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧠 Meta-Clippy: Self-Modifying Symbolic AI</h1>
+    <p class="subtitle">A symbolic AI that learns by generating its own rules</p>
+
+    <div class="container">
+        <!-- Input Panel -->
+        <div class="panel">
+            <div class="panel-header">📝 Input</div>
+            <div class="panel-body">
+                <div class="input-section">
+                    <textarea id="input" placeholder="Type something... Clippy will try to match rules or learn new ones."></textarea>
+                    <div class="btn-row">
+                        <button class="btn primary" onclick="processInput()">Process</button>
+                        <button class="btn" onclick="document.getElementById('input').value=''">Clear</button>
+                    </div>
+                </div>
+
+                <div class="response-area" style="margin-top: 15px;">
+                    <div class="clippy-says">📎 Clippy says:</div>
+                    <div class="response-text" id="response">I'm ready to learn! Type something and I'll try to match it against my rules. If I can't, teach me!</div>
+                    <div class="matched-rule" id="matched-rule"></div>
+                </div>
+
+                <div class="teach-section">
+                    <h4>🎓 Teach Clippy a New Rule</h4>
+                    <div class="teach-row">
+                        <input type="text" id="teach-pattern" placeholder="Pattern (e.g., 'thank you', 'lol', 'brb')">
+                    </div>
+                    <div class="teach-row">
+                        <input type="text" id="teach-response" placeholder="Response (e.g., 'You're welcome!')">
+                    </div>
+                    <div class="btn-row">
+                        <button class="btn learn" onclick="teachRule()">Teach Rule</button>
+                        <button class="btn" onclick="suggestPatterns()">Auto-Suggest</button>
+                    </div>
+                    <div id="suggestions"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rules Panel -->
+        <div class="panel">
+            <div class="panel-header">📋 Rule Table (<span id="rule-count">0</span> rules)</div>
+            <div class="panel-body">
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="stat-value" id="stat-base">0</div>
+                        <div class="stat-label">Base Rules</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="stat-learned">0</div>
+                        <div class="stat-label">Learned Rules</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="stat-matches">0</div>
+                        <div class="stat-label">Total Matches</div>
+                    </div>
+                </div>
+                <div class="rule-table" id="rule-table"></div>
+            </div>
+        </div>
+
+        <!-- Log Panel -->
+        <div class="panel full-width">
+            <div class="panel-header">🔍 Processing Log</div>
+            <div class="panel-body">
+                <div class="log-area" id="log"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ================================================
+        // META-CLIPPY: SELF-MODIFYING SYMBOLIC AI
+        // ================================================
+
+        // The rule database
+        let rules = [
+            // Base rules (hand-coded)
+            {
+                id: 'greeting_hello',
+                name: 'Hello Greeting',
+                patterns: ['hello', 'hi', 'hey', 'howdy'],
+                response: "Hello! How can I help you today?",
+                type: 'base',
+                matches: 0,
+                created: Date.now()
+            },
+            {
+                id: 'greeting_bye',
+                name: 'Goodbye',
+                patterns: ['bye', 'goodbye', 'see you', 'later'],
+                response: "Goodbye! Have a great day!",
+                type: 'base',
+                matches: 0,
+                created: Date.now()
+            },
+            {
+                id: 'letter_formal',
+                name: 'Formal Letter',
+                patterns: ['dear sir', 'dear madam', 'to whom it may concern'],
+                response: "It looks like you're writing a formal letter! Would you like help with formatting?",
+                type: 'base',
+                matches: 0,
+                created: Date.now()
+            },
+            {
+                id: 'help_request',
+                name: 'Help Request',
+                patterns: ['help', 'how do i', 'how to', 'can you help'],
+                response: "I'd be happy to help! What do you need assistance with?",
+                type: 'base',
+                matches: 0,
+                created: Date.now()
+            },
+            {
+                id: 'thanks',
+                name: 'Thanks',
+                patterns: ['thank you', 'thanks', 'thx', 'ty'],
+                response: "You're welcome! Is there anything else I can help with?",
+                type: 'base',
+                matches: 0,
+                created: Date.now()
+            }
+        ];
+
+        // History of unmatched inputs (for meta-learning)
+        let unmatchedHistory = [];
+        let totalMatches = 0;
+
+        // DOM elements
+        const inputEl = document.getElementById('input');
+        const responseEl = document.getElementById('response');
+        const matchedRuleEl = document.getElementById('matched-rule');
+        const logEl = document.getElementById('log');
+        const ruleTableEl = document.getElementById('rule-table');
+
+        // Logging
+        function log(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            const time = new Date().toLocaleTimeString();
+            entry.innerHTML = `<span class="log-time">[${time}]</span> ${message}`;
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        // Fuzzy matching with Levenshtein distance
+        function levenshtein(a, b) {
+            const matrix = Array(b.length + 1).fill(null).map(() => Array(a.length + 1).fill(null));
+            for (let i = 0; i <= a.length; i++) matrix[0][i] = i;
+            for (let j = 0; j <= b.length; j++) matrix[j][0] = j;
+            for (let j = 1; j <= b.length; j++) {
+                for (let i = 1; i <= a.length; i++) {
+                    const indicator = a[i - 1] === b[j - 1] ? 0 : 1;
+                    matrix[j][i] = Math.min(
+                        matrix[j][i - 1] + 1,
+                        matrix[j - 1][i] + 1,
+                        matrix[j - 1][i - 1] + indicator
+                    );
+                }
+            }
+            return matrix[b.length][a.length];
+        }
+
+        // Calculate similarity (0-1)
+        function similarity(a, b) {
+            const maxLen = Math.max(a.length, b.length);
+            if (maxLen === 0) return 1;
+            return 1 - (levenshtein(a, b) / maxLen);
+        }
+
+        // Process input against rules
+        function processInput() {
+            const input = inputEl.value.trim().toLowerCase();
+            if (!input) return;
+
+            log(`Processing: "${input}"`, 'info');
+
+            let bestMatch = null;
+            let bestScore = 0;
+            let matchedPattern = null;
+
+            // Check each rule
+            for (const rule of rules) {
+                for (const pattern of rule.patterns) {
+                    // Exact match
+                    if (input.includes(pattern.toLowerCase())) {
+                        const score = pattern.length / input.length;
+                        log(`Exact match: "${pattern}" in rule "${rule.name}" (score: ${score.toFixed(2)})`, 'match');
+                        if (score > bestScore) {
+                            bestScore = Math.min(score * 1.5, 1); // Boost exact matches
+                            bestMatch = rule;
+                            matchedPattern = pattern;
+                        }
+                    }
+                    
+                    // Fuzzy match
+                    const sim = similarity(input, pattern.toLowerCase());
+                    if (sim > 0.7 && sim > bestScore) {
+                        log(`Fuzzy match: "${pattern}" ~ "${input}" (similarity: ${sim.toFixed(2)})`, 'match');
+                        bestScore = sim;
+                        bestMatch = rule;
+                        matchedPattern = pattern;
+                    }
+                }
+            }
+
+            if (bestMatch && bestScore > 0.5) {
+                // Found a match!
+                bestMatch.matches++;
+                totalMatches++;
+                
+                responseEl.textContent = bestMatch.response;
+                matchedRuleEl.innerHTML = `Matched: <strong>${bestMatch.name}</strong> (pattern: "${matchedPattern}", score: ${bestScore.toFixed(2)}, type: ${bestMatch.type})`;
+                
+                log(`✓ Response from "${bestMatch.name}": ${bestMatch.response}`, 'response');
+                
+                // META-LEARNING: Auto-add fuzzy matches as new patterns (NO HUMAN NEEDED)
+                if (bestScore < 0.95 && !bestMatch.patterns.includes(input)) {
+                    bestMatch.patterns.push(input);
+                    log(`🧠 AUTO-LEARNED: Added "${input}" as new pattern for "${bestMatch.name}"`, 'learn');
+                }
+            } else {
+                // No match - opportunity to learn!
+                responseEl.textContent = "I don't have a rule for that yet. Would you like to teach me?";
+                matchedRuleEl.innerHTML = `<span style="color: #d29922;">No matching rule found. Teach me below!</span>`;
+                
+                log(`✗ No match found for "${input}"`, 'warn');
+                
+                // Store for pattern analysis
+                unmatchedHistory.push({
+                    input: input,
+                    timestamp: Date.now()
+                });
+                
+                // Auto-fill teach section
+                document.getElementById('teach-pattern').value = input;
+            }
+
+            updateUI();
+        }
+
+        // Suggest adding a pattern to existing rule
+        function suggestAddPattern(rule, pattern) {
+            const suggestionsEl = document.getElementById('suggestions');
+            suggestionsEl.innerHTML = `
+                <div class="pattern-suggestion">
+                    <h5>💡 Meta-Learning Suggestion</h5>
+                    <p style="font-size: 11px; color: #8b949e; margin-bottom: 8px;">
+                        Add "${pattern}" as a new pattern for rule "${rule.name}"?
+                    </p>
+                    <div class="suggested-pattern">
+                        <span>"${pattern}" → ${rule.name}</span>
+                        <button class="btn learn" onclick="addPatternToRule('${rule.id}', '${pattern}')">Add Pattern</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Add pattern to existing rule (META-LEARNING!)
+        function addPatternToRule(ruleId, pattern) {
+            const rule = rules.find(r => r.id === ruleId);
+            if (rule && !rule.patterns.includes(pattern)) {
+                rule.patterns.push(pattern);
+                log(`🧠 META-LEARNED: Added "${pattern}" to rule "${rule.name}"`, 'learn');
+                document.getElementById('suggestions').innerHTML = '';
+                updateUI();
+            }
+        }
+
+        // Teach a completely new rule
+        function teachRule() {
+            const pattern = document.getElementById('teach-pattern').value.trim().toLowerCase();
+            const response = document.getElementById('teach-response').value.trim();
+
+            if (!pattern || !response) {
+                log('Please enter both a pattern and a response', 'warn');
+                return;
+            }
+
+            // Check if pattern already exists
+            for (const rule of rules) {
+                if (rule.patterns.includes(pattern)) {
+                    log(`Pattern "${pattern}" already exists in rule "${rule.name}"`, 'warn');
+                    return;
+                }
+            }
+
+            // Create new rule
+            const newRule = {
+                id: 'learned_' + Date.now(),
+                name: `Learned: ${pattern.substring(0, 20)}${pattern.length > 20 ? '...' : ''}`,
+                patterns: [pattern],
+                response: response,
+                type: 'learned',
+                matches: 0,
+                created: Date.now()
+            };
+
+            rules.push(newRule);
+            log(`🎓 NEW RULE CREATED: "${newRule.name}" with pattern "${pattern}"`, 'learn');
+
+            // Clear inputs
+            document.getElementById('teach-pattern').value = '';
+            document.getElementById('teach-response').value = '';
+            document.getElementById('suggestions').innerHTML = '';
+
+            updateUI();
+        }
+
+        // Analyze unmatched history and suggest patterns
+        function suggestPatterns() {
+            const suggestionsEl = document.getElementById('suggestions');
+            
+            if (unmatchedHistory.length === 0) {
+                suggestionsEl.innerHTML = `
+                    <div class="pattern-suggestion">
+                        <h5>No unmatched inputs yet</h5>
+                        <p style="font-size: 11px; color: #8b949e;">
+                            Type some things that don't match existing rules, and I'll suggest patterns!
+                        </p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Find common patterns in unmatched inputs
+            const wordFreq = {};
+            for (const item of unmatchedHistory) {
+                const words = item.input.split(/\s+/);
+                for (const word of words) {
+                    if (word.length > 2) {
+                        wordFreq[word] = (wordFreq[word] || 0) + 1;
+                    }
+                }
+            }
+
+            // Sort by frequency
+            const sorted = Object.entries(wordFreq).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+            let html = `
+                <div class="pattern-suggestion">
+                    <h5>💡 Auto-Suggested Patterns (from ${unmatchedHistory.length} unmatched inputs)</h5>
+            `;
+
+            for (const [word, count] of sorted) {
+                html += `
+                    <div class="suggested-pattern">
+                        <span>"${word}" (seen ${count}x)</span>
+                        <button class="btn" onclick="document.getElementById('teach-pattern').value='${word}'">Use</button>
+                    </div>
+                `;
+            }
+
+            html += `</div>`;
+            suggestionsEl.innerHTML = html;
+
+            log(`Analyzed ${unmatchedHistory.length} unmatched inputs, found ${sorted.length} pattern suggestions`, 'learn');
+        }
+
+        // META-RULE: Rule that generates rules from patterns! (AUTONOMOUS)
+        function metaGenerateRule() {
+            // Find repeated similar unmatched inputs
+            if (unmatchedHistory.length < 3) return;
+
+            const clusters = [];
+            const used = new Set();
+
+            for (let i = 0; i < unmatchedHistory.length; i++) {
+                if (used.has(i)) continue;
+                
+                const cluster = [unmatchedHistory[i].input];
+                used.add(i);
+
+                for (let j = i + 1; j < unmatchedHistory.length; j++) {
+                    if (used.has(j)) continue;
+                    
+                    if (similarity(unmatchedHistory[i].input, unmatchedHistory[j].input) > 0.6) {
+                        cluster.push(unmatchedHistory[j].input);
+                        used.add(j);
+                    }
+                }
+
+                if (cluster.length >= 2) {
+                    clusters.push(cluster);
+                }
+            }
+
+            // AUTO-GENERATE rules for clusters (NO HUMAN NEEDED!)
+            for (const cluster of clusters) {
+                // Find common substring as the rule "concept"
+                const commonPart = findCommonSubstring(cluster);
+                
+                if (commonPart.length >= 3) {
+                    // Check if rule already exists
+                    const exists = rules.some(r => r.patterns.some(p => cluster.includes(p)));
+                    if (exists) continue;
+
+                    // CREATE NEW RULE AUTOMATICALLY
+                    const newRule = {
+                        id: 'auto_' + Date.now(),
+                        name: `Auto-learned: ${commonPart}`,
+                        patterns: [...cluster],
+                        response: `I noticed you've said things like "${cluster[0]}" - I've learned this pattern but don't know how to respond yet.`,
+                        type: 'learned',
+                        matches: 0,
+                        created: Date.now(),
+                        autoGenerated: true
+                    };
+
+                    rules.push(newRule);
+                    log(`🤖 AUTO-GENERATED RULE: "${newRule.name}" from ${cluster.length} similar inputs: ${cluster.join(', ')}`, 'learn');
+                    
+                    // Clear used items from history
+                    unmatchedHistory = unmatchedHistory.filter(h => !cluster.includes(h.input));
+                    
+                    updateUI();
+                }
+            }
+        }
+
+        // Find common substring between strings
+        function findCommonSubstring(strings) {
+            if (strings.length === 0) return '';
+            if (strings.length === 1) return strings[0];
+            
+            let common = strings[0];
+            for (let i = 1; i < strings.length; i++) {
+                common = longestCommonSubstring(common, strings[i]);
+                if (common.length === 0) break;
+            }
+            return common.trim();
+        }
+
+        function longestCommonSubstring(a, b) {
+            const m = a.length, n = b.length;
+            let longest = '', current = '';
+            
+            for (let i = 0; i < m; i++) {
+                for (let j = 0; j < n; j++) {
+                    current = '';
+                    let x = i, y = j;
+                    while (x < m && y < n && a[x] === b[y]) {
+                        current += a[x];
+                        x++; y++;
+                    }
+                    if (current.length > longest.length) {
+                        longest = current;
+                    }
+                }
+            }
+            return longest;
+        }
+
+        // Update UI
+        function updateUI() {
+            // Update stats
+            const baseRules = rules.filter(r => r.type === 'base').length;
+            const learnedRules = rules.filter(r => r.type === 'learned').length;
+            
+            document.getElementById('rule-count').textContent = rules.length;
+            document.getElementById('stat-base').textContent = baseRules;
+            document.getElementById('stat-learned').textContent = learnedRules;
+            document.getElementById('stat-matches').textContent = totalMatches;
+
+            // Update rule table
+            ruleTableEl.innerHTML = '';
+            
+            // Sort: learned first, then by matches
+            const sortedRules = [...rules].sort((a, b) => {
+                if (a.type !== b.type) return a.type === 'learned' ? -1 : 1;
+                return b.matches - a.matches;
+            });
+
+            for (const rule of sortedRules) {
+                const div = document.createElement('div');
+                div.className = `rule-entry ${rule.type}`;
+                div.innerHTML = `
+                    <div class="rule-header">
+                        <span class="rule-name">${rule.name}</span>
+                        <span class="rule-badge ${rule.type}">${rule.type}</span>
+                    </div>
+                    <div class="rule-pattern">Patterns: ${rule.patterns.map(p => `"${p}"`).join(', ')}</div>
+                    <div class="rule-response">→ ${rule.response}</div>
+                    <div class="rule-stats">
+                        <span>Matches: ${rule.matches}</span>
+                        <span>Patterns: ${rule.patterns.length}</span>
+                    </div>
+                `;
+                ruleTableEl.appendChild(div);
+            }
+        }
+
+        // Initialize
+        log('Meta-Clippy initialized with ' + rules.length + ' base rules', 'info');
+        log('I can learn new rules and add patterns to existing ones!', 'learn');
+        updateUI();
+
+        // Keyboard shortcut
+        inputEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                processInput();
+            }
+        });
+
+        // Run meta-analysis frequently (autonomous learning loop!)
+        setInterval(metaGenerateRule, 3000);
+    </script>
+</body>
+</html>

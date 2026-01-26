@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3-Layer Cognitive Architecture - Real Transformer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            min-height: 100vh;
+            background: #08080c;
+            color: #e0e0e0;
+            font-family: 'Consolas', monospace;
+            padding: 15px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { color: #fff; margin-bottom: 5px; font-size: 1.4em; }
+        .subtitle { color: #666; margin-bottom: 15px; font-size: 11px; }
+        .top-bar { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+        .btn {
+            padding: 8px 15px; border: none; border-radius: 4px;
+            cursor: pointer; font-family: inherit; font-size: 12px; font-weight: bold;
+        }
+        .btn-green { background: #00ff88; color: #000; }
+        .btn-blue { background: #0088ff; color: #fff; }
+        .btn-purple { background: #aa55ff; color: #fff; }
+        .btn-gray { background: #333; color: #fff; }
+        .btn:hover { opacity: 0.8; }
+
+        .main-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+        
+        .layer {
+            background: #0d0d12;
+            border: 2px solid #222;
+            border-radius: 8px;
+            padding: 12px;
+            transition: all 0.3s;
+        }
+        .layer.active { box-shadow: 0 0 30px rgba(0,255,136,0.4); }
+        .layer-1 { border-color: #ff6600; }
+        .layer-1.active { box-shadow: 0 0 30px rgba(255,102,0,0.4); }
+        .layer-2 { border-color: #00aaff; }
+        .layer-2.active { box-shadow: 0 0 30px rgba(0,170,255,0.4); }
+        .layer-3 { border-color: #aa55ff; }
+        .layer-3.active { box-shadow: 0 0 30px rgba(170,85,255,0.4); }
+
+        .layer h2 { font-size: 12px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+        .layer-1 h2 { color: #ff6600; }
+        .layer-2 h2 { color: #00aaff; }
+        .layer-3 h2 { color: #aa55ff; }
+        .layer-badge { font-size: 9px; padding: 2px 6px; border-radius: 3px; background: #222; }
+
+        .stats-row { display: flex; gap: 8px; margin-bottom: 8px; }
+        .stat { background: #08080c; padding: 8px; border-radius: 4px; text-align: center; flex: 1; }
+        .stat-value { font-size: 1.1em; font-weight: bold; }
+        .stat-label { font-size: 9px; color: #666; }
+        .layer-1 .stat-value { color: #ff6600; }
+        .layer-2 .stat-value { color: #00aaff; }
+        .layer-3 .stat-value { color: #aa55ff; }
+
+        .layer-content {
+            background: #08080c; border-radius: 4px; padding: 8px;
+            max-height: 150px; overflow-y: auto; font-size: 10px;
+        }
+
+        .item { padding: 4px 6px; margin: 2px 0; border-radius: 3px; background: #111; }
+        .item-1 { border-left: 3px solid #ff6600; }
+        .item-2 { border-left: 3px solid #00aaff; }
+        .item-3 { border-left: 3px solid #aa55ff; }
+
+        .chat-panel {
+            grid-column: 1 / -1;
+            background: #0d0d12;
+            border: 2px solid #00ff88;
+            border-radius: 8px;
+            padding: 12px;
+        }
+        .chat-panel h2 { color: #00ff88; font-size: 12px; margin-bottom: 10px; }
+        .chat-input-row { display: flex; gap: 10px; }
+        .chat-input-row input {
+            flex: 1; background: #08080c; border: 1px solid #333;
+            border-radius: 4px; color: #fff; padding: 12px;
+            font-family: inherit; font-size: 14px;
+        }
+        .chat-input-row input:focus { outline: none; border-color: #00ff88; }
+
+        .response-box { background: #08080c; border-radius: 4px; padding: 12px; margin-top: 10px; }
+        .response-meta { font-size: 10px; color: #666; margin-bottom: 8px; display: flex; gap: 15px; }
+        .layer-tag { padding: 3px 8px; border-radius: 3px; font-weight: bold; font-size: 10px; }
+        .layer-tag.l1 { background: #ff6600; color: #000; }
+        .layer-tag.l2 { background: #00aaff; color: #000; }
+        .layer-tag.l3 { background: #aa55ff; color: #fff; }
+        .response-text { color: #fff; font-size: 14px; line-height: 1.5; }
+
+        .log-panel { grid-column: 1 / -1; background: #0d0d12; border: 1px solid #222; border-radius: 8px; padding: 12px; }
+        .log-panel h2 { color: #666; font-size: 11px; margin-bottom: 8px; }
+        .log { background: #08080c; border-radius: 4px; padding: 8px; height: 100px; overflow-y: auto; font-size: 10px; }
+        .log-entry { padding: 2px 0; }
+        .log-entry.l1 { color: #ff6600; }
+        .log-entry.l2 { color: #00aaff; }
+        .log-entry.l3 { color: #aa55ff; }
+        .log-entry.train { color: #ffaa00; }
+        .log-entry.promote { color: #00ff88; font-weight: bold; }
+        .log-entry.info { color: #666; }
+
+        .loss-bar { height: 6px; background: #222; border-radius: 3px; margin-top: 8px; overflow: hidden; }
+        .loss-fill { height: 100%; background: #ff4444; transition: width 0.3s; }
+
+        .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 100; align-items: center; justify-content: center; }
+        .modal.show { display: flex; }
+        .modal-content { background: #0d0d12; border: 2px solid #00ff88; border-radius: 8px; padding: 20px; width: 90%; max-width: 600px; }
+        .modal h3 { color: #00ff88; margin-bottom: 15px; }
+        .modal textarea { width: 100%; height: 300px; background: #08080c; border: 1px solid #333; border-radius: 4px; color: #0f0; padding: 10px; font-family: monospace; font-size: 11px; }
+        .modal-buttons { margin-top: 15px; display: flex; gap: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧠 3-Layer Cognitive Architecture - Real Transformer</h1>
+        <p class="subtitle">L1=Symbolic | L2=Markov (default) | L3=Actual Neural Network (trains background, talks when confident)</p>
+
+        <div class="top-bar">
+            <button class="btn btn-green" onclick="saveState()">💾 Save</button>
+            <button class="btn btn-blue" onclick="loadState()">📂 Load</button>
+            <button class="btn btn-purple" onclick="trainStep()">🔥 Train Step</button>
+            <button class="btn btn-gray" onclick="resetAll()">🗑️ Reset</button>
+            <span style="color:#666;font-size:11px;padding:8px;">L3 trains continuously, speaks when loss &lt; 0.5</span>
+        </div>
+
+        <div class="main-grid">
+            <!-- L1: Symbolic -->
+            <div class="layer layer-1" id="layer1">
+                <h2>⚡ L1: SYMBOLIC <span class="layer-badge">instant</span></h2>
+                <div class="stats-row">
+                    <div class="stat"><div class="stat-value" id="l1-rules">0</div><div class="stat-label">Rules</div></div>
+                    <div class="stat"><div class="stat-value" id="l1-hits">0</div><div class="stat-label">Hits</div></div>
+                </div>
+                <div class="layer-content" id="l1-content"><div style="color:#555;text-align:center;padding:10px;">Promoted from L3</div></div>
+            </div>
+
+            <!-- L2: Markov -->
+            <div class="layer layer-2" id="layer2">
+                <h2>🔗 L2: MARKOV <span class="layer-badge">default</span></h2>
+                <div class="stats-row">
+                    <div class="stat"><div class="stat-value" id="l2-states">0</div><div class="stat-label">States</div></div>
+                    <div class="stat"><div class="stat-value" id="l2-hits">0</div><div class="stat-label">Hits</div></div>
+                </div>
+                <div class="layer-content" id="l2-content"><div style="color:#555;text-align:center;padding:10px;">Chains build here</div></div>
+            </div>
+
+            <!-- L3: Real Transformer -->
+            <div class="layer layer-3" id="layer3">
+                <h2>🤖 L3: TRANSFORMER <span class="layer-badge">neural net</span></h2>
+                <div class="stats-row">
+                    <div class="stat"><div class="stat-value" id="l3-vocab">0</div><div class="stat-label">Vocab</div></div>
+                    <div class="stat"><div class="stat-value" id="l3-params">0</div><div class="stat-label">Params</div></div>
+                    <div class="stat"><div class="stat-value" id="l3-epoch">0</div><div class="stat-label">Epochs</div></div>
+                </div>
+                <div class="layer-content" id="l3-content"><div style="color:#555;text-align:center;padding:10px;">Weight matrices here</div></div>
+                <div style="margin-top:8px;font-size:10px;color:#666;">
+                    Loss: <span id="l3-loss">∞</span>
+                    <div class="loss-bar"><div class="loss-fill" id="loss-fill" style="width:100%"></div></div>
+                </div>
+            </div>
+
+            <!-- Chat -->
+            <div class="chat-panel">
+                <h2>💬 Chat</h2>
+                <div class="chat-input-row">
+                    <input type="text" id="input" placeholder="Type anything..." autofocus>
+                    <button class="btn btn-green" onclick="process()">Send</button>
+                </div>
+                <div class="response-box">
+                    <div class="response-meta" id="response-meta"><span>Waiting...</span></div>
+                    <div class="response-text" id="response">Type to start. L2 responds by default. L3 learns in background.</div>
+                </div>
+            </div>
+
+            <!-- Log -->
+            <div class="log-panel">
+                <h2>📜 Log</h2>
+                <div class="log" id="log"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div class="modal" id="modal">
+        <div class="modal-content">
+            <h3 id="modal-title">State</h3>
+            <textarea id="modal-text"></textarea>
+            <div class="modal-buttons">
+                <button class="btn btn-green" onclick="modalAction()">OK</button>
+                <button class="btn btn-gray" onclick="closeModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // =====================================================
+        // 3-LAYER COGNITIVE ARCHITECTURE WITH REAL TRANSFORMER
+        // =====================================================
+
+        // === TINY TRANSFORMER ===
+        class TinyTransformer {
+            constructor(embedDim = 16, vocabSize = 100) {
+                this.embedDim = embedDim;
+                this.maxVocab = vocabSize;
+                this.vocab = {};        // word -> index
+                this.reverseVocab = []; // index -> word
+                this.nextIdx = 0;
+                
+                // Weight matrices (randomly initialized)
+                this.Wembed = null;     // vocab x embedDim
+                this.Wq = null;         // embedDim x embedDim (query)
+                this.Wk = null;         // embedDim x embedDim (key)
+                this.Wv = null;         // embedDim x embedDim (value)
+                this.Wout = null;       // embedDim x vocab (output projection)
+                
+                this.lr = 0.1;          // learning rate
+                this.trainingData = []; // {input: [...], target: [...]}
+                this.loss = Infinity;
+                this.epoch = 0;
+            }
+            
+            // Initialize weights
+            initWeights() {
+                const v = this.reverseVocab.length;
+                const d = this.embedDim;
+                
+                this.Wembed = this.randomMatrix(v, d, 0.5);
+                this.Wq = this.randomMatrix(d, d, 0.5);
+                this.Wk = this.randomMatrix(d, d, 0.5);
+                this.Wv = this.randomMatrix(d, d, 0.5);
+                this.Wout = this.randomMatrix(d, v, 0.5);
+            }
+            
+            randomMatrix(rows, cols, scale = 1.0) {
+                const m = [];
+                for (let i = 0; i < rows; i++) {
+                    m[i] = [];
+                    for (let j = 0; j < cols; j++) {
+                        m[i][j] = (Math.random() - 0.5) * scale;
+                    }
+                }
+                return m;
+            }
+            
+            // Add word to vocab
+            addWord(word) {
+                if (this.vocab[word] === undefined && this.nextIdx < this.maxVocab) {
+                    this.vocab[word] = this.nextIdx;
+                    this.reverseVocab[this.nextIdx] = word;
+                    this.nextIdx++;
+                    return true;
+                }
+                return false;
+            }
+            
+            // Tokenize and ensure vocab
+            tokenize(text) {
+                const words = text.toLowerCase().replace(/[^\w\s]/g, ' ').split(/\s+/).filter(w => w);
+                words.forEach(w => this.addWord(w));
+                return words.map(w => this.vocab[w]).filter(i => i !== undefined);
+            }
+            
+            // Matrix operations
+            matmul(A, B) {
+                const rowsA = A.length, colsA = A[0].length;
+                const colsB = B[0].length;
+                const C = [];
+                for (let i = 0; i < rowsA; i++) {
+                    C[i] = [];
+                    for (let j = 0; j < colsB; j++) {
+                        let sum = 0;
+                        for (let k = 0; k < colsA; k++) {
+                            sum += A[i][k] * B[k][j];
+                        }
+                        C[i][j] = sum;
+                    }
+                }
+                return C;
+            }
+            
+            transpose(M) {
+                const rows = M.length, cols = M[0].length;
+                const T = [];
+                for (let j = 0; j < cols; j++) {
+                    T[j] = [];
+                    for (let i = 0; i < rows; i++) {
+                        T[j][i] = M[i][j];
+                    }
+                }
+                return T;
+            }
+            
+            softmax(arr) {
+                const max = Math.max(...arr);
+                const exps = arr.map(x => Math.exp(x - max));
+                const sum = exps.reduce((a, b) => a + b, 0);
+                return exps.map(x => x / sum);
+            }
+            
+            // Forward pass
+            forward(inputIndices) {
+                if (!this.Wembed || inputIndices.length === 0) return null;
+                
+                const v = this.reverseVocab.length;
+                if (this.Wembed.length !== v) this.initWeights();
+                
+                // Get embeddings for input tokens
+                const embeddings = inputIndices.map(i => 
+                    i < this.Wembed.length ? [...this.Wembed[i]] : new Array(this.embedDim).fill(0)
+                );
+                
+                // Average embedding (simple pooling)
+                const pooled = new Array(this.embedDim).fill(0);
+                embeddings.forEach(emb => {
+                    for (let i = 0; i < this.embedDim; i++) pooled[i] += emb[i];
+                });
+                for (let i = 0; i < this.embedDim; i++) pooled[i] /= embeddings.length;
+                
+                // Self-attention (simplified: Q*K^T*V on pooled)
+                const Q = this.vecMatmul(pooled, this.Wq);
+                const K = this.vecMatmul(pooled, this.Wk);
+                const V = this.vecMatmul(pooled, this.Wv);
+                
+                // Attention score (just dot product with self for single vector)
+                const attnScore = Q.reduce((sum, q, i) => sum + q * K[i], 0) / Math.sqrt(this.embedDim);
+                const attnWeight = Math.exp(attnScore) / (1 + Math.exp(attnScore)); // sigmoid
+                
+                // Weighted value
+                const attended = V.map(v => v * attnWeight);
+                
+                // Output projection to vocab
+                const logits = this.vecMatmul(attended, this.Wout);
+                
+                // Softmax
+                const probs = this.softmax(logits);
+                
+                return { probs, attended, pooled, logits };
+            }
+            
+            vecMatmul(vec, mat) {
+                // vec (1 x d) * mat (d x out) = (1 x out)
+                const out = [];
+                for (let j = 0; j < mat[0].length; j++) {
+                    let sum = 0;
+                    for (let i = 0; i < vec.length; i++) {
+                        if (mat[i]) sum += vec[i] * mat[i][j];
+                    }
+                    out[j] = sum;
+                }
+                return out;
+            }
+            
+            // Training step (SGD on one example)
+            trainStep() {
+                if (this.trainingData.length === 0) return;
+                
+                // Pick random example
+                const ex = this.trainingData[Math.floor(Math.random() * this.trainingData.length)];
+                const result = this.forward(ex.input);
+                if (!result) return;
+                
+                const { probs, attended, pooled } = result;
+                
+                // Cross-entropy loss for target tokens
+                let loss = 0;
+                const targetProbs = ex.target.map(t => probs[t] || 0.0001);
+                targetProbs.forEach(p => loss -= Math.log(p + 1e-10));
+                loss /= ex.target.length;
+                
+                // Simple gradient: increase probability of target tokens
+                // Adjust output weights
+                for (const targetIdx of ex.target) {
+                    for (let i = 0; i < this.embedDim; i++) {
+                        if (this.Wout[i] && this.Wout[i][targetIdx] !== undefined) {
+                            // Gradient: attended[i] * (1 - probs[targetIdx])
+                            const grad = attended[i] * (1 - (probs[targetIdx] || 0));
+                            this.Wout[i][targetIdx] += this.lr * grad;
+                        }
+                    }
+                    
+                    // Also adjust embeddings for input tokens
+                    for (const inputIdx of ex.input) {
+                        if (this.Wembed[inputIdx]) {
+                            for (let i = 0; i < this.embedDim; i++) {
+                                this.Wembed[inputIdx][i] += this.lr * 0.1 * (Math.random() - 0.5) * (1 - (probs[targetIdx] || 0));
+                            }
+                        }
+                    }
+                }
+                
+                this.loss = this.loss === Infinity ? loss : this.loss * 0.9 + loss * 0.1;
+                this.epoch++;
+                
+                return loss;
+            }
+            
+            // Generate response
+            generate(inputIndices, maxLen = 8) {
+                const result = this.forward(inputIndices);
+                if (!result) return [];
+                
+                const { probs } = result;
+                
+                // Sample top tokens
+                const output = [];
+                const indexed = probs.map((p, i) => ({ p, i })).sort((a, b) => b.p - a.p);
+                
+                for (let i = 0; i < Math.min(maxLen, indexed.length); i++) {
+                    if (indexed[i].p > 0.01) {
+                        // Probabilistic sampling
+                        if (Math.random() < indexed[i].p * 3) {
+                            output.push(indexed[i].i);
+                        }
+                    }
+                }
+                
+                // Dedupe and limit
+                return [...new Set(output)].slice(0, maxLen);
+            }
+            
+            // Add training example
+            addExample(inputText, targetText) {
+                const input = this.tokenize(inputText);
+                const target = this.tokenize(targetText);
+                
+                if (input.length > 0 && target.length > 0) {
+                    this.trainingData.push({ input, target });
+                    if (this.trainingData.length > 200) {
+                        this.trainingData = this.trainingData.slice(-200);
+                    }
+                    
+                    // Reinit weights if vocab grew
+                    if (!this.Wembed || this.Wembed.length < this.reverseVocab.length) {
+                        this.initWeights();
+                    }
+                }
+            }
+            
+            // Get params count
+            getParamsCount() {
+                if (!this.Wembed) return 0;
+                const v = this.reverseVocab.length;
+                const d = this.embedDim;
+                return v * d + d * d * 3 + d * v;
+            }
+            
+            // Serialize
+            toJSON() {
+                return {
+                    embedDim: this.embedDim,
+                    vocab: this.vocab,
+                    reverseVocab: this.reverseVocab,
+                    nextIdx: this.nextIdx,
+                    Wembed: this.Wembed,
+                    Wq: this.Wq,
+                    Wk: this.Wk,
+                    Wv: this.Wv,
+                    Wout: this.Wout,
+                    trainingData: this.trainingData,
+                    loss: this.loss,
+                    epoch: this.epoch
+                };
+            }
+            
+            fromJSON(data) {
+                Object.assign(this, data);
+            }
+        }
+
+        // === STATE ===
+        let state = {
+            l1: { rules: {}, hits: 0 },
+            l2: { chain: {}, hits: 0 },
+            l3: new TinyTransformer(16, 200),
+            history: [],
+            lastInput: null,
+            lastResponse: null
+        };
+
+        const NGRAM = 2;
+        const L3_CONFIDENCE_THRESHOLD = 0.5; // L3 only speaks when loss < this
+
+        // === DOM ===
+        const inputEl = document.getElementById('input');
+        const responseEl = document.getElementById('response');
+        const responseMetaEl = document.getElementById('response-meta');
+        const logEl = document.getElementById('log');
+
+        function log(msg, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logEl.insertBefore(entry, logEl.firstChild);
+        }
+
+        function tokenize(text) {
+            return text.toLowerCase().replace(/([+\-*/=<>!?.,])/g, ' $1 ').split(/\s+/).filter(w => w);
+        }
+
+        // === L1: SYMBOLIC ===
+        function l1Check(input) {
+            const lower = input.toLowerCase();
+            for (const pattern in state.l1.rules) {
+                if (lower.includes(pattern)) {
+                    state.l1.hits++;
+                    state.l1.rules[pattern].hits++;
+                    return { match: true, response: state.l1.rules[pattern].response };
+                }
+            }
+            return { match: false };
+        }
+
+        // === L2: MARKOV ===
+        function l2Learn(text) {
+            const words = tokenize(text);
+            if (words.length <= NGRAM) return;
+            for (let i = 0; i <= words.length - NGRAM - 1; i++) {
+                const key = words.slice(i, i + NGRAM).join(' ');
+                const next = words[i + NGRAM];
+                if (!state.l2.chain[key]) state.l2.chain[key] = {};
+                if (!state.l2.chain[key][next]) state.l2.chain[key][next] = 0;
+                state.l2.chain[key][next]++;
+            }
+        }
+
+        function l2Generate(seed) {
+            const words = tokenize(seed);
+            const keys = Object.keys(state.l2.chain);
+            if (keys.length < 3) return null;
+
+            let start = null;
+            for (const word of words) {
+                for (const key of keys) {
+                    if (key.includes(word)) { start = key; break; }
+                }
+                if (start) break;
+            }
+            if (!start) start = keys[Math.floor(Math.random() * keys.length)];
+
+            const output = start.split(' ');
+            for (let i = 0; i < 12; i++) {
+                const key = output.slice(-NGRAM).join(' ');
+                const options = state.l2.chain[key];
+                if (!options) break;
+                let total = 0;
+                for (const w in options) total += options[w];
+                let r = Math.random() * total;
+                for (const w in options) {
+                    r -= options[w];
+                    if (r <= 0) { output.push(w); break; }
+                }
+            }
+            state.l2.hits++;
+            return output.join(' ');
+        }
+
+        // === L3: TRANSFORMER ===
+        function l3CanSpeak() {
+            return state.l3.loss < L3_CONFIDENCE_THRESHOLD && state.l3.epoch > 10;
+        }
+
+        function l3Generate(input) {
+            const inputIndices = state.l3.tokenize(input);
+            const outputIndices = state.l3.generate(inputIndices);
+            return outputIndices.map(i => state.l3.reverseVocab[i]).filter(w => w).join(' ');
+        }
+
+        // === AUTO TRAINING SIGNAL ===
+        function detectSignal(curr, prev) {
+            if (!prev) return 0;
+            const currLower = curr.toLowerCase();
+            const prevTokens = tokenize(prev);
+            const currTokens = tokenize(curr);
+            
+            const positive = ['yes', 'yeah', 'ok', 'thanks', 'cool', 'nice', 'good', 'great', 'right', 'exactly', 'true', 'haha', 'lol'];
+            const negative = ['no', 'not', 'wrong', 'what', 'huh', 'nope', 'bad', 'stop'];
+            
+            if (currTokens.some(t => positive.includes(t))) return 1;
+            if (currTokens.some(t => negative.includes(t))) return -1;
+            
+            // Repeated = negative
+            const overlap = currTokens.filter(t => prevTokens.includes(t)).length;
+            if (overlap >= prevTokens.length * 0.5) return -0.5;
+            
+            return 0.2; // neutral continuation = slight positive
+        }
+
+        // === PROMOTION ===
+        function checkPromotion(input, response) {
+            // If L3 is confident and this pattern repeats, promote to L1
+            if (state.l3.loss < 0.3 && state.l3.epoch > 50) {
+                const key = tokenize(input).slice(0, 3).join(' ');
+                if (!state.l1.rules[key]) {
+                    state.l1.rules[key] = { response, hits: 0 };
+                    log(`⬆️ PROMOTED: "${key}" → L1`, 'promote');
+                }
+            }
+        }
+
+        // === MAIN PROCESS ===
+        function process() {
+            const input = inputEl.value.trim();
+            if (!input) return;
+
+            // Auto-train from previous interaction
+            if (state.lastInput && state.lastResponse) {
+                const signal = detectSignal(input, state.lastInput);
+                if (signal > 0) {
+                    state.l3.addExample(state.lastInput, state.lastResponse);
+                    log(`Train signal: +${signal.toFixed(1)} → added to L3`, 'train');
+                } else if (signal < 0) {
+                    log(`Train signal: ${signal.toFixed(1)} → skipped`, 'train');
+                }
+            }
+
+            let response = null;
+            let layer = 0;
+
+            // L1 check
+            const l1Result = l1Check(input);
+            if (l1Result.match) {
+                response = l1Result.response;
+                layer = 1;
+                log(`L1 hit`, 'l1');
+            }
+
+            // L3 check (only if confident!)
+            if (!response && l3CanSpeak()) {
+                const l3Response = l3Generate(input);
+                if (l3Response && l3Response.length > 3) {
+                    response = l3Response;
+                    layer = 3;
+                    log(`L3 speaks (loss=${state.l3.loss.toFixed(3)})`, 'l3');
+                }
+            }
+
+            // L2 default
+            if (!response) {
+                response = l2Generate(input);
+                if (response) {
+                    layer = 2;
+                    log(`L2 generated`, 'l2');
+                } else {
+                    response = tokenize(input).sort(() => Math.random() - 0.5).join(' ') + '?';
+                    layer = 2;
+                    log(`L2 echo (no chains yet)`, 'l2');
+                }
+            }
+
+            // Always learn to L2 and add to L3 training pool
+            l2Learn(input);
+            state.l3.tokenize(input); // Expand vocab
+            
+            // Store for next auto-train
+            state.lastInput = input;
+            state.lastResponse = response;
+            state.history.push({ input, response, layer, time: Date.now() });
+
+            // Check promotion
+            if (layer === 3) checkPromotion(input, response);
+
+            // Display
+            responseEl.textContent = response;
+            const names = ['', 'L1 SYMBOLIC', 'L2 MARKOV', 'L3 TRANSFORMER'];
+            responseMetaEl.innerHTML = `<span class="layer-tag l${layer}">${names[layer]}</span>`;
+
+            document.querySelectorAll('.layer').forEach(l => l.classList.remove('active'));
+            document.getElementById(`layer${layer}`).classList.add('active');
+
+            inputEl.value = '';
+            updateUI();
+        }
+
+        // Manual training step
+        function trainStep() {
+            for (let i = 0; i < 10; i++) {
+                state.l3.trainStep();
+            }
+            log(`Trained 10 steps, loss=${state.l3.loss.toFixed(4)}`, 'train');
+            updateUI();
+        }
+
+        // Background training
+        setInterval(() => {
+            if (state.l3.trainingData.length > 0) {
+                state.l3.trainStep();
+                updateUI();
+            }
+        }, 500);
+
+        // === UI ===
+        function updateUI() {
+            document.getElementById('l1-rules').textContent = Object.keys(state.l1.rules).length;
+            document.getElementById('l1-hits').textContent = state.l1.hits;
+            document.getElementById('l2-states').textContent = Object.keys(state.l2.chain).length;
+            document.getElementById('l2-hits').textContent = state.l2.hits;
+            document.getElementById('l3-vocab').textContent = state.l3.reverseVocab.length;
+            document.getElementById('l3-params').textContent = state.l3.getParamsCount();
+            document.getElementById('l3-epoch').textContent = state.l3.epoch;
+            document.getElementById('l3-loss').textContent = state.l3.loss === Infinity ? '∞' : state.l3.loss.toFixed(4);
+            
+            const lossPct = Math.min(100, (state.l3.loss / 2) * 100);
+            document.getElementById('loss-fill').style.width = lossPct + '%';
+            document.getElementById('loss-fill').style.background = state.l3.loss < 0.5 ? '#00ff88' : state.l3.loss < 1 ? '#ffaa00' : '#ff4444';
+
+            // L1 content
+            const l1Content = document.getElementById('l1-content');
+            const l1Rules = Object.entries(state.l1.rules);
+            l1Content.innerHTML = l1Rules.length === 0 
+                ? '<div style="color:#555;text-align:center;padding:10px;">Promoted from L3</div>'
+                : l1Rules.map(([k, v]) => `<div class="item item-1">"${k}" → "${v.response.slice(0,20)}"</div>`).join('');
+
+            // L2 content
+            const l2Content = document.getElementById('l2-content');
+            const l2Chains = Object.entries(state.l2.chain).slice(-10);
+            l2Content.innerHTML = l2Chains.length === 0
+                ? '<div style="color:#555;text-align:center;padding:10px;">Chains build here</div>'
+                : l2Chains.map(([k, v]) => `<div class="item item-2">"${k}" → ${Object.keys(v).slice(0,3).join(', ')}</div>`).join('');
+
+            // L3 content
+            const l3Content = document.getElementById('l3-content');
+            const vocabSample = state.l3.reverseVocab.slice(0, 20);
+            l3Content.innerHTML = vocabSample.length === 0
+                ? '<div style="color:#555;text-align:center;padding:10px;">Weights here</div>'
+                : `<div class="item item-3">Vocab: ${vocabSample.join(', ')}${state.l3.reverseVocab.length > 20 ? '...' : ''}</div>
+                   <div class="item item-3">Training examples: ${state.l3.trainingData.length}</div>
+                   <div class="item item-3">Can speak: ${l3CanSpeak() ? 'YES' : 'NO'}</div>`;
+        }
+
+        // === SAVE/LOAD ===
+        let modalMode = 'save';
+        function saveState() {
+            const data = {
+                l1: state.l1,
+                l2: state.l2,
+                l3: state.l3.toJSON(),
+                history: state.history.slice(-50)
+            };
+            document.getElementById('modal-title').textContent = '💾 Save';
+            document.getElementById('modal-text').value = JSON.stringify(data);
+            document.getElementById('modal-text').readOnly = true;
+            modalMode = 'save';
+            document.getElementById('modal').classList.add('show');
+        }
+
+        function loadState() {
+            document.getElementById('modal-title').textContent = '📂 Load';
+            document.getElementById('modal-text').value = '';
+            document.getElementById('modal-text').readOnly = false;
+            modalMode = 'load';
+            document.getElementById('modal').classList.add('show');
+        }
+
+        function closeModal() { document.getElementById('modal').classList.remove('show'); }
+
+        function modalAction() {
+            if (modalMode === 'save') {
+                const blob = new Blob([document.getElementById('modal-text').value], { type: 'application/json' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `brain-${Date.now()}.json`;
+                a.click();
+            } else {
+                try {
+                    const data = JSON.parse(document.getElementById('modal-text').value);
+                    state.l1 = data.l1;
+                    state.l2 = data.l2;
+                    state.l3 = new TinyTransformer();
+                    state.l3.fromJSON(data.l3);
+                    state.history = data.history || [];
+                    log('Loaded!', 'promote');
+                    updateUI();
+                } catch (e) { alert('Invalid: ' + e.message); return; }
+            }
+            closeModal();
+        }
+
+        function resetAll() {
+            if (confirm('Reset?')) {
+                state = {
+                    l1: { rules: {}, hits: 0 },
+                    l2: { chain: {}, hits: 0 },
+                    l3: new TinyTransformer(16, 200),
+                    history: [],
+                    lastInput: null,
+                    lastResponse: null
+                };
+                updateUI();
+                log('Reset', 'info');
+            }
+        }
+
+        // === INIT ===
+        inputEl.addEventListener('keydown', e => { if (e.key === 'Enter') process(); });
+        updateUI();
+        log('Ready. L3 is REAL transformer. Trains in background.', 'l3');
+        log('L3 only speaks when loss < 0.5 and epoch > 10', 'info');
+    </script>
+</body>
+</html>

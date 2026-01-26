@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3-Layer Cognitive Architecture</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            min-height: 100vh;
+            background: #08080c;
+            color: #e0e0e0;
+            font-family: 'Consolas', monospace;
+            padding: 15px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #fff;
+            margin-bottom: 5px;
+            font-size: 1.5em;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 15px;
+            font-size: 12px;
+        }
+
+        .top-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .btn-green { background: #00ff88; color: #000; }
+        .btn-blue { background: #0088ff; color: #fff; }
+        .btn-purple { background: #aa55ff; color: #fff; }
+        .btn-gray { background: #333; color: #fff; }
+        .btn:hover { opacity: 0.8; }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 12px;
+        }
+
+        .layer {
+            background: #0d0d12;
+            border: 2px solid #222;
+            border-radius: 8px;
+            padding: 12px;
+        }
+
+        .layer.active { border-color: #00ff88; box-shadow: 0 0 20px rgba(0,255,136,0.2); }
+        .layer-1 { border-color: #ff6600; }
+        .layer-2 { border-color: #00aaff; }
+        .layer-3 { border-color: #aa55ff; }
+
+        .layer h2 {
+            font-size: 12px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .layer-1 h2 { color: #ff6600; }
+        .layer-2 h2 { color: #00aaff; }
+        .layer-3 h2 { color: #aa55ff; }
+
+        .layer-badge {
+            font-size: 9px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            background: #222;
+        }
+
+        .layer-content {
+            background: #08080c;
+            border-radius: 4px;
+            padding: 8px;
+            max-height: 250px;
+            overflow-y: auto;
+            font-size: 11px;
+        }
+
+        .rule-item, .chain-item, .pattern-item {
+            padding: 5px 8px;
+            margin: 3px 0;
+            border-radius: 3px;
+            background: #111;
+        }
+
+        .rule-item { border-left: 3px solid #ff6600; }
+        .chain-item { border-left: 3px solid #00aaff; }
+        .pattern-item { border-left: 3px solid #aa55ff; }
+
+        .item-key { color: #ffaa00; }
+        .item-arrow { color: #444; }
+        .item-value { color: #88ff88; }
+        .item-count { color: #666; font-size: 10px; }
+
+        .chat-panel {
+            grid-column: 1 / -1;
+            background: #0d0d12;
+            border: 2px solid #00ff88;
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 5px;
+        }
+
+        .chat-panel h2 {
+            color: #00ff88;
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+
+        .chat-input-row {
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input-row input {
+            flex: 1;
+            background: #08080c;
+            border: 1px solid #333;
+            border-radius: 4px;
+            color: #fff;
+            padding: 12px;
+            font-family: inherit;
+            font-size: 14px;
+        }
+
+        .chat-input-row input:focus {
+            outline: none;
+            border-color: #00ff88;
+        }
+
+        .response-box {
+            background: #08080c;
+            border-radius: 4px;
+            padding: 12px;
+            margin-top: 10px;
+            min-height: 50px;
+        }
+
+        .response-meta {
+            font-size: 10px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .response-meta .layer-used {
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+
+        .response-meta .layer-used.l1 { background: #ff6600; color: #000; }
+        .response-meta .layer-used.l2 { background: #00aaff; color: #000; }
+        .response-meta .layer-used.l3 { background: #aa55ff; color: #fff; }
+
+        .response-text {
+            color: #fff;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .stats-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .stat {
+            background: #08080c;
+            padding: 8px;
+            border-radius: 4px;
+            text-align: center;
+            flex: 1;
+        }
+
+        .stat-value {
+            font-size: 1.3em;
+            font-weight: bold;
+        }
+
+        .stat-label {
+            font-size: 9px;
+            color: #666;
+        }
+
+        .layer-1 .stat-value { color: #ff6600; }
+        .layer-2 .stat-value { color: #00aaff; }
+        .layer-3 .stat-value { color: #aa55ff; }
+
+        .log-panel {
+            grid-column: 1 / -1;
+            background: #0d0d12;
+            border: 1px solid #222;
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 5px;
+        }
+
+        .log-panel h2 {
+            color: #888;
+            font-size: 11px;
+            margin-bottom: 8px;
+        }
+
+        .log {
+            background: #08080c;
+            border-radius: 4px;
+            padding: 8px;
+            height: 120px;
+            overflow-y: auto;
+            font-size: 10px;
+        }
+
+        .log-entry { padding: 2px 0; }
+        .log-entry.l1 { color: #ff6600; }
+        .log-entry.l2 { color: #00aaff; }
+        .log-entry.l3 { color: #aa55ff; }
+        .log-entry.promote { color: #00ff88; font-weight: bold; }
+        .log-entry.info { color: #666; }
+
+        .progress-bar {
+            height: 4px;
+            background: #222;
+            border-radius: 2px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #aa55ff;
+            transition: width 0.3s;
+        }
+
+        .train-status {
+            font-size: 10px;
+            color: #aa55ff;
+            margin-top: 5px;
+        }
+
+        /* Modal for export/import */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.show { display: flex; }
+
+        .modal-content {
+            background: #0d0d12;
+            border: 2px solid #00ff88;
+            border-radius: 8px;
+            padding: 20px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow: auto;
+        }
+
+        .modal h3 {
+            color: #00ff88;
+            margin-bottom: 15px;
+        }
+
+        .modal textarea {
+            width: 100%;
+            height: 300px;
+            background: #08080c;
+            border: 1px solid #333;
+            border-radius: 4px;
+            color: #0f0;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 11px;
+        }
+
+        .modal-buttons {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧠 3-Layer Cognitive Architecture</h1>
+        <p class="subtitle">L1 Symbolic (instant) → L2 Markov (fast learner) → L3 Transformer (background)</p>
+
+        <div class="top-bar">
+            <button class="btn btn-green" onclick="saveState()">💾 Save State</button>
+            <button class="btn btn-blue" onclick="showLoadModal()">📂 Load State</button>
+            <button class="btn btn-purple" onclick="forcePromote()">⬆️ Force Promote</button>
+            <button class="btn btn-gray" onclick="resetAll()">🗑️ Reset All</button>
+            <span style="color:#666;font-size:11px;padding:8px;">Transformer trains in background, promotes patterns up</span>
+        </div>
+
+        <div class="main-grid">
+            <!-- Layer 1: Symbolic -->
+            <div class="layer layer-1" id="layer1">
+                <h2>⚡ L1: SYMBOLIC <span class="layer-badge">instant</span></h2>
+                <div class="stats-row">
+                    <div class="stat">
+                        <div class="stat-value" id="l1-rules">0</div>
+                        <div class="stat-label">Rules</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="l1-hits">0</div>
+                        <div class="stat-label">Hits</div>
+                    </div>
+                </div>
+                <div class="layer-content" id="l1-content">
+                    <div style="color:#555;text-align:center;padding:20px;">No rules yet.<br>Patterns get promoted here from L2.</div>
+                </div>
+            </div>
+
+            <!-- Layer 2: Markov -->
+            <div class="layer layer-2" id="layer2">
+                <h2>🔗 L2: MARKOV <span class="layer-badge">fast learn</span></h2>
+                <div class="stats-row">
+                    <div class="stat">
+                        <div class="stat-value" id="l2-states">0</div>
+                        <div class="stat-label">States</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="l2-hits">0</div>
+                        <div class="stat-label">Hits</div>
+                    </div>
+                </div>
+                <div class="layer-content" id="l2-content">
+                    <div style="color:#555;text-align:center;padding:20px;">Learning from every input.<br>Type to teach me!</div>
+                </div>
+            </div>
+
+            <!-- Layer 3: Transformer -->
+            <div class="layer layer-3" id="layer3">
+                <h2>🤖 L3: TRANSFORMER <span class="layer-badge">background</span></h2>
+                <div class="stats-row">
+                    <div class="stat">
+                        <div class="stat-value" id="l3-patterns">0</div>
+                        <div class="stat-label">Patterns</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="l3-promoted">0</div>
+                        <div class="stat-label">Promoted</div>
+                    </div>
+                </div>
+                <div class="layer-content" id="l3-content">
+                    <div style="color:#555;text-align:center;padding:20px;">Analyzing patterns...<br>Will promote to L1/L2.</div>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="train-progress" style="width: 0%"></div>
+                </div>
+                <div class="train-status" id="train-status">Training: 0%</div>
+            </div>
+
+            <!-- Chat Panel -->
+            <div class="chat-panel">
+                <h2>💬 Chat</h2>
+                <div class="chat-input-row">
+                    <input type="text" id="input" placeholder="Type anything... I learn from everything" autofocus>
+                    <button class="btn btn-green" onclick="process()">Send</button>
+                </div>
+                <div class="response-box">
+                    <div class="response-meta" id="response-meta">Waiting for input...</div>
+                    <div class="response-text" id="response">Type something to start. I'll learn from every message!</div>
+                </div>
+            </div>
+
+            <!-- Log Panel -->
+            <div class="log-panel">
+                <h2>📜 System Log</h2>
+                <div class="log" id="log"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Save/Load Modal -->
+    <div class="modal" id="modal">
+        <div class="modal-content">
+            <h3 id="modal-title">Save/Load State</h3>
+            <textarea id="modal-text"></textarea>
+            <div class="modal-buttons">
+                <button class="btn btn-green" id="modal-action" onclick="modalAction()">Action</button>
+                <button class="btn btn-gray" onclick="closeModal()">Cancel</button>
+                <button class="btn btn-blue" id="copy-btn" onclick="copyToClipboard()">📋 Copy</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // =========================================
+        // 3-LAYER COGNITIVE ARCHITECTURE
+        // L1: Symbolic (instant, promoted rules)
+        // L2: Markov (fast learning chains)
+        // L3: Transformer (background pattern analysis)
+        // =========================================
+
+        // === STATE ===
+        let state = {
+            // Layer 1: Symbolic rules (pattern → response)
+            l1: {
+                rules: {},  // { "hello": "Hi there!", "bye": "Goodbye!" }
+                hits: 0
+            },
+            
+            // Layer 2: Markov chains
+            l2: {
+                chain: {},  // { "word1 word2": { "word3": count } }
+                hits: 0
+            },
+            
+            // Layer 3: Transformer (pattern accumulator)
+            l3: {
+                corpus: [],      // all inputs for analysis
+                patterns: {},    // discovered patterns { pattern: { count, responses: {} } }
+                promoted: 0,
+                trainProgress: 0
+            },
+            
+            // History
+            history: []
+        };
+
+        // === CONFIG ===
+        const NGRAM = 2;
+        const PROMOTE_THRESHOLD = 3;  // how many times before promoting to L1
+        const TRAIN_INTERVAL = 2000;  // ms between transformer "training" cycles
+
+        // === DOM ===
+        const inputEl = document.getElementById('input');
+        const responseEl = document.getElementById('response');
+        const responseMetaEl = document.getElementById('response-meta');
+        const logEl = document.getElementById('log');
+
+        // === LOGGING ===
+        function log(msg, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logEl.insertBefore(entry, logEl.firstChild);
+            if (logEl.children.length > 100) logEl.removeChild(logEl.lastChild);
+        }
+
+        // === TOKENIZER ===
+        function tokenize(text) {
+            return text.toLowerCase()
+                .replace(/([+\-*/=<>!@#$%^&])/g, ' $1 ')
+                .split(/\s+/)
+                .filter(w => w);
+        }
+
+        // === LAYER 1: SYMBOLIC ===
+        function l1Check(input) {
+            const lower = input.toLowerCase().trim();
+            
+            // Check exact matches
+            for (const pattern in state.l1.rules) {
+                if (lower.includes(pattern)) {
+                    state.l1.hits++;
+                    return { match: true, response: state.l1.rules[pattern], pattern };
+                }
+            }
+            return { match: false };
+        }
+
+        function l1AddRule(pattern, response) {
+            state.l1.rules[pattern.toLowerCase()] = response;
+            log(`L1: Added rule "${pattern}" → "${response}"`, 'l1');
+        }
+
+        // === LAYER 2: MARKOV ===
+        function l2Learn(text) {
+            const words = tokenize(text);
+            if (words.length <= NGRAM) return;
+
+            for (let i = 0; i <= words.length - NGRAM - 1; i++) {
+                const key = words.slice(i, i + NGRAM).join(' ');
+                const next = words[i + NGRAM];
+
+                if (!state.l2.chain[key]) state.l2.chain[key] = {};
+                if (!state.l2.chain[key][next]) state.l2.chain[key][next] = 0;
+                state.l2.chain[key][next]++;
+            }
+        }
+
+        function l2Generate(seed, maxLen = 15) {
+            const words = tokenize(seed);
+            const keys = Object.keys(state.l2.chain);
+            
+            if (keys.length === 0) return null;
+
+            // Find starting point from seed
+            let start = null;
+            for (const word of words) {
+                for (const key of keys) {
+                    if (key.includes(word)) {
+                        start = key;
+                        break;
+                    }
+                }
+                if (start) break;
+            }
+
+            if (!start) start = keys[Math.floor(Math.random() * keys.length)];
+
+            const output = start.split(' ');
+
+            for (let i = 0; i < maxLen; i++) {
+                const key = output.slice(-NGRAM).join(' ');
+                const options = state.l2.chain[key];
+                if (!options) break;
+
+                let total = 0;
+                for (const w in options) total += options[w];
+                let r = Math.random() * total;
+                
+                for (const w in options) {
+                    r -= options[w];
+                    if (r <= 0) {
+                        output.push(w);
+                        break;
+                    }
+                }
+            }
+
+            state.l2.hits++;
+            return output.join(' ');
+        }
+
+        // === LAYER 3: TRANSFORMER (BACKGROUND) ===
+        function l3Accumulate(input, response) {
+            state.l3.corpus.push({ input, response, time: Date.now() });
+            
+            // Extract simple patterns (repeated phrases)
+            const lower = input.toLowerCase().trim();
+            if (!state.l3.patterns[lower]) {
+                state.l3.patterns[lower] = { count: 0, responses: {} };
+            }
+            state.l3.patterns[lower].count++;
+            
+            if (response) {
+                if (!state.l3.patterns[lower].responses[response]) {
+                    state.l3.patterns[lower].responses[response] = 0;
+                }
+                state.l3.patterns[lower].responses[response]++;
+            }
+        }
+
+        function l3Train() {
+            // Simulate background training
+            state.l3.trainProgress += Math.random() * 10;
+            if (state.l3.trainProgress >= 100) {
+                state.l3.trainProgress = 0;
+                
+                // Check for patterns to promote
+                for (const pattern in state.l3.patterns) {
+                    const p = state.l3.patterns[pattern];
+                    
+                    if (p.count >= PROMOTE_THRESHOLD && !state.l1.rules[pattern]) {
+                        // Find best response
+                        let bestResp = null;
+                        let bestCount = 0;
+                        for (const resp in p.responses) {
+                            if (p.responses[resp] > bestCount) {
+                                bestCount = p.responses[resp];
+                                bestResp = resp;
+                            }
+                        }
+                        
+                        // If no response, generate one
+                        if (!bestResp) {
+                            bestResp = l2Generate(pattern) || `I've learned "${pattern}" but don't know how to respond yet.`;
+                        }
+                        
+                        // PROMOTE TO L1!
+                        l1AddRule(pattern, bestResp);
+                        state.l3.promoted++;
+                        log(`⬆️ PROMOTED "${pattern}" to L1!`, 'promote');
+                    }
+                }
+            }
+
+            document.getElementById('train-progress').style.width = state.l3.trainProgress + '%';
+            document.getElementById('train-status').textContent = `Training: ${Math.round(state.l3.trainProgress)}%`;
+        }
+
+        // === MAIN PROCESS ===
+        function process() {
+            const input = inputEl.value.trim();
+            if (!input) return;
+
+            log(`Input: "${input}"`, 'info');
+            
+            let response = null;
+            let layerUsed = 0;
+
+            // Layer 1: Check symbolic rules
+            const l1Result = l1Check(input);
+            if (l1Result.match) {
+                response = l1Result.response;
+                layerUsed = 1;
+                log(`L1 HIT: "${l1Result.pattern}"`, 'l1');
+                highlightLayer(1);
+            }
+
+            // Layer 2: Try Markov if L1 missed
+            if (!response) {
+                const l2Response = l2Generate(input);
+                if (l2Response && Object.keys(state.l2.chain).length > 3) {
+                    response = l2Response;
+                    layerUsed = 2;
+                    log(`L2 generated response`, 'l2');
+                    highlightLayer(2);
+                }
+            }
+
+            // Layer 3: Fallback
+            if (!response) {
+                response = "I'm still learning... keep teaching me!";
+                layerUsed = 3;
+                log(`L3 fallback (still learning)`, 'l3');
+                highlightLayer(3);
+            }
+
+            // Always learn (L2 + L3)
+            l2Learn(input);
+            l3Accumulate(input, response);
+            
+            // Record history
+            state.history.push({ input, response, layer: layerUsed, time: Date.now() });
+
+            // Display
+            responseEl.textContent = response;
+            const layerNames = ['', 'L1 SYMBOLIC', 'L2 MARKOV', 'L3 TRANSFORMER'];
+            const layerClasses = ['', 'l1', 'l2', 'l3'];
+            responseMetaEl.innerHTML = `Responded via: <span class="layer-used ${layerClasses[layerUsed]}">${layerNames[layerUsed]}</span>`;
+
+            inputEl.value = '';
+            updateUI();
+        }
+
+        function highlightLayer(n) {
+            document.querySelectorAll('.layer').forEach(l => l.classList.remove('active'));
+            document.getElementById(`layer${n}`).classList.add('active');
+            setTimeout(() => document.getElementById(`layer${n}`).classList.remove('active'), 500);
+        }
+
+        // === UI UPDATE ===
+        function updateUI() {
+            // L1 stats
+            document.getElementById('l1-rules').textContent = Object.keys(state.l1.rules).length;
+            document.getElementById('l1-hits').textContent = state.l1.hits;
+            
+            // L1 content
+            const l1Content = document.getElementById('l1-content');
+            if (Object.keys(state.l1.rules).length === 0) {
+                l1Content.innerHTML = '<div style="color:#555;text-align:center;padding:20px;">No rules yet.</div>';
+            } else {
+                l1Content.innerHTML = Object.entries(state.l1.rules)
+                    .map(([k,v]) => `<div class="rule-item"><span class="item-key">"${k}"</span> <span class="item-arrow">→</span> <span class="item-value">"${v.substring(0,30)}${v.length>30?'...':''}"</span></div>`)
+                    .join('');
+            }
+
+            // L2 stats
+            document.getElementById('l2-states').textContent = Object.keys(state.l2.chain).length;
+            document.getElementById('l2-hits').textContent = state.l2.hits;
+            
+            // L2 content
+            const l2Content = document.getElementById('l2-content');
+            const chainEntries = Object.entries(state.l2.chain).slice(-20);
+            if (chainEntries.length === 0) {
+                l2Content.innerHTML = '<div style="color:#555;text-align:center;padding:20px;">No chains yet.</div>';
+            } else {
+                l2Content.innerHTML = chainEntries
+                    .map(([k,v]) => {
+                        const vals = Object.entries(v).slice(0,3).map(([w,c]) => `${w}(${c})`).join(', ');
+                        return `<div class="chain-item"><span class="item-key">"${k}"</span> <span class="item-arrow">→</span> <span class="item-value">${vals}</span></div>`;
+                    })
+                    .join('');
+            }
+
+            // L3 stats
+            document.getElementById('l3-patterns').textContent = Object.keys(state.l3.patterns).length;
+            document.getElementById('l3-promoted').textContent = state.l3.promoted;
+            
+            // L3 content
+            const l3Content = document.getElementById('l3-content');
+            const patternEntries = Object.entries(state.l3.patterns)
+                .sort((a,b) => b[1].count - a[1].count)
+                .slice(0, 15);
+            if (patternEntries.length === 0) {
+                l3Content.innerHTML = '<div style="color:#555;text-align:center;padding:20px;">Analyzing...</div>';
+            } else {
+                l3Content.innerHTML = patternEntries
+                    .map(([k,v]) => `<div class="pattern-item"><span class="item-key">"${k.substring(0,25)}${k.length>25?'...':''}"</span> <span class="item-count">×${v.count}</span></div>`)
+                    .join('');
+            }
+        }
+
+        // === SAVE/LOAD ===
+        let modalMode = 'save';
+
+        function saveState() {
+            const json = JSON.stringify(state, null, 2);
+            document.getElementById('modal-title').textContent = '💾 Save State - Copy this JSON';
+            document.getElementById('modal-text').value = json;
+            document.getElementById('modal-text').readOnly = true;
+            document.getElementById('modal-action').textContent = 'Download .json';
+            document.getElementById('copy-btn').style.display = 'inline-block';
+            modalMode = 'save';
+            document.getElementById('modal').classList.add('show');
+        }
+
+        function showLoadModal() {
+            document.getElementById('modal-title').textContent = '📂 Load State - Paste JSON here';
+            document.getElementById('modal-text').value = '';
+            document.getElementById('modal-text').readOnly = false;
+            document.getElementById('modal-action').textContent = 'Load State';
+            document.getElementById('copy-btn').style.display = 'none';
+            modalMode = 'load';
+            document.getElementById('modal').classList.add('show');
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.remove('show');
+        }
+
+        function modalAction() {
+            if (modalMode === 'save') {
+                // Download as file
+                const json = document.getElementById('modal-text').value;
+                const blob = new Blob([json], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `cognitive-state-${new Date().toISOString().slice(0,10)}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                closeModal();
+            } else {
+                // Load state
+                try {
+                    const json = document.getElementById('modal-text').value;
+                    const loaded = JSON.parse(json);
+                    state = loaded;
+                    updateUI();
+                    log('State loaded successfully!', 'promote');
+                    closeModal();
+                } catch (e) {
+                    alert('Invalid JSON: ' + e.message);
+                }
+            }
+        }
+
+        function copyToClipboard() {
+            const text = document.getElementById('modal-text');
+            text.select();
+            document.execCommand('copy');
+            alert('Copied to clipboard!');
+        }
+
+        function forcePromote() {
+            state.l3.trainProgress = 99;
+            l3Train();
+            updateUI();
+        }
+
+        function resetAll() {
+            if (confirm('Reset all learned data?')) {
+                state = {
+                    l1: { rules: {}, hits: 0 },
+                    l2: { chain: {}, hits: 0 },
+                    l3: { corpus: [], patterns: {}, promoted: 0, trainProgress: 0 },
+                    history: []
+                };
+                updateUI();
+                log('All state reset', 'info');
+            }
+        }
+
+        // === INIT ===
+        inputEl.addEventListener('keydown', e => {
+            if (e.key === 'Enter') process();
+        });
+
+        // Background training loop
+        setInterval(l3Train, TRAIN_INTERVAL);
+
+        updateUI();
+        log('3-Layer Cognitive Architecture initialized', 'info');
+        log('L1=Symbolic L2=Markov L3=Transformer', 'info');
+    </script>
+</body>
+</html>

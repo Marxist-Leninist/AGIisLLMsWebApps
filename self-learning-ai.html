@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Self-Learning Symbolic AI</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            min-height: 100vh;
+            background: #1a1a2e;
+            color: #eee;
+            font-family: 'Consolas', monospace;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #00ff88;
+            margin-bottom: 5px;
+        }
+
+        .subtitle {
+            color: #888;
+            margin-bottom: 20px;
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .panel {
+            background: #16213e;
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .panel h2 {
+            color: #00ff88;
+            font-size: 14px;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #333;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            background: #0f0f23;
+            border: 2px solid #333;
+            border-radius: 6px;
+            color: #fff;
+            font-size: 16px;
+            font-family: inherit;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #00ff88;
+        }
+
+        .response-box {
+            background: #0f0f23;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 15px;
+            min-height: 80px;
+        }
+
+        .response-box .label {
+            color: #00ff88;
+            font-size: 12px;
+            margin-bottom: 8px;
+        }
+
+        .response-box .text {
+            color: #fff;
+            line-height: 1.5;
+        }
+
+        .rules-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .rule {
+            background: #0f0f23;
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-left: 3px solid #333;
+        }
+
+        .rule.base { border-left-color: #0066ff; }
+        .rule.learned { border-left-color: #00ff88; }
+
+        .rule-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+
+        .rule-name {
+            color: #fff;
+            font-weight: bold;
+            font-size: 13px;
+        }
+
+        .rule-type {
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            background: #333;
+        }
+
+        .rule-type.base { background: #0066ff; }
+        .rule-type.learned { background: #00ff88; color: #000; }
+
+        .rule-pattern {
+            color: #ffcc00;
+            font-size: 12px;
+        }
+
+        .rule-response {
+            color: #888;
+            font-size: 11px;
+            margin-top: 4px;
+        }
+
+        .rule-stats {
+            color: #555;
+            font-size: 10px;
+            margin-top: 5px;
+        }
+
+        .log {
+            background: #0f0f23;
+            border-radius: 6px;
+            padding: 10px;
+            height: 200px;
+            overflow-y: auto;
+            font-size: 11px;
+        }
+
+        .log-entry {
+            padding: 3px 0;
+            border-bottom: 1px solid #1a1a2e;
+        }
+
+        .log-entry.match { color: #00ff88; }
+        .log-entry.learn { color: #ff00ff; }
+        .log-entry.info { color: #888; }
+        .log-entry.new-rule { color: #ffcc00; font-weight: bold; }
+
+        .stats {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .stat {
+            background: #0f0f23;
+            padding: 10px 15px;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #00ff88;
+        }
+
+        .stat-label {
+            font-size: 10px;
+            color: #888;
+        }
+
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        .help {
+            background: #0f3d0f;
+            border: 1px solid #00ff88;
+            border-radius: 6px;
+            padding: 10px;
+            margin-top: 15px;
+            font-size: 12px;
+        }
+
+        .help strong { color: #00ff88; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧠 Self-Learning Symbolic AI</h1>
+        <p class="subtitle">Type anything. If no rule exists, it creates one automatically.</p>
+
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-value" id="total-rules">5</div>
+                <div class="stat-label">Total Rules</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="learned-rules">0</div>
+                <div class="stat-label">Auto-Learned</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="total-matches">0</div>
+                <div class="stat-label">Matches</div>
+            </div>
+        </div>
+
+        <div class="main-grid">
+            <div class="panel">
+                <h2>💬 Input</h2>
+                <input type="text" id="input" placeholder="Type something and press Enter..." autofocus>
+                
+                <div class="response-box">
+                    <div class="label">📎 Response:</div>
+                    <div class="text" id="response">Type something to start!</div>
+                </div>
+
+                <div class="help">
+                    <strong>How it works:</strong><br>
+                    1. You type something<br>
+                    2. System checks all rules for a match<br>
+                    3. If match found → respond<br>
+                    4. If NO match → <strong>AUTO-CREATE new rule</strong><br>
+                    5. Next time you type similar thing → it matches!
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>📋 Rules (<span id="rule-count">5</span>)</h2>
+                <div class="rules-list" id="rules-list"></div>
+            </div>
+
+            <div class="panel full-width">
+                <h2>📜 Learning Log</h2>
+                <div class="log" id="log"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ========================================
+        // SELF-LEARNING SYMBOLIC AI
+        // Creates its own rules automatically
+        // ========================================
+
+        // Rule database
+        let rules = [
+            {
+                pattern: "hello",
+                response: "Hi there! How can I help?",
+                type: "base",
+                matches: 0
+            },
+            {
+                pattern: "bye",
+                response: "Goodbye! See you later!",
+                type: "base",
+                matches: 0
+            },
+            {
+                pattern: "help",
+                response: "I'm here to help! What do you need?",
+                type: "base",
+                matches: 0
+            },
+            {
+                pattern: "thanks",
+                response: "You're welcome!",
+                type: "base",
+                matches: 0
+            },
+            {
+                pattern: "dear sir",
+                response: "It looks like you're writing a letter!",
+                type: "base",
+                matches: 0
+            }
+        ];
+
+        let totalMatches = 0;
+
+        // DOM
+        const inputEl = document.getElementById('input');
+        const responseEl = document.getElementById('response');
+        const logEl = document.getElementById('log');
+        const rulesListEl = document.getElementById('rules-list');
+
+        // Log function
+        function log(msg, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logEl.insertBefore(entry, logEl.firstChild);
+        }
+
+        // Check if input matches any rule
+        function findMatch(input) {
+            input = input.toLowerCase().trim();
+            
+            for (let rule of rules) {
+                // Check if input contains the pattern
+                if (input.includes(rule.pattern.toLowerCase())) {
+                    return rule;
+                }
+            }
+            return null;
+        }
+
+        // THE MAGIC: Auto-create a new rule
+        function createRule(input) {
+            input = input.toLowerCase().trim();
+            
+            // Don't create rules for very short inputs
+            if (input.length < 2) return null;
+
+            const newRule = {
+                pattern: input,
+                response: `I learned "${input}" - I'll remember this pattern now!`,
+                type: "learned",
+                matches: 0,
+                createdAt: new Date().toISOString()
+            };
+
+            rules.push(newRule);
+            log(`🆕 AUTO-CREATED RULE: "${input}"`, 'new-rule');
+            
+            return newRule;
+        }
+
+        // Process input
+        function process() {
+            const input = inputEl.value.trim();
+            if (!input) return;
+
+            log(`Input: "${input}"`, 'info');
+
+            // Try to find a matching rule
+            let match = findMatch(input);
+
+            if (match) {
+                // Found a match!
+                match.matches++;
+                totalMatches++;
+                responseEl.textContent = match.response;
+                log(`✓ Matched rule: "${match.pattern}" (${match.matches} total matches)`, 'match');
+            } else {
+                // NO MATCH - CREATE NEW RULE AUTOMATICALLY
+                const newRule = createRule(input);
+                if (newRule) {
+                    responseEl.textContent = `No rule existed for "${input}" - I just created one! Type it again and I'll recognize it.`;
+                }
+            }
+
+            inputEl.value = '';
+            updateUI();
+        }
+
+        // Update display
+        function updateUI() {
+            const learnedCount = rules.filter(r => r.type === 'learned').length;
+            
+            document.getElementById('total-rules').textContent = rules.length;
+            document.getElementById('learned-rules').textContent = learnedCount;
+            document.getElementById('total-matches').textContent = totalMatches;
+            document.getElementById('rule-count').textContent = rules.length;
+
+            // Render rules (newest first)
+            rulesListEl.innerHTML = '';
+            const sortedRules = [...rules].reverse();
+            
+            for (const rule of sortedRules) {
+                const div = document.createElement('div');
+                div.className = `rule ${rule.type}`;
+                div.innerHTML = `
+                    <div class="rule-header">
+                        <span class="rule-name">"${rule.pattern}"</span>
+                        <span class="rule-type ${rule.type}">${rule.type}</span>
+                    </div>
+                    <div class="rule-response">→ ${rule.response}</div>
+                    <div class="rule-stats">Matches: ${rule.matches}</div>
+                `;
+                rulesListEl.appendChild(div);
+            }
+        }
+
+        // Event listeners
+        inputEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') process();
+        });
+
+        // Initialize
+        log('System ready. Type anything - I\'ll learn new patterns automatically!', 'info');
+        updateUI();
+    </script>
+</body>
+</html>
