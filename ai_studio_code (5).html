@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3-Mode Physics Engine</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; color: #fff; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; }
+        canvas { display: block; width: 100vw; height: 100vh; cursor: grab; }
+        canvas:active { cursor: grabbing; }
+        
+        #ui {
+            position: absolute; top: 15px; left: 15px; background: rgba(10, 15, 20, 0.85);
+            padding: 20px; border: 1px solid #00ffcc; border-radius: 8px; width: 360px;
+            box-shadow: 0 4px 20px rgba(0, 255, 204, 0.2); backdrop-filter: blur(10px);
+        }
+        h1 { font-size: 1.2rem; margin: 0 0 10px 0; color: #00ffcc; text-transform: uppercase; letter-spacing: 1px;}
+        p { font-size: 0.8rem; color: #aaa; line-height: 1.4; margin-bottom: 15px; }
+        
+        .mode-select { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px;}
+        label.radio-label { display: flex; align-items: center; font-size: 0.9rem; cursor: pointer; font-weight: bold; }
+        label.radio-label input { margin-right: 10px; accent-color: #00ffcc; transform: scale(1.2); }
+        .desc { font-size: 0.75rem; color: #888; margin-left: 24px; font-weight: normal; }
+        
+        .param-group { display: none; margin-bottom: 15px; animation: fadeIn 0.3s ease-in-out; }
+        .param-group.active { display: block; }
+        
+        .slider-row { margin-bottom: 10px; }
+        .slider-label { display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 4px; color: #ccc;}
+        .val { color: #00ffcc; font-family: monospace; }
+        input[type=range] { width: 100%; accent-color: #00ffcc; cursor: pointer; }
+        
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        <h1>Unified Light Engine</h1>
+        <p>Click and drag the screen to rotate the camera.</p>
+        
+        <div class="mode-select">
+            <label class="radio-label">
+                <input type="radio" name="mode" value="0" checked> Pure Classical
+            </label>
+            <div class="desc">Bouncing balls. Hard rays, gray shadows, and white plastic reflections.</div>
+            
+            <label class="radio-label" style="margin-top:10px;">
+                <input type="radio" name="mode" value="1"> Hybrid (Semiclassical)
+            </label>
+            <div class="desc">Triggers Quantum Phase equations on surface impact. Creates structural thin-film iridescence.</div>
+            
+            <label class="radio-label" style="margin-top:10px;">
+                <input type="radio" name="mode" value="2"> Full Quantum Field
+            </label>
+            <div class="desc">Rays are deleted. Evaluates the 3D complex probability amplitude of light interfering through space.</div>
+        </div>
+
+        <!-- Params for Hybrid Mode -->
+        <div id="params-hybrid" class="param-group">
+            <div class="slider-row">
+                <div class="slider-label"><span>Film Thickness (nm)</span> <span class="val" id="val-thick">450</span></div>
+                <input type="range" id="thickness" min="100" max="1000" step="5" value="450">
+            </div>
+            <div class="slider-row">
+                <div class="slider-label"><span>Refractive Index</span> <span class="val" id="val-ior">1.40</span></div>
+                <input type="range" id="ior" min="1.1" max="2.5" step="0.01" value="1.40">
+            </div>
+        </div>
+
+        <!-- Params for Quantum Mode -->
+        <div id="params-quantum" class="param-group">
+            <div class="slider-row">
+                <div class="slider-label"><span>Macro Wavelength</span> <span class="val" id="val-wave">1.50</span></div>
+                <input type="range" id="wavelength" min="0.5" max="4.0" step="0.05" value="1.50">
+            </div>
+            <div class="slider-row">
+                <div class="slider-label"><span>Time Evolution</span> <span class="val" id="val-speed">1.0</span></div>
+                <input type="range" id="speed" min="0.0" max="3.0" step="0.1" value="1.0">
+            </div>
+        </div>
+    </div>
+
+    <canvas id="glcanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('glcanvas');
+        const gl = canvas.getContext('webgl2', { antialias: false });
+
+        function resize() {
+            canvas.width = window.innerWidth * Math.min(window.devicePixelRatio, 1.5);
+            canvas.height = window.innerHeight * Math.min(window.devicePixelRatio, 1.5);
+            gl.viewport(0, 0, canvas.width, canvas.height);
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // --- SHADER CODE ---
+        const vs = `#version 300 es
+            in vec4 a_pos; out vec2 v_uv;
+            void main() { v_uv = a_pos.xy; gl_Position = a_pos; }
+        `;
+
+        const fs = `#version 300 es
+            precision highp float;
+            in vec2 v_uv; out vec4 fragColor;
+
+            uniform vec2 u_res;
+            uniform float u_time;
+            uniform vec3 u_camPos;
+            
+            // Mode & Params
+            uniform int u_mode;
+            uniform float u_thickness;
+            uniform float u_ior;
+            uniform float u_wavelength;
+            uniform float u_speed;
+
+            #define PI 3.14159265359
+
+            // --- GEOMETRY ---
+            vec2 map(vec3 p) {
+                float sphere = length(p) - 1.0;
+                float floor = p.y + 1.0;
+                if (sphere < floor) return vec2(sphere, 1.0); // ID 1: Sphere
+                return vec2(floor, 2.0);                      // ID 2: Floor
+            }
+
+            vec3 getNormal(vec3 p) {
+                vec2 e = vec2(0.001, 0.0);
+                return normalize(vec3(
+                    map(p + e.xyy).x - map(p - e.xyy).x,
+                    map(p + e.yxy).x - map(p - e.yxy).x,
+                    map(p + e.yyx).x - map(p - e.yyx).x
+                ));
+            }
+
+            float calcShadow(vec3 ro, vec3 rd) {
+                float res = 1.0, t = 0.05;
+                for(int i = 0; i < 30; i++) {
+                    float h = map(ro + rd * t).x;
+                    res = min(res, 8.0 * h / t);
+                    t += clamp(h, 0.02, 0.2);
+                    if(h < 0.001 || t > 5.0) break;
+                }
+                return clamp(res, 0.0, 1.0);
+            }
+
+            // --- MODE 1: HYBRID WAVE OPTICS (Microscopic Thin Film) ---
+            vec3 hybridInterference(vec3 n, vec3 v, float d, float ior) {
+                float cosT1 = clamp(dot(n, v), 0.0, 1.0);
+                float sinT2 = (1.0 / ior) * sqrt(1.0 - cosT1 * cosT1);
+                float cosT2 = sqrt(1.0 - sinT2 * sinT2);
+                
+                // Optical Path Difference (nanometers)
+                float OPD = 2.0 * ior * d * cosT2;
+                
+                vec3 lambda = vec3(650.0, 530.0, 450.0); // RGB wavelengths
+                vec3 phase = (2.0 * PI * OPD) / lambda + PI;
+                
+                vec3 interference = 0.5 + 0.5 * cos(phase);
+                
+                float F0 = pow((1.0 - ior) / (1.0 + ior), 2.0);
+                float F = F0 + (1.0 - F0) * pow(1.0 - cosT1, 5.0);
+                
+                return F * interference * 3.5;
+            }
+
+            // --- MODE 2: FULL QUANTUM VOLUMETRICS (Macroscopic Interference) ---
+            vec4 evaluateQuantumField(vec3 p, vec3 lightPos) {
+                float k = 2.0 * PI / u_wavelength;
+                float w = k * u_speed; 
+                float t = u_time;
+                
+                // 1. Direct path from light to point
+                float d1 = length(p - lightPos);
+                vec2 psi = vec2(cos(k*d1 - w*t), sin(k*d1 - w*t)) / (d1 + 0.1);
+                
+                // 2. Path reflecting off the floor (Virtual Source trick: Lloyd's Mirror)
+                vec3 lFloor = vec3(lightPos.x, -2.0 - lightPos.y, lightPos.z);
+                float d2 = length(p - lFloor);
+                psi += 0.8 * vec2(cos(k*d2 - w*t + PI), sin(k*d2 - w*t + PI)) / (d2 + 0.1);
+                
+                // 3. Path scattering off the sphere (Huygens Diffraction)
+                float distToSphere = length(lightPos - vec3(0.0));
+                float d3 = length(p - vec3(0.0));
+                float totalPath3 = distToSphere + d3;
+                psi += 0.6 * vec2(cos(k*totalPath3 - w*t + PI), sin(k*totalPath3 - w*t + PI)) / (d3 + 0.1);
+                
+                // Final Probability Density (Intensity)
+                float intensity = dot(psi, psi);
+                
+                // Map the complex phase to a beautiful color
+                float phase = atan(psi.y, psi.x);
+                vec3 color = 0.5 + 0.5 * cos(phase + vec3(0.0, 2.0, 4.0));
+                
+                return vec4(color * intensity, intensity);
+            }
+
+            // --- MAIN RENDERER ---
+            void main() {
+                vec2 uv = (gl_FragCoord.xy - 0.5 * u_res) / min(u_res.x, u_res.y);
+                
+                vec3 ro = u_camPos;
+                vec3 ta = vec3(0.0, -0.2, 0.0);
+                vec3 cw = normalize(ta - ro);
+                vec3 cu = normalize(cross(cw, vec3(0.0, 1.0, 0.0)));
+                vec3 cv = cross(cu, cw);
+                vec3 rd = normalize(uv.x * cu + uv.y * cv + 1.2 * cw);
+
+                vec3 lightPos = vec3(2.5, 3.0, -2.5);
+
+                // Geometric Raymarch
+                float t = 0.0;
+                float id = 0.0;
+                for(int i = 0; i < 80; i++) {
+                    vec2 res = map(ro + rd * t);
+                    if(res.x < 0.001) { id = res.y; break; }
+                    t += res.x;
+                    if(t > 20.0) break;
+                }
+
+                vec3 finalCol = vec3(0.0);
+
+                if (u_mode == 0 || u_mode == 1) {
+                    // CLASSICAL & HYBRID MODES
+                    if(t < 20.0) {
+                        vec3 p = ro + rd * t;
+                        vec3 n = getNormal(p);
+                        vec3 v = -rd;
+                        vec3 l = normalize(lightPos - p);
+                        vec3 h = normalize(l + v);
+                        
+                        float diff = max(dot(n, l), 0.0);
+                        float shadow = calcShadow(p, l);
+                        
+                        if(id == 2.0) {
+                            // Floor is always Classical Diffuse
+                            float grid = mod(floor(p.x * 2.0) + floor(p.z * 2.0), 2.0);
+                            vec3 albedo = vec3(0.1 + 0.05 * grid);
+                            finalCol = albedo * diff * shadow;
+                        } else if (id == 1.0) {
+                            // Sphere
+                            vec3 baseDiff = vec3(0.02) * diff * shadow;
+                            vec3 spec = vec3(0.0);
+                            
+                            if(u_mode == 0) {
+                                // MODE 0: Pure Classical Plastic
+                                float fresnel = 0.04 + 0.96 * pow(1.0 - max(dot(n, v), 0.0), 5.0);
+                                spec = vec3(fresnel) + pow(max(dot(n, h), 0.0), 40.0) * shadow;
+                            } else {
+                                // MODE 1: Hybrid Semiclassical Wave interference
+                                spec = hybridInterference(n, v, u_thickness, u_ior);
+                                spec += pow(max(dot(n, h), 0.0), 80.0) * shadow; // Sharp bulb reflection
+                            }
+                            
+                            finalCol = baseDiff + spec;
+                        }
+                    }
+                } 
+                else if (u_mode == 2) {
+                    // MODE 2: FULL QUANTUM FIELD
+                    // Calculate volumetric fog (Raymarching the complex probability field)
+                    vec4 vol = vec4(0.0);
+                    float dMax = min(t, 15.0);
+                    float stepSize = dMax / 60.0; // 60 steps through empty space
+                    
+                    // Jitter starting position to reduce banding
+                    float jitter = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+                    float vT = stepSize * jitter;
+                    
+                    for(int i = 0; i < 60; i++) {
+                        if(vT > dMax) break;
+                        vec3 p = ro + rd * vT;
+                        
+                        vec4 qField = evaluateQuantumField(p, lightPos);
+                        vec3 fieldColor = qField.rgb;
+                        float intensity = qField.a;
+                        
+                        // Map intensity to density
+                        float density = smoothstep(0.0, 3.0, intensity) * 0.3;
+                        float alpha = 1.0 - exp(-density * stepSize * 5.0);
+                        
+                        vol += vec4(fieldColor * alpha, alpha) * (1.0 - vol.a);
+                        if(vol.a > 0.98) break;
+                        
+                        vT += stepSize;
+                    }
+                    
+                    // Add the surface boundary (Geometric objects act as field anchors)
+                    vec3 surfaceCol = vec3(0.0);
+                    if(t < 20.0) {
+                        vec3 p = ro + rd * t;
+                        vec4 surfField = evaluateQuantumField(p, lightPos);
+                        
+                        // Surface color is just the projected probability map
+                        surfaceCol = surfField.rgb * 0.5;
+                        
+                        // Draw structural grid on floor to ground the visual
+                        if(id == 2.0) {
+                            float grid = smoothstep(0.0, 0.05, abs(fract(p.x)-0.5)) * 
+                                         smoothstep(0.0, 0.05, abs(fract(p.z)-0.5));
+                            surfaceCol *= 0.5 + 0.5 * grid;
+                        }
+                    }
+                    
+                    // Composite Volume over Surface
+                    finalCol = vol.rgb + surfaceCol * (1.0 - vol.a);
+                }
+
+                // Tonemap
+                finalCol = finalCol / (finalCol + vec3(1.0));
+                finalCol = pow(finalCol, vec3(1.0 / 2.2));
+
+                fragColor = vec4(finalCol, 1.0);
+            }
+        `;
+
+        function buildShader(type, src) {
+            const s = gl.createShader(type);
+            gl.shaderSource(s, src); gl.compileShader(s);
+            if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(s));
+            return s;
+        }
+
+        const prog = gl.createProgram();
+        gl.attachShader(prog, buildShader(gl.VERTEX_SHADER, vs));
+        gl.attachShader(prog, buildShader(gl.FRAGMENT_SHADER, fs));
+        gl.linkProgram(prog);
+
+        const posBuf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]), gl.STATIC_DRAW);
+        const posLoc = gl.getAttribLocation(prog, "a_pos");
+        gl.enableVertexAttribArray(posLoc);
+        gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+
+        // Uniforms
+        const uRes = gl.getUniformLocation(prog, "u_res");
+        const uTime = gl.getUniformLocation(prog, "u_time");
+        const uCam = gl.getUniformLocation(prog, "u_camPos");
+        const uMode = gl.getUniformLocation(prog, "u_mode");
+        const uThick = gl.getUniformLocation(prog, "u_thickness");
+        const uIor = gl.getUniformLocation(prog, "u_ior");
+        const uWave = gl.getUniformLocation(prog, "u_wavelength");
+        const uSpeed = gl.getUniformLocation(prog, "u_speed");
+
+        // Camera control
+        let camX = 0.6, camY = 0.3, isDrag = false, lX, lY;
+        window.onmousedown = e => { isDrag = true; lX = e.clientX; lY = e.clientY; };
+        window.onmouseup = () => isDrag = false;
+        window.onmousemove = e => {
+            if (!isDrag) return;
+            camX -= (e.clientX - lX) * 0.01;
+            camY = Math.max(-0.1, Math.min(1.2, camY + (e.clientY - lY) * 0.01));
+            lX = e.clientX; lY = e.clientY;
+        };
+
+        // UI Logic
+        const radios = document.querySelectorAll('input[name="mode"]');
+        const pHybrid = document.getElementById('params-hybrid');
+        const pQuantum = document.getElementById('params-quantum');
+        
+        let currentMode = 0;
+
+        radios.forEach(r => r.addEventListener('change', (e) => {
+            currentMode = parseInt(e.target.value);
+            pHybrid.className = currentMode === 1 ? 'param-group active' : 'param-group';
+            pQuantum.className = currentMode === 2 ? 'param-group active' : 'param-group';
+        }));
+
+        // Slider bindings
+        const bindSlider = (id, valId, isFloat = false) => {
+            const el = document.getElementById(id);
+            const valEl = document.getElementById(valId);
+            el.oninput = (e) => valEl.innerText = isFloat ? parseFloat(e.target.value).toFixed(2) : e.target.value;
+            return el;
+        };
+
+        const thick = bindSlider('thickness', 'val-thick');
+        const ior = bindSlider('ior', 'val-ior', true);
+        const wave = bindSlider('wavelength', 'val-wave', true);
+        const speed = bindSlider('speed', 'val-speed', true);
+
+        function render(time) {
+            gl.useProgram(prog);
+            
+            const dist = 4.0;
+            gl.uniform3f(uCam, dist * Math.cos(camY) * Math.sin(camX), dist * Math.sin(camY), dist * Math.cos(camY) * Math.cos(camX));
+            
+            gl.uniform2f(uRes, canvas.width, canvas.height);
+            gl.uniform1f(uTime, time * 0.001);
+            
+            gl.uniform1i(uMode, currentMode);
+            gl.uniform1f(uThick, parseFloat(thick.value));
+            gl.uniform1f(uIor, parseFloat(ior.value));
+            gl.uniform1f(uWave, parseFloat(wave.value));
+            gl.uniform1f(uSpeed, parseFloat(speed.value));
+
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+            requestAnimationFrame(render);
+        }
+        
+        requestAnimationFrame(render);
+    </script>
+</body>
+</html>

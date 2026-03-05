@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ray Tracer</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Outfit:wght@300;400;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --border: #1e1e2e;
+    --text: #e0dfe8;
+    --dim: #6b6a7a;
+    --accent: #ff6b3d;
+    --accent2: #3db8ff;
+    --glow: rgba(255, 107, 61, 0.15);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Outfit', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .app {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    grid-template-rows: auto 1fr;
+    height: 100vh;
+    gap: 0;
+  }
+
+  header {
+    grid-column: 1 / -1;
+    padding: 16px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  header h1 span {
+    color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 400;
+    background: var(--glow);
+    padding: 3px 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(255,107,61,0.2);
+  }
+
+  .stats {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--dim);
+    display: flex;
+    gap: 20px;
+  }
+
+  .stats .val { color: var(--accent2); }
+
+  .viewport {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #08080c;
+    overflow: hidden;
+  }
+
+  canvas {
+    image-rendering: pixelated;
+    cursor: crosshair;
+    max-width: 100%;
+    max-height: 100%;
+  }
+
+  .render-overlay {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+    z-index: 10;
+  }
+
+  .render-overlay button {
+    font-family: 'Outfit', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 10px 22px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-render {
+    background: var(--accent);
+    color: #fff;
+    box-shadow: 0 4px 20px rgba(255,107,61,0.3);
+  }
+  .btn-render:hover { transform: translateY(-1px); box-shadow: 0 6px 28px rgba(255,107,61,0.4); }
+
+  .btn-secondary {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border) !important;
+  }
+  .btn-secondary:hover { background: var(--border); }
+
+  .progress-bar {
+    position: absolute;
+    top: 0; left: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    transition: width 0.1s;
+    box-shadow: 0 0 12px var(--accent);
+  }
+
+  .sidebar {
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 20px 0;
+  }
+
+  .panel {
+    padding: 0 20px;
+    margin-bottom: 20px;
+  }
+
+  .panel-title {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--dim);
+    margin-bottom: 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .control {
+    margin-bottom: 12px;
+  }
+
+  .control label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    margin-bottom: 5px;
+    color: var(--dim);
+  }
+
+  .control label .value {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text);
+    font-size: 11px;
+  }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    box-shadow: 0 0 8px rgba(255,107,61,0.4);
+  }
+
+  select {
+    width: 100%;
+    padding: 8px 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Outfit', sans-serif;
+    font-size: 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    outline: none;
+  }
+
+  select:focus { border-color: var(--accent); }
+
+  .color-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .color-row label {
+    font-size: 12px;
+    color: var(--dim);
+    min-width: 60px;
+  }
+
+  input[type="color"] {
+    -webkit-appearance: none;
+    width: 32px;
+    height: 24px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
+  input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
+
+  .scene-objects {
+    list-style: none;
+  }
+
+  .scene-objects li {
+    padding: 8px 10px;
+    margin-bottom: 4px;
+    background: var(--bg);
+    border-radius: 6px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.15s;
+  }
+
+  .scene-objects li:hover { border-color: var(--border); }
+
+  .obj-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .obj-type {
+    color: var(--dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    margin-left: auto;
+  }
+
+  .checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 12px;
+    color: var(--dim);
+    cursor: pointer;
+  }
+
+  .checkbox-row input { accent-color: var(--accent); }
+
+  @media (max-width: 900px) {
+    .app {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto 1fr auto;
+    }
+    .sidebar { border-left: none; border-top: 1px solid var(--border); max-height: 300px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>RAY TRACER <span>REAL-TIME</span></h1>
+    <div class="stats">
+      <div>RES <span class="val" id="statRes">640x480</span></div>
+      <div>BOUNCES <span class="val" id="statBounces">3</span></div>
+      <div>TIME <span class="val" id="statTime">—</span></div>
+      <div>RAYS <span class="val" id="statRays">—</span></div>
+    </div>
+  </header>
+
+  <div class="viewport">
+    <div class="progress-bar" id="progress" style="width:0%"></div>
+    <canvas id="canvas" width="640" height="480"></canvas>
+    <div class="render-overlay">
+      <button class="btn-render" id="btnRender">Render</button>
+      <button class="btn-secondary" id="btnHQ">Hi-Res Render</button>
+      <button class="btn-secondary" id="btnAnimate">Animate</button>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <div class="panel">
+      <div class="panel-title">Render Settings</div>
+      <div class="control">
+        <label>Resolution Scale <span class="value" id="vScale">1.0x</span></label>
+        <input type="range" id="rScale" min="0.25" max="2" step="0.25" value="1">
+      </div>
+      <div class="control">
+        <label>Max Bounces <span class="value" id="vBounces">3</span></label>
+        <input type="range" id="rBounces" min="1" max="8" step="1" value="3">
+      </div>
+      <div class="control">
+        <label>Samples/Pixel <span class="value" id="vSamples">1</span></label>
+        <input type="range" id="rSamples" min="1" max="16" step="1" value="1">
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="cShadows" checked>
+        <label for="cShadows">Shadows</label>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="cReflections" checked>
+        <label for="cReflections">Reflections</label>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="cCheckerboard" checked>
+        <label for="cCheckerboard">Checker Floor</label>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Scene</div>
+      <div class="control">
+        <label>Preset</label>
+        <select id="scenePreset">
+          <option value="default">Classic Spheres</option>
+          <option value="reflections">Mirror Room</option>
+          <option value="gems">Glass &amp; Metal</option>
+          <option value="solar">Solar System</option>
+        </select>
+      </div>
+      <ul class="scene-objects" id="objectList"></ul>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Lighting</div>
+      <div class="control">
+        <label>Light X <span class="value" id="vLx">-2</span></label>
+        <input type="range" id="rLx" min="-10" max="10" step="0.5" value="-2">
+      </div>
+      <div class="control">
+        <label>Light Y <span class="value" id="vLy">8</span></label>
+        <input type="range" id="rLy" min="1" max="20" step="0.5" value="8">
+      </div>
+      <div class="control">
+        <label>Light Z <span class="value" id="vLz">-3</span></label>
+        <input type="range" id="rLz" min="-10" max="10" step="0.5" value="-3">
+      </div>
+      <div class="control">
+        <label>Ambient <span class="value" id="vAmb">0.10</span></label>
+        <input type="range" id="rAmb" min="0" max="0.5" step="0.01" value="0.1">
+      </div>
+      <div class="color-row">
+        <label>Light Color</label>
+        <input type="color" id="cLight" value="#ffffff">
+      </div>
+      <div class="color-row">
+        <label>Sky Color</label>
+        <input type="color" id="cSky" value="#1a1a2e">
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Camera</div>
+      <div class="control">
+        <label>FOV <span class="value" id="vFov">60 deg</span></label>
+        <input type="range" id="rFov" min="20" max="120" step="1" value="60">
+      </div>
+      <div class="control">
+        <label>Height <span class="value" id="vCamY">3.0</span></label>
+        <input type="range" id="rCamY" min="0.5" max="10" step="0.1" value="3">
+      </div>
+      <div class="control">
+        <label>Distance <span class="value" id="vCamZ">8.0</span></label>
+        <input type="range" id="rCamZ" min="2" max="20" step="0.5" value="8">
+      </div>
+      <div class="control">
+        <label>Orbit <span class="value" id="vOrbit">0 deg</span></label>
+        <input type="range" id="rOrbit" min="-180" max="180" step="1" value="0">
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Vector Math ──
+const vec3 = (x=0,y=0,z=0) => ({x,y,z});
+const add = (a,b) => vec3(a.x+b.x, a.y+b.y, a.z+b.z);
+const sub = (a,b) => vec3(a.x-b.x, a.y-b.y, a.z-b.z);
+const mul = (a,s) => vec3(a.x*s, a.y*s, a.z*s);
+const vmul = (a,b) => vec3(a.x*b.x, a.y*b.y, a.z*b.z);
+const dot = (a,b) => a.x*b.x + a.y*b.y + a.z*b.z;
+const len = a => Math.sqrt(dot(a,a));
+const norm = a => { const l=len(a)||1; return vec3(a.x/l, a.y/l, a.z/l); };
+const reflectV = (i,n) => sub(i, mul(n, 2*dot(i,n)));
+const lerp3 = (a,b,t) => vec3(a.x+(b.x-a.x)*t, a.y+(b.y-a.y)*t, a.z+(b.z-a.z)*t);
+const clamp01 = v => Math.max(0, Math.min(1, v));
+const cross = (a,b) => vec3(a.y*b.z-a.z*b.y, a.z*b.x-a.x*b.z, a.x*b.y-a.y*b.x);
+
+// ── Materials ──
+const MAT_DIFFUSE = 0, MAT_METAL = 1, MAT_GLASS = 2;
+
+function makeSphere(cx,cy,cz, r, color, matType=MAT_DIFFUSE, roughness=0, ior=1.5) {
+  return { type:'sphere', center:vec3(cx,cy,cz), radius:r, color, matType, roughness, ior,
+    reflectivity: matType===MAT_METAL?0.9:matType===MAT_GLASS?0.1:0.05 };
+}
+
+function makePlane(y, color, matType=MAT_DIFFUSE) {
+  return { type:'plane', y, color, matType, roughness:0, reflectivity:0.15, ior:1 };
+}
+
+// ── Scenes ──
+const scenes = {
+  default: () => [
+    makeSphere(0, 1, 0, 1, vec3(0.9,0.2,0.2), MAT_DIFFUSE),
+    makeSphere(-2.5, 0.8, -0.5, 0.8, vec3(0.2,0.8,0.3), MAT_METAL, 0.05),
+    makeSphere(2.2, 0.6, 0.5, 0.6, vec3(0.3,0.4,0.95), MAT_DIFFUSE),
+    makeSphere(-0.8, 0.4, 2, 0.4, vec3(0.95,0.85,0.2), MAT_METAL, 0.3),
+    makeSphere(1.5, 0.35, 2.2, 0.35, vec3(0.9,0.4,0.9), MAT_DIFFUSE),
+    makePlane(0, vec3(0.7,0.7,0.7)),
+  ],
+  reflections: () => [
+    makeSphere(0, 1.2, 0, 1.2, vec3(0.95,0.95,0.98), MAT_METAL, 0.0),
+    makeSphere(-2.8, 0.7, 1, 0.7, vec3(0.95,0.6,0.6), MAT_METAL, 0.02),
+    makeSphere(2.5, 0.9, -0.5, 0.9, vec3(0.6,0.8,0.95), MAT_METAL, 0.0),
+    makeSphere(-1, 0.5, 2.5, 0.5, vec3(0.95,0.9,0.5), MAT_METAL, 0.1),
+    makeSphere(1.2, 0.4, 2.8, 0.4, vec3(0.5,0.95,0.7), MAT_METAL, 0.05),
+    makeSphere(0, 0.3, 3.2, 0.3, vec3(0.9,0.5,0.95), MAT_METAL, 0.0),
+    makePlane(0, vec3(0.8,0.8,0.8)),
+  ],
+  gems: () => [
+    makeSphere(0, 1, 0, 1, vec3(0.98,0.98,1.0), MAT_GLASS, 0, 1.52),
+    makeSphere(-2, 0.7, 1, 0.7, vec3(1,0.85,0.6), MAT_METAL, 0.0),
+    makeSphere(2.2, 0.8, -0.3, 0.8, vec3(0.85,0.92,1.0), MAT_GLASS, 0, 1.8),
+    makeSphere(-0.5, 0.4, 2.5, 0.4, vec3(0.6,1.0,0.7), MAT_GLASS, 0, 1.33),
+    makeSphere(1, 0.5, 2, 0.5, vec3(0.95,0.7,0.7), MAT_METAL, 0.02),
+    makePlane(0, vec3(0.65,0.65,0.7)),
+  ],
+  solar: () => [
+    makeSphere(0, 2, -2, 2, vec3(1,0.85,0.3), MAT_DIFFUSE),
+    makeSphere(4, 0.5, 1, 0.5, vec3(0.7,0.4,0.2), MAT_DIFFUSE),
+    makeSphere(-3, 0.65, 0.5, 0.65, vec3(0.3,0.6,1), MAT_DIFFUSE),
+    makeSphere(-4.5, 0.35, 2, 0.35, vec3(0.8,0.3,0.2), MAT_DIFFUSE),
+    makeSphere(2, 0.8, -1, 0.8, vec3(0.9,0.8,0.6), MAT_METAL, 0.2),
+    makeSphere(-1.5, 0.3, 3, 0.3, vec3(0.5,0.9,0.5), MAT_GLASS, 0, 1.4),
+    makePlane(0, vec3(0.15,0.15,0.2)),
+  ],
+};
+
+// ── State ──
+let objects = scenes.default();
+let light = vec3(-2, 8, -3);
+let lightColor = vec3(1,1,1);
+let skyColor = vec3(0.1, 0.1, 0.18);
+let ambient = 0.1;
+let maxBounces = 3;
+let samplesPerPixel = 1;
+let enableShadows = true;
+let enableReflections = true;
+let enableChecker = true;
+let fov = 60;
+let camY = 3;
+let camZ = 8;
+let camOrbit = 0;
+let resScale = 1;
+let animating = false;
+let animFrame = null;
+let rendering = false;
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+// ── Intersection ──
+function intersectSphere(orig, dir, sphere) {
+  const oc = sub(orig, sphere.center);
+  const b = dot(oc, dir);
+  const c = dot(oc, oc) - sphere.radius * sphere.radius;
+  const disc = b*b - c;
+  if (disc < 0) return -1;
+  const sq = Math.sqrt(disc);
+  let t = -b - sq;
+  if (t < 0.001) t = -b + sq;
+  return t > 0.001 ? t : -1;
+}
+
+function intersectPlane(orig, dir, plane) {
+  if (Math.abs(dir.y) < 1e-6) return -1;
+  const t = (plane.y - orig.y) / dir.y;
+  return t > 0.001 ? t : -1;
+}
+
+function intersectScene(orig, dir) {
+  let closest = Infinity, hitObj = null, hitT = -1;
+  for (const obj of objects) {
+    let t;
+    if (obj.type === 'sphere') t = intersectSphere(orig, dir, obj);
+    else t = intersectPlane(orig, dir, obj);
+    if (t > 0 && t < closest) { closest = t; hitObj = obj; hitT = t; }
+  }
+  return hitObj ? { obj: hitObj, t: hitT } : null;
+}
+
+// ── Fresnel (Schlick) ──
+function schlick(cosine, ior) {
+  let r0 = (1 - ior) / (1 + ior);
+  r0 = r0 * r0;
+  return r0 + (1 - r0) * Math.pow(1 - cosine, 5);
+}
+
+// ── Refraction ──
+function refract(uv, n, etaiOverEtat) {
+  const cosTheta = Math.min(-dot(uv, n), 1);
+  const rOutPerp = mul(add(uv, mul(n, cosTheta)), etaiOverEtat);
+  const rOutParallel = mul(n, -Math.sqrt(Math.abs(1 - dot(rOutPerp, rOutPerp))));
+  return norm(add(rOutPerp, rOutParallel));
+}
+
+// ── Checker Pattern ──
+function checkerColor(p, baseColor) {
+  if (!enableChecker) return baseColor;
+  const s = 1.5;
+  const cx = Math.floor(p.x / s + 1000);
+  const cz = Math.floor(p.z / s + 1000);
+  return (cx + cz) % 2 === 0 ? baseColor : mul(baseColor, 0.35);
+}
+
+// ── Trace Ray ──
+function trace(orig, dir, depth) {
+  if (depth > maxBounces) return skyColor;
+
+  const hit = intersectScene(orig, dir);
+  if (!hit) {
+    const t = clamp01(0.5 * (dir.y + 1));
+    return lerp3(vec3(skyColor.x*0.5, skyColor.y*0.5, skyColor.z*0.6), skyColor, t);
+  }
+
+  const { obj, t: hitT } = hit;
+  const p = add(orig, mul(dir, hitT));
+
+  let normal, color;
+  if (obj.type === 'sphere') {
+    normal = norm(sub(p, obj.center));
+    color = obj.color;
+  } else {
+    normal = vec3(0, 1, 0);
+    color = checkerColor(p, obj.color);
+  }
+
+  const frontFace = dot(dir, normal) < 0;
+  if (!frontFace) normal = mul(normal, -1);
+
+  // Glass
+  if (obj.matType === MAT_GLASS && enableReflections) {
+    const ri = frontFace ? (1 / obj.ior) : obj.ior;
+    const unitDir = norm(dir);
+    const cosTheta = Math.min(-dot(unitDir, normal), 1);
+    const sinTheta = Math.sqrt(1 - cosTheta * cosTheta);
+    const cannotRefract = ri * sinTheta > 1;
+    let outDir;
+    if (cannotRefract || schlick(cosTheta, obj.ior) > Math.random()) {
+      outDir = reflectV(unitDir, normal);
+    } else {
+      outDir = refract(unitDir, normal, ri);
+    }
+    const refracted = trace(add(p, mul(outDir, 0.002)), outDir, depth + 1);
+    return vmul(color, refracted);
+  }
+
+  // Lighting
+  const toLight = sub(light, p);
+  const lightDist = len(toLight);
+  const lightDir = norm(toLight);
+
+  let shadow = 1;
+  if (enableShadows) {
+    const shadowHit = intersectScene(add(p, mul(normal, 0.002)), lightDir);
+    if (shadowHit && shadowHit.t < lightDist) shadow = 0.15;
+  }
+
+  const diff = clamp01(dot(normal, lightDir));
+  const falloff = 1 / (1 + lightDist * lightDist * 0.01);
+  let result = vmul(color, mul(lightColor, diff * shadow * falloff));
+  result = add(result, mul(color, ambient));
+
+  // Specular
+  const halfVec = norm(add(lightDir, mul(dir, -1)));
+  const spec = Math.pow(clamp01(dot(normal, halfVec)), obj.matType === MAT_METAL ? 80 : 30);
+  result = add(result, mul(lightColor, spec * shadow * 0.5));
+
+  // Reflections
+  if (enableReflections && (obj.matType === MAT_METAL || obj.reflectivity > 0.01)) {
+    const refl = reflectV(dir, normal);
+    let reflDir = refl;
+    if (obj.roughness > 0) {
+      reflDir = norm(add(refl, mul(vec3(
+        (Math.random()-0.5)*obj.roughness,
+        (Math.random()-0.5)*obj.roughness,
+        (Math.random()-0.5)*obj.roughness
+      ), 1)));
+      if (dot(reflDir, normal) < 0) reflDir = refl;
+    }
+    const reflected = trace(add(p, mul(normal, 0.002)), reflDir, depth + 1);
+    const r = obj.matType === MAT_METAL ? (obj.reflectivity||0.9) : obj.reflectivity;
+    const fr = obj.matType === MAT_METAL ? schlick(clamp01(-dot(dir, normal)), 1.5) : r;
+    result = lerp3(result, vmul(reflected, obj.matType === MAT_METAL ? obj.color : vec3(1,1,1)), fr);
+  }
+
+  return result;
+}
+
+// ── Render ──
+function render(highRes = false) {
+  if (rendering) return;
+  rendering = true;
+
+  const scale = highRes ? 2 : resScale;
+  const W = Math.round(640 * scale);
+  const H = Math.round(480 * scale);
+  canvas.width = W;
+  canvas.height = H;
+
+  document.getElementById('statRes').textContent = W + 'x' + H;
+  document.getElementById('statBounces').textContent = maxBounces;
+
+  const imageData = ctx.createImageData(W, H);
+  const data = imageData.data;
+
+  const aspect = W / H;
+  const fovRad = fov * Math.PI / 180;
+  const halfH = Math.tan(fovRad / 2);
+  const halfW = halfH * aspect;
+
+  const orbitRad = camOrbit * Math.PI / 180;
+  const camPos = vec3(Math.sin(orbitRad) * camZ, camY, Math.cos(orbitRad) * camZ);
+  const camTarget = vec3(0, 1, 0);
+  const camFwd = norm(sub(camTarget, camPos));
+  const worldUp = vec3(0, 1, 0);
+  const camRight = norm(cross(camFwd, worldUp));
+  const camUpV = norm(cross(camRight, camFwd));
+
+  const t0 = performance.now();
+  let totalRays = 0;
+  const spp = samplesPerPixel;
+  let rowsDone = 0;
+
+  function renderChunk(startRow, endRow) {
+    for (let y = startRow; y < endRow; y++) {
+      for (let x = 0; x < W; x++) {
+        let r = 0, g = 0, b = 0;
+        for (let s = 0; s < spp; s++) {
+          const jx = spp > 1 ? (Math.random() - 0.5) : 0;
+          const jy = spp > 1 ? (Math.random() - 0.5) : 0;
+          const u = ((x + 0.5 + jx) / W) * 2 - 1;
+          const v = 1 - ((y + 0.5 + jy) / H) * 2;
+
+          const dir = norm(add(add(camFwd, mul(camRight, u * halfW)), mul(camUpV, v * halfH)));
+          const c = trace(camPos, dir, 0);
+          totalRays++;
+          r += c.x; g += c.y; b += c.z;
+        }
+        r /= spp; g /= spp; b /= spp;
+
+        // ACES tone mapping
+        r = clamp01(r * (2.51 * r + 0.03) / (r * (2.43 * r + 0.59) + 0.14));
+        g = clamp01(g * (2.51 * g + 0.03) / (g * (2.43 * g + 0.59) + 0.14));
+        b = clamp01(b * (2.51 * b + 0.03) / (b * (2.43 * b + 0.59) + 0.14));
+
+        const gamma = 1 / 2.2;
+        const idx = (y * W + x) * 4;
+        data[idx]   = Math.round(Math.pow(r, gamma) * 255);
+        data[idx+1] = Math.round(Math.pow(g, gamma) * 255);
+        data[idx+2] = Math.round(Math.pow(b, gamma) * 255);
+        data[idx+3] = 255;
+      }
+      rowsDone++;
+    }
+  }
+
+  const chunkSize = Math.max(4, Math.round(H / 30));
+  let currentRow = 0;
+
+  function nextChunk() {
+    const end = Math.min(currentRow + chunkSize, H);
+    renderChunk(currentRow, end);
+    currentRow = end;
+
+    const pct = (currentRow / H) * 100;
+    document.getElementById('progress').style.width = pct + '%';
+
+    if (currentRow < H) {
+      requestAnimationFrame(nextChunk);
+    } else {
+      ctx.putImageData(imageData, 0, 0);
+      const elapsed = ((performance.now() - t0) / 1000).toFixed(2);
+      document.getElementById('statTime').textContent = elapsed + 's';
+      document.getElementById('statRays').textContent = (totalRays / 1e6).toFixed(2) + 'M';
+      setTimeout(() => { document.getElementById('progress').style.width = '0%'; }, 600);
+      rendering = false;
+    }
+  }
+
+  requestAnimationFrame(nextChunk);
+}
+
+// ── Scene List ──
+function updateObjectList() {
+  const ul = document.getElementById('objectList');
+  ul.innerHTML = '';
+  objects.forEach((obj, i) => {
+    const li = document.createElement('li');
+    const d = document.createElement('div');
+    d.className = 'obj-dot';
+    const c = obj.color;
+    d.style.background = 'rgb(' + (c.x*255|0) + ',' + (c.y*255|0) + ',' + (c.z*255|0) + ')';
+    li.appendChild(d);
+
+    const name = document.createElement('span');
+    name.textContent = obj.type === 'sphere' ? 'Sphere ' + (i+1) : 'Ground Plane';
+    li.appendChild(name);
+
+    const ts = document.createElement('span');
+    ts.className = 'obj-type';
+    ts.textContent = obj.matType === MAT_METAL ? 'METAL' : obj.matType === MAT_GLASS ? 'GLASS' : 'DIFF';
+    li.appendChild(ts);
+
+    ul.appendChild(li);
+  });
+}
+
+// ── Controls ──
+function bindSlider(id, valId, cb) {
+  const el = document.getElementById(id);
+  const display = document.getElementById(valId);
+  el.addEventListener('input', () => cb(el, display));
+  cb(el, display);
+}
+
+bindSlider('rScale', 'vScale', (el, d) => { resScale = parseFloat(el.value); d.textContent = resScale + 'x'; });
+bindSlider('rBounces', 'vBounces', (el, d) => { maxBounces = parseInt(el.value); d.textContent = maxBounces; });
+bindSlider('rSamples', 'vSamples', (el, d) => { samplesPerPixel = parseInt(el.value); d.textContent = samplesPerPixel; });
+bindSlider('rLx', 'vLx', (el, d) => { light.x = parseFloat(el.value); d.textContent = light.x; });
+bindSlider('rLy', 'vLy', (el, d) => { light.y = parseFloat(el.value); d.textContent = light.y; });
+bindSlider('rLz', 'vLz', (el, d) => { light.z = parseFloat(el.value); d.textContent = light.z; });
+bindSlider('rAmb', 'vAmb', (el, d) => { ambient = parseFloat(el.value); d.textContent = ambient.toFixed(2); });
+bindSlider('rFov', 'vFov', (el, d) => { fov = parseFloat(el.value); d.textContent = fov + ' deg'; });
+bindSlider('rCamY', 'vCamY', (el, d) => { camY = parseFloat(el.value); d.textContent = camY.toFixed(1); });
+bindSlider('rCamZ', 'vCamZ', (el, d) => { camZ = parseFloat(el.value); d.textContent = camZ.toFixed(1); });
+bindSlider('rOrbit', 'vOrbit', (el, d) => { camOrbit = parseFloat(el.value); d.textContent = camOrbit + ' deg'; });
+
+document.getElementById('cShadows').addEventListener('change', e => { enableShadows = e.target.checked; });
+document.getElementById('cReflections').addEventListener('change', e => { enableReflections = e.target.checked; });
+document.getElementById('cCheckerboard').addEventListener('change', e => { enableChecker = e.target.checked; });
+
+function hexToVec3(hex) {
+  return vec3(parseInt(hex.slice(1,3),16)/255, parseInt(hex.slice(3,5),16)/255, parseInt(hex.slice(5,7),16)/255);
+}
+
+document.getElementById('cLight').addEventListener('input', e => { lightColor = hexToVec3(e.target.value); });
+document.getElementById('cSky').addEventListener('input', e => { skyColor = hexToVec3(e.target.value); });
+
+document.getElementById('scenePreset').addEventListener('change', e => {
+  objects = scenes[e.target.value]();
+  updateObjectList();
+  render();
+});
+
+document.getElementById('btnRender').addEventListener('click', () => render());
+document.getElementById('btnHQ').addEventListener('click', () => render(true));
+document.getElementById('btnAnimate').addEventListener('click', () => {
+  if (animating) {
+    animating = false;
+    document.getElementById('btnAnimate').textContent = 'Animate';
+    return;
+  }
+  animating = true;
+  document.getElementById('btnAnimate').textContent = 'Stop';
+  let angle = camOrbit;
+
+  function animLoop() {
+    if (!animating) return;
+    if (rendering) { animFrame = requestAnimationFrame(animLoop); return; }
+    angle += 2;
+    camOrbit = angle % 360;
+    document.getElementById('rOrbit').value = camOrbit;
+    document.getElementById('vOrbit').textContent = Math.round(camOrbit) + ' deg';
+
+    const origScale = resScale;
+    const origSpp = samplesPerPixel;
+    const origBounces = maxBounces;
+    resScale = 0.5;
+    samplesPerPixel = 1;
+    maxBounces = Math.min(maxBounces, 2);
+
+    render();
+
+    resScale = origScale;
+    maxBounces = origBounces;
+    samplesPerPixel = origSpp;
+    animFrame = requestAnimationFrame(animLoop);
+  }
+  animLoop();
+});
+
+// ── Init ──
+updateObjectList();
+render();
+</script>
+</body>
+</html>

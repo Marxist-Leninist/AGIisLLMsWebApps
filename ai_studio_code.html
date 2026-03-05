@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Raytracing + Quantum Fourier Transform</title>
+    <style>
+        body {
+            background-color: #121212;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        h1 { margin-top: 0; color: #03dac6; }
+        p { text-align: center; max-width: 600px; color: #aaa; }
+        canvas {
+            background-color: #000;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8);
+            max-width: 100%;
+            margin-top: 10px;
+        }
+        .controls {
+            margin-top: 20px;
+            background: #1e1e1e;
+            padding: 15px 30px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+        button {
+            background: #03dac6;
+            color: #000;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.3s, transform 0.1s;
+        }
+        button:hover { background: #018786; }
+        button:active { transform: scale(0.98); }
+        button:disabled { background: #555; cursor: not-allowed; }
+        .log {
+            margin-top: 15px;
+            font-family: monospace;
+            color: #bb86fc;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Quantum Interference Raytracer</h1>
+    <p>A pure JS raytracer. The center sphere's texture is generated dynamically using a <b>2D Quantum Fourier Transform (QFT)</b> acting on an 8-qubit equivalent spatial grid, simulating a superposition of quantum momentum states.</p>
+    
+    <canvas id="renderCanvas" width="600" height="400"></canvas>
+    
+    <div class="controls">
+        <button id="renderBtn" onclick="startRender()">Run QFT & Render Scene</button>
+        <div class="log" id="logBox">Awaiting initialization...</div>
+    </div>
+
+<script>
+// --- VECTORS & MATH ---
+class Vec3 {
+    constructor(x, y, z) { this.x = x; this.y = y; this.z = z; }
+    add(v) { return new Vec3(this.x + v.x, this.y + v.y, this.z + v.z); }
+    sub(v) { return new Vec3(this.x - v.x, this.y - v.y, this.z - v.z); }
+    mul(s) { return new Vec3(this.x * s, this.y * s, this.z * s); }
+    dot(v) { return this.x * v.x + this.y * v.y + this.z * v.z; }
+    mag() { return Math.sqrt(this.dot(this)); }
+    norm() { let m = this.mag(); return m === 0 ? new Vec3(0,0,0) : this.mul(1/m); }
+}
+
+class Complex {
+    constructor(re, im) { this.re = re; this.im = im; }
+    magSq() { return this.re * this.re + this.im * this.im; }
+}
+
+// --- QUANTUM FOURIER TRANSFORM SIMULATOR ---
+const texW = 128;
+const texH = 128;
+let qftTex =[];
+
+// 1D QFT over an array of complex amplitudes
+function qft1D(arr) {
+    let len = arr.length;
+    let out = new Array(len);
+    let invSqrt = 1 / Math.sqrt(len);
+    for (let k = 0; k < len; k++) {
+        let sumRe = 0, sumIm = 0;
+        for (let j = 0; j < len; j++) {
+            let angle = (2 * Math.PI * j * k) / len;
+            let cosA = Math.cos(angle);
+            let sinA = Math.sin(angle);
+            // Complex multiply: (re + i*im) * (cosA + i*sinA)
+            sumRe += arr[j].re * cosA - arr[j].im * sinA;
+            sumIm += arr[j].re * sinA + arr[j].im * cosA;
+        }
+        out[k] = new Complex(sumRe * invSqrt, sumIm * invSqrt);
+    }
+    return out;
+}
+
+// 2D QFT logic (Separable into 1D row transforms, then 1D col transforms)
+function qft2D(grid, w, h) {
+    let intermediate = new Array(w * h);
+    for (let y = 0; y < h; y++) {
+        let row = [];
+        for (let x = 0; x < w; x++) row.push(grid[y * w + x]);
+        let rowOut = qft1D(row);
+        for (let x = 0; x < w; x++) intermediate[y * w + x] = rowOut[x];
+    }
+    let finalGrid = new Array(w * h);
+    for (let x = 0; x < w; x++) {
+        let col =[];
+        for (let y = 0; y < h; y++) col.push(intermediate[y * w + x]);
+        let colOut = qft1D(col);
+        for (let y = 0; y < h; y++) finalGrid[y * w + x] = colOut[y];
+    }
+    return finalGrid;
+}
+
+function initQFT() {
+    log("Initializing Quantum Superposition State (|ψ> in momentum basis)...");
+    let grid = new Array(texW * texH);
+    for (let i = 0; i < texW * texH; i++) grid[i] = new Complex(0, 0);
+    
+    // Helper to add momentum states |kx, ky>
+    function addState(kx, ky, phase, amp) {
+        // Wrap around for negative frequencies
+        if (kx < 0) kx = texW + kx;
+        if (ky < 0) ky = texH + ky;
+        grid[ky * texW + kx] = new Complex(amp * Math.cos(phase), amp * Math.sin(phase));
+    }
+    
+    // Inject multiple discrete momentum (frequency) states to create an interference pattern
+    addState(4, 4, 0, 1.0);
+    addState(-4, -4, 0, 1.0);
+    addState(4, -4, 0, 1.0);
+    addState(-4, 4, 0, 1.0);
+    
+    addState(10, 6, Math.PI/3, 0.7);
+    addState(-10, -6, -Math.PI/3, 0.7);
+    addState(0, 16, Math.PI/4, 0.5);
+    addState(0, -16, -Math.PI/4, 0.5);
+    
+    // Normalize State Vector probabilities to sum up to 1
+    let sumSq = grid.reduce((acc, val) => acc + val.magSq(), 0);
+    let invMag = 1.0 / Math.sqrt(sumSq);
+    for (let i = 0; i < texW * texH; i++) {
+        grid[i].re *= invMag;
+        grid[i].im *= invMag;
+    }
+    
+    log("Applying 2D Quantum Fourier Transform...");
+    // Transforms momentum basis into the spatial interference pattern
+    let spatialGrid = qft2D(grid, texW, texH);
+    
+    // Extract probability densities P(x, y) = |ψ(x, y)|^2
+    let maxProb = 0;
+    let probs = new Float32Array(texW * texH);
+    for (let i = 0; i < texW * texH; i++) {
+        let prob = spatialGrid[i].magSq();
+        probs[i] = prob;
+        if (prob > maxProb) maxProb = prob;
+    }
+    
+    // Convert quantum probabilities to an aesthetic material map (Neon Cyan/Blue)
+    qftTex =[];
+    for (let i = 0; i < texW * texH; i++) {
+        let p = probs[i] / maxProb; // Normalized[0, 1]
+        
+        let r = p * 0.1;
+        let g = Math.pow(p, 1.4) * 2.2;
+        let b = Math.pow(p, 0.8) * 1.8 + 0.1;
+        qftTex.push(new Vec3(r, g, b));
+    }
+    log("QFT Texture generated! Initiating Raytracer...");
+}
+
+function sampleQFTTexture(u, v) {
+    u = u - Math.floor(u);
+    v = v - Math.floor(v);
+    let x = Math.floor(u * texW);
+    let y = Math.floor(v * texH);
+    x = Math.max(0, Math.min(texW - 1, x));
+    y = Math.max(0, Math.min(texH - 1, y));
+    return qftTex[y * texW + x];
+}
+
+// --- RAYTRACING ENGINE ---
+class Ray {
+    constructor(origin, dir) { this.origin = origin; this.dir = dir; }
+}
+
+class Sphere {
+    constructor(center, radius, material, color, reflectivity) {
+        this.center = center;
+        this.radius = radius;
+        this.material = material;
+        this.color = color;
+        this.reflectivity = reflectivity;
+    }
+    intersect(ray) {
+        let oc = ray.origin.sub(this.center);
+        let b = 2.0 * oc.dot(ray.dir);
+        let c = oc.dot(oc) - this.radius * this.radius;
+        let h = b * b - 4 * c;
+        if (h < 0.0) return -1.0;
+        let t = (-b - Math.sqrt(h)) / 2.0;
+        return t > 0.001 ? t : -1.0;
+    }
+    getUV(p) {
+        let d = p.sub(this.center).norm();
+        let u = 0.5 + Math.atan2(d.z, d.x) / (2 * Math.PI);
+        let v = 0.5 - Math.asin(d.y) / Math.PI;
+        return { u, v };
+    }
+}
+
+// Set up 3D Scene
+const scene = {
+    spheres:[
+        new Sphere(new Vec3(0, -1000 - 1.5, 5), 1000, "checker", new Vec3(1, 1, 1), 0.3), // Floor
+        new Sphere(new Vec3(0, 0.5, 3), 2.0, "quantum", new Vec3(1, 1, 1), 0.4),          // Center Quantum Object
+        new Sphere(new Vec3(-2.8, -0.5, 3.5), 1.0, "solid", new Vec3(0.9, 0.1, 0.3), 0.2), // Left Sphere
+        new Sphere(new Vec3(2.8, -0.5, 2.5), 1.0, "solid", new Vec3(0.2, 0.5, 0.9), 0.6)   // Right Sphere
+    ],
+    lights:[
+        { pos: new Vec3(-5, 5, -2), intensity: 0.8 },
+        { pos: new Vec3(5, 5, 0), intensity: 0.6 }
+    ]
+};
+
+// Recursive Path Tracer
+function trace(ray, depth) {
+    if (depth > 3) return new Vec3(0, 0, 0);
+    
+    let closestT = Infinity;
+    let hitSphere = null;
+    
+    // Find intersections
+    for (let s of scene.spheres) {
+        let t = s.intersect(ray);
+        if (t > 0 && t < closestT) {
+            closestT = t;
+            hitSphere = s;
+        }
+    }
+    
+    // Environment Skybox Color
+    if (!hitSphere) {
+        let t = 0.5 * (ray.dir.y + 1.0);
+        return new Vec3(0.02, 0.02, 0.05).mul(1.0 - t).add(new Vec3(0.15, 0.2, 0.3).mul(t));
+    }
+    
+    let hitPoint = ray.origin.add(ray.dir.mul(closestT));
+    let normal = hitPoint.sub(hitSphere.center).norm();
+    
+    // Material Setup
+    let albedo = hitSphere.color;
+    if (hitSphere.material === "quantum") {
+        let uv = hitSphere.getUV(hitPoint);
+        albedo = sampleQFTTexture(uv.u * 3.0, uv.v * 3.0); // wrap UV mapping slightly
+    } else if (hitSphere.material === "checker") {
+        let scale = 1.0;
+        let cx = Math.floor(hitPoint.x * scale);
+        let cz = Math.floor(hitPoint.z * scale);
+        albedo = ((cx + cz) % 2 === 0) ? new Vec3(0.7, 0.7, 0.7) : new Vec3(0.1, 0.1, 0.1);
+    }
+    
+    let color = new Vec3(0, 0, 0);
+    
+    // Compute Lights and Soft Shadows
+    for (let l of scene.lights) {
+        let lightDir = l.pos.sub(hitPoint).norm();
+        let lightDist = l.pos.sub(hitPoint).mag();
+        
+        let shadowRay = new Ray(hitPoint.add(normal.mul(0.001)), lightDir);
+        let inShadow = false;
+        for (let s of scene.spheres) {
+            let st = s.intersect(shadowRay);
+            if (st > 0 && st < lightDist) { inShadow = true; break; }
+        }
+        
+        if (!inShadow) {
+            let diff = Math.max(0, normal.dot(lightDir));
+            color = color.add(albedo.mul(diff).mul(l.intensity));
+        }
+    }
+    
+    // Ambient Illumination
+    color = color.add(albedo.mul(0.15));
+    
+    // Recursive Reflections
+    if (hitSphere.reflectivity > 0) {
+        let reflectDir = ray.dir.sub(normal.mul(2 * ray.dir.dot(normal))).norm();
+        let reflectRay = new Ray(hitPoint.add(normal.mul(0.001)), reflectDir);
+        let reflectColor = trace(reflectRay, depth + 1);
+        
+        // Pseudo Fresnel Effect for realistic grazing angles
+        let fresnel = Math.pow(1.0 - Math.max(0, -ray.dir.dot(normal)), 2.0) * 0.5 + 0.5;
+        color = color.add(reflectColor.mul(hitSphere.reflectivity * fresnel));
+    }
+    
+    return color;
+}
+
+// --- RENDER LOOP ---
+const canvas = document.getElementById("renderCanvas");
+const ctx = canvas.getContext("2d");
+let imgData, currentRow = 0, isRendering = false, renderStartTime = 0;
+
+function log(msg) {
+    document.getElementById("logBox").innerText = msg;
+    console.log(msg);
+}
+
+function startRender() {
+    if (isRendering) return;
+    document.getElementById("renderBtn").disabled = true;
+    
+    // Defer execution slightly so UI button state updates
+    setTimeout(() => {
+        let t0 = performance.now();
+        initQFT();
+        let t1 = performance.now();
+        log(`QFT Computed in ${(t1 - t0).toFixed(0)}ms. Executing Progressive Raytracer...`);
+        
+        imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        currentRow = 0;
+        isRendering = true;
+        renderStartTime = performance.now();
+        requestAnimationFrame(renderLine);
+    }, 50);
+}
+
+function renderLine() {
+    if (currentRow >= canvas.height) {
+        isRendering = false;
+        let totalTime = performance.now() - renderStartTime;
+        log(`Render Complete in ${(totalTime / 1000).toFixed(2)}s!`);
+        document.getElementById("renderBtn").disabled = false;
+        return;
+    }
+    
+    const w = canvas.width;
+    const h = canvas.height;
+    const cameraPos = new Vec3(0, 1.0, -3.0);
+    
+    // Compute a batch of 5 rows per frame to balance speed and browser lag
+    for (let rows = 0; rows < 5; rows++) {
+        if (currentRow >= h) break;
+        
+        for (let x = 0; x < w; x++) {
+            let u = (x - w / 2) / h;
+            let v = -(currentRow - h / 2) / h;
+            
+            let dir = new Vec3(u, v, 1.0).norm();
+            let ray = new Ray(cameraPos, dir);
+            
+            let col = trace(ray, 0);
+            
+            // Gamma Correction (1/2.2) and tone mapping
+            col.x = Math.pow(Math.min(1, col.x), 0.4545);
+            col.y = Math.pow(Math.min(1, col.y), 0.4545);
+            col.z = Math.pow(Math.min(1, col.z), 0.4545);
+            
+            let idx = (currentRow * w + x) * 4;
+            imgData.data[idx] = col.x * 255;
+            imgData.data[idx+1] = col.y * 255;
+            imgData.data[idx+2] = col.z * 255;
+            imgData.data[idx+3] = 255;
+        }
+        currentRow++;
+    }
+    
+    ctx.putImageData(imgData, 0, 0);
+    if (currentRow % 25 === 0) log(`Rendering pixels... ${Math.floor((currentRow / h) * 100)}%`);
+    
+    requestAnimationFrame(renderLine);
+}
+
+// Initial draw canvas setup
+ctx.fillStyle = "#0a0a0a";
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+ctx.fillStyle = "#ffffff";
+ctx.font = "18px 'Segoe UI', sans-serif";
+ctx.textAlign = "center";
+ctx.fillText("Click 'Run QFT & Render Scene' to begin computation.", canvas.width/2, canvas.height/2);
+
+</script>
+</body>
+</html>

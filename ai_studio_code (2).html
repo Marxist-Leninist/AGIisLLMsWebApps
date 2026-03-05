@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deterministic QFT Raytracer</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+        #ui-container {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(10, 15, 20, 0.85);
+            padding: 20px;
+            border: 1px solid #00ffcc;
+            border-radius: 8px;
+            max-width: 420px;
+            box-shadow: 0 4px 15px rgba(0, 255, 204, 0.2);
+            backdrop-filter: blur(5px);
+            pointer-events: none;
+        }
+        .interactive {
+            pointer-events: auto;
+        }
+        h1 {
+            font-size: 1.3rem;
+            margin: 0 0 10px 0;
+            color: #00ffcc;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        p {
+            font-size: 0.85rem;
+            color: #aaa;
+            line-height: 1.5;
+            margin-bottom: 15px;
+        }
+        strong {
+            color: #fff;
+        }
+        .control-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: flex;
+            align-items: center;
+            font-size: 0.9rem;
+            cursor: pointer;
+            margin-bottom: 5px;
+        }
+        input[type=range] {
+            width: 100%;
+            accent-color: #00ffcc;
+            cursor: pointer;
+        }
+        input[type=checkbox] {
+            margin-right: 10px;
+            accent-color: #00ffcc;
+            cursor: pointer;
+        }
+        .highlight {
+            color: #ff3366;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui-container">
+        <h1>QFT Path Integral Raytracer</h1>
+        <p><strong>PROBABILITY DOESN'T EXIST:</strong> Standard renderers use random Monte Carlo path tracing. This engine calculates the exact, deterministic <strong style="color:#00ffcc">Feynman Path Integral</strong> (QED).</p>
+        <p>Light takes <em>every possible path</em> simultaneously. The classical "ray" is just an illusion emerging from the constructive interference of purely deterministic quantum field amplitudes.</p>
+        <p>Move your mouse to move the light source. Place it inside the <span class="highlight">red focal point</span> to see a ray mathematically emerge from pure quantum superposition!</p>
+        
+        <div class="interactive">
+            <div class="control-group">
+                <label>Quantum Wavelength (λ): <span id="wl-val" style="margin-left:auto;">0.035</span></label>
+                <input type="range" id="wavelength" min="0.005" max="0.15" step="0.005" value="0.035">
+            </div>
+            <div class="control-group">
+                <label><input type="checkbox" id="show-phase" checked> Visualise Quantum Phase (Color)</label>
+            </div>
+            <div class="control-group">
+                <label><input type="checkbox" id="hide-direct"> Hide Direct Field (Show Reflection Only)</label>
+            </div>
+        </div>
+    </div>
+
+    <canvas id="glcanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('glcanvas');
+        const gl = canvas.getContext('webgl2');
+
+        if (!gl) {
+            alert('WebGL 2 is not supported by your browser.');
+        }
+
+        // --- Shaders ---
+        
+        const vertexShaderSource = `#version 300 es
+            in vec4 a_position;
+            void main() {
+                gl_Position = a_position;
+            }
+        `;
+
+        const fragmentShaderSource = `#version 300 es
+            precision highp float;
+
+            uniform vec2 u_resolution;
+            uniform float u_time;
+            uniform vec2 u_mouse;
+            uniform float u_wavelength;
+            uniform int u_show_phase;
+            uniform int u_hide_direct;
+
+            out vec4 fragColor;
+
+            #define PI 3.14159265359
+            // Number of paths to integrate over the mirror (higher = more continuous deterministic field)
+            #define N_STEPS 500 
+
+            // Complex exponentiation: e^(i*phase)
+            vec2 c_exp(float phase) {
+                return vec2(cos(phase), sin(phase));
+            }
+
+            // Maps complex phase (angle) to Hue, and amplitude squared to Brightness
+            vec3 phaseToColor(float phase, float intensity) {
+                float hue = phase / (2.0 * PI) + 0.5;
+                // Non-linear tone mapping to handle bright constructive interference spots
+                float lum = 1.0 - exp(-intensity * 1.5); 
+                
+                // HSL to RGB conversion
+                vec3 c = vec3(hue, 1.0, lum);
+                vec3 rgb = clamp(abs(mod(c.x * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
+                return c.z + c.y * (rgb - 0.5) * (1.0 - abs(2.0 * c.z - 1.0));
+            }
+
+            void main() {
+                // Normalize pixel coordinates
+                vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution.xy) / min(u_resolution.x, u_resolution.y);
+                vec2 mouse = (u_mouse - 0.5 * u_resolution.xy) / min(u_resolution.x, u_resolution.y);
+
+                // Parabolic Mirror Equation: y = a * x^2 + c_y
+                float a = 1.5;
+                float c_y = -0.3;
+                
+                // The geometric focus point of the parabola
+                float focus_y = c_y + 1.0 / (4.0 * a);
+                vec2 focus = vec2(0.0, focus_y);
+
+                // Quantum Wave variables
+                float k = 2.0 * PI / u_wavelength; // Wavenumber
+                float w = k * 0.15;                 // Angular frequency (speed of time evolution)
+                
+                // The Total Quantum Field (Complex Amplitude)
+                vec2 psi = vec2(0.0);
+
+                // 1. Direct Field Contribution (from source to screen)
+                float d_dir = length(uv - mouse);
+                if (u_hide_direct == 0) {
+                    float phase_dir = k * d_dir - w * u_time;
+                    // In 2D, wave amplitude decays as 1/sqrt(distance)
+                    float amp_dir = 1.0 / sqrt(d_dir + 0.05);
+                    psi += amp_dir * c_exp(phase_dir) * 0.4;
+                }
+
+                // 2. Reflected Field (FEYNMAN PATH INTEGRAL)
+                // We sum the complex amplitudes of light bouncing off *every* point on the mirror.
+                float dx = 2.0 / float(N_STEPS);
+                for (int i = 0; i < N_STEPS; i++) {
+                    float mx = -1.0 + float(i) * dx;
+                    vec2 M = vec2(mx, a * mx * mx + c_y); // Point on mirror
+                    
+                    float d1 = length(M - mouse); // Distance: Source to Mirror
+                    float d2 = length(uv - M);    // Distance: Mirror to Pixel
+                    
+                    float path_length = d1 + d2;
+                    float phase_refl = k * path_length - w * u_time;
+                    
+                    // Amplitude decay for the two legs of the journey
+                    float amp_refl = (1.0 / sqrt(d1 + 0.05)) * (1.0 / sqrt(d2 + 0.05)) * dx;
+                    
+                    // Add phasor to superposition (with PI phase shift for reflection)
+                    psi += amp_refl * c_exp(phase_refl + PI) * 2.5;
+                }
+
+                // Calculate Observable metrics from the deterministic field
+                float intensity = dot(psi, psi);     // Probability density / Classical Intensity
+                float phase = atan(psi.y, psi.x);    // Quantum phase angle
+
+                // Render Color
+                vec3 color = vec3(0.0);
+                if (u_show_phase == 1) {
+                    color = phaseToColor(phase, intensity);
+                } else {
+                    float lum = 1.0 - exp(-intensity * 1.5);
+                    color = vec3(lum);
+                }
+
+                // --- Draw Physical Objects ---
+                
+                // Draw Parabolic Mirror
+                float mirror_y = a * uv.x * uv.x + c_y;
+                if (abs(uv.x) <= 1.0 && abs(uv.y - mirror_y) < 0.005) {
+                    color = mix(color, vec3(0.0, 1.0, 0.8), 0.8);
+                }
+
+                // Draw Light Source
+                if (length(uv - mouse) < 0.015) {
+                    color = vec3(1.0);
+                }
+
+                // Draw Focal Point Target (Red crosshair)
+                if (abs(uv.x - focus.x) < 0.01 && abs(uv.y - focus.y) < 0.002 || 
+                    abs(uv.y - focus.y) < 0.01 && abs(uv.x - focus.x) < 0.002) {
+                    color = mix(color, vec3(1.0, 0.2, 0.4), 0.7);
+                }
+
+                fragColor = vec4(color, 1.0);
+            }
+        `;
+
+        // --- WebGL Compilation Boilerplate ---
+
+        function createShader(gl, type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error(gl.getShaderInfoLog(shader));
+                gl.deleteShader(shader);
+                return null;
+            }
+            return shader;
+        }
+
+        const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+        const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+        const program = gl.createProgram();
+        gl.attachShader(program, vertexShader);
+        gl.attachShader(program, fragmentShader);
+        gl.linkProgram(program);
+
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+            console.error(gl.getProgramInfoLog(program));
+        }
+
+        const positionAttributeLocation = gl.getAttribLocation(program, "a_position");
+        const positionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+        // Full screen quad
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+            -1, -1,  1, -1,  -1, 1,
+            -1,  1,  1, -1,   1, 1,
+        ]), gl.STATIC_DRAW);
+
+        const vao = gl.createVertexArray();
+        gl.bindVertexArray(vao);
+        gl.enableVertexAttribArray(positionAttributeLocation);
+        gl.vertexAttribPointer(positionAttributeLocation, 2, gl.FLOAT, false, 0, 0);
+
+        // --- Uniforms & State ---
+
+        const locResolution = gl.getUniformLocation(program, "u_resolution");
+        const locTime = gl.getUniformLocation(program, "u_time");
+        const locMouse = gl.getUniformLocation(program, "u_mouse");
+        const locWavelength = gl.getUniformLocation(program, "u_wavelength");
+        const locShowPhase = gl.getUniformLocation(program, "u_show_phase");
+        const locHideDirect = gl.getUniformLocation(program, "u_hide_direct");
+
+        let mouseX = window.innerWidth / 2;
+        // Start mouse exactly at the focus point to show off the classical ray emerging
+        let minDim = Math.min(window.innerWidth, window.innerHeight);
+        // From shader: c_y = -0.3, a = 1.5 -> focus_y = -0.3 + 1/(4*1.5) = -0.1333
+        let mouseY = window.innerHeight / 2 - (-0.13333 * minDim); 
+
+        // UI Elements
+        const wlSlider = document.getElementById('wavelength');
+        const wlVal = document.getElementById('wl-val');
+        const phaseCheck = document.getElementById('show-phase');
+        const directCheck = document.getElementById('hide-direct');
+
+        wlSlider.addEventListener('input', (e) => wlVal.innerText = e.target.value);
+
+        // Mouse Tracking
+        window.addEventListener('mousemove', (e) => {
+            mouseX = e.clientX;
+            mouseY = window.innerHeight - e.clientY; // Invert Y for WebGL
+        });
+        
+        // Touch support for mobile
+        window.addEventListener('touchmove', (e) => {
+            mouseX = e.touches[0].clientX;
+            mouseY = window.innerHeight - e.touches[0].clientY;
+        });
+
+        function resizeCanvasToDisplaySize(canvas) {
+            const displayWidth  = canvas.clientWidth;
+            const displayHeight = canvas.clientHeight;
+            if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
+                canvas.width  = displayWidth;
+                canvas.height = displayHeight;
+            }
+        }
+
+        // --- Main Render Loop ---
+        function render(time) {
+            resizeCanvasToDisplaySize(gl.canvas);
+            gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+
+            gl.useProgram(program);
+            gl.bindVertexArray(vao);
+
+            // Pass Uniforms
+            gl.uniform2f(locResolution, gl.canvas.width, gl.canvas.height);
+            gl.uniform1f(locTime, time * 0.001); // seconds
+            gl.uniform2f(locMouse, mouseX, mouseY);
+            
+            gl.uniform1f(locWavelength, parseFloat(wlSlider.value));
+            gl.uniform1i(locShowPhase, phaseCheck.checked ? 1 : 0);
+            gl.uniform1i(locHideDirect, directCheck.checked ? 1 : 0);
+
+            // Draw Full Screen Quad
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+            requestAnimationFrame(render);
+        }
+
+        requestAnimationFrame(render);
+    </script>
+</body>
+</html>

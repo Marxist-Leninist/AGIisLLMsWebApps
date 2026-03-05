@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Lentz-Natario Soliton Simulation with AI Copilot</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap');
+
+        body { margin: 0; overflow: hidden; background: #000; color: #fff; font-family: 'IBM Plex Mono', monospace; user-select: none; }
+        canvas { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
+        canvas:active { cursor: grabbing; }
+        
+        #ui-wrapper {
+            position: absolute; top: 15px; left: 15px;
+            display: flex; flex-direction: column; align-items: flex-start;
+            z-index: 10;
+        }
+
+        .btn-row { display: flex; gap: 10px; margin-bottom: 10px; }
+
+        .sys-btn {
+            background: rgba(0, 204, 255, 0.1);
+            border: 1px solid #00ccff; color: #00ccff;
+            padding: 8px 15px; border-radius: 4px; cursor: pointer;
+            font-family: 'Chakra Petch', sans-serif; font-weight: 700; letter-spacing: 2px;
+            font-size: 0.9rem; backdrop-filter: blur(10px); transition: all 0.2s;
+            box-shadow: 0 0 10px rgba(0, 204, 255, 0.2); text-transform: uppercase;
+        }
+        .sys-btn:hover { background: #00ccff; color: #000; }
+        
+        .cam-btn { border-color: #00ff88; color: #00ff88; box-shadow: 0 0 10px rgba(0, 255, 136, 0.2); }
+        .cam-btn:hover { background: #00ff88; color: #000; }
+
+        #ui {
+            background: rgba(5, 10, 15, 0.85);
+            padding: 20px; border: 1px solid #00ccff; border-radius: 4px; width: 400px;
+            box-shadow: 0 4px 30px rgba(0, 204, 255, 0.15); backdrop-filter: blur(12px);
+            transition: opacity 0.3s, transform 0.3s; transform-origin: top left;
+            max-height: calc(100vh - 80px); overflow-y: auto;
+        }
+        
+        #ui::-webkit-scrollbar { width: 6px; }
+        #ui::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+        #ui::-webkit-scrollbar-thumb { background: rgba(0,204,255,0.4); border-radius: 3px; }
+        #ui.hidden { opacity: 0; transform: scale(0.95); pointer-events: none; position: absolute; }
+
+        h1 { font-family: 'Chakra Petch', sans-serif; font-size: 1.2rem; margin: 0 0 5px 0; color: #00ccff; text-transform: uppercase; letter-spacing: 2px;}
+        p { font-size: 0.75rem; color: #88aacc; line-height: 1.4; margin-bottom: 15px; opacity: 0.8; }
+        
+        .slider-row { margin-bottom: 15px; }
+        .slider-label { display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 6px; color: #ccc;}
+        .val { color: #00ccff; font-weight: 600; }
+        input[type=range] { width: 100%; -webkit-appearance: none; background: rgba(0,204,255,0.2); height: 4px; border-radius: 2px; outline: none; cursor: pointer; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #00ccff; box-shadow: 0 0 8px #00ccff; }
+
+        .toggle-row { display: flex; align-items: center; font-size: 0.8rem; margin-bottom: 12px; color: #ccc; cursor: pointer; }
+        input[type=checkbox] { accent-color: #00ccff; transform: scale(1.2); margin-right: 10px; cursor: pointer; }
+
+        .telemetry-panel { margin-top: 15px; padding: 12px; border: 1px solid rgba(0, 204, 255, 0.3); border-radius: 4px; background: rgba(0, 20, 40, 0.4); }
+        .telemetry-title { font-family: 'Chakra Petch', sans-serif; font-size: 0.85rem; font-weight: 700; color: #00ff88; margin-bottom: 8px; letter-spacing: 1px;}
+        .telemetry-stats { font-size: 0.75rem; color: #aaa; display: flex; justify-content: space-between; flex-direction: column; gap: 6px; }
+        .stat-row { display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 4px;}
+        .safe-val { color: #00ccff; font-weight: bold; }
+        .phys-val { color: #00ff88; font-weight: bold; }
+        .nn-val { color: #ff00aa; font-weight: bold; font-family: monospace;}
+        
+        .ai-panel { margin-top: 15px; padding: 12px; border: 1px solid rgba(255, 0, 170, 0.4); border-radius: 4px; background: rgba(40, 0, 20, 0.4); position: relative; overflow: hidden; }
+        .ai-panel::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: #ff00aa; box-shadow: 0 0 8px #ff00aa; }
+        .ai-title { font-family: 'Chakra Petch', sans-serif; font-size: 0.85rem; font-weight: 700; color: #ff00aa; margin-bottom: 8px; letter-spacing: 1px;}
+        .ai-input { width: 100%; box-sizing: border-box; padding: 8px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,0,170,0.3); color: #fff; border-radius: 4px; font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; margin-bottom: 8px; outline: none; resize: vertical; min-height: 40px; }
+        .ai-input:focus { border-color: #ff00aa; box-shadow: 0 0 5px rgba(255,0,170,0.3); }
+        
+        .ai-btn { width: 100%; background: rgba(255,0,170,0.15); border: 1px solid #ff00aa; color: #ff00aa; padding: 8px; border-radius: 4px; cursor: pointer; font-family: 'Chakra Petch', sans-serif; font-weight: bold; letter-spacing: 1px; transition: all 0.2s; font-size: 0.8rem; }
+        .ai-btn:hover:not(:disabled) { background: #ff00aa; color: #000; box-shadow: 0 0 10px rgba(255,0,170,0.4); }
+        .ai-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .nn-btn { width: 100%; background: rgba(0,255,136,0.15); border: 1px solid #00ff88; color: #00ff88; padding: 8px; border-radius: 4px; cursor: pointer; font-family: 'Chakra Petch', sans-serif; font-weight: bold; letter-spacing: 1px; transition: all 0.2s; font-size: 0.8rem; margin-top: 8px; }
+        .nn-btn:hover:not(:disabled) { background: #00ff88; color: #000; box-shadow: 0 0 10px rgba(0,255,136,0.4); }
+        .nn-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .ai-output { font-size: 0.75rem; color: #ffb3e6; margin-top: 10px; line-height: 1.5; display: none; background: rgba(0,0,0,0.4); padding: 8px; border-radius: 4px; border-left: 2px solid #ff00aa; }
+
+        #crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: rgba(0,255,136,0.5); font-size: 20px; pointer-events: none; z-index: 1; display: none; font-family: sans-serif;}
+        
+        #pilot-hud {
+            position: absolute; top: 10%; right: 5%; color: #00ff88; font-family: 'IBM Plex Mono', monospace; font-size: 0.8rem;
+            pointer-events: none; opacity: 0; transition: opacity 0.5s; text-align: right;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="crosshair">⌖</div>
+    
+    <div id="pilot-hud">
+        <div style="font-family: 'Chakra Petch'; font-size: 1.2rem; margin-bottom: 5px;">OPTICAL SENSORS ACTIVE</div>
+        <div id="hud-v">VELOCITY: 0.95c</div>
+        <div id="hud-lens">LENSING TENSOR: NOMINAL</div>
+    </div>
+
+    <div id="ui-wrapper">
+        <div class="btn-row">
+            <button id="toggle-btn" class="sys-btn">⚙️ Parameters</button>
+            <button id="cam-btn" class="sys-btn cam-btn">📷 VIEW: ORBIT</button>
+        </div>
+        
+        <div id="ui">
+            <h1>Lentz-Natario Soliton</h1>
+            <p><strong>PHYSICALIST WARP TOPOLOGY.</strong> Uses positive stress-matter tensors (Lentz). Eliminates the need for fictional negative energy. Zero-expansion kinematics (Natario) prevents Hawking radiation frying.</p>
+            
+            <div class="slider-row">
+                <div class="slider-label"><span>Warp Velocity (v)</span> <span class="val" id="val-v">0.95 c</span></div>
+                <input type="range" id="velocity" min="0.0" max="3.0" step="0.01" value="0.95">
+            </div>
+            
+            <div class="slider-row">
+                <div class="slider-label"><span>Bow Shock Sharpness (+Z)</span> <span class="val" id="val-b">1.20</span></div>
+                <input type="range" id="bow" min="0.5" max="3.0" step="0.1" value="1.2">
+            </div>
+
+            <div class="slider-row">
+                <div class="slider-label"><span>Wake Taper Length (-Z)</span> <span class="val" id="val-t">6.50</span></div>
+                <input type="range" id="tail" min="2.0" max="10.0" step="0.1" value="6.5">
+            </div>
+
+            <div class="slider-row">
+                <div class="slider-label"><span>Core Radius (Transverse)</span> <span class="val" id="val-w">2.00</span></div>
+                <input type="range" id="width" min="1.0" max="5.0" step="0.1" value="2.0">
+            </div>
+
+            <div class="toggle-row">
+                <input type="checkbox" id="show-flow" checked>
+                <label for="show-flow">Visualize Matter Geodesic Flow</label>
+            </div>
+            <div class="toggle-row">
+                <input type="checkbox" id="show-grid" checked>
+                <label for="show-grid">Visualize Spacetime Curvature Grid</label>
+            </div>
+
+            <div class="telemetry-panel">
+                <div class="telemetry-title">PHYSICS TELEMETRY</div>
+                <div class="telemetry-stats">
+                    <div class="stat-row"><span>Energy Type:</span> <span class="phys-val">100% Positive Mass</span></div>
+                    <div class="stat-row"><span>Energy Cost (Lentz):</span> <span id="val-energy" class="phys-val">0.20 Jupiter Masses</span></div>
+                    <div class="stat-row"><span>Safe Stopping Dist:</span> <span id="val-stop" class="safe-val">0.45 AU</span></div>
+                    <div class="stat-row"><span>Horizon / Hawking Rad:</span> <span class="phys-val">NONE (θ = 0)</span></div>
+                    <div class="stat-row" style="margin-top: 5px; border-top: 1px dashed rgba(255,0,170,0.5); padding-top: 6px;">
+                        <span>Transformer NN Res Scale:</span> <span id="val-nn-scale" class="nn-val">100%</span>
+                    </div>
+                    <div class="stat-row"><span>Framerate:</span> <span id="val-fps" class="nn-val">60 FPS</span></div>
+                </div>
+            </div>
+
+            <!-- AI COPILOT PANEL -->
+            <div class="ai-panel">
+                <div class="ai-title">AI ENGINEERING COPILOT</div>
+                <textarea id="ai-scenario" class="ai-input" placeholder="Enter scenario (e.g., 'We need to stop extremely close to Earth without causing tidal damage', or 'Minimize energy usage')..."></textarea>
+                <button id="ai-btn" class="ai-btn" onclick="optimizeTopologyLLM()">✨ LLM COPILOT: SCENARIO ANALYSIS</button>
+                <button id="nn-opt-btn" class="nn-btn" onclick="startNNOptimization()">🧠 LOCAL TRANSFORMER: MINIMIZE ENERGY & STOP DIST</button>
+                <div id="ai-output" class="ai-output"></div>
+            </div>
+
+        </div>
+    </div>
+
+    <canvas id="glcanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('glcanvas');
+        const gl = canvas.getContext('webgl2', { antialias: false });
+
+        if (!gl) { alert('WebGL 2 is required for this simulation.'); }
+
+        // --- MICRO-TRANSFORMER FPS MANAGER ---
+        class MicroTransformerFPS {
+            constructor(targetFPS = 60) {
+                this.seqLen = 8;
+                this.history = new Array(this.seqLen).fill(1000 / targetFPS);
+                this.targetDt = 1000 / targetFPS;
+                this.wq = 1.0; this.wk = 1.0; this.wv = 1.0;
+                this.learningRate = 0.002;
+                this.currentScale = 1.0;
+            }
+            forward(dt) {
+                this.history.shift(); this.history.push(dt);
+                let q = this.history[this.seqLen - 1] * this.wq;
+                let attentionWeights = new Float32Array(this.seqLen);
+                let sumExp = 0;
+                
+                for (let i = 0; i < this.seqLen; i++) {
+                    let rawWeight = (q * (this.history[i] * this.wk)) / 500.0; 
+                    attentionWeights[i] = Math.exp(rawWeight);
+                    sumExp += attentionWeights[i];
+                }
+                let context = 0;
+                for (let i = 0; i < this.seqLen; i++) {
+                    context += (attentionWeights[i] / sumExp) * (this.history[i] * this.wv);
+                }
+                this.currentScale += (this.targetDt - context) * this.learningRate;
+                this.currentScale = Math.max(0.20, Math.min(1.0, this.currentScale));
+                return this.currentScale;
+            }
+        }
+        const fpsNN = new MicroTransformerFPS(60);
+        let activeScale = 1.0;
+
+        // --- LOCAL TRANSFORMER ATTENTION OPTIMIZER ---
+        // Solves for minimum physical positive energy and stopping distance
+        class TopologyOptimizerNN {
+            constructor() {
+                this.active = false;
+                this.iterations = 0;
+                this.targetIterations = 70; // Run for slightly over a second
+            }
+            
+            step(currentParams) {
+                const numHeads = 32; // Query heads in the attention mechanism
+                let candidates = [];
+                for(let i=0; i<numHeads; i++) {
+                    let c = {
+                        v: Math.max(0.1, Math.min(3.0, currentParams.v + (Math.random()-0.5)*0.8)),
+                        bow: Math.max(0.5, Math.min(3.0, currentParams.bow + (Math.random()-0.5)*0.8)),
+                        tail: Math.max(2.0, Math.min(10.0, currentParams.tail + (Math.random()-0.5)*2.5)),
+                        width: Math.max(1.0, Math.min(5.0, currentParams.width + (Math.random()-0.5)*1.5)),
+                    };
+                    
+                    // Evaluate Physical Loss
+                    let energy = (c.v * c.v) * (c.width * c.width) * (c.bow / 2.0) * 0.1;
+                    let stop = (energy * c.v * c.v) * 0.5 + 0.01;
+                    let turb = (c.width / c.tail) * c.bow * 10.0;
+                    
+                    // Constraints (Physicalist & Practical)
+                    // 1. We still need to travel fast (Target ~1.0c) to be a useful warp drive
+                    let vPenalty = Math.max(0, 1.0 - c.v) * 15.0; 
+                    // 2. Minimize positive mass-energy
+                    let energyPenalty = energy * 20.0; 
+                    // 3. Minimize planetary tidal stopping distance
+                    let stopPenalty = stop * 25.0;
+                    // 4. Ensure structural wake stability
+                    let turbPenalty = Math.max(0, turb - 2.0) * 8.0; 
+                    
+                    let loss = vPenalty + energyPenalty + stopPenalty + turbPenalty;
+                    
+                    // Convert to Attention Score (Softmin)
+                    candidates.push({ p: c, score: Math.exp(-loss) });
+                }
+
+                // Softmax Attention Vector
+                let sumScore = candidates.reduce((sum, c) => sum + c.score, 0);
+                if (sumScore === 0) sumScore = 1; 
+                
+                let next = { v:0, bow:0, tail:0, width:0 };
+                for(let c of candidates) {
+                    let weight = c.score / sumScore;
+                    next.v += c.p.v * weight;
+                    next.bow += c.p.bow * weight;
+                    next.tail += c.p.tail * weight;
+                    next.width += c.p.width * weight;
+                }
+                
+                // Interpolate for smooth convergence visualization
+                return {
+                    v: currentParams.v * 0.85 + next.v * 0.15,
+                    bow: currentParams.bow * 0.85 + next.bow * 0.15,
+                    tail: currentParams.tail * 0.85 + next.tail * 0.15,
+                    width: currentParams.width * 0.85 + next.width * 0.15
+                };
+            }
+        }
+        const localNN = new TopologyOptimizerNN();
+
+        function startNNOptimization() {
+            localNN.active = true;
+            localNN.iterations = localNN.targetIterations;
+            document.getElementById('nn-opt-btn').disabled = true;
+            document.getElementById('ai-btn').disabled = true;
+            document.getElementById('nn-opt-btn').innerText = "🧠 OPTIMIZING TENSORS...";
+            
+            const out = document.getElementById('ai-output');
+            out.style.borderLeftColor = "#00ff88";
+            out.style.display = 'block';
+            out.innerHTML = "<span style='color:#00ff88'>Initializing Local Transformer Attention Heads...<br>Minimizing positive mass-energy footprint and calculating safest tidal deceleration distance.</span>";
+        }
+
+        // UI Logic
+        const ui = document.getElementById('ui');
+        const toggleBtn = document.getElementById('toggle-btn');
+        const camBtn = document.getElementById('cam-btn');
+        const crosshair = document.getElementById('crosshair');
+        const pilotHud = document.getElementById('pilot-hud');
+        
+        let uiVisible = true;
+        let viewMode = 'orbit'; // 'orbit' or 'pilot'
+
+        toggleBtn.addEventListener('click', () => {
+            uiVisible = !uiVisible;
+            if (uiVisible) { ui.classList.remove('hidden'); toggleBtn.innerText = '➖ Parameters'; } 
+            else { ui.classList.add('hidden'); toggleBtn.innerText = '⚙️ Parameters'; }
+        });
+
+        camBtn.addEventListener('click', () => {
+            if (viewMode === 'orbit') {
+                viewMode = 'pilot';
+                camBtn.innerText = '📷 VIEW: PILOT';
+                camBtn.style.color = '#fff'; camBtn.style.borderColor = '#fff';
+                crosshair.style.display = 'block';
+                pilotHud.style.opacity = '1';
+                // Reset pilot look angles
+                pilotYaw = 0; pilotPitch = 0;
+            } else {
+                viewMode = 'orbit';
+                camBtn.innerText = '📷 VIEW: ORBIT';
+                camBtn.style.color = '#00ff88'; camBtn.style.borderColor = '#00ff88';
+                crosshair.style.display = 'none';
+                pilotHud.style.opacity = '0';
+            }
+        });
+
+        const bindSlider = (id, valId, suffix="") => {
+            const el = document.getElementById(id);
+            const valEl = document.getElementById(valId);
+            el.oninput = (e) => {
+                valEl.innerText = parseFloat(e.target.value).toFixed(2) + suffix;
+                updateTelemetry();
+            };
+            return el;
+        };
+
+        const vSlider = bindSlider('velocity', 'val-v', ' c');
+        const bSlider = bindSlider('bow', 'val-b');
+        const tSlider = bindSlider('tail', 'val-t');
+        const wSlider = bindSlider('width', 'val-w');
+        const chkFlow = document.getElementById('show-flow');
+        const chkGrid = document.getElementById('show-grid');
+
+        const valEnergy = document.getElementById('val-energy');
+        const valStop = document.getElementById('val-stop');
+        const valNnScale = document.getElementById('val-nn-scale');
+        const valFps = document.getElementById('val-fps');
+
+        function updateTelemetry() {
+            let v = parseFloat(vSlider.value);
+            let bow = parseFloat(bSlider.value);
+            let tail = parseFloat(tSlider.value);
+            let width = parseFloat(wSlider.value);
+            
+            // Hard Science Heuristic: Energy scales with R^2, v^2, and bow compactness.
+            // Lentz showed configurations that lower this to fractions of a solar mass (or Jupiter masses).
+            let energyMass = (v * v) * (width * width) * (bow / 2.0) * 0.1;
+            
+            if (energyMass < 0.001) energyMass = 0.001;
+            
+            if (energyMass > 5.0) {
+                valEnergy.innerText = (energyMass / 1047).toFixed(3) + " Solar Masses"; // 1 Solar mass = ~1047 Jupiter masses
+                valEnergy.style.color = '#ffaa00';
+            } else {
+                valEnergy.innerText = energyMass.toFixed(3) + " Jupiter Masses";
+                valEnergy.style.color = '#00ff88';
+            }
+            
+            // Safe stopping distance (to avoid tidal shear on planets). Proportional to mass and velocity.
+            let stoppingDist = (energyMass * v * v) * 0.5 + 0.01; 
+            
+            if (stoppingDist > 5.0) {
+                valStop.innerText = stoppingDist.toFixed(1) + " AU (Lethal Tide Range)";
+                valStop.style.color = '#ff3333';
+            } else if (stoppingDist > 0.5) {
+                valStop.innerText = stoppingDist.toFixed(2) + " AU";
+                valStop.style.color = '#00ccff';
+            } else {
+                // E.g. Earth Moon distance is ~0.0025 AU
+                valStop.innerText = stoppingDist.toFixed(4) + " AU (Safe Orbit Inj.)";
+                valStop.style.color = '#00ff88';
+            }
+
+            document.getElementById('hud-v').innerText = `VELOCITY: ${v.toFixed(2)}c`;
+            document.getElementById('hud-lens').innerText = `METRIC DISTORTION: ${(bow * v).toFixed(1)}`;
+        }
+        updateTelemetry();
+
+        // --- GEMINI API INTEGRATION ---
+        const apiKey = ""; 
+        
+        async function optimizeTopologyLLM() {
+            const scenarioInput = document.getElementById('ai-scenario').value;
+            if (!scenarioInput.trim()) return;
+
+            const btn = document.getElementById('ai-btn');
+            const out = document.getElementById('ai-output');
+            
+            btn.innerText = "✨ CALCULATING TRAJECTORY...";
+            btn.disabled = true; document.getElementById('nn-opt-btn').disabled = true;
+            out.style.borderLeftColor = "#ff00aa";
+            out.style.display = 'block';
+            out.innerHTML = "<span style='color:#fff'>Consulting Nav-Computer...</span>";
+
+            const prompt = `As the ship's AI Copilot, optimize the Lentz-Natario physicalist warp metric parameters for this scenario: "${scenarioInput}". 
+            Return JSON: v (0.0 to 3.0), bow (0.5 to 3.0), tail (2.0 to 10.0), width (1.0 to 5.0), and 'explanation'.
+            CONSTRAINTS: You only use STRICTLY POSITIVE mass-energy (no negative energy). 
+            If stopping near a planet (Earth), you MUST drastically lower 'width' and 'v' to minimize the required Jupiter Masses of energy, which shrinks the 'Safe Stopping Distance' (avoids tearing the planet apart with tidal forces). 
+            Provide a technical, in-character explanation referencing positive-energy minimization and tidal safety.`;
+
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }],
+                systemInstruction: { parts: [{ text: "You are an advanced starship engineering AI specializing in Lentz-Natario physicalist metrics. Always respond in valid JSON. Be concise and technical." }] },
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: { v: { type: "NUMBER" }, bow: { type: "NUMBER" }, tail: { type: "NUMBER" }, width: { type: "NUMBER" }, explanation: { type: "STRING" } },
+                        required: ["v", "bow", "tail", "width", "explanation"]
+                    }
+                }
+            };
+
+            let retries = 0; const maxRetries = 5; const delays = [1000, 2000, 4000, 8000, 16000];
+            let success = false; let resultData = null;
+
+            while (retries < maxRetries && !success) {
+                try {
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
+                    });
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    const result = await response.json();
+                    resultData = JSON.parse(result.candidates?.[0]?.content?.parts?.[0]?.text);
+                    success = true;
+                } catch (e) {
+                    if (retries < maxRetries - 1) await new Promise(r => setTimeout(r, delays[retries]));
+                    retries++;
+                }
+            }
+
+            if (success && resultData) {
+                vSlider.value = resultData.v; bSlider.value = resultData.bow;
+                tSlider.value = resultData.tail; wSlider.value = resultData.width;
+                
+                document.getElementById('val-v').innerText = resultData.v.toFixed(2) + ' c';
+                document.getElementById('val-b').innerText = resultData.bow.toFixed(2);
+                document.getElementById('val-t').innerText = resultData.tail.toFixed(2);
+                document.getElementById('val-w').innerText = resultData.width.toFixed(2);
+                updateTelemetry();
+                out.innerHTML = `<strong>AI LOG:</strong> ${resultData.explanation}`;
+            } else {
+                out.innerHTML = `<strong style="color:red">ERROR:</strong> Neural link severed.`;
+            }
+            btn.innerText = "✨ LLM COPILOT: SCENARIO ANALYSIS"; 
+            btn.disabled = false; document.getElementById('nn-opt-btn').disabled = false;
+        }
+        // --- END GEMINI API ---
+
+        function resize(scale = 1.0) {
+            canvas.width = Math.floor(window.innerWidth * scale);
+            canvas.height = Math.floor(window.innerHeight * scale);
+            gl.viewport(0, 0, canvas.width, canvas.height);
+        }
+        window.addEventListener('resize', () => resize(activeScale));
+        resize(activeScale);
+
+        // --- WEBGL SHADERS ---
+        const vs = `#version 300 es
+            in vec4 a_pos; out vec2 v_uv;
+            void main() { v_uv = a_pos.xy; gl_Position = a_pos; }
+        `;
+
+        const fs = `#version 300 es
+            precision highp float;
+            in vec2 v_uv; out vec4 fragColor;
+
+            uniform vec2 u_res;
+            uniform float u_time;
+            uniform vec3 u_camPos;
+            uniform vec3 u_camTarget;
+            uniform int u_isPilot;
+            
+            uniform float u_v; uniform float u_bow; uniform float u_tail;  
+            uniform float u_W; uniform float u_sigma; 
+            
+            uniform int u_showFlow; uniform int u_showGrid;
+
+            float sdShip(vec3 p) {
+                float body = length(p.xy) - (0.15 - p.z * 0.03);
+                body = max(body, p.z - 2.5); // Front nose ends at z=2.5
+                body = max(body, -p.z - 4.0); // Rear ends at z=-4.0
+                
+                float rings = length(vec2(length(p.xy) - 0.4, abs(fract(p.z * 2.0) - 0.5))) - 0.03;
+                rings = max(rings, p.z - 1.5); rings = max(rings, -p.z - 3.5);
+
+                return min(body, rings);
+            }
+
+            vec3 calcShipNormal(vec3 p) {
+                vec2 e = vec2(0.005, 0.0);
+                return normalize(vec3(
+                    sdShip(p + e.xyy) - sdShip(p - e.xyy),
+                    sdShip(p + e.yxy) - sdShip(p - e.yxy),
+                    sdShip(p + e.yyx) - sdShip(p - e.yyx)
+                ));
+            }
+
+            float hash(vec3 p) { p = fract(p * vec3(123.34, 456.21, 85.714)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+            float noise(vec3 x) {
+                vec3 p = floor(x); vec3 f = fract(x); f = f*f*(3.0-2.0*f);
+                return mix(mix(mix(hash(p+vec3(0,0,0)), hash(p+vec3(1,0,0)),f.x), mix(hash(p+vec3(0,1,0)), hash(p+vec3(1,1,0)),f.x),f.y),
+                           mix(mix(hash(p+vec3(0,0,1)), hash(p+vec3(1,0,1)),f.x), mix(hash(p+vec3(0,1,1)), hash(p+vec3(1,1,1)),f.x),f.y),f.z);
+            }
+
+            void main() {
+                vec2 uv = (gl_FragCoord.xy - 0.5 * u_res) / min(u_res.x, u_res.y);
+                
+                vec3 ro = u_camPos;
+                vec3 cw = normalize(u_camTarget - ro);
+                vec3 cu = normalize(cross(cw, vec3(0.0, 1.0, 0.0)));
+                
+                // Fix up vector singularity if looking straight up/down
+                if (length(cu) < 0.001) cu = normalize(cross(cw, vec3(1.0, 0.0, 0.0)));
+                
+                vec3 cv = cross(cu, cw);
+                
+                // Wider FOV for Pilot view
+                float fov = (u_isPilot == 1) ? 0.8 : 1.2;
+                vec3 rd = normalize(uv.x * cu + uv.y * cv + fov * cw);
+
+                vec3 p = ro;
+                vec4 vol = vec4(0.0);
+                bool hitShip = false;
+
+                for(int i = 0; i < 90; i++) { 
+                    float z_scale = (p.z > 0.0) ? u_bow : u_tail;
+                    float rs = sqrt((p.x*p.x)/(u_W*u_W) + (p.y*p.y)/(u_W*u_W) + (p.z*p.z)/(z_scale*z_scale));
+                    
+                    float f = 0.5 - 0.5 * tanh(u_sigma * (rs - 1.0));
+                    float tanh_val = tanh(u_sigma * (rs - 1.0));
+                    float df_drs = -0.5 * u_sigma * (1.0 - tanh_val * tanh_val);
+                    
+                    vec3 gradF = vec3(0.0);
+                    if (rs > 0.001) {
+                        gradF.x = df_drs * (p.x / (u_W*u_W)) / rs;
+                        gradF.y = df_drs * (p.y / (u_W*u_W)) / rs;
+                        gradF.z = df_drs * (p.z / (z_scale*z_scale)) / rs;
+                    }
+
+                    float dt = max(0.05, min(0.3, rs * 0.2));
+                    float dShip = sdShip(p);
+                    
+                    // Do not break immediately if camera starts inside hull (Pilot view logic)
+                    if (dShip < 0.02 && u_isPilot == 0) {
+                        hitShip = true;
+                        vec3 n = calcShipNormal(p);
+                        vec3 l = normalize(vec3(2.0, 4.0, 2.0));
+                        vec3 shipCol = vec3(0.15, 0.18, 0.22) * max(dot(n, l), 0.1);
+                        if (abs(fract(p.z * 2.0) - 0.5) < 0.1 && length(p.xy) > 0.35) shipCol += vec3(0.0, 1.0, 0.5) * 2.0;
+                        vol += vec4(shipCol * (1.0 - vol.a), 1.0 - vol.a);
+                        break;
+                    }
+
+                    // --- PHYSICS: GEODESIC DEFLECTION ---
+                    // This is what causes the Einstein Ring distortion in Pilot View!
+                    rd = normalize(rd - gradF * u_v * dt * 0.5);
+                    vec3 beta = vec3(0.0, 0.0, u_v * f);
+                    p += (rd - beta) * dt;
+
+                    // --- VISUALIZATION ---
+                    if (u_showGrid == 1 && u_isPilot == 0) {
+                        if (abs(p.y) < 0.1 || abs(p.x) < 0.1) {
+                            float lineX = smoothstep(0.05, 0.0, abs(fract(p.x * 1.5) - 0.5));
+                            float lineY = smoothstep(0.05, 0.0, abs(fract(p.y * 1.5) - 0.5));
+                            float lineZ = smoothstep(0.05, 0.0, abs(fract(p.z * 1.5 + u_time * u_v * 3.0) - 0.5));
+                            float gridLine = max(max(lineX, lineZ)*(1.0-abs(p.y)*10.0), max(lineY, lineZ)*(1.0-abs(p.x)*10.0));
+                            float gAlpha = max(0.0, gridLine) * 0.18;
+                            vol += vec4(vec3(0.0, 0.6, 1.0) * gAlpha, gAlpha) * (1.0 - vol.a);
+                        }
+                    }
+                    
+                    if (u_showFlow == 1) {
+                        if (rs > 0.8 && rs < 2.5) {
+                            vec3 flowPos = p * 2.5; flowPos.z += u_time * u_v * 12.0;
+                            float dens = noise(flowPos);
+                            float defl = length(gradF) * u_v;
+                            if (dens > 0.55 && defl > 0.005) {
+                                float alpha = (dens - 0.55) * defl * dt * 6.0;
+                                vec3 flowCol = mix(vec3(0.0, 0.8, 1.0), vec3(1.0, 0.3, 0.0), smoothstep(-u_tail, u_bow, p.z));
+                                vol += vec4(flowCol * alpha, alpha) * (1.0 - vol.a);
+                            }
+                        }
+                    }
+                    
+                    if (rs > 12.0 || vol.a > 0.99) break;
+                }
+
+                vec3 finalCol = vol.rgb;
+
+                // STARFIELD (Shows the gravitational lensing)
+                if (!hitShip && vol.a < 0.99) {
+                    vec3 nDir = rd;
+                    float stars = pow(hash(floor(nDir * 500.0)), 60.0);
+                    vec3 starCol = vec3(stars);
+                    
+                    float cosTheta = dot(nDir, vec3(0.0, 0.0, 1.0)); // Flow moves towards -z relative to ship moving +z
+                    if (u_v > 0.1) {
+                        // Blue shift looking forward, Red shift looking back
+                        if (cosTheta > 0.5) starCol *= mix(vec3(1.0), vec3(0.1, 0.5, 1.0), (cosTheta - 0.5) * 2.0 * u_v);
+                        else if (cosTheta < -0.5) starCol *= mix(vec3(1.0), vec3(1.0, 0.2, 0.1), (-cosTheta - 0.5) * 2.0 * u_v);
+                    }
+                    
+                    vec3 bg = vec3(0.01, 0.02, 0.04) * exp(-abs(nDir.y)*3.0);
+                    finalCol += (starCol + bg) * (1.0 - vol.a);
+                }
+
+                finalCol = finalCol / (finalCol + vec3(1.0));
+                finalCol = pow(finalCol, vec3(1.0 / 2.2));
+                
+                // Pilot HUD Overlay Scanlines
+                if (u_isPilot == 1) {
+                    float scanline = sin(uv.y * u_res.y * 3.0) * 0.04;
+                    finalCol -= scanline;
+                    
+                    // Cockpit Vignette
+                    float vig = length(uv) * 0.5;
+                    finalCol *= smoothstep(1.2, 0.5, vig);
+                }
+
+                fragColor = vec4(finalCol, 1.0);
+            }
+        `;
+
+        function buildShader(type, src) {
+            const s = gl.createShader(type);
+            gl.shaderSource(s, src);
+            gl.compileShader(s);
+            if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+                console.error(gl.getShaderInfoLog(s));
+            }
+            return s;
+        }
+
+        const prog = gl.createProgram();
+        gl.attachShader(prog, buildShader(gl.VERTEX_SHADER, vs));
+        gl.attachShader(prog, buildShader(gl.FRAGMENT_SHADER, fs));
+        gl.linkProgram(prog);
+
+        const posBuf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]), gl.STATIC_DRAW);
+        const posLoc = gl.getAttribLocation(prog, "a_pos");
+        gl.enableVertexAttribArray(posLoc);
+        gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+
+        const locs = {
+            res: gl.getUniformLocation(prog, "u_res"), time: gl.getUniformLocation(prog, "u_time"),
+            cam: gl.getUniformLocation(prog, "u_camPos"), target: gl.getUniformLocation(prog, "u_camTarget"),
+            isPilot: gl.getUniformLocation(prog, "u_isPilot"),
+            v: gl.getUniformLocation(prog, "u_v"), bow: gl.getUniformLocation(prog, "u_bow"),
+            tail: gl.getUniformLocation(prog, "u_tail"), W: gl.getUniformLocation(prog, "u_W"),
+            sigma: gl.getUniformLocation(prog, "u_sigma"),
+            showFlow: gl.getUniformLocation(prog, "u_showFlow"), showGrid: gl.getUniformLocation(prog, "u_showGrid")
+        };
+
+        // --- CAMERA CONTROLS ---
+        let camAngX = 0.8, camAngY = 0.2, camDist = 9.0; 
+        let pilotYaw = 0.0, pilotPitch = 0.0;
+        let isDrag = false, lastX, lastY;
+        
+        window.addEventListener('mousedown', e => { if(e.target === canvas){ isDrag = true; lastX = e.clientX; lastY = e.clientY; }});
+        window.addEventListener('mouseup', () => isDrag = false);
+        window.addEventListener('mousemove', e => {
+            if (!isDrag) return;
+            let dx = e.clientX - lastX; let dy = e.clientY - lastY;
+            
+            if (viewMode === 'orbit') {
+                camAngX -= dx * 0.008;
+                camAngY = Math.max(-1.5, Math.min(1.5, camAngY + dy * 0.008));
+            } else {
+                // Free-look for Pilot mode
+                pilotYaw -= dx * 0.005;
+                pilotPitch = Math.max(-1.5, Math.min(1.5, pilotPitch - dy * 0.005));
+            }
+            lastX = e.clientX; lastY = e.clientY;
+        });
+        
+        window.addEventListener('wheel', e => {
+            if(e.target === canvas && viewMode === 'orbit') {
+                camDist += e.deltaY * 0.015;
+                camDist = Math.max(3.0, Math.min(40.0, camDist)); 
+            }
+        }, { passive: true });
+
+        document.getElementById('ui-wrapper').onmousedown = e => e.stopPropagation();
+
+        let lastFrameTime = performance.now(); let frameCount = 0; let lastUiUpdate = lastFrameTime;
+
+        function render(now) {
+            let dt = now - lastFrameTime; lastFrameTime = now; frameCount++;
+
+            // Neural Network Framerate Manager
+            let predictedScale = fpsNN.forward(dt);
+            if (Math.abs(predictedScale - activeScale) > 0.02) { activeScale = predictedScale; resize(activeScale); }
+
+            // Local NN Auto-Optimizer Loop
+            if (localNN.active && localNN.iterations > 0) {
+                let current = {
+                    v: parseFloat(vSlider.value),
+                    bow: parseFloat(bSlider.value),
+                    tail: parseFloat(tSlider.value),
+                    width: parseFloat(wSlider.value)
+                };
+                
+                let optimized = localNN.step(current);
+                
+                vSlider.value = optimized.v;
+                bSlider.value = optimized.bow;
+                tSlider.value = optimized.tail;
+                wSlider.value = optimized.width;
+                
+                document.getElementById('val-v').innerText = optimized.v.toFixed(2) + ' c';
+                document.getElementById('val-b').innerText = optimized.bow.toFixed(2);
+                document.getElementById('val-t').innerText = optimized.tail.toFixed(2);
+                document.getElementById('val-w').innerText = optimized.width.toFixed(2);
+                
+                updateTelemetry();
+                
+                localNN.iterations--;
+                if (localNN.iterations <= 0) {
+                    localNN.active = false;
+                    document.getElementById('nn-opt-btn').disabled = false;
+                    document.getElementById('ai-btn').disabled = false;
+                    document.getElementById('nn-opt-btn').innerText = "🧠 LOCAL TRANSFORMER: MINIMIZE ENERGY & STOP DIST";
+                    document.getElementById('ai-output').innerHTML = "<strong style='color:#00ff88'>NN OPTIMIZATION COMPLETE:</strong><br><span style='color:#00ff88'>Attention heads converged. Energy footprint minimized to strictly positive physical bounds. Safe planetary deceleration distance achieved at optimal practical velocity.</span>";
+                }
+            }
+
+            if (now - lastUiUpdate > 250) {
+                valFps.innerText = Math.round((frameCount * 1000) / (now - lastUiUpdate)) + " FPS";
+                valNnScale.innerText = Math.round(activeScale * 100) + "%";
+                valNnScale.style.color = (activeScale < 0.9) ? "#ffaa00" : "#ff00aa";
+                frameCount = 0; lastUiUpdate = now;
+            }
+
+            gl.useProgram(prog);
+            
+            // View Mode Logic
+            let cx, cy, cz, tx, ty, tz;
+            if (viewMode === 'orbit') {
+                cx = camDist * Math.cos(camAngY) * Math.sin(camAngX);
+                cy = camDist * Math.sin(camAngY);
+                cz = camDist * Math.cos(camAngY) * Math.cos(camAngX);
+                tx = 0.0; ty = 0.0; tz = 0.0; // Look at ship center
+                gl.uniform1i(locs.isPilot, 0);
+            } else {
+                // Pilot is seated near the nose of the ship (z = +2.6) looking forward (+z)
+                cx = 0.0; cy = 0.1; cz = 2.6; 
+                
+                // Calculate look direction based on mouse pitch/yaw
+                let lookDist = 10.0;
+                tx = cx + lookDist * Math.cos(pilotPitch) * Math.sin(pilotYaw);
+                ty = cy + lookDist * Math.sin(pilotPitch);
+                tz = cz + lookDist * Math.cos(pilotPitch) * Math.cos(pilotYaw);
+                gl.uniform1i(locs.isPilot, 1);
+            }
+            
+            gl.uniform3f(locs.cam, cx, cy, cz);
+            gl.uniform3f(locs.target, tx, ty, tz);
+            
+            gl.uniform2f(locs.res, canvas.width, canvas.height);
+            gl.uniform1f(locs.time, now * 0.001);
+            
+            gl.uniform1f(locs.v, parseFloat(vSlider.value));
+            gl.uniform1f(locs.bow, parseFloat(bSlider.value));
+            gl.uniform1f(locs.tail, parseFloat(tSlider.value));
+            gl.uniform1f(locs.W, parseFloat(wSlider.value));
+            gl.uniform1f(locs.sigma, 0.45); 
+            
+            gl.uniform1i(locs.showFlow, chkFlow.checked ? 1 : 0);
+            gl.uniform1i(locs.showGrid, chkGrid.checked ? 1 : 0);
+
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+            requestAnimationFrame(render);
+        }
+        
+        requestAnimationFrame(render);
+    </script>
+</body>
+</html>

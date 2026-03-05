@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D QFT Deterministic Raytracer</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #050505;
+            color: #eee;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+            cursor: grab;
+        }
+        canvas:active {
+            cursor: grabbing;
+        }
+        #ui-container {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: rgba(10, 15, 20, 0.85);
+            padding: 20px;
+            border: 1px solid #0055ff;
+            border-radius: 8px;
+            max-width: 400px;
+            box-shadow: 0 4px 20px rgba(0, 85, 255, 0.3);
+            backdrop-filter: blur(10px);
+            pointer-events: none;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .interactive {
+            pointer-events: auto;
+        }
+        h1 {
+            font-size: 1.2rem;
+            margin: 0 0 10px 0;
+            color: #00ccff;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        p {
+            font-size: 0.8rem;
+            color: #aaa;
+            line-height: 1.4;
+            margin-bottom: 15px;
+        }
+        strong { color: #fff; }
+        .highlight { color: #ff3366; font-weight: bold; }
+        
+        .control-group {
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .control-group:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        
+        label {
+            display: flex;
+            align-items: center;
+            font-size: 0.85rem;
+            margin-bottom: 6px;
+        }
+        .val-display {
+            margin-left: auto;
+            color: #00ccff;
+            font-family: monospace;
+        }
+        input[type=range] {
+            width: 100%;
+            accent-color: #00ccff;
+            cursor: pointer;
+        }
+        input[type=checkbox] {
+            margin-right: 10px;
+            accent-color: #00ccff;
+            cursor: pointer;
+        }
+        .note {
+            font-size: 0.75rem;
+            color: #888;
+            font-style: italic;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui-container">
+        <h1>3D QFT Volumetric Renderer</h1>
+        <p><strong>PROBABILITY DOESN'T EXIST:</strong> No random Monte Carlo rays are cast. This engine performs a full 3D volumetric evaluation of the deterministic <strong style="color:#00ccff">Feynman Path Integral</strong>.</p>
+        <p>For every step in the 3D fog, the shader sums the complex quantum phase of light bouncing off <em>every point</em> on the mirror simultaneously. The straight beam is pure constructive interference.</p>
+        <p class="highlight" style="font-size: 0.85rem;">Click and drag to rotate camera. Scroll to zoom.</p>
+        
+        <div class="interactive">
+            <div class="control-group">
+                <label>Light Position Y (Focus): <span class="val-display" id="val-ly">-0.75</span></label>
+                <input type="range" id="lightY" min="-1.5" max="0.5" step="0.01" value="-0.75">
+                <div class="note">Moving off -0.75 destroys the phase interference (defocus).</div>
+            </div>
+            <div class="control-group">
+                <label>Light Position X: <span class="val-display" id="val-lx">0.00</span></label>
+                <input type="range" id="lightX" min="-0.5" max="0.5" step="0.01" value="0.0">
+            </div>
+            
+            <div class="control-group">
+                <label>Quantum Wavelength (λ): <span class="val-display" id="val-wl">0.15</span></label>
+                <input type="range" id="wavelength" min="0.05" max="0.5" step="0.01" value="0.15">
+            </div>
+
+            <div class="control-group">
+                <label>Path Samples (QFT Fidelity): <span class="val-display" id="val-samples">80</span></label>
+                <input type="range" id="samples" min="10" max="200" step="1" value="80">
+                <div class="note">Lower values run faster but introduce aliasing.</div>
+            </div>
+
+            <div class="control-group">
+                <label><input type="checkbox" id="show-direct"> Show Direct Light Field</label>
+            </div>
+        </div>
+    </div>
+
+    <canvas id="glcanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('glcanvas');
+        const gl = canvas.getContext('webgl2', { antialias: false });
+
+        if (!gl) {
+            alert('WebGL 2 is required but not supported by your browser.');
+        }
+
+        // Downscale slightly on high DPI displays to maintain the massive path integral performance
+        function resizeCanvas() {
+            const pixelRatio = Math.min(window.devicePixelRatio, 1.5);
+            const targetWidth = window.innerWidth * pixelRatio;
+            const targetHeight = window.innerHeight * pixelRatio;
+            
+            // Cap max resolution to prevent GPU freezing on extreme screens
+            const MAX_RES = 1600; 
+            const scale = Math.min(1.0, MAX_RES / Math.max(targetWidth, targetHeight));
+            
+            canvas.width = targetWidth * scale;
+            canvas.height = targetHeight * scale;
+            gl.viewport(0, 0, canvas.width, canvas.height);
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // --- WebGL Shaders ---
+
+        const vertexShaderSource = `#version 300 es
+            in vec4 a_position;
+            out vec2 v_uv;
+            void main() {
+                v_uv = a_position.xy;
+                gl_Position = a_position;
+            }
+        `;
+
+        const fragmentShaderSource = `#version 300 es
+            precision highp float;
+
+            in vec2 v_uv;
+            out vec4 fragColor;
+
+            uniform vec2 u_resolution;
+            uniform float u_time;
+            
+            // Camera
+            uniform vec3 u_camPos;
+            uniform vec3 u_camTarget;
+            
+            // Physics / QFT
+            uniform vec3 u_lightPos;
+            uniform float u_wavelength;
+            uniform int u_samples;
+            uniform int u_showDirect;
+
+            #define PI 3.14159265359
+
+            // SDF Map for physical boundaries (the parabolic dish and lightbulb)
+            float map(vec3 p) {
+                // Paraboloid equation: y = x^2 + z^2 - 1.0
+                float dish_y = p.x*p.x + p.z*p.z - 1.0;
+                float dish = abs(p.y - dish_y) - 0.015;
+                dish = max(dish, length(p.xz) - 1.05); // Trim edge
+                
+                float bulb = length(p - u_lightPos) - 0.04;
+                return min(dish, bulb);
+            }
+
+            vec3 calcNormal(vec3 p) {
+                vec2 e = vec2(0.005, 0.0);
+                return normalize(vec3(
+                    map(p + e.xyy) - map(p - e.xyy),
+                    map(p + e.yxy) - map(p - e.yxy),
+                    map(p + e.yyx) - map(p - e.yyx)
+                ));
+            }
+
+            // ==========================================================
+            // CORE QFT ENGINE: FEYNMAN PATH INTEGRAL
+            // ==========================================================
+            float calcQuantumField(vec3 p) {
+                vec2 psi = vec2(0.0);
+                float k = 2.0 * PI / u_wavelength;
+                float w = k * 1.5; // Time evolution speed
+                
+                // 1. Direct Field Contribution
+                if (u_showDirect == 1) {
+                    float d_dir = length(p - u_lightPos);
+                    float phase_dir = k * d_dir - w * u_time;
+                    psi += vec2(cos(phase_dir), sin(phase_dir)) / (d_dir + 0.1) * 0.4;
+                }
+
+                // 2. Reflected Field (Path Integral over Mirror Surface)
+                // We use Fibonacci Spiral mapping to evenly sample the 3D parabolic disk 
+                // without creating linear grid interference artifacts.
+                float golden_angle = 2.39996323;
+                float N = float(u_samples);
+                
+                for(int i = 0; i < u_samples; i++) {
+                    // Map point to 2D disk
+                    float r = sqrt(float(i) + 0.5) / sqrt(N);
+                    float theta = float(i) * golden_angle;
+                    
+                    // Project onto 3D paraboloid: y = r^2 - 1.0
+                    vec3 m = vec3(r * cos(theta), r*r - 1.0, r * sin(theta));
+                    
+                    // Path lengths
+                    float d1 = length(u_lightPos - m); // Source to Mirror
+                    float d2 = length(p - m);          // Mirror to Space point
+                    
+                    float path_len = d1 + d2;
+                    float phase = k * path_len - w * u_time + PI; // Phase includes PI shift from reflection
+                    
+                    // Inverse square law amplitude decay
+                    float amp = 1.0 / ((d1 + 0.05) * (d2 + 0.05));
+                    
+                    // Accumulate complex phasor
+                    psi += vec2(cos(phase), sin(phase)) * amp;
+                }
+                
+                // Normalize by sample count (area integration)
+                psi *= 2.0 / N;
+                
+                // Observable = Probability Density (Intensity = |psi|^2)
+                return dot(psi, psi);
+            }
+
+            // Pseudo-random noise to break up raymarch banding
+            float hash(vec2 p) {
+                return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+            }
+
+            void main() {
+                // Setup Camera ray
+                vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution.xy) / min(u_resolution.x, u_resolution.y);
+                
+                vec3 forward = normalize(u_camTarget - u_camPos);
+                vec3 right = normalize(cross(forward, vec3(0.0, 1.0, 0.0)));
+                vec3 up = cross(right, forward);
+                vec3 rd = normalize(forward + right * uv.x + up * uv.y);
+                vec3 ro = u_camPos;
+
+                // 1. Raymarch Solid Physical Objects (Dish / Bulb)
+                float t_solid = 100.0;
+                float t = 0.0;
+                for(int i = 0; i < 80; i++) {
+                    vec3 p = ro + rd * t;
+                    float d = map(p);
+                    if(d < 0.001) { t_solid = t; break; }
+                    t += d;
+                    if(t > 15.0) break;
+                }
+
+                // Render Physical Surface
+                vec3 solidCol = vec3(0.02, 0.03, 0.05); // Background
+                if(t_solid < 15.0) {
+                    vec3 p = ro + rd * t_solid;
+                    if (length(p - u_lightPos) < 0.05) {
+                        // Light Bulb
+                        solidCol = vec3(1.0, 1.0, 0.8) * 1.5;
+                    } else {
+                        // Parabolic Dish (Metallic)
+                        vec3 n = calcNormal(p);
+                        vec3 l = normalize(vec3(1.0, 2.0, 1.0));
+                        float diff = max(dot(n, l), 0.0);
+                        float rim = 1.0 - max(dot(n, -rd), 0.0);
+                        solidCol = vec3(0.1, 0.15, 0.2) * diff + vec3(0.1, 0.3, 0.5) * pow(rim, 3.0);
+                        
+                        // Add a grid/ring texture to make it look like an instrument
+                        float rings = sin(length(p.xz) * 40.0);
+                        solidCol *= 0.8 + 0.2 * smoothstep(0.8, 1.0, rings);
+                    }
+                }
+
+                // 2. Volumetric Raymarching of the Quantum Field
+                vec4 vol = vec4(0.0);
+                float step_size = 0.06;
+                
+                // Jitter start to remove banding artifacts
+                float t_vol = 0.5 + step_size * hash(gl_FragCoord.xy);
+
+                for(int i = 0; i < 60; i++) {
+                    if(t_vol > t_solid || t_vol > 8.0) break;
+                    
+                    vec3 p = ro + rd * t_vol;
+                    
+                    // Bounding Box to save immense QFT calculations
+                    // Only compute field within the cylinder above the dish
+                    if(p.y > -1.05 && p.y < 3.0 && length(p.xz) < 1.15) {
+                        
+                        // Perform the path integral calculation
+                        float intensity = calcQuantumField(p);
+                        
+                        // Map quantum intensity to an emissive color (Blue / Cyan / White)
+                        if(intensity > 0.0) {
+                            float q = intensity * 1.5;
+                            vec3 c = vec3(0.05, 0.3, 0.9) * q;              // Blue envelope
+                            c = mix(c, vec3(0.2, 0.8, 1.0), smoothstep(0.5, 1.5, q)); // Cyan core
+                            c = mix(c, vec3(1.0, 1.0, 1.0), smoothstep(1.5, 3.0, q)); // White hot center
+                            
+                            // Alpha tuning
+                            float alpha = (1.0 - exp(-q * 1.2)) * 0.12; 
+                            
+                            // Front-to-back alpha compositing
+                            vol += vec4(c * alpha, alpha) * (1.0 - vol.a);
+                        }
+                    }
+                    if(vol.a > 0.98) break;
+                    t_vol += step_size;
+                }
+
+                // Final composition
+                vec3 finalCol = solidCol * (1.0 - vol.a) + vol.rgb;
+                
+                // Tonemapping & Gamma correction
+                finalCol = finalCol / (finalCol + vec3(1.0));
+                finalCol = pow(finalCol, vec3(1.0 / 2.2));
+
+                fragColor = vec4(finalCol, 1.0);
+            }
+        `;
+
+        // --- WebGL Setup Boilerplate ---
+        function createShader(gl, type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error("Shader Error:", gl.getShaderInfoLog(shader));
+                gl.deleteShader(shader);
+                return null;
+            }
+            return shader;
+        }
+
+        const vShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+        const fShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+        const program = gl.createProgram();
+        gl.attachShader(program, vShader);
+        gl.attachShader(program, fShader);
+        gl.linkProgram(program);
+
+        const positionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]), gl.STATIC_DRAW);
+        const posLoc = gl.getAttribLocation(program, "a_position");
+        gl.enableVertexAttribArray(posLoc);
+        gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+
+        // --- Uniform Locations ---
+        const locRes = gl.getUniformLocation(program, "u_resolution");
+        const locTime = gl.getUniformLocation(program, "u_time");
+        const locCamPos = gl.getUniformLocation(program, "u_camPos");
+        const locCamTar = gl.getUniformLocation(program, "u_camTarget");
+        const locLightPos = gl.getUniformLocation(program, "u_lightPos");
+        const locWavelength = gl.getUniformLocation(program, "u_wavelength");
+        const locSamples = gl.getUniformLocation(program, "u_samples");
+        const locShowDirect = gl.getUniformLocation(program, "u_showDirect");
+
+        // --- UI & State Interactions ---
+        let camTheta = 0.5;
+        let camPhi = 0.4;
+        let camDist = 3.5;
+        
+        let isDragging = false;
+        let lastX = 0, lastY = 0;
+
+        // Orbital camera controls
+        window.addEventListener('mousedown', (e) => { isDragging = true; lastX = e.clientX; lastY = e.clientY; });
+        window.addEventListener('mouseup', () => isDragging = false);
+        window.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                camTheta -= (e.clientX - lastX) * 0.01;
+                camPhi = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, camPhi + (e.clientY - lastY) * 0.01));
+                lastX = e.clientX;
+                lastY = e.clientY;
+            }
+        });
+        window.addEventListener('wheel', (e) => {
+            camDist = Math.max(1.5, Math.min(6.0, camDist + e.deltaY * 0.005));
+        });
+
+        // Sliders
+        const uiLightY = document.getElementById('lightY');
+        const uiLightX = document.getElementById('lightX');
+        const uiWl = document.getElementById('wavelength');
+        const uiSamples = document.getElementById('samples');
+        const uiDirect = document.getElementById('show-direct');
+
+        uiLightY.oninput = (e) => document.getElementById('val-ly').innerText = parseFloat(e.target.value).toFixed(2);
+        uiLightX.oninput = (e) => document.getElementById('val-lx').innerText = parseFloat(e.target.value).toFixed(2);
+        uiWl.oninput = (e) => document.getElementById('val-wl').innerText = parseFloat(e.target.value).toFixed(2);
+        uiSamples.oninput = (e) => document.getElementById('val-samples').innerText = e.target.value;
+
+        // --- Main Render Loop ---
+        function render(time) {
+            gl.useProgram(program);
+
+            // Update camera spherical coordinates
+            const cx = camDist * Math.cos(camPhi) * Math.sin(camTheta);
+            const cy = camDist * Math.sin(camPhi);
+            const cz = camDist * Math.cos(camPhi) * Math.cos(camTheta);
+            
+            gl.uniform3f(locCamPos, cx, cy, cz);
+            gl.uniform3f(locCamTar, 0, 0.5, 0); // Look slightly above the dish
+            
+            // Set Physics Variables
+            gl.uniform3f(locLightPos, parseFloat(uiLightX.value), parseFloat(uiLightY.value), 0.0);
+            gl.uniform1f(locWavelength, parseFloat(uiWl.value));
+            gl.uniform1i(locSamples, parseInt(uiSamples.value));
+            gl.uniform1i(locShowDirect, uiDirect.checked ? 1 : 0);
+
+            // Screen/Time config
+            gl.uniform2f(locRes, canvas.width, canvas.height);
+            gl.uniform1f(locTime, time * 0.001);
+
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+            requestAnimationFrame(render);
+        }
+
+        requestAnimationFrame(render);
+    </script>
+</body>
+</html>

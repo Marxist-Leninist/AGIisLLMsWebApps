@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Warp Drive Geometry Comparison — McMonigal Catastrophe</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;600&family=Chakra+Petch:wght@400;600;700&display=swap');
+
+:root {
+  --red: #ff3333;
+  --red-dim: #661111;
+  --red-glow: #ff6600;
+  --green: #00ff88;
+  --green-dim: #004422;
+  --green-glow: #44ffaa;
+  --cyan: #00ccff;
+  --bg: #05080a;
+  --grid: rgba(255,255,255,0.025);
+  --text-dim: rgba(255,255,255,0.3);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  font-family: 'IBM Plex Mono', monospace;
+  color: #ccc;
+  height: 100vh;
+  overflow: hidden;
+  cursor: crosshair;
+}
+
+.master {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 48px 1fr 120px;
+  height: 100vh;
+  gap: 0;
+}
+
+/* ── TOP BAR ── */
+.topbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  background: rgba(255,255,255,0.02);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.topbar-title {
+  font-family: 'Chakra Petch', sans-serif;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.5);
+}
+.topbar-phase {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--cyan);
+  opacity: 0.7;
+}
+.topbar-time {
+  font-size: 11px;
+  color: rgba(255,255,255,0.3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── CANVAS PANELS ── */
+.panel {
+  position: relative;
+  overflow: hidden;
+}
+.panel-left { border-right: 1px solid rgba(255,50,50,0.1); }
+.panel-right { border-left: 1px solid rgba(0,255,100,0.1); }
+
+.panel canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.panel-label {
+  position: absolute;
+  top: 10px;
+  left: 14px;
+  right: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  pointer-events: none;
+  z-index: 5;
+}
+.panel-name {
+  font-family: 'Chakra Petch', sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 3px;
+}
+.panel-left .panel-name { color: var(--red); }
+.panel-right .panel-name { color: var(--green); }
+
+.panel-desc {
+  font-size: 9px;
+  letter-spacing: 1px;
+  opacity: 0.35;
+}
+
+.panel-verdict {
+  position: absolute;
+  bottom: 10px;
+  left: 0; right: 0;
+  text-align: center;
+  pointer-events: none;
+  z-index: 5;
+  font-family: 'Chakra Petch', sans-serif;
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: 4px;
+  opacity: 0;
+  transition: opacity 0.8s;
+}
+
+/* ── BOTTOM HUD ── */
+.hud-strip {
+  border-top: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.015);
+  padding: 10px 20px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 0;
+  font-size: 10px;
+  line-height: 1.8;
+}
+
+.hud-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.hud-col-left { text-align: left; }
+.hud-col-center {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 20px;
+  border-left: 1px solid rgba(255,255,255,0.04);
+  border-right: 1px solid rgba(255,255,255,0.04);
+}
+.hud-col-right { text-align: right; }
+
+.hud-row { display: flex; justify-content: space-between; gap: 20px; }
+.hud-label { color: var(--text-dim); }
+.hud-val-red { color: var(--red); font-weight: 600; font-variant-numeric: tabular-nums; }
+.hud-val-green { color: var(--green); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.hud-compare {
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--cyan);
+  letter-spacing: 2px;
+}
+.hud-compare-label {
+  font-size: 8px;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.energy-bar {
+  height: 3px;
+  border-radius: 2px;
+  margin-top: 4px;
+  overflow: hidden;
+}
+.hud-col-left .energy-bar { background: var(--red-dim); }
+.hud-col-right .energy-bar { background: var(--green-dim); }
+.energy-fill-r { height: 100%; width: 0%; background: var(--red); border-radius: 2px; transition: width 0.15s; }
+.energy-fill-g { height: 100%; width: 0%; background: var(--green); border-radius: 2px; transition: width 0.15s; }
+
+.progress-track {
+  width: 160px;
+  height: 2px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 1px;
+  margin-top: 8px;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 1px;
+  background: linear-gradient(90deg, var(--cyan), var(--green));
+  width: 0%;
+}
+
+.replay-btn {
+  margin-top: 6px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--cyan);
+  background: none;
+  border: 1px solid rgba(0,204,255,0.2);
+  padding: 3px 12px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.4s, background 0.2s;
+}
+.replay-btn:hover { background: rgba(0,204,255,0.08); }
+
+.science-footer {
+  grid-column: 1 / -1;
+  text-align: center;
+  font-size: 8px;
+  color: rgba(255,255,255,0.15);
+  padding: 2px;
+  letter-spacing: 1px;
+  border-top: 1px solid rgba(255,255,255,0.03);
+  line-height: 1.6;
+}
+</style>
+</head>
+<body>
+
+<div class="master">
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="topbar-title">Warp Drive Geometry Comparison</div>
+    <div class="topbar-phase" id="phase-label">PHASE 1 — TRANSIT</div>
+    <div class="topbar-time" id="time-label">T+ 0.0s</div>
+  </div>
+
+  <!-- LEFT: Alcubierre -->
+  <div class="panel panel-left">
+    <div class="panel-label">
+      <span class="panel-name">ALCUBIERRE SPHERE</span>
+      <span class="panel-desc">SHARP WALL · 100% CAPTURE</span>
+    </div>
+    <canvas id="cL"></canvas>
+    <div class="panel-verdict" id="verdict-L" style="color:var(--red)">☠ EXTINCTION EVENT</div>
+  </div>
+
+  <!-- RIGHT: COD -->
+  <div class="panel panel-right">
+    <div class="panel-label">
+      <span class="panel-name">COD METRIC</span>
+      <span class="panel-desc">OBLATE TAPER · GEODESIC DEFLECTION</span>
+    </div>
+    <canvas id="cR"></canvas>
+    <div class="panel-verdict" id="verdict-R" style="color:var(--green)">✓ SAFE AT 1.7 AU</div>
+  </div>
+
+  <!-- BOTTOM HUD -->
+  <div class="hud-strip" style="grid-column: 1 / -1;">
+    <!-- Left stats -->
+    <div class="hud-col hud-col-left">
+      <div class="hud-row"><span class="hud-label">CAPTURED</span><span class="hud-val-red" id="s-Lcap">0</span></div>
+      <div class="hud-row"><span class="hud-label">WALL ENERGY</span><span class="hud-val-red" id="s-Lenergy">0 J</span></div>
+      <div class="hud-row"><span class="hud-label">BEAM AT DECEL</span><span class="hud-val-red" id="s-Lbeam">—</span></div>
+      <div class="hud-row"><span class="hud-label">SAFE DROP</span><span class="hud-val-red" id="s-Ldrop">—</span></div>
+      <div class="energy-bar"><div class="energy-fill-r" id="bar-L"></div></div>
+    </div>
+    <!-- Center -->
+    <div class="hud-col hud-col-center">
+      <div class="hud-compare" id="ratio-val">×1</div>
+      <div class="hud-compare-label">REDUCTION FACTOR</div>
+      <div class="progress-track"><div class="progress-fill" id="prog-fill"></div></div>
+      <button class="replay-btn" id="replay-btn" onclick="restart()">▶ REPLAY</button>
+    </div>
+    <!-- Right stats -->
+    <div class="hud-col hud-col-right">
+      <div class="hud-row"><span class="hud-label">CAPTURED</span><span class="hud-val-green" id="s-Rcap">0</span></div>
+      <div class="hud-row"><span class="hud-label">WALL ENERGY</span><span class="hud-val-green" id="s-Renergy">0 J</span></div>
+      <div class="hud-row"><span class="hud-label">BEAM AT DECEL</span><span class="hud-val-green" id="s-Rbeam">—</span></div>
+      <div class="hud-row"><span class="hud-label">SAFE DROP</span><span class="hud-val-green" id="s-Rdrop">—</span></div>
+      <div class="energy-bar"><div class="energy-fill-g" id="bar-R"></div></div>
+    </div>
+  </div>
+  <div class="science-footer">
+    McMonigal, Lewis &amp; O'Byrne (2012) Phys.Rev.D 85(6) · Fuchs et al. (2024) Class.Quantum Grav. 41(9) · Bisset &amp; Claude (2026) COD Metric
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+// CONFIGURATION
+// ═══════════════════════════════════════════
+const DUR = 24; // total seconds
+const T_TRANSIT_END = 14;
+const T_DECEL_END = 19;
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+
+const ALC_REDUCTION = 1;
+const COD_REDUCTION = 1900;
+
+// ═══════════════════════════════════════════
+// PARTICLE
+// ═══════════════════════════════════════════
+class P {
+  constructor() { this.alive = false; }
+  spawn(w, h, fromEdge) {
+    this.alive = true;
+    this.captured = false;
+    this.deflected = false;
+    this.released = false;
+    this.x = fromEdge ? w + 10 + Math.random()*80 : Math.random()*w*1.3;
+    this.y = Math.random() * h;
+    this.vx = -(2 + Math.random()*2);
+    this.vy = (Math.random()-0.5)*0.4;
+    this.a = 0.12 + Math.random()*0.2;
+    this.r = 0.8 + Math.random()*1.2;
+    this.cx = 0; this.cy = 0; // capture pos
+    this.rvx = 0; this.rvy = 0; // release vel
+    this.energy = 0;
+    this.t0 = 0; // trail head
+    this.tx = new Float32Array(10); this.ty = new Float32Array(10); this.tLen = 0;
+  }
+}
+
+// ═══════════════════════════════════════════
+// SIM
+// ═══════════════════════════════════════════
+class Sim {
+  constructor(cid, kind) {
+    this.cv = document.getElementById(cid);
+    this.c = this.cv.getContext('2d');
+    this.kind = kind; // 'alc' or 'cod'
+    this.N = 350;
+    this.ps = [];
+    for(let i=0;i<this.N;i++) this.ps.push(new P());
+    this.nCap = 0;
+    this.resize();
+    this.reset();
+  }
+  resize() {
+    const b = this.cv.parentElement.getBoundingClientRect();
+    this.W = b.width * DPR;
+    this.H = b.height * DPR;
+    this.cv.width = this.W; this.cv.height = this.H;
+    // bubble position
+    this.bx = this.W * 0.38;
+    this.by = this.H * 0.5;
+    if(this.kind==='alc') {
+      this.bR = Math.min(this.W,this.H)*0.14;
+    } else {
+      this.oRx = Math.min(this.W,this.H)*0.18;
+      this.oRy = Math.min(this.W,this.H)*0.065;
+      this.iR = Math.min(this.W,this.H)*0.06;
+      this.taper = this.oRx*2.2;
+    }
+  }
+  reset() {
+    this.nCap = 0;
+    for(const p of this.ps) p.spawn(this.W, this.H, false);
+  }
+  step(t, dt) {
+    const phase = t < T_TRANSIT_END ? 0 : t < T_DECEL_END ? 1 : 2;
+    for(const p of this.ps) {
+      if(!p.alive) { p.spawn(this.W, this.H, true); continue; }
+      if(p.released) {
+        p.x += p.rvx*dt*60; p.y += p.rvy*dt*60;
+        p.a *= 0.993;
+        if(p.a<0.005) p.alive = false;
+        continue;
+      }
+      if(p.captured) {
+        if(phase===1 && Math.random()<0.06) {
+          p.released = true;
+          const ang = Math.atan2(p.cy-this.by, p.cx-this.bx);
+          const spd = 6+Math.random()*10;
+          p.rvx = -spd*(0.7+Math.random()*0.5);
+          p.rvy = Math.sin(ang)*spd*0.25;
+          p.a = 0.9; p.r = 2+Math.random()*2;
+        }
+        continue;
+      }
+      // trail
+      if(p.tLen < 10) { p.tx[p.tLen]=p.x; p.ty[p.tLen]=p.y; p.tLen++; }
+      else { for(let i=0;i<9;i++){p.tx[i]=p.tx[i+1];p.ty[i]=p.ty[i+1];} p.tx[9]=p.x;p.ty[9]=p.y; }
+
+      p.x += p.vx*dt*60;
+      p.y += p.vy*dt*60;
+
+      if(this.kind==='alc') this.alcForce(p);
+      else this.codForce(p);
+
+      if(p.x<-60||p.x>this.W+160||p.y<-60||p.y>this.H+60) p.spawn(this.W,this.H,true);
+    }
+  }
+  alcForce(p) {
+    const dx=p.x-this.bx, dy=p.y-this.by, d=Math.sqrt(dx*dx+dy*dy);
+    // Hard wall capture
+    if(d < this.bR*1.08 && d > this.bR*0.3 && !p.captured) {
+      p.captured = true; this.nCap++;
+      const a = Math.atan2(dy,dx);
+      p.cx = this.bx+Math.cos(a)*this.bR*0.97;
+      p.cy = this.by+Math.sin(a)*this.bR*0.97;
+      p.x=p.cx; p.y=p.cy;
+      return;
+    }
+    // Slight metric pull near wall
+    if(d < this.bR*2.5 && d > this.bR) {
+      const s = 0.03/(d/this.bR);
+      p.vx -= s*(dx/d); p.vy -= s*(dy/d);
+    }
+  }
+  codForce(p) {
+    const dx=p.x-this.bx, dy=p.y-this.by, d=Math.sqrt(dx*dx+dy*dy);
+    // Oblate coordinates
+    const rx=dx/this.oRx, ry=dy/this.oRy;
+    const od=Math.sqrt(rx*rx+ry*ry);
+
+    if(od < 4.5) {
+      // Taper deflection — transverse force away from axis
+      const tf = Math.exp(-od*od*0.35);
+      const sign = dy>0?1:-1;
+      const transD = Math.abs(dy)/this.oRy + 0.25;
+      const force = 0.22*tf/transD;
+      p.vy += sign*force;
+      // Slight forward drag
+      if(dx>0) p.vx -= 0.008*tf;
+      if(tf>0.05) p.deflected = true;
+    }
+    // Inner shell capture (much smaller target, most particles miss)
+    if(d < this.iR*1.1 && !p.captured) {
+      p.captured = true; this.nCap++;
+      const a=Math.atan2(dy,dx);
+      p.cx=this.bx+Math.cos(a)*this.iR*0.95;
+      p.cy=this.by+Math.sin(a)*this.iR*0.95;
+      p.x=p.cx; p.y=p.cy;
+    }
+  }
+
+  draw(t) {
+    const c=this.c, W=this.W, H=this.H;
+    const phase = t<T_TRANSIT_END?0:t<T_DECEL_END?1:2;
+    c.clearRect(0,0,W,H);
+    // BG gradient
+    const bg = c.createRadialGradient(this.bx,this.by,0,this.bx,this.by,W*0.7);
+    bg.addColorStop(0, this.kind==='alc'?'rgba(30,5,5,1)':'rgba(5,20,12,1)');
+    bg.addColorStop(1, 'rgba(5,8,10,1)');
+    c.fillStyle = bg; c.fillRect(0,0,W,H);
+
+    // Grid dots
+    c.fillStyle = 'rgba(255,255,255,0.02)';
+    const gs = 35*DPR;
+    for(let x=0;x<W;x+=gs) for(let y=0;y<H;y+=gs) { c.fillRect(x,y,1,1); }
+
+    // ── DRAW BUBBLE GEOMETRY ──
+    if(this.kind==='alc') this.drawAlc(c,t,phase);
+    else this.drawCod(c,t,phase);
+
+    // ── DRAW PARTICLES ──
+    for(const p of this.ps) {
+      if(!p.alive||p.a<0.005) continue;
+      // Trail
+      if(p.tLen>1 && !p.captured) {
+        c.beginPath(); c.moveTo(p.tx[0],p.ty[0]);
+        for(let i=1;i<p.tLen;i++) c.lineTo(p.tx[i],p.ty[i]);
+        c.strokeStyle = p.deflected && this.kind==='cod'
+          ? `rgba(0,255,140,${p.a*0.25})`
+          : p.released ? `rgba(255,180,40,${p.a*0.4})` : `rgba(120,180,255,${p.a*0.2})`;
+        c.lineWidth = 1; c.stroke();
+      }
+      // Dot
+      if(p.captured && !p.released) {
+        const gl = 0.4+Math.sin(t*6+p.cx*0.1)*0.2;
+        c.fillStyle = this.kind==='alc'
+          ? `rgba(255,${80+this.nCap},0,${gl})`
+          : `rgba(0,160,255,${gl*0.4})`;
+        c.beginPath(); c.arc(p.x,p.y,p.r*1.8,0,Math.PI*2); c.fill();
+      } else if(p.released) {
+        c.fillStyle = `rgba(255,180,40,${p.a})`;
+        c.beginPath(); c.arc(p.x,p.y,p.r*2.5,0,Math.PI*2); c.fill();
+        // glow
+        const rg=c.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r*8);
+        rg.addColorStop(0,`rgba(255,120,0,${p.a*0.25})`);
+        rg.addColorStop(1,'rgba(255,80,0,0)');
+        c.fillStyle=rg; c.beginPath(); c.arc(p.x,p.y,p.r*8,0,Math.PI*2); c.fill();
+      } else if(p.deflected && this.kind==='cod') {
+        c.fillStyle = `rgba(0,255,140,${p.a*1.2})`;
+        c.beginPath(); c.arc(p.x,p.y,p.r,0,Math.PI*2); c.fill();
+      } else {
+        c.fillStyle = `rgba(140,190,255,${p.a})`;
+        c.beginPath(); c.arc(p.x,p.y,p.r,0,Math.PI*2); c.fill();
+      }
+    }
+
+    // ── DECEL/AFTERMATH EFFECTS ──
+    if(phase>=1) this.drawDecel(c,t,phase);
+  }
+
+  drawAlc(c,t,phase) {
+    const cx=this.bx, cy=this.by, R=this.bR;
+    // Wall glow from accumulation
+    const gi = Math.min(1, this.nCap/100);
+    // Metric distortion lines ahead of bubble
+    c.save(); c.globalAlpha = 0.04;
+    c.strokeStyle = '#ff4444'; c.lineWidth = 1;
+    for(let i=0;i<12;i++) {
+      const xo = R+15+i*12;
+      const squeeze = Math.exp(-i*0.15);
+      const hh = R*1.8*squeeze;
+      c.beginPath(); c.moveTo(cx+xo, cy-hh); c.lineTo(cx+xo, cy+hh); c.stroke();
+    }
+    // Expansion lines behind
+    c.strokeStyle = '#4444ff';
+    for(let i=0;i<8;i++) {
+      const xo = -(R+15+i*14);
+      const expand = 1+i*0.08;
+      const hh = R*1.4*expand;
+      c.beginPath(); c.moveTo(cx+xo, cy-hh); c.lineTo(cx+xo, cy+hh); c.stroke();
+    }
+    c.restore();
+
+    // Forward hot spot
+    const hs = c.createRadialGradient(cx+R*0.85,cy,0,cx+R*0.85,cy,R*0.6);
+    hs.addColorStop(0,`rgba(255,200,60,${gi*0.4})`);
+    hs.addColorStop(0.4,`rgba(255,100,0,${gi*0.15})`);
+    hs.addColorStop(1,'rgba(255,0,0,0)');
+    c.fillStyle=hs; c.beginPath(); c.arc(cx+R*0.85,cy,R*0.6,0,Math.PI*2); c.fill();
+
+    // Wall ring
+    c.strokeStyle = `rgba(255,${60+gi*140},${60-gi*60},${0.4+gi*0.3})`;
+    c.lineWidth = 3*DPR;
+    c.beginPath(); c.arc(cx,cy,R,0,Math.PI*2); c.stroke();
+
+    // Outer glow
+    const og = c.createRadialGradient(cx,cy,R-5,cx,cy,R+20);
+    og.addColorStop(0,`rgba(255,40,0,${gi*0.2})`);
+    og.addColorStop(1,'rgba(255,0,0,0)');
+    c.fillStyle=og; c.beginPath(); c.arc(cx,cy,R+20,0,Math.PI*2); c.fill();
+
+    // Labels
+    c.fillStyle='rgba(255,100,100,0.12)';
+    c.font=`${10*DPR}px IBM Plex Mono`; c.textAlign='center';
+    c.fillText('SHIP',cx,cy+4*DPR);
+    c.font=`${7*DPR}px IBM Plex Mono`;
+    c.fillStyle='rgba(255,80,80,0.18)';
+    c.fillText('HARD WALL',cx+R+30*DPR,cy-R*0.6);
+    // Arrow to wall
+    c.strokeStyle='rgba(255,80,80,0.1)'; c.lineWidth=1;
+    c.beginPath(); c.moveTo(cx+R+25*DPR,cy-R*0.5); c.lineTo(cx+R+5,cy-R*0.3); c.stroke();
+  }
+
+  drawCod(c,t,phase) {
+    const cx=this.bx, cy=this.by;
+    const orx=this.oRx, ory=this.oRy, ir=this.iR, tp=this.taper;
+
+    // Taper gradient field
+    const tg = c.createRadialGradient(cx,cy,orx*0.8,cx,cy,orx+tp);
+    tg.addColorStop(0,'rgba(0,160,80,0.05)');
+    tg.addColorStop(0.5,'rgba(0,100,50,0.015)');
+    tg.addColorStop(1,'rgba(0,50,25,0)');
+    c.fillStyle=tg;
+    c.beginPath(); c.ellipse(cx,cy,orx+tp,ory*5,0,0,Math.PI*2); c.fill();
+
+    // Deflection streamlines
+    c.save(); c.globalAlpha=0.04; c.strokeStyle='#00ff88'; c.lineWidth=1;
+    for(let i=-5;i<=5;i++) {
+      if(i===0) continue;
+      const y0 = cy + i*ory*0.35;
+      c.beginPath(); c.moveTo(cx+orx+tp*0.6, y0);
+      // Curve outward
+      c.bezierCurveTo(
+        cx+orx*0.6, y0,
+        cx, y0 + i*ory*0.6,
+        cx-orx*0.8, y0 + i*ory*1.8
+      );
+      c.stroke();
+    }
+    c.restore();
+
+    // Outer oblate shell
+    c.strokeStyle='rgba(0,255,100,0.3)'; c.lineWidth=2*DPR;
+    c.setLineDash([8*DPR,5*DPR]);
+    c.beginPath(); c.ellipse(cx,cy,orx,ory,0,0,Math.PI*2); c.stroke();
+    c.setLineDash([]);
+
+    // Taper boundary (very faint)
+    c.strokeStyle='rgba(0,255,100,0.04)'; c.lineWidth=1;
+    c.setLineDash([3,8]);
+    c.beginPath(); c.ellipse(cx,cy,orx+tp,ory*3.5,0,0,Math.PI*2); c.stroke();
+    c.setLineDash([]);
+
+    // Inner transport shell
+    const gi = Math.min(1, this.nCap/30);
+    c.strokeStyle=`rgba(0,180,255,${0.4+gi*0.2})`; c.lineWidth=2*DPR;
+    c.beginPath(); c.arc(cx,cy,ir,0,Math.PI*2); c.stroke();
+
+    // Minimal inner glow
+    const ig=c.createRadialGradient(cx,cy,ir-3,cx,cy,ir+10);
+    ig.addColorStop(0,`rgba(0,140,255,${gi*0.08})`);
+    ig.addColorStop(1,'rgba(0,100,200,0)');
+    c.fillStyle=ig; c.beginPath(); c.arc(cx,cy,ir+10,0,Math.PI*2); c.fill();
+
+    // Labels
+    c.fillStyle='rgba(0,180,255,0.12)';
+    c.font=`${10*DPR}px IBM Plex Mono`; c.textAlign='center';
+    c.fillText('SHIP',cx,cy+4*DPR);
+
+    c.fillStyle='rgba(0,255,100,0.14)';
+    c.font=`${7*DPR}px IBM Plex Mono`;
+    c.fillText('DEFLECTOR SHELL',cx,cy-ory-10*DPR);
+    c.fillText('TAPER ZONE',cx+orx*0.6+tp*0.3,cy-ory*3);
+    c.fillText('(GENTLE METRIC GRADIENT)',cx+orx*0.6+tp*0.3,cy-ory*3+10*DPR);
+  }
+
+  drawDecel(c,t,phase) {
+    const dt01 = Math.min(1,(t-T_TRANSIT_END)/(T_DECEL_END-T_TRANSIT_END));
+    const cx=this.bx, cy=this.by, W=this.W, H=this.H;
+
+    if(this.kind==='alc') {
+      // Massive beam
+      const bw = 20 + dt01*H*0.35;
+      const bg = c.createLinearGradient(cx,cy,0,cy);
+      bg.addColorStop(0,`rgba(255,140,0,${dt01*0.5})`);
+      bg.addColorStop(0.6,`rgba(255,60,0,${dt01*0.25})`);
+      bg.addColorStop(1,`rgba(255,0,0,${dt01*0.08})`);
+      c.fillStyle=bg;
+      c.beginPath();
+      c.moveTo(cx,cy-bw*0.2); c.lineTo(0,cy-bw); c.lineTo(0,cy+bw); c.lineTo(cx,cy+bw*0.2);
+      c.closePath(); c.fill();
+
+      // Flash pulse
+      const fl = Math.exp(-dt01*4)*0.35;
+      c.fillStyle=`rgba(255,200,100,${fl})`; c.fillRect(0,0,W,H);
+
+      // Shockwave
+      const sr=dt01*W*0.7;
+      c.strokeStyle=`rgba(255,80,0,${(1-dt01)*0.3})`; c.lineWidth=2;
+      c.beginPath(); c.arc(cx,cy,sr,0,Math.PI*2); c.stroke();
+
+      // Planet getting destroyed
+      if(dt01>0.25) {
+        const px=35*DPR, pr=22*DPR;
+        const fireFrac = Math.min(1,(dt01-0.25)*3);
+        // Planet
+        c.fillStyle=`rgba(40,80,180,${1-fireFrac*0.7})`;
+        c.beginPath(); c.arc(px,cy,pr,0,Math.PI*2); c.fill();
+        // Fire
+        c.fillStyle=`rgba(255,60,0,${fireFrac*0.6})`;
+        c.beginPath(); c.arc(px,cy,pr+6*DPR,0,Math.PI*2); c.fill();
+        // Skull
+        if(dt01>0.55) {
+          c.fillStyle=`rgba(255,0,0,${Math.min(1,(dt01-0.55)*4)})`;
+          c.font=`${20*DPR}px serif`; c.textAlign='center';
+          c.fillText('☠',px,cy+7*DPR);
+        }
+      }
+    } else {
+      // COD: tiny beam
+      const bw = 3 + dt01*18;
+      const bg = c.createLinearGradient(cx,cy,0,cy);
+      bg.addColorStop(0,`rgba(0,180,100,${dt01*0.18})`);
+      bg.addColorStop(0.6,`rgba(0,120,70,${dt01*0.06})`);
+      bg.addColorStop(1,'rgba(0,80,50,0)');
+      c.fillStyle=bg;
+      c.beginPath();
+      c.moveTo(cx,cy-bw*0.25); c.lineTo(0,cy-bw); c.lineTo(0,cy+bw); c.lineTo(cx,cy+bw*0.25);
+      c.closePath(); c.fill();
+
+      // Tiny flash
+      const fl = Math.exp(-dt01*6)*0.08;
+      c.fillStyle=`rgba(100,255,150,${fl})`; c.fillRect(0,0,W,H);
+
+      // Planet survives
+      if(dt01>0.25) {
+        const px=35*DPR, pr=22*DPR;
+        c.fillStyle='rgba(40,80,180,0.8)';
+        c.beginPath(); c.arc(px,cy,pr,0,Math.PI*2); c.fill();
+        // Atmosphere shimmer
+        c.strokeStyle=`rgba(100,200,255,${0.15+Math.sin(t*3)*0.05})`;
+        c.lineWidth=2;
+        c.beginPath(); c.arc(px,cy,pr+3*DPR,0,Math.PI*2); c.stroke();
+        // Check
+        if(dt01>0.55) {
+          c.fillStyle=`rgba(0,255,100,${Math.min(1,(dt01-0.55)*4)})`;
+          c.font=`${20*DPR}px serif`; c.textAlign='center';
+          c.fillText('✓',px,cy+7*DPR);
+        }
+      }
+    }
+  }
+}
+
+// ═══════════════════════════════════════════
+// INIT & LOOP
+// ═══════════════════════════════════════════
+const sL = new Sim('cL','alc');
+const sR = new Sim('cR','cod');
+
+let t0 = performance.now(), tLast = t0;
+
+function expN(v) {
+  if(v<1e3) return v.toFixed(0)+' J';
+  const e=Math.floor(Math.log10(v));
+  return (v/10**e).toFixed(1)+'×10^'+e+' J';
+}
+
+function restart() {
+  t0=performance.now(); tLast=t0;
+  sL.reset(); sR.reset();
+  document.getElementById('replay-btn').style.opacity='0';
+  document.getElementById('verdict-L').style.opacity='0';
+  document.getElementById('verdict-R').style.opacity='0';
+  ['s-Lbeam','s-Rbeam','s-Ldrop','s-Rdrop'].forEach(id=>document.getElementById(id).textContent='—');
+}
+
+window.addEventListener('resize',()=>{ sL.resize(); sR.resize(); });
+
+function loop() {
+  const now = performance.now();
+  const t = Math.min((now-t0)/1000, DUR);
+  const dt = Math.min((now-tLast)/1000, 0.05);
+  tLast = now;
+
+  sL.step(t,dt); sR.step(t,dt);
+  sL.draw(t); sR.draw(t);
+
+  // Phase label
+  const pEl = document.getElementById('phase-label');
+  const tEl = document.getElementById('time-label');
+  tEl.textContent = 'T+ '+t.toFixed(1)+'s';
+  if(t<T_TRANSIT_END) {
+    pEl.textContent = 'PHASE 1 — TRANSIT AT 0.9c';
+    pEl.style.color = 'var(--cyan)';
+  } else if(t<T_DECEL_END) {
+    pEl.textContent = '⚠ PHASE 2 — DECELERATION';
+    pEl.style.color = '#ffaa00';
+  } else {
+    pEl.textContent = 'PHASE 3 — AFTERMATH';
+    pEl.style.color = 'rgba(255,255,255,0.4)';
+  }
+
+  // Stats
+  const alcE = sL.nCap * 1.55e23/150;
+  const codE = sR.nCap * (1.55e23/150) / COD_REDUCTION;
+
+  document.getElementById('s-Lcap').textContent = sL.nCap;
+  document.getElementById('s-Rcap').textContent = sR.nCap;
+  document.getElementById('s-Lenergy').textContent = expN(alcE);
+  document.getElementById('s-Renergy').textContent = expN(codE);
+  document.getElementById('bar-L').style.width = Math.min(100,sL.nCap/1.5)+'%';
+  document.getElementById('bar-R').style.width = Math.min(100,sR.nCap/1.5)+'%';
+
+  // Ratio
+  const ratio = sL.nCap > 0 && sR.nCap > 0
+    ? Math.round((sL.nCap/sR.nCap)*COD_REDUCTION)
+    : COD_REDUCTION;
+  document.getElementById('ratio-val').textContent = '×'+ratio.toLocaleString();
+
+  // Progress
+  document.getElementById('prog-fill').style.width = (t/DUR*100)+'%';
+
+  // Decel stats
+  if(t >= T_TRANSIT_END) {
+    document.getElementById('s-Lbeam').textContent = '~1.55×10²³ J';
+    document.getElementById('s-Rbeam').textContent = '~8.2×10¹⁹ J';
+    document.getElementById('s-Ldrop').textContent = '~500 AU';
+    document.getElementById('s-Rdrop').textContent = '~1.7 AU';
+  }
+
+  // Verdicts
+  if(t >= T_DECEL_END+1) {
+    document.getElementById('verdict-L').style.opacity='1';
+    document.getElementById('verdict-R').style.opacity='1';
+    document.getElementById('replay-btn').style.opacity='1';
+  }
+
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>

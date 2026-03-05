@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D COD Metric Simulation</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap');
+
+        body { margin: 0; overflow: hidden; background: #000; color: #fff; font-family: 'IBM Plex Mono', monospace; user-select: none; }
+        canvas { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
+        canvas:active { cursor: grabbing; }
+        
+        #ui-wrapper {
+            position: absolute; top: 15px; left: 15px;
+            display: flex; flex-direction: column; align-items: flex-start;
+            z-index: 10;
+        }
+
+        #toggle-btn {
+            background: rgba(0, 255, 136, 0.1);
+            border: 1px solid #00ff88; color: #00ff88;
+            padding: 8px 15px; border-radius: 4px; cursor: pointer;
+            font-family: 'Chakra Petch', sans-serif; font-weight: 700; letter-spacing: 2px;
+            font-size: 0.9rem; margin-bottom: 10px;
+            backdrop-filter: blur(10px); transition: all 0.2s;
+            box-shadow: 0 0 10px rgba(0, 255, 136, 0.2);
+            text-transform: uppercase;
+        }
+        #toggle-btn:hover { background: #00ff88; color: #000; }
+
+        #ui {
+            background: rgba(5, 15, 10, 0.85);
+            padding: 20px; border: 1px solid #00ff88; border-radius: 4px; width: 380px;
+            box-shadow: 0 4px 30px rgba(0, 255, 136, 0.15); backdrop-filter: blur(12px);
+            transition: opacity 0.3s, transform 0.3s;
+            transform-origin: top left;
+        }
+        
+        #ui.hidden { opacity: 0; transform: scale(0.95); pointer-events: none; position: absolute; }
+
+        h1 { font-family: 'Chakra Petch', sans-serif; font-size: 1.2rem; margin: 0 0 5px 0; color: #00ff88; text-transform: uppercase; letter-spacing: 2px;}
+        p { font-size: 0.75rem; color: #88ccaa; line-height: 1.4; margin-bottom: 15px; opacity: 0.8; }
+        
+        .slider-row { margin-bottom: 15px; }
+        .slider-label { display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 6px; color: #ccc;}
+        .val { color: #00ff88; font-weight: 600; }
+        input[type=range] { 
+            width: 100%; -webkit-appearance: none; background: rgba(0,255,136,0.2); 
+            height: 4px; border-radius: 2px; outline: none; cursor: pointer;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
+            background: #00ff88; box-shadow: 0 0 8px #00ff88;
+        }
+
+        .toggle-row { display: flex; align-items: center; font-size: 0.8rem; margin-bottom: 12px; color: #ccc; cursor: pointer; }
+        input[type=checkbox] { accent-color: #00ff88; transform: scale(1.2); margin-right: 10px; cursor: pointer; }
+
+        .telemetry-panel {
+            margin-top: 20px; padding: 12px; border: 1px solid rgba(0, 255, 136, 0.3);
+            border-radius: 4px; background: rgba(0, 40, 20, 0.4);
+        }
+        
+        .telemetry-title { font-family: 'Chakra Petch', sans-serif; font-size: 0.85rem; font-weight: 700; color: #00ccff; margin-bottom: 8px; letter-spacing: 1px;}
+        .telemetry-stats {
+            font-size: 0.75rem; color: #aaa;
+            display: flex; justify-content: space-between; flex-direction: column; gap: 6px;
+        }
+        .stat-row { display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 4px;}
+        .safe-val { color: #00ff88; font-weight: bold; }
+        
+        #crosshair {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: rgba(0,255,136,0.3); font-size: 24px; pointer-events: none; z-index: 1;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="crosshair">⌖</div>
+
+    <div id="ui-wrapper">
+        <button id="toggle-btn">⚙️ COD Parameters</button>
+        <div id="ui">
+            <h1>COD Deflector Metric</h1>
+            <p><strong>GEODESIC DEFLECTION PROTOTYPE.</strong> The oblate shape and gentle taper gradient organically route incoming physical matter around the primary hull, bypassing the McMonigal Accumulation Catastrophe.</p>
+            
+            <div class="slider-row">
+                <div class="slider-label"><span>Warp Velocity (v)</span> <span class="val" id="val-v">0.90 c</span></div>
+                <input type="range" id="velocity" min="0.0" max="2.5" step="0.01" value="0.9">
+            </div>
+            
+            <div class="slider-row">
+                <div class="slider-label"><span>Oblate Width (Transverse Rx/Ry)</span> <span class="val" id="val-w">3.50</span></div>
+                <input type="range" id="width" min="1.5" max="6.0" step="0.1" value="3.5">
+            </div>
+
+            <div class="slider-row">
+                <div class="slider-label"><span>Taper Length (Longitudinal Rz)</span> <span class="val" id="val-l">5.00</span></div>
+                <input type="range" id="length" min="2.0" max="8.0" step="0.1" value="5.0">
+            </div>
+
+            <div class="slider-row">
+                <div class="slider-label"><span>Metric Gradient Steepness (σ)</span> <span class="val" id="val-s">0.35</span></div>
+                <input type="range" id="steepness" min="0.1" max="2.0" step="0.05" value="0.35">
+            </div>
+
+            <div class="toggle-row">
+                <input type="checkbox" id="show-flow" checked>
+                <label for="show-flow">Visualize Matter Geodesic Flow</label>
+            </div>
+            <div class="toggle-row">
+                <input type="checkbox" id="show-grid" checked>
+                <label for="show-grid">Visualize Spacetime Curvature Grid</label>
+            </div>
+
+            <div class="telemetry-panel">
+                <div class="telemetry-title">SIMULATION TELEMETRY</div>
+                <div class="telemetry-stats">
+                    <div class="stat-row"><span>Matter Capture Rate:</span> <span id="val-capture" class="safe-val">0.01%</span></div>
+                    <div class="stat-row"><span>Wall Energy Accretion:</span> <span id="val-energy" class="safe-val">Nominal</span></div>
+                    <div class="stat-row"><span>Metric State:</span> <span class="safe-val">STABLE</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <canvas id="glcanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('glcanvas');
+        const gl = canvas.getContext('webgl2', { antialias: false });
+
+        if (!gl) { alert('WebGL 2 is required for this simulation.'); }
+
+        // UI Logic
+        const ui = document.getElementById('ui');
+        const toggleBtn = document.getElementById('toggle-btn');
+        let uiVisible = true;
+
+        toggleBtn.addEventListener('click', () => {
+            uiVisible = !uiVisible;
+            if (uiVisible) {
+                ui.classList.remove('hidden');
+                toggleBtn.innerText = '➖ Close Parameters';
+            } else {
+                ui.classList.add('hidden');
+                toggleBtn.innerText = '⚙️ COD Parameters';
+            }
+        });
+
+        const bindSlider = (id, valId, suffix="") => {
+            const el = document.getElementById(id);
+            const valEl = document.getElementById(valId);
+            el.oninput = (e) => {
+                valEl.innerText = parseFloat(e.target.value).toFixed(2) + suffix;
+                updateTelemetry();
+            };
+            return el;
+        };
+
+        const vSlider = bindSlider('velocity', 'val-v', ' c');
+        const wSlider = bindSlider('width', 'val-w');
+        const lSlider = bindSlider('length', 'val-l');
+        const sSlider = bindSlider('steepness', 'val-s');
+        const chkFlow = document.getElementById('show-flow');
+        const chkGrid = document.getElementById('show-grid');
+
+        const valCapture = document.getElementById('val-capture');
+        const valEnergy = document.getElementById('val-energy');
+
+        function updateTelemetry() {
+            // Faux calculations based on parameters to demonstrate physics relationship
+            let steep = parseFloat(sSlider.value);
+            let width = parseFloat(wSlider.value);
+            let len = parseFloat(lSlider.value);
+            
+            // Higher steepness (closer to Alcubierre hard wall) = more capture
+            // Higher width/length ratio (more oblate) = better deflection
+            let captureProb = Math.pow(steep, 2.5) * (len / width) * 2.0;
+            if(captureProb < 0.001) captureProb = 0.001;
+            if(captureProb > 99.9) captureProb = 99.9;
+            
+            valCapture.innerText = captureProb.toFixed(3) + "%";
+            
+            if (captureProb > 5.0) {
+                valCapture.style.color = '#ff3333';
+                valEnergy.style.color = '#ff3333';
+                valEnergy.innerText = "DANGEROUS ACCRETION";
+            } else if (captureProb > 1.0) {
+                valCapture.style.color = '#ffaa00';
+                valEnergy.style.color = '#ffaa00';
+                valEnergy.innerText = "ELEVATED";
+            } else {
+                valCapture.style.color = '#00ff88';
+                valEnergy.style.color = '#00ff88';
+                valEnergy.innerText = "NOMINAL (SAFE)";
+            }
+        }
+        updateTelemetry();
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            gl.viewport(0, 0, canvas.width, canvas.height);
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // --- WEBGL SHADERS ---
+        const vs = `#version 300 es
+            in vec4 a_pos; out vec2 v_uv;
+            void main() { v_uv = a_pos.xy; gl_Position = a_pos; }
+        `;
+
+        const fs = `#version 300 es
+            precision highp float;
+            in vec2 v_uv; out vec4 fragColor;
+
+            uniform vec2 u_res;
+            uniform float u_time;
+            uniform vec3 u_camPos;
+            
+            // COD Parameters
+            uniform float u_v; 
+            uniform float u_W; // Transverse width (X/Y)
+            uniform float u_L; // Longitudinal length (Z)
+            uniform float u_sigma; // Gradient steepness
+            
+            uniform int u_showFlow;
+            uniform int u_showGrid;
+
+            // Physical Spaceship SDF
+            float sdShip(vec3 p) {
+                // Sleek, swept-back elongated hull
+                vec3 p2 = p;
+                p2.z += 1.0; 
+                float hull = length(p2 * vec3(1.5, 1.5, 0.25)) - 0.4;
+                
+                // Ring drive (deflector emitters)
+                float ring = length(vec2(length(p.xz) - 1.2, p.y)) - 0.05;
+                
+                return min(hull, ring);
+            }
+
+            vec3 calcShipNormal(vec3 p) {
+                vec2 e = vec2(0.005, 0.0);
+                return normalize(vec3(
+                    sdShip(p + e.xyy) - sdShip(p - e.xyy),
+                    sdShip(p + e.yxy) - sdShip(p - e.yxy),
+                    sdShip(p + e.yyx) - sdShip(p - e.yyx)
+                ));
+            }
+
+            // Procedural 3D Simplex-ish Noise for Matter Flow
+            float hash(vec3 p) {
+                p = fract(p * vec3(123.34, 456.21, 85.714));
+                p += dot(p, p + 45.32);
+                return fract(p.x * p.y);
+            }
+            float noise(vec3 x) {
+                vec3 p = floor(x); vec3 f = fract(x);
+                f = f*f*(3.0-2.0*f);
+                float n = p.x + p.y*157.0 + 113.0*p.z;
+                return mix(
+                    mix(mix(hash(p+vec3(0,0,0)), hash(p+vec3(1,0,0)),f.x),
+                        mix(hash(p+vec3(0,1,0)), hash(p+vec3(1,1,0)),f.x),f.y),
+                    mix(mix(hash(p+vec3(0,0,1)), hash(p+vec3(1,0,1)),f.x),
+                        mix(hash(p+vec3(0,1,1)), hash(p+vec3(1,1,1)),f.x),f.y),f.z);
+            }
+
+            void main() {
+                vec2 uv = (gl_FragCoord.xy - 0.5 * u_res) / min(u_res.x, u_res.y);
+                
+                vec3 ro = u_camPos;
+                vec3 ta = vec3(0.0, 0.0, 0.0);
+                vec3 cw = normalize(ta - ro);
+                vec3 cu = normalize(cross(cw, vec3(0.0, 1.0, 0.0)));
+                vec3 cv = cross(cu, cw);
+                vec3 rd = normalize(uv.x * cu + uv.y * cv + 1.2 * cw);
+
+                vec3 p = ro;
+                vec4 vol = vec4(0.0);
+                bool hitShip = false;
+
+                // Analytical COD Metric Calculation
+                // f(p) is 1 inside the bubble, 0 outside.
+                // It transitions smoothly via a tanh function based on the oblate radius.
+                
+                for(int i = 0; i < 90; i++) {
+                    // 1. Calculate Oblate Radius 'rs'
+                    // Using standard ellipsoid equation
+                    float rs = sqrt((p.x*p.x)/(u_W*u_W) + (p.y*p.y)/(u_W*u_W) + (p.z*p.z)/(u_L*u_L));
+                    
+                    // 2. Analytical COD Metric Function
+                    float f = 0.5 - 0.5 * tanh(u_sigma * (rs - 1.0));
+                    
+                    // 3. Analytical Derivative for Lensing
+                    // d(tanh(x))/dx = 1 - tanh^2(x)
+                    float tanh_val = tanh(u_sigma * (rs - 1.0));
+                    float df_drs = -0.5 * u_sigma * (1.0 - tanh_val * tanh_val);
+                    
+                    // Gradient vector of f in 3D
+                    vec3 gradF = vec3(0.0);
+                    if (rs > 0.001) {
+                        gradF.x = df_drs * (p.x / (u_W*u_W)) / rs;
+                        gradF.y = df_drs * (p.y / (u_W*u_W)) / rs;
+                        gradF.z = df_drs * (p.z / (u_L*u_L)) / rs;
+                    }
+
+                    // Raymarching Steps
+                    float dt = max(0.05, min(0.3, rs * 0.2));
+                    float dShip = sdShip(p);
+                    if (dShip < 0.3) dt = min(dt, dShip * 0.6);
+                    
+                    // --- PHYSICS: NULL GEODESIC INTEGRATION ---
+                    // Lensing (Refraction)
+                    rd = normalize(rd - gradF * u_v * dt * 0.5);
+                    
+                    // Frame Dragging (Beta shift)
+                    vec3 beta = vec3(0.0, 0.0, u_v * f);
+                    p += (rd - beta) * dt;
+
+                    // --- VISUALIZATION: SPACETIME GRID ---
+                    if (u_showGrid == 1) {
+                        // Show grid slice at Y=0 and X=0
+                        if (abs(p.y) < 0.1 || abs(p.x) < 0.1) {
+                            float lineX = smoothstep(0.05, 0.0, abs(fract(p.x * 1.5) - 0.5));
+                            float lineY = smoothstep(0.05, 0.0, abs(fract(p.y * 1.5) - 0.5));
+                            float lineZ = smoothstep(0.05, 0.0, abs(fract(p.z * 1.5 + u_time * u_v * 3.0) - 0.5));
+                            
+                            float gridLine = max(max(lineX, lineZ)* (1.0 - abs(p.y)*10.0), max(lineY, lineZ) * (1.0 - abs(p.x)*10.0));
+                            gridLine = max(0.0, gridLine);
+                            
+                            vec3 gridCol = vec3(0.0, 0.8, 0.5); // Safe green grid
+                            float gAlpha = gridLine * 0.15;
+                            vol += vec4(gridCol * gAlpha, gAlpha) * (1.0 - vol.a);
+                        }
+                    }
+                    
+                    // --- VISUALIZATION: MATTER FLOW (DEFLECTION) ---
+                    if (u_showFlow == 1) {
+                        // Only show flow outside the immediate core to see the deflection
+                        if (rs > 0.8 && rs < 2.5) {
+                            // Sample noise flowing backwards against the ship
+                            vec3 flowPos = p * 2.0;
+                            flowPos.z += u_time * u_v * 10.0;
+                            
+                            float dens = noise(flowPos);
+                            // Highlight regions where the metric gradient is doing work (deflecting)
+                            float deflectionStrength = length(gradF) * u_v;
+                            
+                            if (dens > 0.6 && deflectionStrength > 0.01) {
+                                float alpha = (dens - 0.6) * deflectionStrength * dt * 4.0;
+                                // Color shifts based on how hard it's being pushed
+                                vec3 flowCol = mix(vec3(0.0, 0.6, 1.0), vec3(0.0, 1.0, 0.5), smoothstep(0.0, 0.5, deflectionStrength));
+                                vol += vec4(flowCol * alpha, alpha) * (1.0 - vol.a);
+                            }
+                        }
+                    }
+
+                    if (dShip < 0.01) {
+                        hitShip = true;
+                        vec3 n = calcShipNormal(p);
+                        vec3 l = normalize(vec3(2.0, 4.0, -2.0));
+                        float diff = max(dot(n, l), 0.1);
+                        vec3 shipCol = vec3(0.2, 0.25, 0.3) * diff;
+                        // Engine glow
+                        if (p.z > 0.0 && length(p.xy) < 0.5) shipCol += vec3(0.0, 1.0, 0.8) * 1.5;
+                        vol += vec4(shipCol * (1.0 - vol.a), 1.0 - vol.a);
+                        break;
+                    }
+                    
+                    if (rs > 8.0 || vol.a > 0.99) break;
+                }
+
+                vec3 finalCol = vol.rgb;
+
+                // Procedural Starfield
+                if (!hitShip && vol.a < 0.99) {
+                    vec3 nDir = rd;
+                    float stars = pow(hash(floor(nDir * 400.0)), 50.0);
+                    vec3 starCol = vec3(stars);
+                    
+                    // Doppler shift roughly based on view angle and velocity
+                    float cosTheta = dot(nDir, vec3(0.0, 0.0, -1.0)); 
+                    if (u_v > 0.1) {
+                        if (cosTheta > 0.5) starCol *= mix(vec3(1.0), vec3(0.2, 0.6, 1.0), (cosTheta - 0.5) * 2.0 * u_v);
+                        else if (cosTheta < -0.5) starCol *= mix(vec3(1.0), vec3(1.0, 0.3, 0.1), (-cosTheta - 0.5) * 2.0 * u_v);
+                    }
+                    
+                    // Deep space background
+                    vec3 bg = vec3(0.02, 0.05, 0.08) * exp(-abs(nDir.y)*4.0);
+                    finalCol += (starCol + bg) * (1.0 - vol.a);
+                }
+
+                // Tonemapping
+                finalCol = finalCol / (finalCol + vec3(1.0));
+                finalCol = pow(finalCol, vec3(1.0 / 2.2));
+
+                fragColor = vec4(finalCol, 1.0);
+            }
+        `;
+
+        function buildShader(type, src) {
+            const s = gl.createShader(type);
+            gl.shaderSource(s, src); gl.compileShader(s);
+            if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+                console.error(gl.getShaderInfoLog(s));
+            }
+            return s;
+        }
+
+        const prog = gl.createProgram();
+        gl.attachShader(prog, buildShader(gl.VERTEX_SHADER, vs));
+        gl.attachShader(prog, buildShader(gl.FRAGMENT_SHADER, fs));
+        gl.linkProgram(prog);
+
+        const posBuf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]), gl.STATIC_DRAW);
+        const posLoc = gl.getAttribLocation(prog, "a_pos");
+        gl.enableVertexAttribArray(posLoc);
+        gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+
+        // Uniforms
+        const locs = {
+            res: gl.getUniformLocation(prog, "u_res"),
+            time: gl.getUniformLocation(prog, "u_time"),
+            cam: gl.getUniformLocation(prog, "u_camPos"),
+            v: gl.getUniformLocation(prog, "u_v"),
+            W: gl.getUniformLocation(prog, "u_W"),
+            L: gl.getUniformLocation(prog, "u_L"),
+            sigma: gl.getUniformLocation(prog, "u_sigma"),
+            showFlow: gl.getUniformLocation(prog, "u_showFlow"),
+            showGrid: gl.getUniformLocation(prog, "u_showGrid")
+        };
+
+        // Orbit Camera Controls
+        let camAngX = 0.5, camAngY = 0.3; // Starting angles to see the oblate shape
+        let isDrag = false, lastX, lastY;
+        
+        window.onmousedown = e => { if(e.target === canvas){ isDrag = true; lastX = e.clientX; lastY = e.clientY; }};
+        window.onmouseup = () => isDrag = false;
+        window.onmousemove = e => {
+            if (!isDrag) return;
+            camAngX -= (e.clientX - lastX) * 0.008;
+            camAngY = Math.max(-1.5, Math.min(1.5, camAngY + (e.clientY - lastY) * 0.008));
+            lastX = e.clientX; lastY = e.clientY;
+        };
+
+        // Prevent UI interactions from dragging camera
+        document.getElementById('ui-wrapper').onmousedown = e => e.stopPropagation();
+
+        function render(now) {
+            gl.useProgram(prog);
+            
+            // Calculate Camera Position
+            const dist = 7.0;
+            const cx = dist * Math.cos(camAngY) * Math.sin(camAngX);
+            const cy = dist * Math.sin(camAngY);
+            const cz = dist * Math.cos(camAngY) * Math.cos(camAngX);
+            
+            gl.uniform3f(locs.cam, cx, cy, cz);
+            gl.uniform2f(locs.res, canvas.width, canvas.height);
+            gl.uniform1f(locs.time, now * 0.001);
+            
+            gl.uniform1f(locs.v, parseFloat(vSlider.value));
+            gl.uniform1f(locs.W, parseFloat(wSlider.value));
+            gl.uniform1f(locs.L, parseFloat(lSlider.value));
+            gl.uniform1f(locs.sigma, parseFloat(sSlider.value));
+            
+            gl.uniform1i(locs.showFlow, chkFlow.checked ? 1 : 0);
+            gl.uniform1i(locs.showGrid, chkGrid.checked ? 1 : 0);
+
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+            requestAnimationFrame(render);
+        }
+        
+        requestAnimationFrame(render);
+    </script>
+</body>
+</html>

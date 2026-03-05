@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hybrid Semiclassical Raytracer</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; color: #fff; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        canvas { display: block; width: 100vw; height: 100vh; }
+        #ui {
+            position: absolute; top: 15px; left: 15px; background: rgba(15, 20, 25, 0.85);
+            padding: 20px; border: 1px solid #ff0077; border-radius: 8px; max-width: 380px;
+            box-shadow: 0 4px 20px rgba(255, 0, 119, 0.3); backdrop-filter: blur(8px);
+        }
+        h1 { font-size: 1.2rem; margin: 0 0 10px 0; color: #ff0077; text-transform: uppercase; }
+        p { font-size: 0.85rem; color: #bbb; line-height: 1.4; margin-bottom: 15px; }
+        strong { color: #fff; }
+        .control-group { margin-bottom: 15px; }
+        label { display: flex; align-items: center; font-size: 0.85rem; margin-bottom: 5px; cursor: pointer; }
+        .val { margin-left: auto; color: #ff0077; font-family: monospace; }
+        input[type=range] { width: 100%; accent-color: #ff0077; cursor: pointer; }
+        input[type=radio] { margin-right: 8px; accent-color: #ff0077; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        <h1>Hybrid Semiclassical Engine</h1>
+        <p><strong>Macro:</strong> Classical straight-line raytracing for structure and shadows.<br>
+           <strong>Micro:</strong> Quantum wave mechanics (phase interference) triggered on the object surface.</p>
+        
+        <div class="control-group">
+            <label>
+                <input type="radio" name="mode" id="mode-classical" value="0"> 
+                Pure Classical Raytracer (Plastic)
+            </label>
+            <label>
+                <input type="radio" name="mode" id="mode-hybrid" value="1" checked> 
+                Hybrid Wave-Optics (Iridescence)
+            </label>
+        </div>
+
+        <div class="control-group">
+            <label>Thin-Film Thickness (Nanometers): <span class="val" id="val-thick">450</span></label>
+            <input type="range" id="thickness" min="100" max="1200" step="5" value="450">
+        </div>
+        
+        <div class="control-group">
+            <label>Film Refractive Index: <span class="val" id="val-ior">1.40</span></label>
+            <input type="range" id="ior" min="1.1" max="2.5" step="0.01" value="1.40">
+        </div>
+        
+        <p style="font-size: 0.75rem; color: #777; margin-top: 15px;">Click and drag to rotate camera.</p>
+    </div>
+
+    <canvas id="glcanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('glcanvas');
+        const gl = canvas.getContext('webgl2');
+
+        function resize() {
+            canvas.width = window.innerWidth * Math.min(window.devicePixelRatio, 2);
+            canvas.height = window.innerHeight * Math.min(window.devicePixelRatio, 2);
+            gl.viewport(0, 0, canvas.width, canvas.height);
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        const vertexShaderSource = `#version 300 es
+            in vec4 a_pos; out vec2 v_uv;
+            void main() { v_uv = a_pos.xy; gl_Position = a_pos; }
+        `;
+
+        const fragmentShaderSource = `#version 300 es
+            precision highp float;
+            in vec2 v_uv; out vec4 fragColor;
+
+            uniform vec2 u_res;
+            uniform vec3 u_camPos;
+            uniform int u_mode;
+            uniform float u_thickness;
+            uniform float u_ior;
+            
+            #define PI 3.14159265359
+
+            // --- 1. CLASSICAL MACRO SCENE DEFINITION ---
+            
+            vec2 map(vec3 p) {
+                // Sphere at origin (id: 1 for thin-film object)
+                float dSphere = length(p) - 1.0;
+                
+                // Floor (id: 2 for classical diffuse floor)
+                float dFloor = p.y + 1.0;
+                
+                if (dSphere < dFloor) return vec2(dSphere, 1.0);
+                return vec2(dFloor, 2.0);
+            }
+
+            vec3 calcNormal(vec3 p) {
+                vec2 e = vec2(0.001, 0.0);
+                return normalize(vec3(
+                    map(p + e.xyy).x - map(p - e.xyy).x,
+                    map(p + e.yxy).x - map(p - e.yxy).x,
+                    map(p + e.yyx).x - map(p - e.yyx).x
+                ));
+            }
+
+            // Classical Soft Shadow
+            float calcShadow(vec3 ro, vec3 rd) {
+                float res = 1.0;
+                float t = 0.02;
+                for(int i = 0; i < 30; i++) {
+                    float h = map(ro + rd * t).x;
+                    res = min(res, 8.0 * h / t);
+                    t += clamp(h, 0.02, 0.2);
+                    if(h < 0.001 || t > 5.0) break;
+                }
+                return clamp(res, 0.0, 1.0);
+            }
+
+            // --- 2. THE QUANTUM HYBRID MODULE ---
+            
+            // Calculates analytical wave interference of light bouncing inside a microscopic film.
+            vec3 waveOpticsInterference(vec3 normal, vec3 viewDir, float film_d, float n_film) {
+                // Classical ray angle
+                float cosTheta1 = clamp(dot(normal, viewDir), 0.0, 1.0);
+                
+                // Snell's law to find refraction angle inside the microscopic film
+                float n_air = 1.0;
+                float sinTheta1 = sqrt(1.0 - cosTheta1 * cosTheta1);
+                float sinTheta2 = (n_air / n_film) * sinTheta1;
+                float cosTheta2 = sqrt(1.0 - sinTheta2 * sinTheta2);
+                
+                // QFT: Optical Path Difference (OPD) between outer bounce and inner bounce
+                float OPD = 2.0 * n_film * film_d * cosTheta2;
+                
+                // Sample 3 specific wavelengths (Red, Green, Blue) in nanometers
+                vec3 lambda = vec3(650.0, 530.0, 450.0);
+                
+                // Calculate Quantum Phase shift: (2*pi*distance / wavelength) + Pi (boundary shift)
+                vec3 phase = (2.0 * PI * OPD) / lambda + PI;
+                
+                // Calculate constructive/destructive interference envelope
+                vec3 interference = 0.5 + 0.5 * cos(phase);
+                
+                // Classical Fresnel macro-envelope to scale the wave-effect
+                float F0 = pow((n_air - n_film) / (n_air + n_film), 2.0);
+                float F = F0 + (1.0 - F0) * pow(1.0 - cosTheta1, 5.0);
+                
+                return F * interference * 4.0; // Boosted for screen
+            }
+
+            // Classical Fresnel for the "Standard" raytracing mode
+            float pureClassicalFresnel(vec3 normal, vec3 viewDir) {
+                float F0 = 0.04; // standard plastic/glass
+                return F0 + (1.0 - F0) * pow(1.0 - max(dot(normal, viewDir), 0.0), 5.0);
+            }
+
+            // --- 3. MAIN RENDER LOGIC ---
+
+            void main() {
+                vec2 uv = (gl_FragCoord.xy - 0.5 * u_res) / min(u_res.x, u_res.y);
+                
+                // Classical Ray Setup
+                vec3 ro = u_camPos;
+                vec3 ta = vec3(0.0, 0.0, 0.0);
+                vec3 cw = normalize(ta - ro);
+                vec3 cu = normalize(cross(cw, vec3(0.0, 1.0, 0.0)));
+                vec3 cv = cross(cu, cw);
+                vec3 rd = normalize(uv.x * cu + uv.y * cv + 1.2 * cw);
+
+                // Raymarch Scene (Classical transport)
+                float t = 0.0;
+                float id = 0.0;
+                for(int i = 0; i < 100; i++) {
+                    vec3 p = ro + rd * t;
+                    vec2 res = map(p);
+                    if(res.x < 0.001) { id = res.y; break; }
+                    t += res.x;
+                    if(t > 20.0) break;
+                }
+
+                vec3 col = vec3(0.05); // Background light
+
+                if(t < 20.0) {
+                    vec3 p = ro + rd * t;
+                    vec3 n = calcNormal(p);
+                    vec3 viewDir = -rd;
+                    vec3 lightPos = vec3(2.0, 4.0, -3.0);
+                    vec3 l = normalize(lightPos - p);
+                    
+                    // Classical Lighting components
+                    float diff = max(dot(n, l), 0.0);
+                    float shadow = calcShadow(p, l);
+                    
+                    if(id == 2.0) {
+                        // FLOOR: Purely Classical Raytracing
+                        // Add a checkerboard pattern
+                        float f = mod(floor(p.x * 2.0) + floor(p.z * 2.0), 2.0);
+                        vec3 albedo = vec3(0.1 + 0.1 * f);
+                        col = albedo * diff * shadow;
+                        
+                        // Fake classical ambient occlusion
+                        col += albedo * 0.1 * (0.5 + 0.5 * n.y);
+                    } 
+                    else if (id == 1.0) {
+                        // TARGET SPHERE: The Hybrid Semiclassical Switch
+                        
+                        vec3 albedo = vec3(0.02); // Dark base material
+                        vec3 diffuseLight = albedo * diff * shadow;
+                        vec3 specColor;
+
+                        if (u_mode == 1) {
+                            // HYBRID MODE: Execute wave-optics math at intersection
+                            specColor = waveOpticsInterference(n, viewDir, u_thickness, u_ior);
+                            
+                            // Add classical specular highlight for the light bulb
+                            vec3 h = normalize(l + viewDir);
+                            float specHighlight = pow(max(dot(n, h), 0.0), 64.0);
+                            specColor += specHighlight * shadow;
+                            
+                        } else {
+                            // CLASSICAL MODE: Standard generic white specular reflection
+                            float f = pureClassicalFresnel(n, viewDir);
+                            specColor = vec3(f); // Just white plastic reflection
+                            
+                            vec3 h = normalize(l + viewDir);
+                            float specHighlight = pow(max(dot(n, h), 0.0), 32.0);
+                            specColor += specHighlight * shadow * 0.5;
+                        }
+
+                        // Combine classical diffuse with quantum/classical specular
+                        col = diffuseLight + specColor;
+                        
+                        // Add a subtle classical rim light
+                        col += vec3(0.1, 0.15, 0.2) * pow(1.0 - max(dot(n, viewDir), 0.0), 4.0);
+                    }
+                }
+
+                // Tonemapping and Gamma correction
+                col = col / (col + vec3(1.0));
+                col = pow(col, vec3(1.0 / 2.2));
+
+                fragColor = vec4(col, 1.0);
+            }
+        `;
+
+        function createShader(gl, type, src) {
+            const s = gl.createShader(type);
+            gl.shaderSource(s, src); gl.compileShader(s);
+            if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(s));
+            return s;
+        }
+
+        const prog = gl.createProgram();
+        gl.attachShader(prog, createShader(gl, gl.VERTEX_SHADER, vertexShaderSource));
+        gl.attachShader(prog, createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource));
+        gl.linkProgram(prog);
+
+        const posBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]), gl.STATIC_DRAW);
+        const posLoc = gl.getAttribLocation(prog, "a_pos");
+        gl.enableVertexAttribArray(posLoc);
+        gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+
+        // Uniforms
+        const locRes = gl.getUniformLocation(prog, "u_res");
+        const locCam = gl.getUniformLocation(prog, "u_camPos");
+        const locMode = gl.getUniformLocation(prog, "u_mode");
+        const locThick = gl.getUniformLocation(prog, "u_thickness");
+        const locIor = gl.getUniformLocation(prog, "u_ior");
+
+        // Camera control
+        let camAngX = 0.5, camAngY = 0.2, isDragging = false, lastX, lastY;
+        window.onmousedown = e => { isDragging = true; lastX = e.clientX; lastY = e.clientY; };
+        window.onmouseup = () => isDragging = false;
+        window.onmousemove = e => {
+            if (!isDragging) return;
+            camAngX -= (e.clientX - lastX) * 0.01;
+            camAngY = Math.max(-0.2, Math.min(1.2, camAngY + (e.clientY - lastY) * 0.01));
+            lastX = e.clientX; lastY = e.clientY;
+        };
+        
+        // Touch support
+        window.ontouchstart = e => { isDragging = true; lastX = e.touches[0].clientX; lastY = e.touches[0].clientY; };
+        window.ontouchend = () => isDragging = false;
+        window.ontouchmove = e => {
+            if (!isDragging) return;
+            camAngX -= (e.touches[0].clientX - lastX) * 0.01;
+            camAngY = Math.max(-0.2, Math.min(1.2, camAngY + (e.touches[0].clientY - lastY) * 0.01));
+            lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+        };
+
+        // UI Binding
+        const uiThick = document.getElementById('thickness');
+        const uiIor = document.getElementById('ior');
+        const modeHybrid = document.getElementById('mode-hybrid');
+
+        uiThick.oninput = e => document.getElementById('val-thick').innerText = e.target.value;
+        uiIor.oninput = e => document.getElementById('val-ior').innerText = parseFloat(e.target.value).toFixed(2);
+
+        function render() {
+            gl.useProgram(prog);
+            
+            // Orbit Camera Math
+            const dist = 3.5;
+            const cx = dist * Math.cos(camAngY) * Math.sin(camAngX);
+            const cy = dist * Math.sin(camAngY);
+            const cz = dist * Math.cos(camAngY) * Math.cos(camAngX);
+            
+            gl.uniform3f(locCam, cx, cy, cz);
+            gl.uniform2f(locRes, canvas.width, canvas.height);
+            
+            // Inject variables
+            gl.uniform1i(locMode, modeHybrid.checked ? 1 : 0);
+            gl.uniform1f(locThick, parseFloat(uiThick.value));
+            gl.uniform1f(locIor, parseFloat(uiIor.value));
+
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+            requestAnimationFrame(render);
+        }
+        
+        requestAnimationFrame(render);
+    </script>
+</body>
+</html>
