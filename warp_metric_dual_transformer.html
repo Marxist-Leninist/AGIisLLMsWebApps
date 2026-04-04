@@ -1,0 +1,1484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>General Relativity: Dual-Transformer Metric Handover</title>
+    <style>
+        :root {
+            --accent: #00ffd0;
+            --accent-2: #67f0ff;
+            --bg: rgba(10, 15, 20, 0.86);
+            --border: rgba(0, 255, 208, 0.35);
+            --text: #f1f7fb;
+            --muted: #9ba8b4;
+            --warn: #ff4f7b;
+            --good: #00ffd0;
+            --shadow: 0 10px 32px rgba(0, 0, 0, 0.35), 0 0 24px rgba(0, 255, 208, 0.08);
+        }
+
+        * { box-sizing: border-box; }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            background: #000;
+            color: var(--text);
+            overflow: hidden;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body { user-select: none; }
+
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+            cursor: grab;
+            touch-action: none;
+        }
+
+        canvas:active { cursor: grabbing; }
+
+        #ui-wrapper {
+            position: absolute;
+            top: 14px;
+            left: 14px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            z-index: 10;
+            max-width: min(460px, calc(100vw - 28px));
+        }
+
+        #toggle-btn,
+        .minor-btn {
+            border: 1px solid var(--accent);
+            background: rgba(10, 15, 20, 0.88);
+            color: var(--accent);
+            padding: 8px 14px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 0.9rem;
+            transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+            box-shadow: 0 0 14px rgba(0, 255, 208, 0.12);
+            backdrop-filter: blur(12px);
+        }
+
+        #toggle-btn:hover,
+        .minor-btn:hover {
+            background: var(--accent);
+            color: #061014;
+            transform: translateY(-1px);
+        }
+
+        #toggle-btn { margin-bottom: 10px; }
+
+        #ui {
+            width: min(460px, calc(100vw - 28px));
+            padding: 18px 18px 16px;
+            border-radius: 14px;
+            border: 1px solid var(--border);
+            background: var(--bg);
+            backdrop-filter: blur(14px);
+            box-shadow: var(--shadow);
+            transition: opacity 0.22s ease, transform 0.22s ease;
+            transform-origin: top left;
+        }
+
+        #ui.hidden {
+            opacity: 0;
+            transform: scale(0.965);
+            pointer-events: none;
+            position: absolute;
+        }
+
+        h1 {
+            margin: 0 0 6px;
+            font-size: 1.08rem;
+            color: var(--accent);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        p {
+            margin: 0 0 14px;
+            color: var(--muted);
+            font-size: 0.82rem;
+            line-height: 1.45;
+        }
+
+        strong { color: #fff; }
+
+        .slider-row { margin-bottom: 12px; }
+
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 6px;
+            font-size: 0.85rem;
+            color: #d3dee7;
+        }
+
+        .val {
+            color: var(--accent);
+            font-family: Consolas, Monaco, monospace;
+            white-space: nowrap;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+
+        input[type="checkbox"] {
+            accent-color: var(--accent);
+            transform: scale(1.15);
+            margin-right: 8px;
+            cursor: pointer;
+        }
+
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            color: #c7d3dc;
+            font-size: 0.85rem;
+        }
+
+        .panel-note {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-top: 6px;
+            color: #91a2af;
+            font-size: 0.73rem;
+        }
+
+        .ai-panel {
+            margin-top: 15px;
+            padding: 14px;
+            border-radius: 12px;
+            border: 1px solid rgba(0, 255, 208, 0.2);
+            background: linear-gradient(180deg, rgba(0, 55, 45, 0.28), rgba(0, 25, 22, 0.18));
+        }
+
+        .ai-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .subhead {
+            margin-top: 8px;
+            margin-bottom: 8px;
+            color: #b5c6d1;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            margin-bottom: 10px;
+            border-radius: 999px;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .progress-fill {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-2), var(--accent));
+            box-shadow: 0 0 18px rgba(0, 255, 208, 0.35);
+            transition: width 0.12s linear;
+        }
+
+        .ai-stats {
+            display: grid;
+            gap: 6px;
+            font-size: 0.76rem;
+            color: #a8b5bf;
+            font-family: Consolas, Monaco, monospace;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .status-warn { color: var(--warn); }
+        .status-sync { color: var(--good); }
+
+        .button-row {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .minor-btn {
+            padding: 7px 12px;
+            font-size: 0.8rem;
+        }
+
+        #fallback {
+            position: absolute;
+            inset: 0;
+            display: none;
+            place-items: center;
+            padding: 24px;
+            text-align: center;
+            background: radial-gradient(circle at 50% 35%, rgba(0, 255, 208, 0.08), transparent 35%), #040708;
+            color: #dfeaf1;
+            z-index: 20;
+        }
+
+        #fallback .card {
+            max-width: 560px;
+            padding: 22px;
+            border-radius: 16px;
+            border: 1px solid rgba(0, 255, 208, 0.25);
+            background: rgba(10, 15, 20, 0.88);
+            box-shadow: var(--shadow);
+        }
+
+        #fallback h2 {
+            margin: 0 0 10px;
+            color: var(--accent);
+            font-size: 1.1rem;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        #fallback p {
+            margin: 0;
+            font-size: 0.9rem;
+            color: #c8d4dd;
+        }
+
+        @media (max-width: 560px) {
+            #ui-wrapper {
+                top: 10px;
+                left: 10px;
+                max-width: calc(100vw - 20px);
+            }
+
+            #ui {
+                width: calc(100vw - 20px);
+                padding: 16px;
+            }
+
+            .button-row {
+                flex-wrap: wrap;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="fallback">
+        <div class="card">
+            <h2>WebGL2 Required</h2>
+            <p>This demo needs a browser and GPU path that support WebGL2. Two tiny browser-safe transformers are already enough chaos without the graphics stack collapsing too.</p>
+        </div>
+    </div>
+
+    <div id="ui-wrapper">
+        <button id="toggle-btn" type="button">➖ Close Panel</button>
+        <div id="ui">
+            <h1>Physical Spacetime Manifold</h1>
+            <p><strong>MATTER DRIVES CURVATURE.</strong> One micro-transformer learns a sharper radial GR metric from tokenized radius samples. Another watches frame telemetry and throttles resolution, ray steps, and training budget to hold FPS.</p>
+
+            <div class="slider-row">
+                <div class="slider-label"><span>Warp Velocity (v)</span><span class="val" id="val-v">0.80 c</span></div>
+                <input type="range" id="velocity" min="0.00" max="2.50" step="0.01" value="0.80">
+            </div>
+
+            <div class="slider-row">
+                <div class="slider-label"><span>Bubble Radius (R)</span><span class="val" id="val-r">2.50</span></div>
+                <input type="range" id="radius" min="1.50" max="4.00" step="0.05" value="2.50">
+            </div>
+
+            <div class="slider-row">
+                <div class="slider-label"><span>Bubble Wall Thickness (σ)</span><span class="val" id="val-t">0.50</span></div>
+                <input type="range" id="thickness" min="0.10" max="1.50" step="0.05" value="0.50">
+            </div>
+
+            <div class="toggle-row">
+                <input type="checkbox" id="show-energy" checked>
+                <label for="show-energy">Show Stress-Matter Tensor (T<sub>μν</sub>)</label>
+            </div>
+
+            <div class="toggle-row">
+                <input type="checkbox" id="show-grid" checked>
+                <label for="show-grid">Show Spacetime Grid</label>
+            </div>
+
+            <div class="ai-panel">
+                <div class="ai-title">
+                    <span>Dual Transformer Handover</span>
+                    <span id="ai-status" class="status-warn">TEACHER FORCING</span>
+                </div>
+
+                <div class="subhead">Metric Student</div>
+                <div class="progress-bar"><div class="progress-fill" id="ai-control-bar"></div></div>
+                <div class="ai-stats">
+                    <div class="stat-row"><span>Control Weight:</span><span id="val-control">0%</span></div>
+                    <div class="stat-row"><span>Metric Loss:</span><span id="val-loss">1.000e+0</span></div>
+                    <div class="stat-row"><span>Radial Tokens:</span><span id="val-tokens">48</span></div>
+                </div>
+
+                <div class="subhead">FPS Controller</div>
+                <div class="ai-stats">
+                    <div class="stat-row"><span>FPS:</span><span id="val-fps">60</span></div>
+                    <div class="stat-row"><span>Quality:</span><span id="val-quality">100%</span></div>
+                    <div class="stat-row"><span>Ray Steps:</span><span id="val-rays">128</span></div>
+                    <div class="stat-row"><span>Train Budget:</span><span id="val-train">3</span></div>
+                </div>
+
+                <div class="button-row">
+                    <button id="reset-ai" class="minor-btn" type="button">Reset Learners</button>
+                    <button id="recenter-cam" class="minor-btn" type="button">Recenter Camera</button>
+                </div>
+            </div>
+
+            <div class="panel-note">
+                <span>Drag to orbit</span>
+                <span>Wheel to zoom</span>
+            </div>
+        </div>
+    </div>
+
+    <canvas id="glcanvas" aria-label="Warp metric visualization"></canvas>
+
+    <script>
+        (() => {
+            'use strict';
+
+            const MAX_R = 15.0;
+            const AI_TEX_W = 256;
+            const METRIC_TOKENS = 48;
+            const METRIC_D = 12;
+            const CTRL_SEQ = 12;
+            const CTRL_D = 10;
+            const FEATURE_COUNT = 8;
+            const TARGET_FPS = 60;
+            const BASE_DPR_CAP = 1.5;
+            const MAX_SHADER_STEPS = 160;
+
+            const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+            const lerp = (a, b, t) => a + (b - a) * t;
+            const sigmoid = (x) => {
+                const z = clamp(x, -18.0, 18.0);
+                return 1.0 / (1.0 + Math.exp(-z));
+            };
+            const seeded = (n) => {
+                const x = Math.sin(n * 12.9898 + 78.233) * 43758.5453123;
+                return (x - Math.floor(x)) * 2.0 - 1.0;
+            };
+
+            const canvas = document.getElementById('glcanvas');
+            const fallback = document.getElementById('fallback');
+            const gl = canvas.getContext('webgl2', {
+                alpha: false,
+                antialias: true,
+                depth: false,
+                stencil: false,
+                powerPreference: 'high-performance',
+                premultipliedAlpha: false,
+                preserveDrawingBuffer: false
+            });
+
+            if (!gl) {
+                fallback.style.display = 'grid';
+                return;
+            }
+
+            const dom = {
+                ui: document.getElementById('ui'),
+                toggleBtn: document.getElementById('toggle-btn'),
+                velocity: document.getElementById('velocity'),
+                radius: document.getElementById('radius'),
+                thickness: document.getElementById('thickness'),
+                showEnergy: document.getElementById('show-energy'),
+                showGrid: document.getElementById('show-grid'),
+                valV: document.getElementById('val-v'),
+                valR: document.getElementById('val-r'),
+                valT: document.getElementById('val-t'),
+                aiStatus: document.getElementById('ai-status'),
+                aiBar: document.getElementById('ai-control-bar'),
+                valControl: document.getElementById('val-control'),
+                valLoss: document.getElementById('val-loss'),
+                valFps: document.getElementById('val-fps'),
+                valQuality: document.getElementById('val-quality'),
+                valRays: document.getElementById('val-rays'),
+                valTrain: document.getElementById('val-train'),
+                valTokens: document.getElementById('val-tokens'),
+                resetAI: document.getElementById('reset-ai'),
+                recenterCam: document.getElementById('recenter-cam')
+            };
+
+            const state = {
+                v: parseFloat(dom.velocity.value),
+                R: parseFloat(dom.radius.value),
+                T: parseFloat(dom.thickness.value),
+                showEnergy: dom.showEnergy.checked,
+                showGrid: dom.showGrid.checked,
+                camTheta: 2.35,
+                camPhi: 0.35,
+                camDist: 5.7,
+                dragging: false,
+                lastPointerX: 0,
+                lastPointerY: 0,
+                uiVisible: true,
+                rafId: 0,
+                quality: 0.94,
+                renderConfig: {
+                    resScale: 0.98,
+                    raySteps: 132,
+                    trainIters: 3
+                }
+            };
+
+            function syncControls() {
+                dom.valV.textContent = `${state.v.toFixed(2)} c`;
+                dom.valR.textContent = state.R.toFixed(2);
+                dom.valT.textContent = state.T.toFixed(2);
+                dom.showEnergy.checked = state.showEnergy;
+                dom.showGrid.checked = state.showGrid;
+                dom.valTokens.textContent = `${METRIC_TOKENS}`;
+            }
+
+            dom.velocity.addEventListener('input', () => {
+                state.v = parseFloat(dom.velocity.value);
+                dom.valV.textContent = `${state.v.toFixed(2)} c`;
+            });
+
+            dom.radius.addEventListener('input', () => {
+                state.R = parseFloat(dom.radius.value);
+                dom.valR.textContent = state.R.toFixed(2);
+            });
+
+            dom.thickness.addEventListener('input', () => {
+                state.T = parseFloat(dom.thickness.value);
+                dom.valT.textContent = state.T.toFixed(2);
+            });
+
+            dom.showEnergy.addEventListener('change', () => {
+                state.showEnergy = dom.showEnergy.checked;
+            });
+
+            dom.showGrid.addEventListener('change', () => {
+                state.showGrid = dom.showGrid.checked;
+            });
+
+            dom.toggleBtn.addEventListener('click', () => {
+                state.uiVisible = !state.uiVisible;
+                dom.ui.classList.toggle('hidden', !state.uiVisible);
+                dom.toggleBtn.textContent = state.uiVisible ? '➖ Close Panel' : '⚙️ Metric Parameters';
+            });
+
+            dom.recenterCam.addEventListener('click', () => {
+                state.camTheta = 2.35;
+                state.camPhi = 0.35;
+                state.camDist = 5.7;
+            });
+
+            function exactProfile(r, R, T) {
+                const left = R - T;
+                const right = R + T;
+                if (r <= left) return [1.0, 0.0];
+                if (r >= right) return [0.0, 0.0];
+                const invWall = 1.0 / Math.max(2.0 * T, 1e-5);
+                const t = (r - left) * invWall;
+                const f = 1.0 - (t * t * (3.0 - 2.0 * t));
+                const df = -(6.0 * t * (1.0 - t)) * invWall;
+                return [f, df];
+            }
+
+            class MetricTransformerStudent {
+                constructor(tokenCount = METRIC_TOKENS, dModel = METRIC_D, texWidth = AI_TEX_W, maxR = MAX_R) {
+                    this.tokenCount = tokenCount;
+                    this.dModel = dModel;
+                    this.texWidth = texWidth;
+                    this.maxR = maxR;
+                    this.positions = new Float32Array(tokenCount);
+                    this.baseTokens = new Float32Array(tokenCount * dModel);
+                    this.hidden = new Float32Array(tokenCount * dModel);
+                    this.q = new Float32Array(tokenCount * dModel);
+                    this.k = new Float32Array(tokenCount * dModel);
+                    this.v = new Float32Array(tokenCount * dModel);
+                    this.predF = new Float32Array(tokenCount);
+                    this.predDF = new Float32Array(tokenCount);
+                    this.textureData = new Float32Array(texWidth * 2);
+                    this.scoreBuf = new Float32Array(13);
+
+                    this.win = new Float32Array(FEATURE_COUNT * dModel);
+                    this.wq = new Float32Array(dModel * dModel);
+                    this.wk = new Float32Array(dModel * dModel);
+                    this.wv = new Float32Array(dModel * dModel);
+                    this.outF = new Float32Array(dModel);
+                    this.outDF = new Float32Array(dModel);
+                    this.mF = new Float32Array(dModel);
+                    this.vF = new Float32Array(dModel);
+                    this.mDF = new Float32Array(dModel);
+                    this.vDF = new Float32Array(dModel);
+
+                    this.bF = 0.0;
+                    this.bDF = 0.0;
+                    this.mbF = 0.0;
+                    this.vbF = 0.0;
+                    this.mbDF = 0.0;
+                    this.vbDF = 0.0;
+
+                    this.beta1 = 0.9;
+                    this.beta2 = 0.999;
+                    this.eps = 1e-8;
+                    this.lr = 0.015;
+                    this.lambdaDF = 6.5;
+                    this.loss = 1.0;
+                    this.controlWeight = 0.0;
+                    this.stepCount = 0;
+                    this.targetR = 2.5;
+                    this.targetT = 0.5;
+                    this.targetKey = '';
+                    this.hiddenDirty = true;
+
+                    for (let i = 0; i < tokenCount; i++) {
+                        this.positions[i] = (i / (tokenCount - 1)) * maxR;
+                    }
+
+                    for (let i = 0; i < this.win.length; i++) this.win[i] = seeded(1000 + i) * 0.45;
+                    for (let i = 0; i < this.wq.length; i++) this.wq[i] = seeded(2000 + i) * 0.30;
+                    for (let i = 0; i < this.wk.length; i++) this.wk[i] = seeded(3000 + i) * 0.30;
+                    for (let i = 0; i < this.wv.length; i++) this.wv[i] = seeded(4000 + i) * 0.30;
+                    for (let i = 0; i < dModel; i++) {
+                        this.outF[i] = seeded(5000 + i) * 0.08;
+                        this.outDF[i] = seeded(6000 + i) * 0.08;
+                    }
+                }
+
+                reset(R, T) {
+                    this.targetR = R;
+                    this.targetT = T;
+                    this.targetKey = `${R.toFixed(3)}|${T.toFixed(3)}`;
+                    this.loss = 1.0;
+                    this.controlWeight = 0.0;
+                    this.stepCount = 0;
+                    this.hiddenDirty = true;
+                    this.bF = 0.0;
+                    this.bDF = 0.0;
+                    this.mbF = 0.0;
+                    this.vbF = 0.0;
+                    this.mbDF = 0.0;
+                    this.vbDF = 0.0;
+
+                    for (let i = 0; i < this.dModel; i++) {
+                        this.outF[i] = seeded(5000 + i) * 0.08;
+                        this.outDF[i] = seeded(6000 + i) * 0.08;
+                        this.mF[i] = 0.0;
+                        this.vF[i] = 0.0;
+                        this.mDF[i] = 0.0;
+                        this.vDF[i] = 0.0;
+                    }
+                }
+
+                retarget(R, T) {
+                    const key = `${R.toFixed(3)}|${T.toFixed(3)}`;
+                    if (key === this.targetKey) return;
+                    const delta = Math.abs(R - this.targetR) + 1.6 * Math.abs(T - this.targetT);
+                    this.targetR = R;
+                    this.targetT = T;
+                    this.targetKey = key;
+                    this.hiddenDirty = true;
+                    this.loss = Math.max(this.loss, 0.008 + delta * 0.02);
+                    this.controlWeight *= clamp(1.0 - delta * 0.32, 0.38, 0.92);
+                }
+
+                buildHidden() {
+                    if (!this.hiddenDirty) return;
+
+                    const n = this.tokenCount;
+                    const d = this.dModel;
+                    const tokenCountMinus1 = Math.max(1, n - 1);
+                    const invSqrtD = 1.0 / Math.sqrt(d);
+
+                    for (let i = 0; i < n; i++) {
+                        const r = this.positions[i];
+                        const rNorm = r / this.maxR;
+                        const rel = (r - this.targetR) / Math.max(this.targetT, 0.04);
+                        const relNorm = clamp(rel * 0.25, -1.0, 1.0);
+                        const absRelNorm = clamp(Math.abs(rel) * 0.25, 0.0, 1.5);
+                        const side = r < this.targetR ? -1.0 : 1.0;
+                        const feats = [
+                            rNorm,
+                            this.targetR / this.maxR,
+                            this.targetT / this.maxR,
+                            relNorm,
+                            absRelNorm,
+                            side,
+                            Math.sin(rNorm * Math.PI),
+                            Math.cos(i / tokenCountMinus1 * Math.PI)
+                        ];
+
+                        const base = i * d;
+                        for (let m = 0; m < d; m++) {
+                            let sum = 0.0;
+                            for (let f = 0; f < FEATURE_COUNT; f++) {
+                                sum += feats[f] * this.win[f * d + m];
+                            }
+                            sum += Math.sin((i + 1) * (m + 1) * 0.19) * 0.20;
+                            sum += Math.cos((i + 1) * (m + 1) * 0.11) * 0.10;
+                            this.baseTokens[base + m] = Math.tanh(sum);
+                        }
+                    }
+
+                    for (let i = 0; i < n; i++) {
+                        const base = i * d;
+                        for (let out = 0; out < d; out++) {
+                            let qSum = 0.0, kSum = 0.0, vSum = 0.0;
+                            for (let inner = 0; inner < d; inner++) {
+                                const t = this.baseTokens[base + inner];
+                                qSum += t * this.wq[inner * d + out];
+                                kSum += t * this.wk[inner * d + out];
+                                vSum += t * this.wv[inner * d + out];
+                            }
+                            this.q[base + out] = qSum;
+                            this.k[base + out] = kSum;
+                            this.v[base + out] = vSum;
+                        }
+                    }
+
+                    for (let i = 0; i < n; i++) {
+                        const base = i * d;
+                        const start = Math.max(0, i - 6);
+                        const end = Math.min(n - 1, i + 6);
+                        let maxScore = -1e9;
+                        let scoreIndex = 0;
+
+                        for (let j = start; j <= end; j++) {
+                            const jBase = j * d;
+                            let score = -0.10 * Math.abs(i - j);
+                            let dot = 0.0;
+                            for (let m = 0; m < d; m++) {
+                                dot += this.q[base + m] * this.k[jBase + m];
+                            }
+                            score += dot * invSqrtD;
+                            this.scoreBuf[scoreIndex] = score;
+                            if (score > maxScore) maxScore = score;
+                            scoreIndex++;
+                        }
+
+                        let scoreSum = 0.0;
+                        for (let s = 0; s < scoreIndex; s++) {
+                            const value = Math.exp(this.scoreBuf[s] - maxScore);
+                            this.scoreBuf[s] = value;
+                            scoreSum += value;
+                        }
+                        scoreSum = Math.max(scoreSum, 1e-6);
+
+                        for (let m = 0; m < d; m++) {
+                            let ctx = 0.0;
+                            let s = 0;
+                            for (let j = start; j <= end; j++, s++) {
+                                ctx += (this.scoreBuf[s] / scoreSum) * this.v[j * d + m];
+                            }
+                            this.hidden[base + m] = Math.tanh(this.baseTokens[base + m] * 0.72 + ctx * 0.95);
+                        }
+                    }
+
+                    this.hiddenDirty = false;
+                    this.computePredictions();
+                }
+
+                computePredictions() {
+                    const n = this.tokenCount;
+                    const d = this.dModel;
+                    for (let i = 0; i < n; i++) {
+                        const base = i * d;
+                        let rawF = this.bF;
+                        let rawDF = this.bDF;
+                        for (let m = 0; m < d; m++) {
+                            const h = this.hidden[base + m];
+                            rawF += h * this.outF[m];
+                            rawDF += h * this.outDF[m];
+                        }
+                        this.predF[i] = sigmoid(rawF);
+                        this.predDF[i] = clamp(rawDF, -12.0, 12.0);
+                    }
+                }
+
+                train(iterations = 1) {
+                    this.buildHidden();
+
+                    const n = this.tokenCount;
+                    const d = this.dModel;
+                    const gradF = new Float32Array(d);
+                    const gradDF = new Float32Array(d);
+
+                    for (let iter = 0; iter < iterations; iter++) {
+                        gradF.fill(0.0);
+                        gradDF.fill(0.0);
+                        let gradBF = 0.0;
+                        let gradBDF = 0.0;
+                        let lossSum = 0.0;
+
+                        for (let i = 0; i < n; i++) {
+                            const r = this.positions[i];
+                            const target = exactProfile(r, this.targetR, this.targetT);
+                            const errF = this.predF[i] - target[0];
+                            const errDF = this.predDF[i] - target[1];
+                            const dRawF = 2.0 * errF * this.predF[i] * (1.0 - this.predF[i]);
+                            const dRawDF = 2.0 * this.lambdaDF * errDF;
+                            const base = i * d;
+
+                            lossSum += errF * errF + this.lambdaDF * errDF * errDF;
+
+                            for (let m = 0; m < d; m++) {
+                                const h = this.hidden[base + m];
+                                gradF[m] += dRawF * h;
+                                gradDF[m] += dRawDF * h;
+                            }
+                            gradBF += dRawF;
+                            gradBDF += dRawDF;
+                        }
+
+                        this.stepCount += 1;
+                        const scale = 1.0 / n;
+                        const bias1 = 1.0 - Math.pow(this.beta1, this.stepCount);
+                        const bias2 = 1.0 - Math.pow(this.beta2, this.stepCount);
+
+                        for (let m = 0; m < d; m++) {
+                            const gF = gradF[m] * scale;
+                            const gDF = gradDF[m] * scale;
+
+                            this.mF[m] = this.beta1 * this.mF[m] + (1.0 - this.beta1) * gF;
+                            this.vF[m] = this.beta2 * this.vF[m] + (1.0 - this.beta2) * gF * gF;
+                            const mHatF = this.mF[m] / bias1;
+                            const vHatF = this.vF[m] / bias2;
+                            this.outF[m] -= this.lr * mHatF / (Math.sqrt(vHatF) + this.eps);
+
+                            this.mDF[m] = this.beta1 * this.mDF[m] + (1.0 - this.beta1) * gDF;
+                            this.vDF[m] = this.beta2 * this.vDF[m] + (1.0 - this.beta2) * gDF * gDF;
+                            const mHatDF = this.mDF[m] / bias1;
+                            const vHatDF = this.vDF[m] / bias2;
+                            this.outDF[m] -= this.lr * mHatDF / (Math.sqrt(vHatDF) + this.eps);
+                        }
+
+                        const gBF = gradBF * scale;
+                        const gBDF = gradBDF * scale;
+
+                        this.mbF = this.beta1 * this.mbF + (1.0 - this.beta1) * gBF;
+                        this.vbF = this.beta2 * this.vbF + (1.0 - this.beta2) * gBF * gBF;
+                        this.bF -= this.lr * (this.mbF / bias1) / (Math.sqrt(this.vbF / bias2) + this.eps);
+
+                        this.mbDF = this.beta1 * this.mbDF + (1.0 - this.beta1) * gBDF;
+                        this.vbDF = this.beta2 * this.vbDF + (1.0 - this.beta2) * gBDF * gBDF;
+                        this.bDF -= this.lr * (this.mbDF / bias1) / (Math.sqrt(this.vbDF / bias2) + this.eps);
+
+                        this.computePredictions();
+
+                        const instantLoss = lossSum / n;
+                        this.loss = lerp(this.loss, instantLoss, 0.16);
+
+                        const targetControl = this.loss < 7e-4 ? 1.0
+                            : this.loss < 2e-3 ? 0.85
+                            : this.loss < 5e-3 ? 0.58
+                            : this.loss < 1.2e-2 ? 0.28
+                            : 0.0;
+
+                        this.controlWeight = lerp(this.controlWeight, targetControl, 0.10);
+                    }
+                }
+
+                writeTextureData() {
+                    this.buildHidden();
+                    const tex = this.textureData;
+                    const nMinus1 = this.tokenCount - 1;
+                    for (let p = 0; p < this.texWidth; p++) {
+                        const coord = (p / (this.texWidth - 1)) * nMinus1;
+                        const i0 = Math.floor(coord);
+                        const i1 = Math.min(i0 + 1, nMinus1);
+                        const t = coord - i0;
+                        const f = lerp(this.predF[i0], this.predF[i1], t);
+                        const df = lerp(this.predDF[i0], this.predDF[i1], t);
+                        tex[p * 2] = clamp(f, -0.05, 1.05);
+                        tex[p * 2 + 1] = clamp(df, -12.0, 12.0);
+                    }
+                    return tex;
+                }
+            }
+
+            class TelemetryTransformerController {
+                constructor(seqLen = CTRL_SEQ, dModel = CTRL_D) {
+                    this.seqLen = seqLen;
+                    this.dModel = dModel;
+                    this.seq = new Float32Array(seqLen * FEATURE_COUNT);
+                    this.tokens = new Float32Array(seqLen * dModel);
+                    this.keys = new Float32Array(seqLen * dModel);
+                    this.values = new Float32Array(seqLen * dModel);
+                    this.context = new Float32Array(dModel);
+                    this.prompt = new Float32Array(dModel);
+                    this.win = new Float32Array(FEATURE_COUNT * dModel);
+                    this.wk = new Float32Array(dModel * dModel);
+                    this.wv = new Float32Array(dModel * dModel);
+                    this.out = new Float32Array(dModel);
+                    this.mOut = new Float32Array(dModel);
+                    this.vOut = new Float32Array(dModel);
+
+                    this.beta1 = 0.9;
+                    this.beta2 = 0.999;
+                    this.eps = 1e-8;
+                    this.lr = 0.020;
+                    this.stepCount = 0;
+                    this.loss = 1.0;
+                    this.bias = 0.0;
+                    this.mBias = 0.0;
+                    this.vBias = 0.0;
+                    this.quality = 0.94;
+
+                    for (let i = 0; i < this.prompt.length; i++) this.prompt[i] = seeded(7000 + i) * 0.35;
+                    for (let i = 0; i < this.win.length; i++) this.win[i] = seeded(8000 + i) * 0.50;
+                    for (let i = 0; i < this.wk.length; i++) this.wk[i] = seeded(9000 + i) * 0.26;
+                    for (let i = 0; i < this.wv.length; i++) this.wv[i] = seeded(10000 + i) * 0.26;
+                    for (let i = 0; i < this.out.length; i++) this.out[i] = seeded(11000 + i) * 0.10;
+                }
+
+                reset() {
+                    this.seq.fill(0.0);
+                    this.loss = 1.0;
+                    this.stepCount = 0;
+                    this.bias = 0.0;
+                    this.mBias = 0.0;
+                    this.vBias = 0.0;
+                    this.quality = 0.94;
+                    this.mOut.fill(0.0);
+                    this.vOut.fill(0.0);
+                    for (let i = 0; i < this.out.length; i++) this.out[i] = seeded(11000 + i) * 0.10;
+                }
+
+                push(features) {
+                    this.seq.copyWithin(0, FEATURE_COUNT);
+                    const base = (this.seqLen - 1) * FEATURE_COUNT;
+                    for (let i = 0; i < FEATURE_COUNT; i++) this.seq[base + i] = features[i];
+                }
+
+                encode() {
+                    const n = this.seqLen;
+                    const d = this.dModel;
+                    const invSqrtD = 1.0 / Math.sqrt(d);
+
+                    for (let i = 0; i < n; i++) {
+                        const seqBase = i * FEATURE_COUNT;
+                        const tokBase = i * d;
+                        for (let m = 0; m < d; m++) {
+                            let sum = 0.0;
+                            for (let f = 0; f < FEATURE_COUNT; f++) {
+                                sum += this.seq[seqBase + f] * this.win[f * d + m];
+                            }
+                            const age = i / Math.max(1, n - 1);
+                            sum += Math.sin((i + 1) * (m + 1) * 0.17) * 0.10;
+                            sum += age * 0.08;
+                            this.tokens[tokBase + m] = Math.tanh(sum);
+                        }
+                    }
+
+                    for (let i = 0; i < n; i++) {
+                        const tokBase = i * d;
+                        for (let out = 0; out < d; out++) {
+                            let kSum = 0.0;
+                            let vSum = 0.0;
+                            for (let inner = 0; inner < d; inner++) {
+                                const t = this.tokens[tokBase + inner];
+                                kSum += t * this.wk[inner * d + out];
+                                vSum += t * this.wv[inner * d + out];
+                            }
+                            this.keys[tokBase + out] = kSum;
+                            this.values[tokBase + out] = vSum;
+                        }
+                    }
+
+                    const latestBase = (n - 1) * d;
+                    let maxScore = -1e9;
+                    const weights = new Float32Array(n);
+
+                    for (let i = 0; i < n; i++) {
+                        const tokBase = i * d;
+                        let dot = 0.0;
+                        for (let m = 0; m < d; m++) {
+                            dot += (this.prompt[m] + 0.65 * this.tokens[latestBase + m]) * this.keys[tokBase + m];
+                        }
+                        const score = dot * invSqrtD - 0.12 * (n - 1 - i);
+                        weights[i] = score;
+                        if (score > maxScore) maxScore = score;
+                    }
+
+                    let sumW = 0.0;
+                    for (let i = 0; i < n; i++) {
+                        weights[i] = Math.exp(weights[i] - maxScore);
+                        sumW += weights[i];
+                    }
+                    sumW = Math.max(sumW, 1e-6);
+
+                    for (let m = 0; m < d; m++) this.context[m] = 0.0;
+                    for (let i = 0; i < n; i++) {
+                        const tokBase = i * d;
+                        const w = weights[i] / sumW;
+                        for (let m = 0; m < d; m++) {
+                            this.context[m] += w * this.values[tokBase + m];
+                        }
+                    }
+
+                    let raw = this.bias;
+                    for (let m = 0; m < d; m++) {
+                        this.context[m] = Math.tanh(this.context[m] * 0.95 + this.tokens[latestBase + m] * 0.55);
+                        raw += this.context[m] * this.out[m];
+                    }
+                    return sigmoid(raw);
+                }
+
+                targetQuality(fps, dtMs, currentQuality, metricLoss, metricControl) {
+                    let target = currentQuality;
+                    const fpsError = (fps - TARGET_FPS) / TARGET_FPS;
+                    target += fpsError * 0.20;
+                    target -= clamp(metricLoss / 0.030, 0.0, 1.0) * 0.06;
+                    target += clamp(metricControl - 0.75, -0.5, 1.0) * 0.05;
+
+                    if (fps < 54.0) target -= 0.05;
+                    if (fps < 46.0) target -= 0.09;
+                    if (fps > 63.0) target += 0.03;
+                    if (dtMs > 20.0) target -= 0.08;
+
+                    return clamp(target, 0.46, 1.0);
+                }
+
+                step(telemetry) {
+                    const features = [
+                        clamp(telemetry.fps / TARGET_FPS, 0.0, 1.6),
+                        clamp(telemetry.dtMs / 16.67, 0.0, 2.5),
+                        telemetry.quality,
+                        clamp(telemetry.metricLoss / 0.04, 0.0, 2.0),
+                        telemetry.metricControl,
+                        clamp(telemetry.velocity / 2.5, 0.0, 1.0),
+                        clamp(telemetry.radius / 4.0, 0.0, 1.0),
+                        clamp(telemetry.thickness / 1.5, 0.0, 1.0)
+                    ];
+
+                    this.push(features);
+                    const pred = this.encode();
+                    const target = this.targetQuality(
+                        telemetry.fps,
+                        telemetry.dtMs,
+                        telemetry.quality,
+                        telemetry.metricLoss,
+                        telemetry.metricControl
+                    );
+
+                    const err = pred - target;
+                    const dRaw = 2.0 * err * pred * (1.0 - pred);
+
+                    this.stepCount += 1;
+                    const bias1 = 1.0 - Math.pow(this.beta1, this.stepCount);
+                    const bias2 = 1.0 - Math.pow(this.beta2, this.stepCount);
+
+                    for (let m = 0; m < this.dModel; m++) {
+                        const g = dRaw * this.context[m];
+                        this.mOut[m] = this.beta1 * this.mOut[m] + (1.0 - this.beta1) * g;
+                        this.vOut[m] = this.beta2 * this.vOut[m] + (1.0 - this.beta2) * g * g;
+                        const mHat = this.mOut[m] / bias1;
+                        const vHat = this.vOut[m] / bias2;
+                        this.out[m] -= this.lr * mHat / (Math.sqrt(vHat) + this.eps);
+                    }
+
+                    this.mBias = this.beta1 * this.mBias + (1.0 - this.beta1) * dRaw;
+                    this.vBias = this.beta2 * this.vBias + (1.0 - this.beta2) * dRaw * dRaw;
+                    this.bias -= this.lr * (this.mBias / bias1) / (Math.sqrt(this.vBias / bias2) + this.eps);
+
+                    this.loss = lerp(this.loss, err * err, 0.12);
+
+                    let nextQuality = lerp(telemetry.quality, pred, 0.10);
+                    if (telemetry.fps < 42.0) nextQuality = Math.min(nextQuality, telemetry.quality - 0.08);
+                    if (telemetry.fps < 35.0) nextQuality = Math.min(nextQuality, telemetry.quality - 0.14);
+
+                    this.quality = clamp(nextQuality, 0.46, 1.0);
+                    return this.quality;
+                }
+            }
+
+            function qualityToConfig(q) {
+                const quantized = Math.round(clamp(q, 0.46, 1.0) * 50.0) / 50.0;
+                return {
+                    resScale: lerp(0.70, 1.0, quantized),
+                    raySteps: Math.round(lerp(72, 148, quantized)),
+                    trainIters: Math.max(1, Math.round(lerp(1, 4, quantized)))
+                };
+            }
+
+            function createShader(glCtx, type, source) {
+                const shader = glCtx.createShader(type);
+                glCtx.shaderSource(shader, source);
+                glCtx.compileShader(shader);
+                if (!glCtx.getShaderParameter(shader, glCtx.COMPILE_STATUS)) {
+                    const log = glCtx.getShaderInfoLog(shader) || 'Unknown shader compile failure';
+                    glCtx.deleteShader(shader);
+                    throw new Error(log);
+                }
+                return shader;
+            }
+
+            function createProgram(glCtx, vertexSource, fragmentSource) {
+                const program = glCtx.createProgram();
+                const vs = createShader(glCtx, glCtx.VERTEX_SHADER, vertexSource);
+                const fs = createShader(glCtx, glCtx.FRAGMENT_SHADER, fragmentSource);
+                glCtx.attachShader(program, vs);
+                glCtx.attachShader(program, fs);
+                glCtx.linkProgram(program);
+                glCtx.deleteShader(vs);
+                glCtx.deleteShader(fs);
+                if (!glCtx.getProgramParameter(program, glCtx.LINK_STATUS)) {
+                    const log = glCtx.getProgramInfoLog(program) || 'Unknown program link failure';
+                    glCtx.deleteProgram(program);
+                    throw new Error(log);
+                }
+                return program;
+            }
+
+            const vertexShaderSource = `#version 300 es
+                precision highp float;
+                in vec2 a_pos;
+                void main() {
+                    gl_Position = vec4(a_pos, 0.0, 1.0);
+                }
+            `;
+
+            const fragmentShaderSource = `#version 300 es
+                precision highp float;
+
+                out vec4 fragColor;
+
+                uniform vec2 u_res;
+                uniform float u_time;
+                uniform vec3 u_camPos;
+                uniform float u_v;
+                uniform float u_R;
+                uniform float u_T;
+                uniform float u_aiInfluence;
+                uniform sampler2D u_aiMetric;
+                uniform int u_showEnergy;
+                uniform int u_showGrid;
+                uniform int u_raySteps;
+
+                const float MAX_R = 15.0;
+                const float TEX_W = 256.0;
+
+                vec2 exactShape(float r, float R, float T) {
+                    float left = R - T;
+                    float right = R + T;
+                    if (r <= left) return vec2(1.0, 0.0);
+                    if (r >= right) return vec2(0.0, 0.0);
+                    float denom = max(2.0 * T, 1e-4);
+                    float t = (r - left) / denom;
+                    float f = 1.0 - (t * t * (3.0 - 2.0 * t));
+                    float df = -(6.0 * t * (1.0 - t)) / denom;
+                    return vec2(f, df);
+                }
+
+                vec2 sampleAIMetric(float r) {
+                    float coord = clamp(r / MAX_R, 0.0, 1.0) * (TEX_W - 1.0);
+                    int idx = int(floor(coord));
+                    float fracPart = coord - float(idx);
+                    vec2 a = texelFetch(u_aiMetric, ivec2(clamp(idx, 0, 255), 0), 0).rg;
+                    vec2 b = texelFetch(u_aiMetric, ivec2(clamp(idx + 1, 0, 255), 0), 0).rg;
+                    return mix(a, b, fracPart);
+                }
+
+                float hash13(vec3 p) {
+                    p = fract(p * 0.1031);
+                    p += dot(p, p.zyx + 31.32);
+                    return fract((p.x + p.y) * p.z);
+                }
+
+                float sdCapsule(vec3 p, vec3 a, vec3 b, float r) {
+                    vec3 pa = p - a;
+                    vec3 ba = b - a;
+                    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+                    return length(pa - ba * h) - r;
+                }
+
+                float sdTorus(vec3 p, vec2 t) {
+                    vec2 q = vec2(length(p.xz) - t.x, p.y);
+                    return length(q) - t.y;
+                }
+
+                float sdShip(vec3 p) {
+                    float hull = sdCapsule(p, vec3(0.0, 0.0, -0.42), vec3(0.0, 0.0, 0.58), 0.18);
+                    float bridge = length((p - vec3(0.0, 0.12, 0.12)) * vec3(1.8, 2.2, 1.5)) - 0.11;
+                    float ring = sdTorus(p - vec3(0.0, 0.0, -0.05), vec2(0.92, 0.06));
+                    float strutA = sdCapsule(p, vec3(0.18, 0.0, 0.12), vec3(0.72, 0.0, -0.08), 0.028);
+                    float strutB = sdCapsule(p, vec3(-0.18, 0.0, 0.12), vec3(-0.72, 0.0, -0.08), 0.028);
+                    float nacelleA = sdCapsule(p, vec3(0.75, 0.0, -0.32), vec3(0.75, 0.0, 0.30), 0.07);
+                    float nacelleB = sdCapsule(p, vec3(-0.75, 0.0, -0.32), vec3(-0.75, 0.0, 0.30), 0.07);
+                    return min(min(min(hull, bridge), min(ring, min(strutA, strutB))), min(nacelleA, nacelleB));
+                }
+
+                vec3 calcShipNormal(vec3 p) {
+                    vec2 e = vec2(0.003, 0.0);
+                    return normalize(vec3(
+                        sdShip(p + e.xyy) - sdShip(p - e.xyy),
+                        sdShip(p + e.yxy) - sdShip(p - e.yxy),
+                        sdShip(p + e.yyx) - sdShip(p - e.yyx)
+                    ));
+                }
+
+                float gridLine(float value, float scale, float width) {
+                    float cell = abs(fract(value * scale) - 0.5);
+                    return 1.0 - smoothstep(0.0, width, cell);
+                }
+
+                vec3 starfield(vec3 rd, float time, float warp) {
+                    vec3 dir = normalize(rd);
+                    vec3 col = vec3(0.0);
+                    for (int i = 0; i < 3; i++) {
+                        float layer = float(i) + 1.0;
+                        vec3 p = floor(dir * (240.0 * layer) + vec3(0.0, 0.0, time * warp * 14.0 * layer));
+                        float n = hash13(p);
+                        float s = smoothstep(0.9952, 1.0, n);
+                        col += vec3(s) * (1.25 / layer);
+                    }
+                    float galacticBand = exp(-12.0 * dir.y * dir.y);
+                    col += vec3(0.025, 0.05, 0.08) * galacticBand;
+                    float forward = max(dot(dir, vec3(0.0, 0.0, -1.0)), 0.0);
+                    float aft = max(dot(dir, vec3(0.0, 0.0, 1.0)), 0.0);
+                    col *= 1.0 + forward * warp * 0.22;
+                    col += vec3(0.08, 0.22, 0.55) * pow(forward, 6.0) * warp * 0.8;
+                    col += vec3(0.58, 0.12, 0.07) * pow(aft, 6.0) * warp * 0.55;
+                    return col;
+                }
+
+                void main() {
+                    vec2 uv = (gl_FragCoord.xy - 0.5 * u_res) / min(u_res.x, u_res.y);
+                    vec3 ro = u_camPos;
+                    vec3 ta = vec3(0.0);
+                    vec3 ww = normalize(ta - ro);
+                    vec3 up = abs(ww.y) > 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(0.0, 1.0, 0.0);
+                    vec3 uu = normalize(cross(ww, up));
+                    vec3 vv = normalize(cross(uu, ww));
+                    vec3 rd = normalize(uv.x * uu + uv.y * vv + 1.55 * ww);
+                    vec3 p = ro;
+                    vec4 accum = vec4(0.0);
+                    bool hitShip = false;
+
+                    for (int i = 0; i < 160; i++) {
+                        if (i >= u_raySteps) break;
+
+                        float r = length(p);
+                        if (r > MAX_R || accum.a > 0.995) break;
+
+                        vec2 exactData = exactShape(r, u_R, u_T);
+                        vec2 aiData = sampleAIMetric(r);
+                        vec2 metric = mix(exactData, aiData, clamp(u_aiInfluence, 0.0, 1.0));
+                        float currentF = clamp(metric.x, -0.1, 1.1);
+                        float currentDF = clamp(metric.y, -12.0, 12.0);
+
+                        vec3 gradF = r > 1e-4 ? p * (currentDF / r) : vec3(0.0);
+                        vec3 beta = vec3(0.0, 0.0, u_v * currentF);
+                        float dShip = sdShip(p);
+                        float dt = clamp(0.035 + r * 0.09, 0.012, 0.18);
+                        if (dShip < 0.35) {
+                            dt = min(dt, max(0.008, dShip * 0.45));
+                        }
+
+                        rd = normalize(rd - gradF * u_v * dt * 0.7);
+                        p += (rd - beta) * dt;
+
+                        if (u_showGrid == 1) {
+                            float gridPlane = abs(p.y);
+                            if (gridPlane < 0.05) {
+                                float gx = gridLine(p.x, 0.5, 0.03);
+                                float gz = gridLine(p.z + u_time * u_v * 1.15, 0.5, 0.03);
+                                float gAlpha = max(gx, gz) * (0.05 - gridPlane) * 11.0 * 0.45;
+                                vec3 gridColor = mix(vec3(0.08, 0.78, 0.36), vec3(0.0, 1.0, 0.84), u_aiInfluence);
+                                accum += vec4(gridColor * gAlpha, gAlpha) * (1.0 - accum.a);
+                            }
+                        }
+
+                        if (u_showEnergy == 1) {
+                            float theta = u_v * gradF.z;
+                            if (abs(theta) > 0.02) {
+                                vec3 glowColor = theta < 0.0 ? vec3(0.0, 0.54, 1.0) : vec3(1.0, 0.16, 0.04);
+                                float shellBoost = 1.0 - smoothstep(0.0, max(u_T * 1.8, 1e-4), abs(r - u_R));
+                                float alpha = abs(theta) * dt * (0.12 + 0.38 * shellBoost);
+                                accum += vec4(glowColor * alpha, alpha) * (1.0 - accum.a);
+                            }
+                        }
+
+                        if (dShip < 0.0035) {
+                            hitShip = true;
+                            vec3 n = calcShipNormal(p);
+                            vec3 l = normalize(vec3(2.0, 3.0, -1.0));
+                            float diff = max(dot(n, l), 0.0);
+                            float rim = pow(1.0 - max(dot(n, -rd), 0.0), 3.0);
+                            vec3 shipColor = vec3(0.58, 0.64, 0.72) * (0.18 + 0.82 * diff) + vec3(0.22, 0.42, 0.76) * rim * 0.65;
+                            if (p.z > 0.26 && length(p.xy) < 0.13) {
+                                shipColor += vec3(0.0, 0.84, 1.0) * 2.6;
+                            }
+                            accum += vec4(shipColor * (1.0 - accum.a), 1.0 - accum.a);
+                            break;
+                        }
+                    }
+
+                    vec3 color = accum.rgb;
+                    if (!hitShip && accum.a < 0.995) {
+                        color += starfield(rd, u_time, u_v) * (1.0 - accum.a);
+                    }
+
+                    float vignette = 1.0 - smoothstep(0.25, 1.5, length(uv));
+                    color *= mix(0.72, 1.0, vignette);
+                    color = color / (color + vec3(1.0));
+                    color = pow(color, vec3(1.0 / 2.2));
+                    fragColor = vec4(color, 1.0);
+                }
+            `;
+
+            let program;
+            try {
+                program = createProgram(gl, vertexShaderSource, fragmentShaderSource);
+            } catch (err) {
+                console.error(err);
+                fallback.style.display = 'grid';
+                fallback.querySelector('p').textContent = `Shader compilation failed: ${String(err.message || err)}`;
+                return;
+            }
+
+            const vao = gl.createVertexArray();
+            gl.bindVertexArray(vao);
+
+            const quadBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+                -1.0, -1.0,
+                 3.0, -1.0,
+                -1.0,  3.0
+            ]), gl.STATIC_DRAW);
+
+            const posLoc = gl.getAttribLocation(program, 'a_pos');
+            gl.enableVertexAttribArray(posLoc);
+            gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+            gl.bindVertexArray(null);
+            gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+            const loc = {
+                res: gl.getUniformLocation(program, 'u_res'),
+                time: gl.getUniformLocation(program, 'u_time'),
+                cam: gl.getUniformLocation(program, 'u_camPos'),
+                v: gl.getUniformLocation(program, 'u_v'),
+                R: gl.getUniformLocation(program, 'u_R'),
+                T: gl.getUniformLocation(program, 'u_T'),
+                aiInfluence: gl.getUniformLocation(program, 'u_aiInfluence'),
+                aiMetric: gl.getUniformLocation(program, 'u_aiMetric'),
+                showEnergy: gl.getUniformLocation(program, 'u_showEnergy'),
+                showGrid: gl.getUniformLocation(program, 'u_showGrid'),
+                raySteps: gl.getUniformLocation(program, 'u_raySteps')
+            };
+
+            const aiTexture = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, aiTexture);
+            gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, AI_TEX_W, 1, 0, gl.RG, gl.FLOAT, null);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            gl.bindTexture(gl.TEXTURE_2D, null);
+
+            const metricNet = new MetricTransformerStudent(METRIC_TOKENS, METRIC_D, AI_TEX_W, MAX_R);
+            const perfNet = new TelemetryTransformerController(CTRL_SEQ, CTRL_D);
+
+            function resetLearners() {
+                metricNet.reset(state.R, state.T);
+                perfNet.reset();
+                state.quality = perfNet.quality;
+                state.renderConfig = qualityToConfig(state.quality);
+                metricNet.train(42);
+            }
+
+            resetLearners();
+
+            dom.resetAI.addEventListener('click', () => {
+                resetLearners();
+                updateAITexture();
+            });
+
+            function updateAITexture() {
+                const texData = metricNet.writeTextureData();
+                gl.bindTexture(gl.TEXTURE_2D, aiTexture);
+                gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, AI_TEX_W, 1, gl.RG, gl.FLOAT, texData);
+            }
+
+            function resizeCanvas(force = false) {
+                const dynamicDprCap = lerp(1.0, BASE_DPR_CAP, state.renderConfig.resScale);
+                const dpr = Math.min(window.devicePixelRatio || 1, dynamicDprCap);
+                const width = Math.max(1, Math.round(window.innerWidth * dpr * state.renderConfig.resScale));
+                const height = Math.max(1, Math.round(window.innerHeight * dpr * state.renderConfig.resScale));
+                if (force || Math.abs(canvas.width - width) > 2 || Math.abs(canvas.height - height) > 2) {
+                    canvas.width = width;
+                    canvas.height = height;
+                    gl.viewport(0, 0, width, height);
+                }
+            }
+
+            window.addEventListener('resize', () => resizeCanvas(true));
+            canvas.addEventListener('contextmenu', (event) => event.preventDefault());
+
+            canvas.addEventListener('pointerdown', (event) => {
+                if (event.button !== 0 && event.pointerType !== 'touch') return;
+                state.dragging = true;
+                state.lastPointerX = event.clientX;
+                state.lastPointerY = event.clientY;
+                canvas.setPointerCapture(event.pointerId);
+            });
+
+            canvas.addEventListener('pointermove', (event) => {
+                if (!state.dragging) return;
+                const dx = event.clientX - state.lastPointerX;
+                const dy = event.clientY - state.lastPointerY;
+                state.camTheta -= dx * 0.008;
+                state.camPhi = clamp(state.camPhi + dy * 0.008, -1.25, 1.25);
+                state.lastPointerX = event.clientX;
+                state.lastPointerY = event.clientY;
+            });
+
+            const stopDragging = (event) => {
+                if (!state.dragging) return;
+                state.dragging = false;
+                try {
+                    canvas.releasePointerCapture(event.pointerId);
+                } catch (_) {
+                    // no-op
+                }
+            };
+
+            canvas.addEventListener('pointerup', stopDragging);
+            canvas.addEventListener('pointercancel', stopDragging);
+            canvas.addEventListener('pointerleave', stopDragging);
+
+            canvas.addEventListener('wheel', (event) => {
+                event.preventDefault();
+                state.camDist = clamp(state.camDist + event.deltaY * 0.0055, 3.6, 10.5);
+            }, { passive: false });
+
+            canvas.addEventListener('webglcontextlost', (event) => {
+                event.preventDefault();
+                cancelAnimationFrame(state.rafId);
+                fallback.style.display = 'grid';
+                fallback.querySelector('p').textContent = 'WebGL context lost. Reload the page to rebuild the renderer.';
+            });
+
+            gl.clearColor(0.0, 0.0, 0.0, 1.0);
+            gl.useProgram(program);
+            gl.uniform1i(loc.aiMetric, 0);
+
+            let fpsEMA = 60.0;
+            let lastHudUpdate = 0.0;
+            let lastFrameTime = performance.now();
+
+            document.addEventListener('visibilitychange', () => {
+                lastFrameTime = performance.now();
+            });
+
+            function updateHud(now) {
+                if (now - lastHudUpdate < 120.0) return;
+                lastHudUpdate = now;
+
+                const pct = Math.round(metricNet.controlWeight * 100.0);
+                dom.aiBar.style.width = `${pct}%`;
+                dom.valControl.textContent = `${pct}%`;
+                dom.valLoss.textContent = metricNet.loss.toExponential(3);
+                dom.valFps.textContent = `${Math.round(fpsEMA)}`;
+                dom.valQuality.textContent = `${Math.round(state.quality * 100)}%`;
+                dom.valRays.textContent = `${state.renderConfig.raySteps}`;
+                dom.valTrain.textContent = `${state.renderConfig.trainIters}`;
+
+                if (metricNet.controlWeight > 0.96) {
+                    dom.aiStatus.textContent = 'SYNCED';
+                    dom.aiStatus.className = 'status-sync';
+                } else if (metricNet.controlWeight > 0.18) {
+                    dom.aiStatus.textContent = 'HANDOVER';
+                    dom.aiStatus.className = 'status-sync';
+                } else {
+                    dom.aiStatus.textContent = 'TEACHER FORCING';
+                    dom.aiStatus.className = 'status-warn';
+                }
+            }
+
+            function render(now) {
+                state.rafId = requestAnimationFrame(render);
+                const dtMs = clamp(now - lastFrameTime, 1.0, 50.0);
+                lastFrameTime = now;
+                fpsEMA = lerp(fpsEMA, 1000.0 / dtMs, 0.14);
+
+                metricNet.retarget(state.R, state.T);
+                metricNet.train(state.renderConfig.trainIters);
+                updateAITexture();
+
+                state.quality = perfNet.step({
+                    fps: fpsEMA,
+                    dtMs,
+                    quality: state.quality,
+                    metricLoss: metricNet.loss,
+                    metricControl: metricNet.controlWeight,
+                    velocity: state.v,
+                    radius: state.R,
+                    thickness: state.T
+                });
+                state.renderConfig = qualityToConfig(state.quality);
+
+                resizeCanvas();
+
+                const dist = state.camDist;
+                const cx = dist * Math.cos(state.camPhi) * Math.sin(state.camTheta);
+                const cy = dist * Math.sin(state.camPhi);
+                const cz = dist * Math.cos(state.camPhi) * Math.cos(state.camTheta);
+
+                updateHud(now);
+
+                gl.clear(gl.COLOR_BUFFER_BIT);
+                gl.useProgram(program);
+                gl.bindVertexArray(vao);
+                gl.activeTexture(gl.TEXTURE0);
+                gl.bindTexture(gl.TEXTURE_2D, aiTexture);
+
+                gl.uniform2f(loc.res, canvas.width, canvas.height);
+                gl.uniform1f(loc.time, now * 0.001);
+                gl.uniform3f(loc.cam, cx, cy, cz);
+                gl.uniform1f(loc.v, state.v);
+                gl.uniform1f(loc.R, state.R);
+                gl.uniform1f(loc.T, state.T);
+                gl.uniform1f(loc.aiInfluence, metricNet.controlWeight);
+                gl.uniform1i(loc.showEnergy, state.showEnergy ? 1 : 0);
+                gl.uniform1i(loc.showGrid, state.showGrid ? 1 : 0);
+                gl.uniform1i(loc.raySteps, state.renderConfig.raySteps);
+
+                gl.drawArrays(gl.TRIANGLES, 0, 3);
+                gl.bindVertexArray(null);
+            }
+
+            syncControls();
+            resizeCanvas(true);
+            updateAITexture();
+            state.rafId = requestAnimationFrame(render);
+        })();
+    </script>
+</body>
+</html>

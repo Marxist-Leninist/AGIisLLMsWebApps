@@ -1,0 +1,1391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Warp Bubble Courier</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top, rgba(0, 255, 204, 0.08), transparent 40%),
+                radial-gradient(circle at bottom, rgba(255, 90, 0, 0.08), transparent 35%),
+                #020508;
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            user-select: none;
+        }
+        canvas { display: block; width: 100vw; height: 100vh; }
+        #glcanvas { position: absolute; inset: 0; z-index: 1; cursor: grab; }
+        #glcanvas:active { cursor: grabbing; }
+        #gameplay { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+        
+        #ui-wrapper {
+            position: absolute; top: 15px; left: 15px;
+            display: flex; flex-direction: column; align-items: flex-start;
+        }
+
+        #toggle-btn {
+            background: rgba(10, 15, 20, 0.85);
+            border: 1px solid #00ffcc; color: #00ffcc;
+            padding: 8px 15px; border-radius: 8px; cursor: pointer;
+            font-weight: bold; font-size: 0.9rem; margin-bottom: 10px;
+            backdrop-filter: blur(10px); transition: all 0.2s;
+            box-shadow: 0 0 10px rgba(0, 255, 204, 0.2);
+        }
+        #toggle-btn:hover { background: #00ffcc; color: #000; }
+
+        #ui {
+            background: rgba(10, 15, 20, 0.85);
+            padding: 20px; border: 1px solid #00ffcc; border-radius: 12px; width: 400px;
+            box-shadow: 0 4px 20px rgba(0, 255, 204, 0.2); backdrop-filter: blur(10px);
+            transition: opacity 0.3s, transform 0.3s;
+            transform-origin: top left;
+        }
+        
+        #ui.hidden { opacity: 0; transform: scale(0.95); pointer-events: none; position: absolute; }
+
+        h1 { font-size: 1.2rem; margin: 0 0 5px 0; color: #00ffcc; text-transform: uppercase; letter-spacing: 1px;}
+        p { font-size: 0.8rem; color: #aaa; line-height: 1.4; margin-bottom: 15px; }
+        strong { color: #fff; }
+        
+        .slider-row { margin-bottom: 12px; }
+        .slider-label { display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 4px; color: #ccc;}
+        .val { color: #00ffcc; font-family: monospace; }
+        input[type=range] { width: 100%; accent-color: #00ffcc; cursor: pointer; }
+        input[type=checkbox] { accent-color: #00ffcc; transform: scale(1.2); margin-right: 8px; cursor: pointer; }
+        
+        .toggle-row { display: flex; align-items: center; font-size: 0.85rem; margin-bottom: 10px; color: #ccc; }
+
+        .ai-panel {
+            margin-top: 15px; padding: 15px; border: 1px solid rgba(0, 255, 204, 0.3);
+            border-radius: 6px; background: rgba(0, 50, 40, 0.3);
+        }
+        
+        .ai-title { font-size: 0.85rem; font-weight: bold; color: #00ffcc; margin-bottom: 8px; display: flex; justify-content: space-between;}
+        
+        .progress-bar { width: 100%; height: 6px; background: #222; border-radius: 3px; overflow: hidden; margin-bottom: 8px; }
+        .progress-fill { height: 100%; background: #00ffcc; width: 0%; transition: width 0.1s linear; }
+
+        .ai-stats {
+            font-size: 0.75rem; color: #aaa; font-family: monospace;
+            display: flex; justify-content: space-between; flex-direction: column; gap: 4px;
+        }
+        .stat-row { display: flex; justify-content: space-between; }
+        .warn { color: #ff3366; }
+        .sync { color: #00ffcc; }
+        .good { color: #9cffdb; }
+
+        #game-hud, #controls-card, #mission-bar, #overlay {
+            position: absolute;
+            z-index: 5;
+        }
+
+        #game-hud {
+            top: 15px;
+            right: 15px;
+            width: 320px;
+            background: rgba(10, 15, 20, 0.85);
+            padding: 18px;
+            border: 1px solid rgba(255, 145, 77, 0.55);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(255, 145, 77, 0.12);
+            backdrop-filter: blur(10px);
+        }
+
+        .hud-title {
+            font-size: 0.8rem;
+            color: #ff914d;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .hud-block { margin-bottom: 14px; }
+        .hud-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            font-size: 0.82rem;
+            color: #cdd9df;
+            margin-bottom: 6px;
+        }
+
+        .meter {
+            height: 8px;
+            width: 100%;
+            border-radius: 999px;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .meter-fill {
+            height: 100%;
+            width: 0%;
+            transition: width 0.12s linear;
+        }
+
+        .meter-fill.integrity { background: linear-gradient(90deg, #ff3366, #ff914d); }
+        .meter-fill.lock { background: linear-gradient(90deg, #4aa3ff, #00ffcc); }
+        .meter-fill.charge { background: linear-gradient(90deg, #6f8bff, #ecfeff); }
+        .meter-fill.progress { background: linear-gradient(90deg, #ff914d, #ffe5b8); }
+
+        .target-box, .event-box {
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.18);
+            padding: 12px;
+        }
+
+        .tag {
+            color: #ff914d;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 0.68rem;
+        }
+
+        #controls-card {
+            left: 15px;
+            bottom: 15px;
+            width: 320px;
+            background: rgba(10, 15, 20, 0.72);
+            padding: 15px;
+            border: 1px solid rgba(106, 211, 255, 0.28);
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+            z-index: 4;
+        }
+
+        #controls-card .hud-row { font-size: 0.78rem; color: #a8bdc8; }
+
+        #mission-bar {
+            left: 50%;
+            bottom: 15px;
+            transform: translateX(-50%);
+            width: min(720px, calc(100vw - 30px));
+            background: rgba(10, 15, 20, 0.82);
+            padding: 14px 18px;
+            border: 1px solid rgba(255, 145, 77, 0.35);
+            border-radius: 14px;
+            backdrop-filter: blur(12px);
+            box-shadow: 0 6px 22px rgba(0, 0, 0, 0.24);
+        }
+
+        #mission-text {
+            color: #fff1db;
+            font-size: 0.92rem;
+            line-height: 1.4;
+        }
+
+        #overlay {
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle at center, rgba(4, 10, 14, 0.42), rgba(1, 3, 5, 0.82));
+            transition: opacity 0.25s ease;
+        }
+
+        #overlay.hidden { opacity: 0; pointer-events: none; }
+
+        #overlay-card {
+            width: min(640px, calc(100vw - 30px));
+            padding: 28px;
+            border-radius: 24px;
+            background: rgba(7, 14, 18, 0.92);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            text-align: center;
+            box-shadow: 0 26px 70px rgba(0, 0, 0, 0.35);
+        }
+
+        #overlay-kicker {
+            color: #ff914d;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            font-size: 0.74rem;
+            margin-bottom: 10px;
+        }
+
+        #overlay-copy {
+            color: #a8bdc8;
+            line-height: 1.55;
+            margin-bottom: 18px;
+        }
+
+        .overlay-actions {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .cta-btn {
+            background: rgba(10, 15, 20, 0.88);
+            color: #00ffcc;
+            border: 1px solid #00ffcc;
+            border-radius: 10px;
+            padding: 10px 16px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .cta-btn:hover {
+            background: #00ffcc;
+            color: #021114;
+        }
+
+        @media (max-width: 900px) {
+            #game-hud {
+                top: auto;
+                bottom: 110px;
+            }
+        }
+
+        @media (max-width: 720px) {
+            #ui, #game-hud, #controls-card, #mission-bar {
+                width: calc(100vw - 24px);
+            }
+
+            #ui-wrapper { left: 12px; top: 12px; }
+            #game-hud { right: 12px; bottom: 120px; }
+            #controls-card { left: 12px; bottom: 12px; }
+            #mission-bar { bottom: 12px; }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="ui-wrapper">
+        <button id="toggle-btn">[+] Render Diagnostics</button>
+        <div id="ui">
+            <h1>Warp Gate Runner</h1>
+            <p><strong>Fly, dodge, collect, pulse.</strong> The shader still handles the spacetime spectacle, but the game is now an arcade run through collapsing warp gates. The readouts below track live telemetry rather than something you have to babysit.</p>
+            
+            <div class="slider-row">
+                <div class="slider-label"><span>Flux Speed</span> <span class="val" id="val-v">0.80 c</span></div>
+                <input type="range" id="velocity" min="0.0" max="20.0" step="0.005" value="0.8">
+            </div>
+            
+            <div class="slider-row">
+                <div class="slider-label"><span>Lateral Distortion</span> <span class="val" id="val-r">2.50</span></div>
+                <input type="range" id="radius" min="1" max="12.0" step="0.025" value="2.5">
+            </div>
+
+            <div class="slider-row">
+                <div class="slider-label"><span>Wake Thickness</span> <span class="val" id="val-t">0.30</span></div>
+                <input type="range" id="thickness" min="0.05" max="2.5" step="0.0025" value="0.3">
+            </div>
+
+            <div class="toggle-row">
+                <input type="checkbox" id="show-energy" checked>
+                <label for="show-energy">Show stress-matter tensor</label>
+            </div>
+            <div class="toggle-row">
+                <input type="checkbox" id="show-grid" checked>
+                <label for="show-grid">Show spacetime grid</label>
+            </div>
+
+            <div class="ai-panel">
+                <div class="ai-title">
+                    <span>Attention-PINN Handover</span>
+                    <span id="ai-status" class="warn">CALIBRATING</span>
+                </div>
+                <div class="progress-bar"><div class="progress-fill" id="ai-control-bar"></div></div>
+                <div class="ai-stats">
+                    <div class="stat-row"><span>Control Weight:</span> <span id="val-control">0%</span></div>
+                    <div class="stat-row"><span>Neural Loss (MSE):</span> <span id="val-loss">1.00000</span></div>
+                    <div class="stat-row"><span>FPS:</span> <span id="val-fps">60</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <aside id="game-hud">
+        <div class="hud-title">
+            <span>Run Status</span>
+            <span id="hud-sector">Sector 1 / 4</span>
+        </div>
+        <div class="hud-block">
+            <div class="hud-row"><span>Score</span><span id="hud-score" class="val">0</span></div>
+            <div class="hud-row"><span>Best</span><span id="hud-best">0</span></div>
+            <div class="hud-row"><span>Gates</span><span id="hud-time">0 / 5</span></div>
+        </div>
+        <div class="hud-block">
+            <div class="hud-row"><span>Hull Integrity</span><span id="hud-integrity-label">100%</span></div>
+            <div class="meter"><div id="hud-integrity" class="meter-fill integrity"></div></div>
+        </div>
+        <div class="hud-block">
+            <div class="hud-row"><span>Gate Chain</span><span id="hud-lock-label">0%</span></div>
+            <div class="meter"><div id="hud-lock" class="meter-fill lock"></div></div>
+        </div>
+        <div class="hud-block">
+            <div class="hud-row"><span>Pulse Charge</span><span id="hud-charge-label">0%</span></div>
+            <div class="meter"><div id="hud-charge" class="meter-fill charge"></div></div>
+        </div>
+        <div class="hud-block">
+            <div class="hud-row"><span>Sector Progress</span><span id="hud-progress-label">0 / 5</span></div>
+            <div class="meter"><div id="hud-progress" class="meter-fill progress"></div></div>
+        </div>
+        <div class="target-box">
+            <div class="hud-row"><span class="tag">Flux</span><span id="hud-target-v" class="val">0.80 c</span></div>
+            <div class="hud-row"><span class="tag">Drift X</span><span id="hud-target-r" class="val">0.00</span></div>
+            <div class="hud-row"><span class="tag">Drift Y</span><span id="hud-target-t" class="val">0.00</span></div>
+        </div>
+        <div class="event-box">
+            <div class="hud-row"><span class="tag">Threat</span><span id="hud-state">Standby</span></div>
+            <div id="hud-event-text" style="font-size:0.8rem;color:#a8bdc8;line-height:1.4;">Press Enter or click Start Run to launch the courier.</div>
+        </div>
+    </aside>
+
+    <div id="controls-card">
+        <div class="hud-title"><span>Flight Keys</span><span>Live</span></div>
+        <div class="hud-row"><span>W / A / S / D</span><span>Move the courier</span></div>
+        <div class="hud-row"><span>Arrow Keys</span><span>Alternate movement</span></div>
+        <div class="hud-row"><span>Space</span><span>Pulse-blast nearby hazards</span></div>
+        <div class="hud-row"><span>R</span><span>Restart run</span></div>
+        <div class="hud-row"><span>Mouse drag</span><span>Orbit camera</span></div>
+    </div>
+
+    <div id="mission-bar">
+        <div id="mission-text">Awaiting launch. Thread the gates, dodge anomalies, and clear four sectors.</div>
+    </div>
+
+    <div id="overlay">
+        <div id="overlay-card">
+            <div id="overlay-kicker">Arcade Trial</div>
+            <h1 id="overlay-title">Warp Gate Runner</h1>
+            <p id="overlay-copy">Steer the courier through collapsing gates, scoop up charge cells, and pulse-blast anomalies before they hit the hull. Clear each sector by threading enough gates, not by babysitting sliders.</p>
+            <div class="overlay-actions">
+                <button id="start-btn" class="cta-btn">Start Run</button>
+                <button id="restart-btn" class="cta-btn">Restart</button>
+            </div>
+        </div>
+    </div>
+
+    <canvas id="gameplay"></canvas>
+    <canvas id="glcanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('glcanvas');
+        const gl = canvas.getContext('webgl2', { antialias: false });
+
+        if (!gl) {
+            document.body.innerHTML = '<div style="padding:24px;color:#fff;font-family:Segoe UI,sans-serif;">WebGL2 is required to run this game.</div>';
+            throw new Error('WebGL2 unavailable');
+        }
+
+        if (!gl.getExtension('EXT_color_buffer_float')) {
+            console.warn("EXT_color_buffer_float not perfectly supported.");
+        }
+
+        // UI Logic
+        const ui = document.getElementById('ui');
+        const toggleBtn = document.getElementById('toggle-btn');
+        let uiVisible = true;
+
+        toggleBtn.addEventListener('click', () => {
+            uiVisible = !uiVisible;
+            if (uiVisible) {
+                ui.classList.remove('hidden');
+                toggleBtn.innerText = '➖ Close Panel';
+            } else {
+                ui.classList.add('hidden');
+                toggleBtn.innerText = '⚙️ Metric Parameters';
+            }
+        });
+
+        // ========================================================
+        // ATTENTION-GUIDED PHYSICS-INFORMED NEURAL NETWORK (PINN)
+        // Explicitly weights derivative learning for exact matter distribution
+        // ========================================================
+        class AttentionPINN {
+            constructor(nodes = 256, maxR = 15.0) {
+                this.nodes = nodes;
+                this.maxR = maxR;
+                
+                // Learnable parameters
+                this.weightsF = new Float32Array(nodes);
+                this.weightsDF = new Float32Array(nodes);
+                
+                // Fixed Gaussian centers distributed across physical space
+                this.centers = new Float32Array(nodes);
+                for(let i=0; i<nodes; i++) {
+                    this.centers[i] = (i / (nodes-1)) * maxR;
+                }
+                this.sigma = (maxR / nodes) * 1.5;
+                
+                this.lr = 0.5; // Controlled learning rate
+                this.loss = 1.0;
+                this.controlWeight = 0.0;
+            }
+
+            // Ground Truth Exact Physics
+            getExactPhysics(r, u_R, u_T) {
+                let f = 0, df = 0;
+                if (r <= u_R - u_T) f = 1.0;
+                else if (r >= u_R + u_T) f = 0.0;
+                else {
+                    let t = (r - (u_R - u_T)) / (2.0 * u_T);
+                    f = t * t * (3.0 - 2.0 * t);
+                    f = 1.0 - f;
+                    df = -(6.0 * t * (1.0 - t)) / (2.0 * u_T);
+                }
+                return { f, df };
+            }
+
+            trainStep(u_R, u_T) {
+                let batchLoss = 0;
+                const batchSize = 128; // Increased batch size for accuracy
+
+                for(let b=0; b<batchSize; b++) {
+                    let r;
+                    // ATTENTION MECHANISM: Allocate 80% of compute to the bubble wall
+                    // because that is where the Stress-Matter Tensor exists.
+                    if (Math.random() > 0.2) {
+                        r = u_R + (Math.random() * 2.0 - 1.0) * (u_T * 1.5);
+                    } else {
+                        r = Math.random() * this.maxR;
+                    }
+                    r = Math.max(0, Math.min(this.maxR, r));
+
+                    let exact = this.getExactPhysics(r, u_R, u_T);
+
+                    // Forward Pass
+                    let f_ai = 0, df_ai = 0;
+                    let activations = new Float32Array(this.nodes);
+                    
+                    for(let i=0; i<this.nodes; i++) {
+                        let diff = r - this.centers[i];
+                        let act = Math.exp(-(diff * diff) / (this.sigma * this.sigma));
+                        activations[i] = act;
+                        f_ai += this.weightsF[i] * act;
+                        df_ai += this.weightsDF[i] * act;
+                    }
+
+                    // Physics-Informed Loss: Heavily penalize derivative errors to preserve matter coloring
+                    let errF = f_ai - exact.f;
+                    let errDF = df_ai - exact.df;
+                    batchLoss += (errF * errF) + (errDF * errDF * 10.0); 
+
+                    // Backpropagation
+                    for(let i=0; i<this.nodes; i++) {
+                        this.weightsF[i] -= this.lr * errF * activations[i];
+                        this.weightsDF[i] -= this.lr * errDF * activations[i];
+                    }
+                }
+                
+                this.loss = this.loss * 0.90 + (batchLoss / batchSize) * 0.10;
+
+                if (this.loss < 0.05) { // Adjusted threshold for the weighted loss
+                    this.controlWeight = Math.min(1.0, this.controlWeight + 0.01);
+                } else {
+                    this.controlWeight = Math.max(0.0, this.controlWeight - 0.1);
+                }
+            }
+
+            getTextureData() {
+                let data = new Float32Array(256 * 2);
+                for(let p=0; p<256; p++) {
+                    let r = (p / 255.0) * this.maxR;
+                    let f_ai = 0, df_ai = 0;
+                    for(let i=0; i<this.nodes; i++) {
+                        let diff = r - this.centers[i];
+                        let act = Math.exp(-(diff * diff) / (this.sigma * this.sigma));
+                        f_ai += this.weightsF[i] * act;
+                        df_ai += this.weightsDF[i] * act;
+                    }
+                    data[p * 2] = f_ai;
+                    data[p * 2 + 1] = df_ai;
+                }
+                return data;
+            }
+        }
+
+        const aiNet = new AttentionPINN(128, 15.0);
+
+        // --- WEBGL SETUP & TEXTURE ---
+        const aiTex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, aiTex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, 256, 1, 0, gl.RG, gl.FLOAT, null);
+        // FORCE NEAREST FILTERING to bypass hardware limitations on continuous Float32 interpolation
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+        function resize() {
+            const scale = 1.0; 
+            const targetWidth = Math.floor(window.innerWidth * scale);
+            const targetHeight = Math.floor(window.innerHeight * scale);
+            const gameplay = document.getElementById('gameplay');
+            if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+                canvas.width = targetWidth;
+                canvas.height = targetHeight;
+                gl.viewport(0, 0, canvas.width, canvas.height);
+            }
+            if (gameplay.width !== targetWidth || gameplay.height !== targetHeight) {
+                gameplay.width = targetWidth;
+                gameplay.height = targetHeight;
+            }
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // --- SHADERS ---
+        const vs = `#version 300 es
+            in vec4 a_pos; out vec2 v_uv;
+            void main() { v_uv = a_pos.xy; gl_Position = a_pos; }
+        `;
+
+        const fs = `#version 300 es
+            precision highp float;
+            in vec2 v_uv; out vec4 fragColor;
+
+            uniform vec2 u_res;
+            uniform float u_time;
+            uniform vec3 u_camPos;
+            
+            // GR Metric Parameters
+            uniform float u_v; 
+            uniform float u_R; 
+            uniform float u_T; 
+            
+            // AI Handover Parameters
+            uniform sampler2D u_aiMetric;
+            uniform float u_aiInfluence;
+            
+            uniform int u_showEnergy;
+            uniform int u_showGrid;
+
+            // Physical Spaceship SDF
+            float sdShip(vec3 p) {
+                float hull = length(p * vec3(1.5, 1.5, 0.4)) - 0.25;
+                float ring = length(vec2(length(p.xz) - 0.9, p.y)) - 0.08;
+                vec3 absp = abs(p);
+                float struts = max(absp.z - 0.04, absp.y - 0.04);
+                struts = max(struts, length(p.xz) - 0.9);
+                return min(min(hull, ring), struts);
+            }
+
+            vec3 calcShipNormal(vec3 p) {
+                vec2 e = vec2(0.005, 0.0);
+                return normalize(vec3(
+                    sdShip(p + e.xyy) - sdShip(p - e.xyy),
+                    sdShip(p + e.yxy) - sdShip(p - e.yxy),
+                    sdShip(p + e.yyx) - sdShip(p - e.yyx)
+                ));
+            }
+
+            // Procedural Starfield
+            float hash(vec3 p) {
+                p = fract(p * vec3(123.34, 456.21, 85.714));
+                p += dot(p, p + 45.32);
+                return fract(p.x * p.y);
+            }
+
+            vec3 getStarfield(vec3 dir, float warpVelocity, float time) {
+                vec3 nDir = normalize(dir);
+                vec3 starPos = nDir * 300.0;
+                starPos.z += time * warpVelocity * 20.0;
+                float n = hash(floor(starPos));
+                
+                float star = smoothstep(0.99, 1.0, n);
+                vec3 color = vec3(star);
+                
+                float cosTheta = dot(nDir, vec3(0.0, 0.0, -1.0)); 
+                if (warpVelocity > 0.1) {
+                    if (cosTheta > 0.5) {
+                        color *= mix(vec3(1.0), vec3(0.1, 0.5, 1.0), (cosTheta - 0.5) * 2.0 * warpVelocity);
+                    } else if (cosTheta < -0.5) {
+                        color *= mix(vec3(1.0), vec3(1.0, 0.2, 0.1), (-cosTheta - 0.5) * 2.0 * warpVelocity);
+                    }
+                }
+                
+                float band = exp(-pow(dir.y * 3.0, 2.0));
+                color += vec3(0.05, 0.1, 0.15) * band;
+                return color;
+            }
+
+            void main() {
+                vec2 uv = (gl_FragCoord.xy - 0.5 * u_res) / min(u_res.x, u_res.y);
+                
+                vec3 ro = u_camPos;
+                vec3 ta = vec3(0.0, 0.0, 0.0);
+                vec3 cw = normalize(ta - ro);
+                vec3 cu = normalize(cross(cw, vec3(0.0, 1.0, 0.0)));
+                vec3 cv = cross(cu, cw);
+                vec3 rd = normalize(uv.x * cu + uv.y * cv + 1.2 * cw);
+
+                vec3 p = ro;
+                vec4 vol = vec4(0.0);
+                bool hitShip = false;
+
+                // Null Geodesic Raymarch Integrator
+                for(int i = 0; i < 100; i++) {
+                    float r = length(p);
+                    
+                    // 1. EXACT MATHEMATICAL METRIC
+                    float exact_f = smoothstep(u_R + u_T, u_R - u_T, r);
+                    float t_val = clamp((r - (u_R - u_T)) / (2.0 * u_T), 0.0, 1.0);
+                    float exact_df = (r > u_R - u_T && r < u_R + u_T) ? -(6.0 * t_val * (1.0 - t_val)) / (2.0 * u_T) : 0.0;
+                    
+                    // 2. AI LEARNED METRIC
+                    // Bypassing hardware interpolation failure by performing continuous math internally
+                    float ai_idx = (r / 15.0) * 255.0;
+                    int i_idx = int(floor(ai_idx));
+                    float f_frac = ai_idx - float(i_idx);
+                    
+                    vec2 data0 = texelFetch(u_aiMetric, ivec2(clamp(i_idx, 0, 255), 0), 0).rg;
+                    vec2 data1 = texelFetch(u_aiMetric, ivec2(clamp(i_idx + 1, 0, 255), 0), 0).rg;
+                    vec2 ai_data = mix(data0, data1, f_frac);
+                    
+                    // 3. HANDOVER BLEND
+                    float current_f = mix(exact_f, ai_data.r, u_aiInfluence);
+                    float current_df = mix(exact_df, ai_data.g, u_aiInfluence);
+
+                    vec3 gradF = (r > 0.001) ? (p / r) * current_df : vec3(0.0);
+                    float theta = u_v * gradF.z; 
+
+                    float dt = max(0.02, min(0.2, r * 0.1));
+                    float dShip = sdShip(p);
+                    if (dShip < 0.2) dt = min(dt, dShip * 0.5);
+                    
+                    // Physical Lensing (Refraction)
+                    rd = normalize(rd - gradF * u_v * dt * 0.5);
+                    
+                    // Physical Frame Dragging
+                    vec3 beta = vec3(0.0, 0.0, u_v * current_f);
+                    p += (rd - beta) * dt;
+
+                    // Spacetime Grid
+                    if (u_showGrid == 1) {
+                        float gridY = abs(p.y);
+                        if (gridY < 0.05) {
+                            float lineX = smoothstep(0.04, 0.0, abs(fract(p.x * 2.0) - 0.5));
+                            float lineZ = smoothstep(0.04, 0.0, abs(fract(p.z * 2.0 + u_time * u_v * 2.0) - 0.5));
+                            
+                            vec3 gridCol = mix(vec3(0.1, 0.8, 0.4), vec3(0.0, 1.0, 0.8), u_aiInfluence);
+                            float gAlpha = max(lineX, lineZ) * (0.05 - gridY) * 20.0 * 0.4;
+                            vol += vec4(gridCol * gAlpha, gAlpha) * (1.0 - vol.a);
+                        }
+                    }
+                    
+                    // Stress-Matter Tensor Visualization (Expansion/Contraction amplitude learned by AI)
+                    if (u_showEnergy == 1) {
+                        if (abs(theta) > 0.05) {
+                            vec3 glowColor = theta < 0.0 ? vec3(0.0, 0.5, 1.0) : vec3(1.0, 0.1, 0.0);
+                            float alpha = abs(theta) * dt * 0.25;
+                            vol += vec4(glowColor * alpha, alpha) * (1.0 - vol.a);
+                        }
+                    }
+
+                    if (dShip < 0.005) {
+                        hitShip = true;
+                        vec3 n = calcShipNormal(p);
+                        vec3 l = normalize(vec3(2.0, 3.0, -1.0));
+                        float diff = max(dot(n, l), 0.1);
+                        vec3 shipCol = vec3(0.6, 0.65, 0.7) * diff;
+                        if (p.z > 0.2 && length(p.xy) < 0.2) shipCol += vec3(0.0, 0.8, 1.0) * 2.0;
+                        vol += vec4(shipCol * (1.0 - vol.a), 1.0 - vol.a);
+                        break;
+                    }
+                    
+                    if (r > 15.0 || vol.a > 0.99) break;
+                }
+
+                vec3 finalCol = vol.rgb;
+
+                if (!hitShip && vol.a < 0.99) {
+                    vec3 stars = getStarfield(rd, u_v, u_time);
+                    finalCol += stars * (1.0 - vol.a);
+                }
+
+                finalCol = finalCol / (finalCol + vec3(1.0));
+                finalCol = pow(finalCol, vec3(1.0 / 2.2));
+
+                fragColor = vec4(finalCol, 1.0);
+            }
+        `;
+
+        function buildShader(type, src) {
+            const s = gl.createShader(type);
+            gl.shaderSource(s, src); gl.compileShader(s);
+            if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(s));
+            return s;
+        }
+
+        const prog = gl.createProgram();
+        gl.attachShader(prog, buildShader(gl.VERTEX_SHADER, vs));
+        gl.attachShader(prog, buildShader(gl.FRAGMENT_SHADER, fs));
+        gl.linkProgram(prog);
+
+        const posBuf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]), gl.STATIC_DRAW);
+        const posLoc = gl.getAttribLocation(prog, "a_pos");
+        gl.enableVertexAttribArray(posLoc);
+        gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+
+        // Uniforms
+        const uRes = gl.getUniformLocation(prog, "u_res");
+        const uTime = gl.getUniformLocation(prog, "u_time");
+        const uCam = gl.getUniformLocation(prog, "u_camPos");
+        const uV = gl.getUniformLocation(prog, "u_v");
+        const uR = gl.getUniformLocation(prog, "u_R");
+        const uT = gl.getUniformLocation(prog, "u_T");
+        const uShowEnergy = gl.getUniformLocation(prog, "u_showEnergy");
+        const uShowGrid = gl.getUniformLocation(prog, "u_showGrid");
+        
+        const uAiInfluence = gl.getUniformLocation(prog, "u_aiInfluence");
+        const uAiMetric = gl.getUniformLocation(prog, "u_aiMetric");
+
+        // UI Bindings
+        const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+        const rand = (min, max) => min + Math.random() * (max - min);
+
+        const bindSlider = (id, valId, suffix = "") => {
+            const el = document.getElementById(id);
+            const valEl = document.getElementById(valId);
+            const render = () => {
+                valEl.innerText = parseFloat(el.value).toFixed(2) + suffix;
+            };
+            el.oninput = render;
+            render();
+            return {
+                el,
+                get() { return parseFloat(el.value); },
+                set(value) {
+                    el.value = clamp(value, parseFloat(el.min), parseFloat(el.max));
+                    render();
+                }
+            };
+        };
+
+        const vSlider = bindSlider('velocity', 'val-v', ' c');
+        const rSlider = bindSlider('radius', 'val-r');
+        const tSlider = bindSlider('thickness', 'val-t');
+        const chkEnergy = document.getElementById('show-energy');
+        const chkGrid = document.getElementById('show-grid');
+        
+        // AI UI Elements
+        const aiBar = document.getElementById('ai-control-bar');
+        const aiStatusText = document.getElementById('ai-status');
+        const valControl = document.getElementById('val-control');
+        const valLoss = document.getElementById('val-loss');
+        const valFps = document.getElementById('val-fps');
+
+        // Game UI Elements
+        const missionText = document.getElementById('mission-text');
+        const overlay = document.getElementById('overlay');
+        const overlayKicker = document.getElementById('overlay-kicker');
+        const overlayTitle = document.getElementById('overlay-title');
+        const overlayCopy = document.getElementById('overlay-copy');
+        const startBtn = document.getElementById('start-btn');
+        const restartBtn = document.getElementById('restart-btn');
+        const hudSector = document.getElementById('hud-sector');
+        const hudScore = document.getElementById('hud-score');
+        const hudBest = document.getElementById('hud-best');
+        const hudTime = document.getElementById('hud-time');
+        const hudIntegrity = document.getElementById('hud-integrity');
+        const hudIntegrityLabel = document.getElementById('hud-integrity-label');
+        const hudLock = document.getElementById('hud-lock');
+        const hudLockLabel = document.getElementById('hud-lock-label');
+        const hudCharge = document.getElementById('hud-charge');
+        const hudChargeLabel = document.getElementById('hud-charge-label');
+        const hudProgress = document.getElementById('hud-progress');
+        const hudProgressLabel = document.getElementById('hud-progress-label');
+        const hudTargetV = document.getElementById('hud-target-v');
+        const hudTargetR = document.getElementById('hud-target-r');
+        const hudTargetT = document.getElementById('hud-target-t');
+        const hudState = document.getElementById('hud-state');
+        const hudEventText = document.getElementById('hud-event-text');
+
+        toggleBtn.addEventListener('click', () => {
+            toggleBtn.innerText = uiVisible ? '[-] Close Panel' : '[+] Render Diagnostics';
+        });
+
+        aiNet.reset = () => {
+            aiNet.weightsF.fill(0);
+            aiNet.weightsDF.fill(0);
+            aiNet.loss = 1.0;
+            aiNet.controlWeight = 0.0;
+        };
+
+        const gameCanvas = document.getElementById('gameplay');
+        const gameCtx = gameCanvas.getContext('2d');
+
+        const controls = { up: false, down: false, left: false, right: false };
+        const sectorPlan = [
+            { gates: 5, speed: 0.70, gateEvery: 1.35, pickupEvery: 3.4, hazardChance: 0.30 },
+            { gates: 6, speed: 0.80, gateEvery: 1.20, pickupEvery: 3.0, hazardChance: 0.38 },
+            { gates: 7, speed: 0.92, gateEvery: 1.08, pickupEvery: 2.8, hazardChance: 0.46 },
+            { gates: 8, speed: 1.04, gateEvery: 0.98, pickupEvery: 2.6, hazardChance: 0.52 }
+        ];
+
+        const game = {
+            active: false,
+            over: false,
+            victory: false,
+            sector: 1,
+            maxSectors: sectorPlan.length,
+            score: 0,
+            best: Number(localStorage.getItem('aw15-game-best') || 0),
+            integrity: 100,
+            chain: 0,
+            charge: 0,
+            totalGates: 0,
+            sectorGates: 0,
+            sectorGoal: sectorPlan[0].gates,
+            objects: [],
+            spawnGateIn: 1.1,
+            spawnPickupIn: 2.8,
+            pulse: 0,
+            invuln: 0,
+            player: { x: 0, y: 0 },
+            threat: 'Standby',
+            eventText: 'Press Enter or click Start Run to launch the courier.'
+        };
+
+        const setMission = (text, tone = 'neutral') => {
+            missionText.innerText = text;
+            missionText.style.color = tone === 'good' ? '#d5fff1' : tone === 'bad' ? '#ffd4dd' : '#fff1db';
+        };
+
+        const setOverlay = (mode) => {
+            if (mode === 'hidden') {
+                overlay.classList.add('hidden');
+                return;
+            }
+
+            overlay.classList.remove('hidden');
+            if (mode === 'start') {
+                overlayKicker.innerText = 'Arcade Trial';
+                overlayTitle.innerText = 'Warp Gate Runner';
+                overlayCopy.innerText = 'Steer through gates, dodge anomalies, scoop charge cells, and fire a pulse when the corridor gets crowded. Clear enough gates in each sector to finish the run.';
+            } else if (mode === 'gameover') {
+                overlayKicker.innerText = 'Run Lost';
+                overlayTitle.innerText = 'Hull Integrity Failed';
+                overlayCopy.innerText = `Final score ${Math.round(game.score)}. Best run ${Math.round(game.best)}. Relaunch and thread the gates cleaner.`;
+            } else if (mode === 'victory') {
+                overlayKicker.innerText = 'Route Complete';
+                overlayTitle.innerText = 'Runner Cleared';
+                overlayCopy.innerText = `You cleared all ${game.maxSectors} sectors with ${game.totalGates} gates threaded and a final score of ${Math.round(game.score)}.`;
+            }
+        };
+
+        const saveBest = () => {
+            const rounded = Math.round(game.score);
+            if (rounded > game.best) {
+                game.best = rounded;
+                localStorage.setItem('aw15-game-best', String(rounded));
+            }
+        };
+
+        const currentSectorConfig = () => sectorPlan[Math.min(game.sector - 1, sectorPlan.length - 1)];
+
+        const resetPlayer = () => {
+            game.player.x = 0;
+            game.player.y = 0;
+        };
+
+        const setTelemetry = () => {
+            const config = currentSectorConfig();
+            const nearbyThreat = game.objects.filter(obj => obj.type === 'hazard' && obj.z < 0.8).length;
+            const flux = 1.1 + (config.speed * 2.4) + (game.pulse > 0 ? 0.7 : 0);
+            const lateral = 2.2 + Math.abs(game.player.x) * 2.7 + (nearbyThreat * 0.18);
+            const wake = 0.22 + Math.abs(game.player.y) * 0.35 + (nearbyThreat * 0.04);
+            vSlider.set(flux);
+            rSlider.set(lateral);
+            tSlider.set(wake);
+        };
+
+        const spawnHazardCluster = (gateX, gateY) => {
+            const config = currentSectorConfig();
+            const count = Math.random() < 0.65 ? 1 : 2;
+            for (let i = 0; i < count; i++) {
+                const angle = rand(0, Math.PI * 2);
+                const offset = rand(0.18, 0.30);
+                game.objects.push({
+                    type: 'hazard',
+                    x: clamp(gateX + Math.cos(angle) * offset, -0.8, 0.8),
+                    y: clamp(gateY + Math.sin(angle) * offset, -0.62, 0.62),
+                    z: 1.75 + (i * 0.06),
+                    radius: rand(0.08, 0.11),
+                    spin: rand(-2.5, 2.5),
+                    wobble: rand(0.3, 1.0)
+                });
+            }
+            if (Math.random() < config.hazardChance * 0.45) {
+                game.objects.push({
+                    type: 'hazard',
+                    x: clamp(gateX + rand(-0.42, 0.42), -0.82, 0.82),
+                    y: clamp(gateY + rand(-0.32, 0.32), -0.62, 0.62),
+                    z: 1.95,
+                    radius: rand(0.09, 0.12),
+                    spin: rand(-1.8, 1.8),
+                    wobble: rand(0.2, 0.7)
+                });
+            }
+        };
+
+        const spawnGatePattern = () => {
+            const config = currentSectorConfig();
+            const gateX = rand(-0.55, 0.55);
+            const gateY = rand(-0.40, 0.40);
+            game.objects.push({
+                type: 'gate',
+                x: gateX,
+                y: gateY,
+                z: 1.8,
+                radius: rand(0.16, 0.20)
+            });
+
+            if (Math.random() < config.hazardChance) {
+                spawnHazardCluster(gateX, gateY);
+            }
+
+            if (Math.random() < 0.28) {
+                game.objects.push({
+                    type: 'pickup',
+                    x: clamp(gateX + rand(-0.22, 0.22), -0.78, 0.78),
+                    y: clamp(gateY + rand(-0.18, 0.18), -0.58, 0.58),
+                    z: 2.0,
+                    radius: 0.09
+                });
+            }
+
+            game.spawnGateIn = rand(config.gateEvery * 0.88, config.gateEvery * 1.15);
+        };
+
+        const spawnPickup = () => {
+            const config = currentSectorConfig();
+            game.objects.push({
+                type: 'pickup',
+                x: rand(-0.72, 0.72),
+                y: rand(-0.52, 0.52),
+                z: 1.95,
+                radius: 0.085
+            });
+            game.spawnPickupIn = rand(config.pickupEvery * 0.8, config.pickupEvery * 1.25);
+        };
+
+        const damageHull = (amount, reason) => {
+            if (game.invuln > 0) return;
+            game.integrity = clamp(game.integrity - amount, 0, 100);
+            game.invuln = 0.35;
+            game.chain = 0;
+            game.eventText = reason;
+            game.threat = 'Impact';
+            setMission(reason, 'bad');
+        };
+
+        const collectCharge = (amount, reason) => {
+            game.charge = clamp(game.charge + amount, 0, 100);
+            game.eventText = reason;
+        };
+
+        const startSector = (sector, freshRun = false) => {
+            game.sector = sector;
+            game.sectorGoal = currentSectorConfig().gates;
+            game.sectorGates = 0;
+            game.objects = [];
+            game.spawnGateIn = 1.0;
+            game.spawnPickupIn = 2.4;
+            game.threat = 'Clear';
+            game.eventText = `Sector ${sector} active. Thread ${game.sectorGoal} gates to advance.`;
+            aiNet.reset();
+            aiNet.controlWeight = 0.2 + (sector * 0.04);
+            resetPlayer();
+            if (freshRun) {
+                game.score = 0;
+                game.charge = 35;
+                game.integrity = 100;
+                game.totalGates = 0;
+                game.chain = 0;
+            } else {
+                game.integrity = clamp(game.integrity + 15, 0, 100);
+                game.charge = clamp(game.charge + 20, 0, 100);
+                game.chain = 0;
+            }
+            setMission(`Sector ${sector}: thread ${game.sectorGoal} gates and keep the hull intact.`, 'neutral');
+        };
+
+        const startRun = () => {
+            game.active = true;
+            game.over = false;
+            game.victory = false;
+            game.pulse = 0;
+            game.invuln = 0;
+            startSector(1, true);
+            setOverlay('hidden');
+        };
+
+        const endRun = (victory) => {
+            game.active = false;
+            game.over = !victory;
+            game.victory = victory;
+            game.objects = [];
+            saveBest();
+            setMission(victory ? 'Route complete. Every sector cleared.' : 'Run lost. Relaunch and try a cleaner line.', victory ? 'good' : 'bad');
+            setOverlay(victory ? 'victory' : 'gameover');
+        };
+
+        const firePulse = () => {
+            if (!game.active || game.charge < 100 || game.pulse > 0) return;
+            game.charge = 0;
+            game.pulse = 1.05;
+            game.invuln = 0.2;
+            game.score += 80;
+            collectCharge(0, 'Pulse burst active. Nearby hazards destabilized.');
+            setMission('Pulse burst active. Punch through the crowd.', 'good');
+        };
+
+        const updateHud = () => {
+            const progressPct = Math.round((game.sectorGates / Math.max(1, game.sectorGoal)) * 100);
+            const chainPct = Math.min(100, game.chain * 20);
+            hudSector.innerText = `Sector ${game.sector} / ${game.maxSectors}`;
+            hudScore.innerText = Math.round(game.score).toLocaleString();
+            hudBest.innerText = Math.round(game.best).toLocaleString();
+            hudTime.innerText = `${game.sectorGates} / ${game.sectorGoal}`;
+            hudIntegrity.style.width = `${game.integrity}%`;
+            hudIntegrityLabel.innerText = `${Math.round(game.integrity)}%`;
+            hudLock.style.width = `${chainPct}%`;
+            hudLockLabel.innerText = `x${game.chain}`;
+            hudCharge.style.width = `${Math.round(game.charge)}%`;
+            hudChargeLabel.innerText = `${Math.round(game.charge)}%`;
+            hudProgress.style.width = `${progressPct}%`;
+            hudProgressLabel.innerText = `${game.sectorGates} / ${game.sectorGoal}`;
+            hudTargetV.innerText = `${vSlider.get().toFixed(2)} c`;
+            hudTargetR.innerText = game.player.x.toFixed(2);
+            hudTargetT.innerText = game.player.y.toFixed(2);
+            hudState.innerText = game.active ? game.threat : (game.victory ? 'Complete' : game.over ? 'Offline' : 'Standby');
+            hudEventText.innerText = game.eventText;
+        };
+
+        startBtn.onclick = startRun;
+        restartBtn.onclick = startRun;
+
+        window.addEventListener('keydown', (event) => {
+            if (['Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(event.code)) {
+                event.preventDefault();
+            }
+            if (event.code === 'Enter') { if (!game.active) startRun(); return; }
+            if (event.code === 'KeyR') { startRun(); return; }
+            if (event.code === 'Space') { firePulse(); return; }
+            if (event.code === 'KeyW' || event.code === 'ArrowUp') controls.up = true;
+            if (event.code === 'KeyS' || event.code === 'ArrowDown') controls.down = true;
+            if (event.code === 'KeyA' || event.code === 'ArrowLeft') controls.left = true;
+            if (event.code === 'KeyD' || event.code === 'ArrowRight') controls.right = true;
+        });
+
+        window.addEventListener('keyup', (event) => {
+            if (event.code === 'KeyW' || event.code === 'ArrowUp') controls.up = false;
+            if (event.code === 'KeyS' || event.code === 'ArrowDown') controls.down = false;
+            if (event.code === 'KeyA' || event.code === 'ArrowLeft') controls.left = false;
+            if (event.code === 'KeyD' || event.code === 'ArrowRight') controls.right = false;
+        });
+
+        // Orbit Camera
+        let camX = 2.4, camY = 0.4;
+        let isDrag = false, lX, lY;
+        
+        window.onmousedown = e => { if(e.target === canvas){ isDrag = true; lX = e.clientX; lY = e.clientY; }};
+        window.onmouseup = () => isDrag = false;
+        window.onmousemove = e => {
+            if (!isDrag) return;
+            camX -= (e.clientX - lX) * 0.01;
+            camY = Math.max(-1.5, Math.min(1.5, camY + (e.clientY - lY) * 0.01));
+            lX = e.clientX; lY = e.clientY;
+        };
+
+        let lastFrame = performance.now();
+        let frameCount = 0;
+        let lastFpsUpdate = lastFrame;
+
+        function projectObject(obj) {
+            const span = Math.min(gameCanvas.width, gameCanvas.height);
+            const scale = 1 / Math.max(obj.z, 0.18);
+            return {
+                x: (gameCanvas.width * 0.5) + (obj.x * span * 0.36 * scale),
+                y: (gameCanvas.height * 0.5) + (obj.y * span * 0.24 * scale),
+                r: obj.radius * span * scale
+            };
+        }
+
+        function drawGameplay(now) {
+            const width = gameCanvas.width;
+            const height = gameCanvas.height;
+            const span = Math.min(width, height);
+            const px = (width * 0.5) + (game.player.x * span * 0.23);
+            const py = (height * 0.5) + (game.player.y * span * 0.16);
+
+            gameCtx.clearRect(0, 0, width, height);
+
+            gameCtx.save();
+            gameCtx.strokeStyle = 'rgba(106, 211, 255, 0.08)';
+            gameCtx.lineWidth = 1;
+            gameCtx.beginPath();
+            gameCtx.moveTo(width * 0.5, height * 0.16);
+            gameCtx.lineTo(width * 0.5, height * 0.84);
+            gameCtx.moveTo(width * 0.24, height * 0.5);
+            gameCtx.lineTo(width * 0.76, height * 0.5);
+            gameCtx.stroke();
+            gameCtx.restore();
+
+            const sorted = [...game.objects].sort((a, b) => b.z - a.z);
+            for (const obj of sorted) {
+                const p = projectObject(obj);
+                if (obj.type === 'gate') {
+                    gameCtx.save();
+                    gameCtx.strokeStyle = 'rgba(0, 255, 204, 0.95)';
+                    gameCtx.shadowColor = 'rgba(0, 255, 204, 0.5)';
+                    gameCtx.shadowBlur = 18;
+                    gameCtx.lineWidth = Math.max(3, p.r * 0.18);
+                    gameCtx.beginPath();
+                    gameCtx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                    gameCtx.stroke();
+                    gameCtx.lineWidth = 1.2;
+                    gameCtx.strokeStyle = 'rgba(255,255,255,0.35)';
+                    gameCtx.beginPath();
+                    gameCtx.arc(p.x, p.y, p.r * 0.58, 0, Math.PI * 2);
+                    gameCtx.stroke();
+                    gameCtx.restore();
+                } else if (obj.type === 'hazard') {
+                    gameCtx.save();
+                    gameCtx.translate(p.x, p.y);
+                    gameCtx.rotate((now * 0.001 * obj.spin) + (obj.z * 6));
+                    gameCtx.fillStyle = 'rgba(255, 86, 48, 0.22)';
+                    gameCtx.strokeStyle = 'rgba(255, 124, 72, 0.95)';
+                    gameCtx.shadowColor = 'rgba(255, 90, 0, 0.35)';
+                    gameCtx.shadowBlur = 18;
+                    gameCtx.lineWidth = Math.max(2, p.r * 0.12);
+                    gameCtx.beginPath();
+                    for (let i = 0; i < 8; i++) {
+                        const angle = (Math.PI * 2 * i) / 8;
+                        const radius = p.r * (i % 2 === 0 ? 1.0 : 0.6);
+                        const x = Math.cos(angle) * radius;
+                        const y = Math.sin(angle) * radius;
+                        if (i === 0) gameCtx.moveTo(x, y);
+                        else gameCtx.lineTo(x, y);
+                    }
+                    gameCtx.closePath();
+                    gameCtx.fill();
+                    gameCtx.stroke();
+                    gameCtx.restore();
+                } else if (obj.type === 'pickup') {
+                    gameCtx.save();
+                    gameCtx.translate(p.x, p.y);
+                    gameCtx.rotate(now * 0.0018);
+                    gameCtx.fillStyle = 'rgba(127, 214, 255, 0.28)';
+                    gameCtx.strokeStyle = 'rgba(168, 238, 255, 0.95)';
+                    gameCtx.shadowColor = 'rgba(127, 214, 255, 0.5)';
+                    gameCtx.shadowBlur = 16;
+                    gameCtx.lineWidth = Math.max(2, p.r * 0.15);
+                    gameCtx.beginPath();
+                    gameCtx.moveTo(0, -p.r);
+                    gameCtx.lineTo(p.r * 0.7, 0);
+                    gameCtx.lineTo(0, p.r);
+                    gameCtx.lineTo(-p.r * 0.7, 0);
+                    gameCtx.closePath();
+                    gameCtx.fill();
+                    gameCtx.stroke();
+                    gameCtx.restore();
+                }
+            }
+
+            if (game.pulse > 0) {
+                gameCtx.save();
+                gameCtx.strokeStyle = `rgba(115, 231, 255, ${0.15 + (game.pulse * 0.5)})`;
+                gameCtx.lineWidth = 4;
+                gameCtx.beginPath();
+                gameCtx.arc(px, py, span * (0.10 + ((1.05 - game.pulse) * 0.28)), 0, Math.PI * 2);
+                gameCtx.stroke();
+                gameCtx.restore();
+            }
+
+            gameCtx.save();
+            gameCtx.translate(px, py);
+            gameCtx.fillStyle = game.invuln > 0 ? 'rgba(255,255,255,0.96)' : 'rgba(0,255,204,0.96)';
+            gameCtx.strokeStyle = 'rgba(255,255,255,0.55)';
+            gameCtx.lineWidth = 1.5;
+            gameCtx.shadowColor = 'rgba(0,255,204,0.45)';
+            gameCtx.shadowBlur = 20;
+            gameCtx.beginPath();
+            gameCtx.moveTo(0, -span * 0.022);
+            gameCtx.lineTo(span * 0.015, span * 0.022);
+            gameCtx.lineTo(0, span * 0.010);
+            gameCtx.lineTo(-span * 0.015, span * 0.022);
+            gameCtx.closePath();
+            gameCtx.fill();
+            gameCtx.stroke();
+            gameCtx.restore();
+        }
+
+        function render(now) {
+            const dt = Math.min(0.05, (now - lastFrame) * 0.001);
+            lastFrame = now;
+            frameCount++;
+
+            if (!isDrag) camX += dt * (0.08 + vSlider.get() * 0.004);
+
+            if (game.active) {
+                const config = currentSectorConfig();
+                const moveX = (controls.right ? 1 : 0) - (controls.left ? 1 : 0);
+                const moveY = (controls.down ? 1 : 0) - (controls.up ? 1 : 0);
+                const moveSpeed = 1.55 + (game.pulse > 0 ? 0.25 : 0);
+                game.player.x = clamp(game.player.x + (moveX * moveSpeed * dt), -0.82, 0.82);
+                game.player.y = clamp(game.player.y + (moveY * moveSpeed * dt), -0.64, 0.64);
+
+                game.spawnGateIn -= dt;
+                game.spawnPickupIn -= dt;
+                if (game.spawnGateIn <= 0) spawnGatePattern();
+                if (game.spawnPickupIn <= 0) spawnPickup();
+
+                const survivors = [];
+                let hazardsAhead = 0;
+
+                for (const obj of game.objects) {
+                    obj.z -= dt * config.speed;
+                    if (obj.type === 'hazard') {
+                        hazardsAhead += 1;
+                        obj.x = clamp(obj.x + (Math.sin((now * 0.001 * obj.spin) + (obj.z * 6.0)) * obj.wobble * dt * 0.05), -0.84, 0.84);
+                        obj.y = clamp(obj.y + (Math.cos((now * 0.0008 * obj.spin) + (obj.z * 5.0)) * obj.wobble * dt * 0.04), -0.66, 0.66);
+                    }
+
+                    const distToPlayer = Math.hypot(game.player.x - obj.x, game.player.y - obj.y);
+
+                    if (game.pulse > 0 && obj.type === 'hazard' && obj.z < 0.65 && distToPlayer < 0.38) {
+                        game.score += 35;
+                        collectCharge(6, 'Pulse shredded an anomaly.');
+                        continue;
+                    }
+
+                    if (obj.type === 'pickup' && obj.z < 0.28 && distToPlayer < obj.radius + 0.10) {
+                        game.score += 55;
+                        collectCharge(36, 'Charge cell secured.');
+                        continue;
+                    }
+
+                    if (obj.z < 0.18) {
+                        if (obj.type === 'gate') {
+                            if (distToPlayer < obj.radius + 0.06) {
+                                game.sectorGates += 1;
+                                game.totalGates += 1;
+                                game.chain = Math.min(game.chain + 1, 9);
+                                game.score += 110 + (game.chain * 15);
+                                collectCharge(12, 'Gate threaded. Keep the chain alive.');
+                                if (game.chain >= 4) {
+                                    setMission(`Chain x${game.chain}. Keep threading gates.`, 'good');
+                                }
+                            } else {
+                                damageHull(16, 'Missed a gate. Hull stressed.');
+                            }
+                        } else if (obj.type === 'hazard') {
+                            if (distToPlayer < obj.radius + 0.06) {
+                                damageHull(14, 'Anomaly impact on the hull.');
+                            }
+                        }
+                        continue;
+                    }
+
+                    if (obj.z > 0.10) survivors.push(obj);
+                }
+
+                game.objects = survivors;
+                game.invuln = Math.max(0, game.invuln - dt);
+                game.pulse = Math.max(0, game.pulse - dt);
+                game.threat = game.pulse > 0 ? 'Pulse Burst' : hazardsAhead > 6 ? 'Severe' : hazardsAhead > 3 ? 'Active' : 'Clear';
+
+                if (game.charge >= 100) {
+                    setMission('Pulse charged. Press Space to blast nearby hazards.', 'good');
+                } else if (game.integrity < 30) {
+                    setMission('Hull integrity critical. Stay clean through the next gate.', 'bad');
+                }
+
+                if (game.sectorGates >= game.sectorGoal) {
+                    game.score += 250 + (game.sector * 120);
+                    if (game.sector >= game.maxSectors) {
+                        endRun(true);
+                    } else {
+                        startSector(game.sector + 1, false);
+                    }
+                } else if (game.integrity <= 0) {
+                    endRun(false);
+                }
+            } else {
+                game.invuln = Math.max(0, game.invuln - dt);
+                game.pulse = Math.max(0, game.pulse - dt);
+            }
+
+            setTelemetry();
+            const currentR = rSlider.get();
+            const currentT = tSlider.get();
+            aiNet.trainStep(currentR, currentT);
+
+            const aiData = aiNet.getTextureData();
+            gl.bindTexture(gl.TEXTURE_2D, aiTex);
+            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 256, 1, gl.RG, gl.FLOAT, aiData);
+
+            if (now - lastFpsUpdate > 250) {
+                valFps.innerText = Math.round((frameCount * 1000) / (now - lastFpsUpdate));
+                valLoss.innerText = aiNet.loss.toFixed(6);
+                const pctl = Math.round(aiNet.controlWeight * 100);
+                valControl.innerText = pctl + "%";
+                aiBar.style.width = pctl + "%";
+                
+                if (aiNet.controlWeight > 0.95) {
+                    aiStatusText.innerText = "IN CONTROL";
+                    aiStatusText.className = "sync";
+                } else if (aiNet.controlWeight > 0.0) {
+                    aiStatusText.innerText = "HANDOVER ACTIVE";
+                    aiStatusText.className = "sync";
+                } else {
+                    aiStatusText.innerText = "CALIBRATING";
+                    aiStatusText.className = "warn";
+                }
+
+                frameCount = 0;
+                lastFpsUpdate = now;
+            }
+
+            updateHud();
+
+            gl.useProgram(prog);
+            
+            const dist = 5.5;
+            const cx = dist * Math.cos(camY) * Math.sin(camX);
+            const cy = dist * Math.sin(camY);
+            const cz = dist * Math.cos(camY) * Math.cos(camX);
+            
+            gl.uniform3f(uCam, cx, cy, cz);
+            gl.uniform2f(uRes, canvas.width, canvas.height);
+            gl.uniform1f(uTime, now * 0.001);
+            
+            gl.uniform1f(uV, vSlider.get());
+            gl.uniform1f(uR, currentR);
+            gl.uniform1f(uT, currentT);
+            
+            gl.uniform1i(uShowEnergy, chkEnergy.checked ? 1 : 0);
+            gl.uniform1i(uShowGrid, chkGrid.checked ? 1 : 0);
+
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, aiTex);
+            gl.uniform1i(uAiMetric, 0);
+            gl.uniform1f(uAiInfluence, aiNet.controlWeight);
+
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+            drawGameplay(now);
+            requestAnimationFrame(render);
+        }
+
+        setOverlay('start');
+        game.eventText = 'Press Enter or click Start Run to launch the courier.';
+        updateHud();
+        requestAnimationFrame(render);
+    </script>
+</body>
+</html>

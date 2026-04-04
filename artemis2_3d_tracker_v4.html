@@ -1,0 +1,2307 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Artemis II 3D Mission Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --bg: #050814;
+      --panel: rgba(8, 14, 30, 0.80);
+      --border: rgba(255, 255, 255, 0.12);
+      --text: #ecf4ff;
+      --muted: #9fb2d2;
+      --accent: #73c5ff;
+      --accent-2: #ffd46d;
+      --accent-3: #93b4ff;
+      --danger: #ff9f9f;
+      --shadow: 0 18px 60px rgba(0, 0, 0, 0.4);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: radial-gradient(circle at 20% 20%, #0a1230 0%, #040812 45%, #02040a 100%);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    a { color: var(--accent); }
+
+    #app {
+      position: fixed;
+      inset: 0;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(14px);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+    }
+
+    #titlePanel {
+      position: fixed;
+      left: 16px;
+      top: 16px;
+      width: min(420px, calc(100vw - 32px));
+      padding: 16px 18px 14px;
+      z-index: 20;
+      pointer-events: auto;
+    }
+
+    #titleRow {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.1;
+      letter-spacing: 0.02em;
+    }
+
+    .sub {
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .badges {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.04);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .badge .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 14px rgba(115, 197, 255, 0.85);
+    }
+
+    .badge.live .dot { background: #31ff9f; box-shadow: 0 0 14px rgba(49,255,159,0.8); }
+    .badge.replay .dot { background: var(--accent-2); box-shadow: 0 0 14px rgba(255,212,109,0.7); }
+
+    #telemetryPanel {
+      position: fixed;
+      left: 16px;
+      top: 196px;
+      width: min(420px, calc(100vw - 32px));
+      padding: 14px 16px 16px;
+      z-index: 20;
+      pointer-events: auto;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .stat {
+      padding: 10px 11px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.035);
+      min-height: 72px;
+    }
+
+    .statLabel {
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 6px;
+    }
+
+    .statValue {
+      font-size: 17px;
+      line-height: 1.18;
+      font-weight: 700;
+      word-break: break-word;
+    }
+
+    .statValue.smallish {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    #phaseValue { color: var(--accent-2); }
+
+    #controlsPanel {
+      position: fixed;
+      right: 16px;
+      top: 16px;
+      width: min(396px, calc(100vw - 32px));
+      padding: 15px 16px 16px;
+      z-index: 20;
+      pointer-events: auto;
+    }
+
+    #schedulePanel {
+      position: fixed;
+      right: 16px;
+      top: 320px;
+      width: min(396px, calc(100vw - 32px));
+      max-height: min(43vh, 430px);
+      padding: 14px 16px 14px;
+      z-index: 20;
+      pointer-events: auto;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #controlsPanel h2, #telemetryPanel h2, #schedulePanel h2 {
+      margin: 0 0 10px 0;
+      font-size: 14px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .telemetryStatusChip,
+    .scheduleTag,
+    .eventChip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.05);
+      padding: 5px 9px;
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      font-weight: 800;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .telemetryStatusChip[data-mode="loading"] { color: var(--accent); border-color: rgba(115,197,255,0.55); background: rgba(115,197,255,0.11); }
+    .telemetryStatusChip[data-mode="nasa"],
+    .telemetryStatusChip[data-mode="file"] { color: #91ffcf; border-color: rgba(109,255,203,0.55); background: rgba(109,255,203,0.12); }
+    .telemetryStatusChip[data-mode="fallback"],
+    .telemetryStatusChip[data-mode="error"] { color: var(--accent-2); border-color: rgba(255,212,109,0.52); background: rgba(255,212,109,0.12); }
+
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    button, select, input[type="range"] {
+      appearance: none;
+      border: 1px solid rgba(255,255,255,0.11);
+      border-radius: 12px;
+      background: rgba(255,255,255,0.055);
+      color: var(--text);
+      font: inherit;
+      transition: transform .12s ease, border-color .12s ease, background .12s ease;
+    }
+
+    button:hover, select:hover { border-color: rgba(115, 197, 255, 0.55); }
+    button:active { transform: translateY(1px) scale(0.99); }
+
+    button {
+      padding: 10px 12px;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 13px;
+    }
+
+    button.active {
+      background: rgba(115, 197, 255, 0.18);
+      border-color: rgba(115, 197, 255, 0.65);
+      box-shadow: inset 0 0 0 1px rgba(115, 197, 255, 0.18);
+    }
+
+    .toggleBtn {
+      padding: 8px 10px;
+      font-size: 12px;
+    }
+
+    button.secondary.active {
+      background: rgba(255, 212, 109, 0.18);
+      border-color: rgba(255, 212, 109, 0.65);
+      box-shadow: inset 0 0 0 1px rgba(255, 212, 109, 0.18);
+    }
+
+    select {
+      padding: 10px 12px;
+      min-width: 110px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    .hint {
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 14px;
+      margin-top: 12px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .legendItem {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .swatch {
+      width: 11px;
+      height: 11px;
+      border-radius: 999px;
+      display: inline-block;
+      flex: 0 0 auto;
+    }
+
+    .subhint {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .telemetryHeader,
+    .scheduleHeader {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .scheduleList {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 10px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .scheduleList::-webkit-scrollbar {
+      width: 10px;
+    }
+
+    .scheduleList::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.13);
+      border-radius: 999px;
+      border: 2px solid transparent;
+      background-clip: padding-box;
+    }
+
+    .scheduleItem {
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.035);
+      border-radius: 14px;
+      padding: 10px 11px 10px 12px;
+      display: grid;
+      grid-template-columns: 96px 1fr;
+      gap: 10px;
+      align-items: start;
+      transition: transform .12s ease, border-color .12s ease, background .12s ease, opacity .12s ease;
+    }
+
+    .scheduleItem.past {
+      opacity: 0.6;
+    }
+
+    .scheduleItem.current {
+      border-color: rgba(115,197,255,0.62);
+      background: rgba(115,197,255,0.11);
+      box-shadow: inset 0 0 0 1px rgba(115,197,255,0.15);
+    }
+
+    .scheduleItem.next {
+      border-color: rgba(255,212,109,0.55);
+      background: rgba(255,212,109,0.08);
+    }
+
+    .scheduleItem.burn {
+      box-shadow: inset 3px 0 0 rgba(255,212,109,0.85);
+    }
+
+    .scheduleTime {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.35;
+      font-weight: 700;
+    }
+
+    .scheduleTitle {
+      font-size: 13px;
+      line-height: 1.3;
+      font-weight: 800;
+      margin-right: 8px;
+    }
+
+    .scheduleMeta {
+      font-size: 11px;
+      line-height: 1.45;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .scheduleTitleRow {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .eventChip.burn {
+      color: var(--accent-2);
+      border-color: rgba(255,212,109,0.48);
+      background: rgba(255,212,109,0.12);
+    }
+
+    .eventChip.current {
+      color: var(--accent);
+      border-color: rgba(115,197,255,0.48);
+      background: rgba(115,197,255,0.12);
+    }
+
+    .eventChip.next {
+      color: var(--accent-2);
+      border-color: rgba(255,212,109,0.48);
+      background: rgba(255,212,109,0.12);
+    }
+
+    #timelinePanel {
+      position: fixed;
+      left: 16px;
+      right: 16px;
+      bottom: 16px;
+      padding: 14px 16px 12px;
+      z-index: 20;
+      pointer-events: auto;
+    }
+
+    #timelineHeader {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    #timelineHeader strong {
+      font-size: 14px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    #timelineTime {
+      font-size: 13px;
+      color: var(--text);
+      font-weight: 700;
+      text-align: right;
+    }
+
+    #timeline {
+      width: 100%;
+      height: 14px;
+      border-radius: 999px;
+      background: transparent;
+      outline: none;
+      cursor: pointer;
+      margin: 0;
+    }
+
+    #timeline::-webkit-slider-runnable-track {
+      height: 8px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(115,197,255,0.5), rgba(255,212,109,0.55));
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    #timeline::-moz-range-track {
+      height: 8px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(115,197,255,0.5), rgba(255,212,109,0.55));
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    #timeline::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #ffffff;
+      border: 2px solid rgba(115, 197, 255, 0.9);
+      margin-top: -6px;
+      box-shadow: 0 0 18px rgba(115, 197, 255, 0.45);
+    }
+
+    #timeline::-moz-range-thumb {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #ffffff;
+      border: 2px solid rgba(115, 197, 255, 0.9);
+      box-shadow: 0 0 18px rgba(115, 197, 255, 0.45);
+    }
+
+    #markerBar {
+      position: relative;
+      height: 40px;
+      margin-top: 4px;
+      user-select: none;
+    }
+
+    .marker {
+      position: absolute;
+      top: 8px;
+      width: 2px;
+      height: 12px;
+      background: rgba(255,255,255,0.4);
+    }
+
+    .marker span {
+      position: absolute;
+      top: -10px;
+      transform: translateX(-50%);
+      font-size: 10px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .marker.alt span {
+      top: 14px;
+    }
+
+    #timeEnds {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 2px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    #sceneHint {
+      position: fixed;
+      right: 16px;
+      bottom: 122px;
+      padding: 10px 12px;
+      z-index: 20;
+      font-size: 12px;
+      color: var(--muted);
+      pointer-events: none;
+    }
+
+    #officialLink {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.95em;
+    }
+
+    @media (max-width: 1000px) {
+      #titlePanel, #telemetryPanel, #controlsPanel, #schedulePanel {
+        position: fixed;
+        left: 10px;
+        right: 10px;
+        width: auto;
+      }
+      #titlePanel { top: 10px; }
+      #telemetryPanel { top: 212px; }
+      #controlsPanel { top: auto; bottom: 284px; }
+      #schedulePanel { top: auto; bottom: 142px; max-height: 132px; }
+      #timelinePanel { left: 10px; right: 10px; bottom: 10px; }
+      #sceneHint { display: none; }
+    }
+
+    @media (max-width: 640px) {
+      h1 { font-size: 20px; }
+      #telemetryPanel { top: 228px; }
+      .grid { grid-template-columns: 1fr 1fr; }
+      .statValue { font-size: 14px; }
+      .statValue.smallish { font-size: 12px; }
+      #controlsPanel { bottom: 312px; }
+      #schedulePanel { bottom: 150px; max-height: 138px; }
+      .scheduleItem { grid-template-columns: 82px 1fr; gap: 8px; }
+      .scheduleTitle { font-size: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <section id="titlePanel" class="panel">
+    <div id="titleRow">
+      <div>
+        <h1>Artemis II 3D Tracker</h1>
+        <div class="sub">
+          Live mode uses your computer clock so Orion opens at its current mission position when the file loads.
+          Replay mode lets you start at launch, fast-forward the whole flight, follow the official schedule and burn timeline, and switch between the nominal sim and NASA telemetry without the display turning into a bowl of glowing spaghetti.
+        </div>
+      </div>
+    </div>
+    <div class="badges">
+      <div class="badge live" id="modeBadge"><span class="dot"></span><span id="modeBadgeText">Live</span></div>
+      <div class="badge"><span class="dot" style="background:#ffd46d; box-shadow: 0 0 14px rgba(255,212,109,0.7);"></span><span>3D sim</span></div>
+      <div class="badge"><span class="dot" style="background:#93b4ff; box-shadow: 0 0 14px rgba(147,180,255,0.7);"></span><span>single file</span></div>
+    </div>
+    <a id="officialLink" href="https://www.nasa.gov/trackartemis" target="_blank" rel="noopener noreferrer">
+      Open NASA AROW official live tracker
+    </a>
+  </section>
+
+  <section id="telemetryPanel" class="panel">
+    <div class="telemetryHeader">
+      <h2>Telemetry</h2>
+      <span class="telemetryStatusChip" id="telemetrySourceChip" data-mode="loading">Trying NASA data…</span>
+    </div>
+    <div class="grid">
+      <div class="stat">
+        <div class="statLabel">Phase</div>
+        <div class="statValue" id="phaseValue">Loading...</div>
+      </div>
+      <div class="stat">
+        <div class="statLabel">Mission elapsed</div>
+        <div class="statValue" id="metValue">--</div>
+      </div>
+      <div class="stat">
+        <div class="statLabel">Approx from Earth center</div>
+        <div class="statValue smallish" id="earthDistValue">--</div>
+      </div>
+      <div class="stat">
+        <div class="statLabel">Approx to Moon center</div>
+        <div class="statValue smallish" id="moonDistValue">--</div>
+      </div>
+      <div class="stat">
+        <div class="statLabel">Approx speed</div>
+        <div class="statValue" id="speedValue">--</div>
+      </div>
+      <div class="stat">
+        <div class="statLabel">Sim time</div>
+        <div class="statValue smallish" id="simTimeValue">--</div>
+      </div>
+    </div>
+    <div class="hint" id="statusNote" style="margin-top:10px;">
+      Approximate 3D mission model anchored to NASA mission timing. If official NASA ephemeris loads, Orion position and speed switch to NASA state vectors directly, while the Moon and Sun are rebuilt in the same Earth-centered inertial scene instead of the old hand-wavy alignment trick.
+    </div>
+  </section>
+
+  <section id="controlsPanel" class="panel">
+    <h2>Controls</h2>
+    <div class="row">
+      <button id="liveBtn" class="active">Live now</button>
+      <button id="beginBtn">Start from beginning</button>
+      <button id="playBtn" class="secondary">Pause replay</button>
+    </div>
+    <div class="row" style="align-items:center;">
+      <select id="speedSelect" aria-label="Replay speed">
+        <option value="1">1×</option>
+        <option value="10">10×</option>
+        <option value="60">60×</option>
+        <option value="240" selected>240×</option>
+        <option value="1000">1000×</option>
+        <option value="5000">5000×</option>
+        <option value="25000">25000×</option>
+      </select>
+      <div class="hint" id="speedHint">Replay speed</div>
+    </div>
+    <div class="row">
+      <button class="viewBtn active" data-view="ship">Follow Orion</button>
+      <button class="viewBtn" data-view="system">System view</button>
+      <button class="viewBtn" data-view="earth">Earth</button>
+      <button class="viewBtn" data-view="moon">Moon</button>
+      <button class="viewBtn" data-view="sun">Sun</button>
+    </div>
+    <div class="row">
+      <button id="toggleNominalPathBtn" class="toggleBtn active">Nominal path</button>
+      <button id="toggleCompletedTrailBtn" class="toggleBtn active">Completed trail</button>
+      <button id="toggleTelemetryTrackBtn" class="toggleBtn active">NASA track</button>
+      <button id="toggleMilestonesBtn" class="toggleBtn active">Milestones</button>
+      <button id="toggleSunBtn" class="toggleBtn active">Sun marker</button>
+    </div>
+    <div class="row">
+      <button id="refreshTelemetryBtn">Refresh NASA telemetry</button>
+      <button id="importTelemetryBtn">Load OEM zip</button>
+      <input id="telemetryFileInput" type="file" accept=".zip,.txt,.oem,text/plain,application/zip" hidden>
+    </div>
+    <div class="hint" id="telemetryHint">
+      Auto-tries NASA’s published Artemis II ephemeris on load and periodically re-checks it in live mode. If browser/network policy blocks it, the sim falls back gracefully instead of lying to your face.
+    </div>
+    <div class="legend">
+      <span class="legendItem"><span class="swatch" style="background:#4cc2ff;"></span>planned path</span>
+      <span class="legendItem"><span class="swatch" style="background:#ffd46d;"></span>completed trail</span>
+      <span class="legendItem"><span class="swatch" style="background:#6dffcb;"></span>Orion now</span>
+      <span class="legendItem"><span class="swatch" style="background:#93b4ff;"></span>Moon at flyby</span>
+      <span class="legendItem" id="telemetryLegend" style="display:none;"><span class="swatch" style="background:#91ffcf;"></span>NASA ephemeris</span>
+    </div>
+    <div class="hint" style="margin-top:10px;">
+      Drag to orbit the camera, scroll to zoom, right-drag to pan. Because apparently nobody can leave well enough alone.
+    </div>
+  </section>
+
+  <section id="schedulePanel" class="panel">
+    <div class="scheduleHeader">
+      <h2>Schedule &amp; burns</h2>
+      <span class="scheduleTag" id="nextEventTag">--</span>
+    </div>
+    <div class="subhint" id="scheduleHint">Official NASA mission events shown in your computer’s local time. Burn rows are highlighted.</div>
+    <div id="scheduleList" class="scheduleList"></div>
+  </section>
+
+  <section id="timelinePanel" class="panel">
+    <div id="timelineHeader">
+      <strong>Mission timeline</strong>
+      <div id="timelineTime">--</div>
+    </div>
+    <input id="timeline" type="range" min="0" max="10000" value="0" step="1">
+    <div id="markerBar"></div>
+    <div id="timeEnds">
+      <span>Launch</span>
+      <span>Splashdown</span>
+    </div>
+  </section>
+
+  <div id="sceneHint" class="panel">
+    Current Moon is solid.<br>
+    Pale Moon marks the flyby anchor.<br>
+    Sun marker uses the real direction, just with the distance crushed so you can actually see the thing.
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script>
+    (() => {
+      const app = document.getElementById('app');
+      const controlsPanel = document.getElementById('controlsPanel');
+      const schedulePanel = document.getElementById('schedulePanel');
+      const timeline = document.getElementById('timeline');
+      const markerBar = document.getElementById('markerBar');
+      const liveBtn = document.getElementById('liveBtn');
+      const beginBtn = document.getElementById('beginBtn');
+      const playBtn = document.getElementById('playBtn');
+      const speedSelect = document.getElementById('speedSelect');
+      const refreshTelemetryBtn = document.getElementById('refreshTelemetryBtn');
+      const importTelemetryBtn = document.getElementById('importTelemetryBtn');
+      const telemetryFileInput = document.getElementById('telemetryFileInput');
+      const modeBadge = document.getElementById('modeBadge');
+      const modeBadgeText = document.getElementById('modeBadgeText');
+      const phaseValue = document.getElementById('phaseValue');
+      const metValue = document.getElementById('metValue');
+      const earthDistValue = document.getElementById('earthDistValue');
+      const moonDistValue = document.getElementById('moonDistValue');
+      const speedValue = document.getElementById('speedValue');
+      const simTimeValue = document.getElementById('simTimeValue');
+      const timelineTime = document.getElementById('timelineTime');
+      const statusNote = document.getElementById('statusNote');
+      const telemetrySourceChip = document.getElementById('telemetrySourceChip');
+      const telemetryHint = document.getElementById('telemetryHint');
+      const scheduleList = document.getElementById('scheduleList');
+      const nextEventTag = document.getElementById('nextEventTag');
+      const scheduleHint = document.getElementById('scheduleHint');
+      const telemetryLegend = document.getElementById('telemetryLegend');
+      const viewButtons = Array.from(document.querySelectorAll('.viewBtn'));
+      const toggleNominalPathBtn = document.getElementById('toggleNominalPathBtn');
+      const toggleCompletedTrailBtn = document.getElementById('toggleCompletedTrailBtn');
+      const toggleTelemetryTrackBtn = document.getElementById('toggleTelemetryTrackBtn');
+      const toggleMilestonesBtn = document.getElementById('toggleMilestonesBtn');
+      const toggleSunBtn = document.getElementById('toggleSunBtn');
+
+
+      function fail3D(title, message) {
+        phaseValue.textContent = 'Error';
+        metValue.textContent = '--';
+        earthDistValue.textContent = '--';
+        moonDistValue.textContent = '--';
+        speedValue.textContent = '--';
+        simTimeValue.textContent = '--';
+        telemetrySourceChip.dataset.mode = 'error';
+        telemetrySourceChip.textContent = title;
+        telemetryHint.textContent = message;
+        statusNote.textContent = message;
+      }
+
+      window.addEventListener('error', (event) => {
+        const msg = event && event.error && event.error.message ? event.error.message : (event && event.message ? event.message : 'Unknown runtime error');
+        fail3D('Scene init failed', 'The 3D scene crashed during startup: ' + msg + '. This was supposed to be a tracker, not a tribute to the void.');
+      });
+
+      const MS = 1;
+      const SECOND = 1000 * MS;
+      const MINUTE = 60 * SECOND;
+      const HOUR = 60 * MINUTE;
+      const DAY = 24 * HOUR;
+
+      const SCALE = 1 / 1000; // 1 scene unit = 1000 km
+      const EARTH_RADIUS_KM = 6371;
+      const MOON_RADIUS_KM = 1737.4;
+      const MOON_DISTANCE_KM = 384400;
+      const AU_KM = 149597870.7;
+      const SIDEREAL_DAY = 86164.0905 * SECOND;
+      const SUN_RENDER_DISTANCE = 980;
+      const SUN_RENDER_RADIUS = 22;
+      const TELEMETRY_AUTO_REFRESH_MS = 8 * MINUTE;
+      const EARTH_RADIUS = EARTH_RADIUS_KM * SCALE;
+      const MOON_RADIUS = MOON_RADIUS_KM * SCALE;
+      const MOON_DISTANCE = MOON_DISTANCE_KM * SCALE;
+
+      const mission = {
+        launch: Date.parse('2026-04-01T22:35:00Z'),
+        tliStart: Date.parse('2026-04-02T23:49:00Z'),
+        tliEnd: Date.parse('2026-04-02T23:54:50Z'),
+        otc2: Date.parse('2026-04-04T23:49:00Z'),
+        otc3: Date.parse('2026-04-06T03:03:00Z'),
+        moonSOIIn: Date.parse('2026-04-06T04:41:00Z'),
+        flybyStart: Date.parse('2026-04-06T22:47:00Z'),
+        flybyCenter: Date.parse('2026-04-06T23:02:00Z'),
+        flybyEnd: Date.parse('2026-04-07T01:32:00Z'),
+        moonSOIOut: Date.parse('2026-04-07T17:28:00Z'),
+        rtc1: Date.parse('2026-04-08T01:03:00Z'),
+        rtc2: Date.parse('2026-04-10T02:53:00Z'),
+        rtc3: Date.parse('2026-04-10T18:53:00Z'),
+        serviceModuleSeparation: Date.parse('2026-04-10T23:33:00Z'),
+        raiseBurn: Date.parse('2026-04-10T23:37:00Z'),
+        entryInterface: Date.parse('2026-04-10T23:53:00Z'),
+        splashdown: Date.parse('2026-04-11T00:07:00Z')
+      };
+      mission.duration = mission.splashdown - mission.launch;
+
+      const OPERATIONS = [
+        { key: 'launch', label: 'Launch', time: mission.launch, kind: 'milestone', note: 'Actual liftoff from Kennedy Space Center.' },
+        { key: 'tli', label: 'Translunar injection burn', time: mission.tliStart, kind: 'burn', duration: 350 * SECOND, note: 'Official Orion main-engine burn that sends the crew toward the Moon.' },
+        { key: 'downlink1', label: 'First live downlink', time: Date.parse('2026-04-03T02:24:00Z'), kind: 'downlink', note: 'Crew talks live from Orion.' },
+        { key: 'otc2', label: 'Outbound trajectory correction-2 burn', time: mission.otc2, kind: 'burn', duration: 5 * MINUTE, note: 'Planned outbound cleanup burn.' },
+        { key: 'manual1', label: 'Manual piloting detailed flight test objective', time: Date.parse('2026-04-05T01:10:00Z'), kind: 'test', note: 'Crew handling-quality objective.' },
+        { key: 'image1', label: 'Lunar imaging for flyby operations', time: Date.parse('2026-04-05T01:40:00Z'), kind: 'ops', note: 'Pre-flyby imaging sequence.' },
+        { key: 'otc3', label: 'Outbound trajectory correction-3 burn', time: mission.otc3, kind: 'burn', duration: 5 * MINUTE, note: 'Final outbound cleanup burn before lunar encounter.' },
+        { key: 'moonSOIIn', label: 'Enter lunar sphere of influence', time: mission.moonSOIIn, kind: 'milestone', note: 'Orion enters the Moon-dominated gravity region.' },
+        { key: 'coverage', label: 'Lunar flyby coverage begins', time: Date.parse('2026-04-06T17:00:00Z'), kind: 'coverage', note: 'NASA+ lunar flyby coverage starts.' },
+        { key: 'apollo13', label: 'Apollo 13 distance record surpassed', time: Date.parse('2026-04-06T17:56:00Z'), kind: 'milestone', note: 'Artemis II exceeds Apollo 13’s human-distance record from Earth.' },
+        { key: 'observeStart', label: 'Lunar observation period begins', time: Date.parse('2026-04-06T18:45:00Z'), kind: 'ops', note: 'Crew observation window starts.' },
+        { key: 'los', label: 'Predicted loss of communications behind Moon', time: mission.flybyStart, kind: 'milestone', note: 'Expected comm blackout while Orion passes behind the Moon.' },
+        { key: 'closestApproach', label: 'Closest approach to the Moon', time: mission.flybyCenter, kind: 'milestone', note: 'Closest approach marker from NASA’s mission schedule.' },
+        { key: 'maxDistance', label: 'Maximum distance from Earth', time: Date.parse('2026-04-06T23:05:00Z'), kind: 'milestone', note: 'Orion reaches max Earth distance just after closest approach.' },
+        { key: 'eclipseStart', label: 'Moon eclipses the Sun', time: Date.parse('2026-04-07T00:35:00Z'), kind: 'milestone', note: 'Eclipse period begins.' },
+        { key: 'eclipseEnd', label: 'Solar eclipse period ends', time: mission.flybyEnd, kind: 'milestone', note: 'Eclipse/flyby window concludes.' },
+        { key: 'moonSOIOut', label: 'Depart lunar sphere of influence', time: mission.moonSOIOut, kind: 'milestone', note: 'Return leg transitions away from lunar gravity dominance.' },
+        { key: 'rtc1', label: 'Return trajectory correction-1 burn', time: mission.rtc1, kind: 'burn', duration: 5 * MINUTE, note: 'First planned return-leg cleanup burn.' },
+        { key: 'rtc2', label: 'Return trajectory correction-2 burn', time: mission.rtc2, kind: 'burn', duration: 5 * MINUTE, note: 'Second planned return-leg cleanup burn.' },
+        { key: 'rtc3', label: 'Return trajectory correction-3 burn', time: mission.rtc3, kind: 'burn', duration: 5 * MINUTE, note: 'Final planned return-leg cleanup burn.' },
+        { key: 'smSep', label: 'Crew/service module separation', time: mission.serviceModuleSeparation, kind: 'milestone', note: 'Crew module separates before entry.' },
+        { key: 'raiseBurn', label: 'Crew module raise burn', time: mission.raiseBurn, kind: 'burn', duration: 90 * SECOND, note: 'Short burn after service module separation.' },
+        { key: 'entry', label: 'Entry interface', time: mission.entryInterface, kind: 'milestone', note: 'Beginning of atmospheric entry.' },
+        { key: 'splashdown', label: 'Splashdown', time: mission.splashdown, kind: 'milestone', note: 'Pacific Ocean recovery point in NASA’s public schedule.' }
+      ];
+
+      const TIMELINE_MARKERS = [
+        { key: 'launch', label: 'Launch', time: mission.launch },
+        { key: 'tli', label: 'TLI', time: mission.tliStart },
+        { key: 'otc2', label: 'OTC-2', time: mission.otc2 },
+        { key: 'otc3', label: 'OTC-3', time: mission.otc3 },
+        { key: 'flyby', label: 'Flyby', time: mission.flybyCenter },
+        { key: 'rtc1', label: 'RTC-1', time: mission.rtc1 },
+        { key: 'rtc2', label: 'RTC-2', time: mission.rtc2 },
+        { key: 'rtc3', label: 'RTC-3', time: mission.rtc3 },
+        { key: 'entry', label: 'Entry', time: mission.entryInterface },
+        { key: 'splashdown', label: 'Splash', time: mission.splashdown }
+      ];
+
+      const OFFICIAL_OEM_URLS = [
+        'https://www.nasa.gov/wp-content/uploads/2026/03/artemis-ii-oem-2026-04-04-to-ei.zip',
+        'https://www.nasa.gov/wp-content/uploads/2026/03/artemis-ii-oem-2026-04-04-to-ei.zip?emrc=69d121e8bbe3d',
+        'https://www.nasa.gov/wp-content/uploads/2026/03/artemis-ii-oem-2026-04-03-to-ei.zip',
+        'https://www.nasa.gov/wp-content/uploads/2026/03/artemis-ii-oem-2026-04-03-to-ei.zip?emrc=69d0cb356677d'
+      ];
+
+      const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+      const lerp = (a, b, t) => a + (b - a) * t;
+      const smooth = (t) => t * t * (3 - 2 * t);
+      const smoother = (t) => t * t * t * (t * (t * 6 - 15) + 10);
+      const deg = (d) => d * Math.PI / 180;
+      const radToDeg = (r) => r * 180 / Math.PI;
+
+      function normDeg(v) {
+        let out = v % 360;
+        if (out < 0) out += 360;
+        return out;
+      }
+
+      function julianDate(timeMs) {
+        return timeMs / DAY + 2440587.5;
+      }
+
+      function daysSinceJ2000(timeMs) {
+        return julianDate(timeMs) - 2451545.0;
+      }
+
+      function gmstRad(timeMs) {
+        const jd = julianDate(timeMs);
+        const T = (jd - 2451545.0) / 36525;
+        const gmst = 280.46061837
+          + 360.98564736629 * (jd - 2451545.0)
+          + 0.000387933 * T * T
+          - (T * T * T) / 38710000;
+        return deg(normDeg(gmst));
+      }
+
+      function sceneVectorFromEquatorial(x, y, z, scale = 1) {
+        return new THREE.Vector3(x * scale, z * scale, y * scale);
+      }
+
+      function eclipticToEquatorial(xe, ye, ze, timeMs) {
+        const d = daysSinceJ2000(timeMs);
+        const eps = deg(23.439291 - 0.0000003563 * d);
+        const x = xe;
+        const y = ye * Math.cos(eps) - ze * Math.sin(eps);
+        const z = ye * Math.sin(eps) + ze * Math.cos(eps);
+        return new THREE.Vector3(x, y, z);
+      }
+
+      function sunEciKmAt(timeMs) {
+        const d = daysSinceJ2000(timeMs);
+        const g = deg(normDeg(357.529 + 0.98560028 * d));
+        const q = normDeg(280.459 + 0.98564736 * d);
+        const L = deg(normDeg(q + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g)));
+        const R = 1.00014 - 0.01671 * Math.cos(g) - 0.00014 * Math.cos(2 * g);
+        const xe = R * Math.cos(L) * AU_KM;
+        const ye = R * Math.sin(L) * AU_KM;
+        return eclipticToEquatorial(xe, ye, 0, timeMs);
+      }
+
+      function moonEciKmAt(timeMs) {
+        const d = daysSinceJ2000(timeMs);
+
+        const N = deg(normDeg(125.1228 - 0.0529538083 * d));
+        const i = deg(5.1454);
+        const w = deg(normDeg(318.0634 + 0.1643573223 * d));
+        const a = 60.2666;
+        const e = 0.054900;
+        const M = deg(normDeg(115.3654 + 13.0649929509 * d));
+
+        let E = M + e * Math.sin(M) * (1 + e * Math.cos(M));
+        for (let iter = 0; iter < 4; iter++) {
+          E = E - (E - e * Math.sin(E) - M) / (1 - e * Math.cos(E));
+        }
+
+        const xv = a * (Math.cos(E) - e);
+        const yv = a * (Math.sqrt(1 - e * e) * Math.sin(E));
+        let v = Math.atan2(yv, xv);
+        let r = Math.sqrt(xv * xv + yv * yv);
+
+        let xh = r * (Math.cos(N) * Math.cos(v + w) - Math.sin(N) * Math.sin(v + w) * Math.cos(i));
+        let yh = r * (Math.sin(N) * Math.cos(v + w) + Math.cos(N) * Math.sin(v + w) * Math.cos(i));
+        let zh = r * (Math.sin(v + w) * Math.sin(i));
+
+        let lon = Math.atan2(yh, xh);
+        let lat = Math.atan2(zh, Math.sqrt(xh * xh + yh * yh));
+
+        const Ms = deg(normDeg(357.529 + 0.98560028 * d));
+        const Ls = deg(normDeg(280.459 + 0.98564736 * d + 1.915 * Math.sin(Ms) + 0.020 * Math.sin(2 * Ms)));
+        const Lm = N + w + M;
+        const Dm = Lm - Ls;
+        const F = Lm - N;
+
+        lon += deg(
+          -1.274 * Math.sin(M - 2 * Dm) +
+           0.658 * Math.sin(2 * Dm) -
+           0.186 * Math.sin(Ms) -
+           0.059 * Math.sin(2 * M - 2 * Dm) -
+           0.057 * Math.sin(M - 2 * Dm + Ms) +
+           0.053 * Math.sin(M + 2 * Dm) +
+           0.046 * Math.sin(2 * Dm - Ms) +
+           0.041 * Math.sin(M - Ms) -
+           0.035 * Math.sin(Dm) -
+           0.031 * Math.sin(M + Ms) -
+           0.015 * Math.sin(2 * F - 2 * Dm) +
+           0.011 * Math.sin(M - 4 * Dm)
+        );
+
+        lat += deg(
+          -0.173 * Math.sin(F - 2 * Dm) -
+           0.055 * Math.sin(M - F - 2 * Dm) -
+           0.046 * Math.sin(M + F - 2 * Dm) +
+           0.033 * Math.sin(F + 2 * Dm) +
+           0.017 * Math.sin(2 * M + F)
+        );
+
+        r += -0.58 * Math.cos(M - 2 * Dm) - 0.46 * Math.cos(2 * Dm);
+
+        const xec = r * Math.cos(lon) * Math.cos(lat) * EARTH_RADIUS_KM;
+        const yec = r * Math.sin(lon) * Math.cos(lat) * EARTH_RADIUS_KM;
+        const zec = r * Math.sin(lat) * EARTH_RADIUS_KM;
+        return eclipticToEquatorial(xec, yec, zec, timeMs);
+      }
+
+      function moonPosAt(timeMs) {
+        const v = moonEciKmAt(timeMs);
+        return sceneVectorFromEquatorial(v.x, v.y, v.z, SCALE);
+      }
+
+      function sunSceneDirectionAt(timeMs) {
+        const v = sunEciKmAt(timeMs).normalize();
+        return sceneVectorFromEquatorial(v.x, v.y, v.z, 1).normalize();
+      }
+
+      function earthFixedToScene(latDeg, lonDeg, timeMs, radius = EARTH_RADIUS * 1.02) {
+        const lat = deg(latDeg);
+        const lon = deg(lonDeg);
+        const x = radius * Math.cos(lat) * Math.cos(lon);
+        const z = radius * Math.cos(lat) * Math.sin(lon);
+        const y = radius * Math.sin(lat);
+        const eqX = x * Math.cos(gmstRad(timeMs)) - z * Math.sin(gmstRad(timeMs));
+        const eqY = x * Math.sin(gmstRad(timeMs)) + z * Math.cos(gmstRad(timeMs));
+        const eqZ = y;
+        return sceneVectorFromEquatorial(eqX / SCALE, eqY / SCALE, eqZ / SCALE, SCALE);
+      }
+
+      function km(v) { return v / SCALE; }
+
+      function formatNumber(value, digits = 0) {
+        return Number(value).toLocaleString(undefined, {
+          maximumFractionDigits: digits,
+          minimumFractionDigits: digits
+        });
+      }
+
+      function formatDateTime(ms) {
+        const d = new Date(ms);
+        const local = d.toLocaleString(undefined, {
+          year: 'numeric', month: 'short', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', second: '2-digit'
+        });
+        const utc = d.toUTCString().replace(' GMT', ' UTC');
+        return local + ' / ' + utc;
+      }
+
+      function formatMET(ms) {
+        const sign = ms < 0 ? '-' : '+';
+        const abs = Math.abs(ms);
+        const days = Math.floor(abs / DAY);
+        const hours = Math.floor((abs % DAY) / HOUR);
+        const minutes = Math.floor((abs % HOUR) / MINUTE);
+        const seconds = Math.floor((abs % MINUTE) / SECOND);
+        const dayPart = days > 0 ? (days + 'd ') : '';
+        return sign + dayPart +
+          String(hours).padStart(2, '0') + ':' +
+          String(minutes).padStart(2, '0') + ':' +
+          String(seconds).padStart(2, '0');
+      }
+
+      function formatSpeedKms(kms) {
+        if (!isFinite(kms)) return '--';
+        return formatNumber(kms, kms < 10 ? 2 : 1) + ' km/s';
+      }
+
+      function formatDistanceKm(kmValue) {
+        if (!isFinite(kmValue)) return '--';
+        return formatNumber(kmValue, 0) + ' km';
+      }
+
+      function formatLocalMini(ms) {
+        return new Date(ms).toLocaleString(undefined, {
+          weekday: 'short',
+          month: 'short',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      }
+
+      function formatClock(ms) {
+        const abs = Math.abs(ms);
+        const days = Math.floor(abs / DAY);
+        const hours = Math.floor((abs % DAY) / HOUR);
+        const minutes = Math.floor((abs % HOUR) / MINUTE);
+        const seconds = Math.floor((abs % MINUTE) / SECOND);
+        const body = (days > 0 ? days + 'd ' : '') +
+          String(hours).padStart(2, '0') + ':' +
+          String(minutes).padStart(2, '0') + ':' +
+          String(seconds).padStart(2, '0');
+        return (ms < 0 ? '-' : '') + body;
+      }
+
+      function formatCountdown(ms) {
+        return ms <= 0 ? 'now' : 'in ' + formatClock(ms);
+      }
+
+      function eventWindow(ev) {
+        if (typeof ev.duration === 'number') return ev.duration;
+        if (ev.kind === 'burn') return 5 * MINUTE;
+        if (ev.kind === 'coverage' || ev.kind === 'ops' || ev.kind === 'downlink' || ev.kind === 'test') return 12 * MINUTE;
+        return 3 * MINUTE;
+      }
+
+      function eventState(ev, timeMs) {
+        const start = ev.time;
+        const end = ev.time + eventWindow(ev);
+        if (timeMs > end) return 'past';
+        if (timeMs >= start && timeMs <= end) return 'current';
+        return 'future';
+      }
+
+      function currentEventAt(timeMs) {
+        return OPERATIONS.find(ev => eventState(ev, timeMs) === 'current') || null;
+      }
+
+      function nextEventAt(timeMs) {
+        return OPERATIONS.find(ev => ev.time >= timeMs) || null;
+      }
+
+      function phaseForTime(t) {
+        if (t < mission.launch) return 'Prelaunch';
+        if (t < mission.tliStart) return 'Earth orbits & checkout';
+        if (t < mission.tliEnd) return 'TLI burn';
+        if (t < mission.otc2) return 'Outbound coast';
+        if (t < mission.otc3) return 'Outbound coast / correction window';
+        if (t < mission.moonSOIIn) return 'Approaching Moon';
+        if (t < mission.flybyStart) return 'Lunar approach';
+        if (t < mission.flybyEnd) return 'Lunar flyby';
+        if (t < mission.moonSOIOut) return 'Leaving lunar sphere';
+        if (t < mission.rtc1) return 'Return to Earth';
+        if (t < mission.rtc3) return 'Return coast';
+        if (t < mission.serviceModuleSeparation) return 'Entry prep';
+        if (t < mission.entryInterface) return 'Reentry setup';
+        if (t < mission.splashdown) return 'Atmospheric entry';
+        return 'Mission complete';
+      }
+
+      function layoutPanels() {
+        if (window.innerWidth > 1000) {
+          const controlsRect = controlsPanel.getBoundingClientRect();
+          schedulePanel.style.top = Math.round(controlsRect.bottom + 12) + 'px';
+          schedulePanel.style.bottom = '';
+          schedulePanel.style.maxHeight = Math.max(150, Math.min(430, window.innerHeight - controlsRect.bottom - 140)) + 'px';
+        } else {
+          schedulePanel.style.top = '';
+          schedulePanel.style.maxHeight = '';
+        }
+      }
+
+
+      function setTelemetryMode(mode, label, hintText) {
+        telemetrySourceChip.dataset.mode = mode;
+        telemetrySourceChip.textContent = label;
+        if (hintText) telemetryHint.textContent = hintText;
+        telemetryLegend.style.display = (mode === 'nasa' || mode === 'file') ? 'inline-flex' : 'none';
+      }
+
+      function renderSchedule(timeMs) {
+        const current = currentEventAt(timeMs);
+        const upcoming = nextEventAt(timeMs);
+        if (current) {
+          nextEventTag.textContent = 'Now: ' + current.label;
+        } else if (upcoming) {
+          nextEventTag.textContent = upcoming.label + ' ' + formatCountdown(upcoming.time - timeMs);
+        } else {
+          nextEventTag.textContent = 'Mission complete';
+        }
+
+        scheduleList.innerHTML = '';
+        OPERATIONS.forEach(ev => {
+          const state = eventState(ev, timeMs);
+          const isNext = !current && upcoming && upcoming.key === ev.key;
+          const item = document.createElement('div');
+          item.className = 'scheduleItem ' + state + (ev.kind === 'burn' ? ' burn' : '') + (isNext ? ' next' : '');
+          const time = document.createElement('div');
+          time.className = 'scheduleTime';
+          time.textContent = formatLocalMini(ev.time);
+          item.appendChild(time);
+
+          const body = document.createElement('div');
+          const titleRow = document.createElement('div');
+          titleRow.className = 'scheduleTitleRow';
+
+          const title = document.createElement('div');
+          title.className = 'scheduleTitle';
+          title.textContent = ev.label;
+          titleRow.appendChild(title);
+
+          if (ev.kind === 'burn') {
+            const burnChip = document.createElement('span');
+            burnChip.className = 'eventChip burn';
+            burnChip.textContent = 'Burn';
+            titleRow.appendChild(burnChip);
+          }
+
+          if (state === 'current') {
+            const chip = document.createElement('span');
+            chip.className = 'eventChip current';
+            chip.textContent = 'Current';
+            titleRow.appendChild(chip);
+          } else if (isNext) {
+            const chip = document.createElement('span');
+            chip.className = 'eventChip next';
+            chip.textContent = 'Next';
+            titleRow.appendChild(chip);
+          }
+
+          body.appendChild(titleRow);
+
+          const meta = document.createElement('div');
+          meta.className = 'scheduleMeta';
+          meta.textContent = ev.note + (isNext ? ' • ' + formatCountdown(ev.time - timeMs) : '');
+          body.appendChild(meta);
+
+          item.appendChild(body);
+          scheduleList.appendChild(item);
+        });
+      }
+
+      async function extractOEMTextFromBlob(blob, nameHint = '') {
+        const header = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
+        const isZip = (nameHint && /\.zip(?:$|\?)/i.test(nameHint)) ||
+          (header[0] === 0x50 && header[1] === 0x4b && header[2] === 0x03 && header[3] === 0x04) ||
+          /zip/i.test(blob.type || '');
+
+        if (isZip) {
+          if (!window.JSZip) throw new Error('JSZip library unavailable');
+          const zip = await JSZip.loadAsync(blob);
+          const preferred = Object.values(zip.files).find(file => !file.dir && /\.(txt|oem)$/i.test(file.name))
+            || Object.values(zip.files).find(file => !file.dir);
+          if (!preferred) throw new Error('No readable ephemeris text file found in ZIP');
+          return preferred.async('string');
+        }
+        return blob.text();
+      }
+
+      function parseOEMText(text, sourceLabel = 'OEM') {
+        const lines = text.split(/\r?\n/);
+        const meta = {};
+        const comments = [];
+        const records = [];
+
+        for (const rawLine of lines) {
+          const line = rawLine.trim();
+          if (!line) continue;
+
+          const metaMatch = line.match(/^([A-Z_]+)\s*=\s*(.+)$/);
+          if (metaMatch) {
+            meta[metaMatch[1]] = metaMatch[2];
+            continue;
+          }
+
+          if (line.startsWith('COMMENT')) {
+            comments.push(line.replace(/^COMMENT\s*/, ''));
+            continue;
+          }
+
+          const m = line.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z)?)\s+([+\-0-9Ee.]+)\s+([+\-0-9Ee.]+)\s+([+\-0-9Ee.]+)\s+([+\-0-9Ee.]+)\s+([+\-0-9Ee.]+)\s+([+\-0-9Ee.]+)$/);
+          if (m) {
+            const epoch = m[1].endsWith('Z') ? m[1] : (m[1] + 'Z');
+            records.push({
+              time: Date.parse(epoch),
+              positionKm: new THREE.Vector3(Number(m[2]), Number(m[3]), Number(m[4])),
+              velocityKmps: new THREE.Vector3(Number(m[5]), Number(m[6]), Number(m[7]))
+            });
+          }
+        }
+
+        if (records.length < 2) throw new Error('No state vectors found in ' + sourceLabel);
+        records.sort((a, b) => a.time - b.time);
+        return {
+          sourceLabel,
+          meta,
+          comments,
+          records,
+          start: records[0].time,
+          end: records[records.length - 1].time
+        };
+      }
+
+      function makeLabelSprite(text, color = '#ffffff', scale = 24) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.font = '700 44px Inter, Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = 'rgba(0,0,0,0.7)';
+        ctx.fillStyle = color;
+        ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.needsUpdate = true;
+        const material = new THREE.SpriteMaterial({
+          map: texture,
+          transparent: true,
+          depthWrite: false
+        });
+        const sprite = new THREE.Sprite(material);
+        sprite.scale.set(scale, scale * 0.25, 1);
+        return sprite;
+      }
+
+      function makeEarthTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 2048;
+        canvas.height = 1024;
+        const ctx = canvas.getContext('2d');
+
+        const ocean = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        ocean.addColorStop(0, '#0b1e58');
+        ocean.addColorStop(0.35, '#0b3d91');
+        ocean.addColorStop(0.7, '#0c5fb8');
+        ocean.addColorStop(1, '#103c7c');
+        ctx.fillStyle = ocean;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        function blob(x, y, rx, ry, rot, color) {
+          ctx.save();
+          ctx.translate(x, y);
+          ctx.rotate(rot);
+          ctx.beginPath();
+          for (let i = 0; i < 18; i++) {
+            const a = (i / 18) * Math.PI * 2;
+            const k = 0.82 + Math.sin(a * 3.1 + x * 0.002 + y * 0.001) * 0.15 + Math.cos(a * 5.2) * 0.08;
+            const px = Math.cos(a) * rx * k;
+            const py = Math.sin(a) * ry * k;
+            if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+          }
+          ctx.closePath();
+          ctx.fillStyle = color;
+          ctx.fill();
+          ctx.restore();
+        }
+
+        const landColors = ['#1f8e49', '#2ca25f', '#3ea76d', '#5bb274'];
+        blob(410, 380, 170, 120, 0.25, landColors[0]);   // N. America-ish
+        blob(540, 630, 90, 150, -0.2, landColors[1]);    // S. America-ish
+        blob(1060, 360, 110, 75, 0.12, landColors[2]);   // Europe-ish
+        blob(1120, 560, 180, 210, 0.08, landColors[1]);  // Africa-ish
+        blob(1450, 420, 280, 150, -0.08, landColors[0]); // Asia-ish
+        blob(1650, 750, 100, 65, 0.18, landColors[2]);   // Australia-ish
+        blob(1800, 180, 70, 38, 0.0, landColors[3]);     // Greenland-ish
+
+        ctx.fillStyle = 'rgba(255,255,255,0.18)';
+        for (let i = 0; i < 900; i++) {
+          const x = Math.random() * canvas.width;
+          const y = Math.random() * canvas.height;
+          const w = 8 + Math.random() * 24;
+          const h = 4 + Math.random() * 12;
+          ctx.beginPath();
+          ctx.ellipse(x, y, w, h, Math.random() * Math.PI, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.needsUpdate = true;
+        return tex;
+      }
+
+      function makeMoonTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 1024;
+        canvas.height = 512;
+        const ctx = canvas.getContext('2d');
+        const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        grad.addColorStop(0, '#d4d4d4');
+        grad.addColorStop(0.45, '#adadad');
+        grad.addColorStop(1, '#858585');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        for (let i = 0; i < 1500; i++) {
+          const shade = 120 + Math.random() * 110;
+          ctx.fillStyle = `rgba(${shade},${shade},${shade},${0.08 + Math.random() * 0.12})`;
+          const x = Math.random() * canvas.width;
+          const y = Math.random() * canvas.height;
+          const r = 1 + Math.random() * 3;
+          ctx.beginPath();
+          ctx.arc(x, y, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        for (let i = 0; i < 220; i++) {
+          const x = Math.random() * canvas.width;
+          const y = Math.random() * canvas.height;
+          const r = 6 + Math.random() * 38;
+          ctx.beginPath();
+          ctx.fillStyle = 'rgba(60,60,60,0.18)';
+          ctx.arc(x, y, r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+          ctx.lineWidth = Math.max(1, r * 0.08);
+          ctx.arc(x - r * 0.1, y - r * 0.1, r * 0.82, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.needsUpdate = true;
+        return tex;
+      }
+
+
+      if (!window.THREE || !THREE.WebGLRenderer || !THREE.OrbitControls) {
+        fail3D(
+          '3D engine missing',
+          'Three.js or OrbitControls did not load. This single file still pulls the 3D engine from a CDN, so if the browser was offline or blocked remote scripts from a local HTML file, the canvas stays black.'
+        );
+        return;
+      }
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.outputEncoding = THREE.sRGBEncoding;
+      app.appendChild(renderer.domElement);
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x030710);
+
+      const camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 6000);
+      camera.position.set(-70, 80, 180);
+
+      const controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.08;
+      controls.minDistance = 8;
+      controls.maxDistance = 4200;
+      controls.target.set(0, 0, 0);
+
+      const ambient = new THREE.AmbientLight(0x7891c0, 0.9);
+      scene.add(ambient);
+
+      const sunLight = new THREE.DirectionalLight(0xffffff, 1.35);
+      sunLight.position.set(220, 80, 140);
+      scene.add(sunLight);
+
+      const fillLight = new THREE.DirectionalLight(0x7fb3ff, 0.28);
+      fillLight.position.set(-160, -50, -120);
+      scene.add(fillLight);
+
+      const stars = (() => {
+        const count = 5000;
+        const positions = new Float32Array(count * 3);
+        for (let i = 0; i < count; i++) {
+          const radius = 1200 + Math.random() * 2600;
+          const theta = Math.random() * Math.PI * 2;
+          const phi = Math.acos(2 * Math.random() - 1);
+          positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+          positions[i * 3 + 1] = radius * Math.cos(phi);
+          positions[i * 3 + 2] = radius * Math.sin(phi) * Math.sin(theta);
+        }
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        const mat = new THREE.PointsMaterial({
+          color: 0xffffff,
+          size: 1.85,
+          sizeAttenuation: true,
+          transparent: true,
+          opacity: 0.82,
+          depthWrite: false
+        });
+        const pts = new THREE.Points(geo, mat);
+        return pts;
+      })();
+      scene.add(stars);
+
+      const earthGroup = new THREE.Group();
+      scene.add(earthGroup);
+      const earth = new THREE.Mesh(
+        new THREE.SphereGeometry(EARTH_RADIUS, 72, 72),
+        new THREE.MeshStandardMaterial({
+          map: makeEarthTexture(),
+          roughness: 1,
+          metalness: 0,
+          emissive: 0x072456,
+          emissiveIntensity: 0.22
+        })
+      );
+      earthGroup.add(earth);
+      const earthGlow = new THREE.Mesh(
+        new THREE.SphereGeometry(EARTH_RADIUS * 1.08, 48, 48),
+        new THREE.MeshBasicMaterial({
+          color: 0x3ca0ff,
+          transparent: true,
+          opacity: 0.12,
+          side: THREE.BackSide,
+          depthWrite: false
+        })
+      );
+      earthGroup.add(earthGlow);
+      const earthLabel = makeLabelSprite('Earth', '#ffffff', 24);
+      earthLabel.position.set(0, EARTH_RADIUS * 2.1, 0);
+      earthGroup.add(earthLabel);
+
+      const moonGroup = new THREE.Group();
+      scene.add(moonGroup);
+      const moon = new THREE.Mesh(
+        new THREE.SphereGeometry(MOON_RADIUS, 56, 56),
+        new THREE.MeshStandardMaterial({
+          map: makeMoonTexture(),
+          roughness: 1,
+          metalness: 0
+        })
+      );
+      moonGroup.add(moon);
+      const moonLabel = makeLabelSprite('Moon now', '#ffffff', 22);
+      moonLabel.position.set(0, MOON_RADIUS * 2.2, 0);
+      moonGroup.add(moonLabel);
+
+      const flybyMoonGhost = new THREE.Group();
+      scene.add(flybyMoonGhost);
+      const flybyMoonSphere = new THREE.Mesh(
+        new THREE.SphereGeometry(MOON_RADIUS, 40, 40),
+        new THREE.MeshBasicMaterial({
+          color: 0x93b4ff,
+          transparent: true,
+          opacity: 0.14,
+          depthWrite: false
+        })
+      );
+      flybyMoonGhost.add(flybyMoonSphere);
+      const flybyLabel = makeLabelSprite('Moon at flyby', '#93b4ff', 26);
+      flybyLabel.position.set(0, MOON_RADIUS * 2.2, 0);
+      flybyMoonGhost.add(flybyLabel);
+
+      const sunGroup = new THREE.Group();
+      scene.add(sunGroup);
+      const sunCore = new THREE.Mesh(
+        new THREE.SphereGeometry(SUN_RENDER_RADIUS, 48, 48),
+        new THREE.MeshBasicMaterial({ color: 0xffd46d })
+      );
+      sunGroup.add(sunCore);
+      const sunGlow = new THREE.Mesh(
+        new THREE.SphereGeometry(SUN_RENDER_RADIUS * 1.7, 40, 40),
+        new THREE.MeshBasicMaterial({
+          color: 0xffb347,
+          transparent: true,
+          opacity: 0.22,
+          side: THREE.BackSide,
+          depthWrite: false
+        })
+      );
+      sunGroup.add(sunGlow);
+      const sunLabel = makeLabelSprite('Sun', '#ffd46d', 26);
+      sunLabel.position.set(0, SUN_RENDER_RADIUS * 2.1, 0);
+      sunGroup.add(sunLabel);
+
+
+      const shipGroup = new THREE.Group();
+      scene.add(shipGroup);
+
+      const shipGlow = new THREE.Mesh(
+        new THREE.SphereGeometry(1.6, 18, 18),
+        new THREE.MeshBasicMaterial({
+          color: 0x6dffcb,
+          transparent: true,
+          opacity: 0.82,
+          depthWrite: false
+        })
+      );
+      shipGroup.add(shipGlow);
+
+      const shipBodyMat = new THREE.MeshStandardMaterial({ color: 0xdfe9ff, roughness: 0.55, metalness: 0.25 });
+      const shipDarkMat = new THREE.MeshStandardMaterial({ color: 0x6f7a94, roughness: 0.65, metalness: 0.2 });
+      const shipPanelMat = new THREE.MeshBasicMaterial({ color: 0x52a8ff, transparent: true, opacity: 0.95 });
+
+      const commandModule = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.84, 1.55, 20), shipBodyMat);
+      commandModule.rotation.z = Math.PI / 2;
+      shipGroup.add(commandModule);
+
+      const serviceModule = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 1.75, 18), shipDarkMat);
+      serviceModule.rotation.z = Math.PI / 2;
+      serviceModule.position.x = -1.42;
+      shipGroup.add(serviceModule);
+
+      const nose = new THREE.Mesh(new THREE.ConeGeometry(0.52, 0.92, 20), shipBodyMat);
+      nose.rotation.z = -Math.PI / 2;
+      nose.position.x = 1.18;
+      shipGroup.add(nose);
+
+      const aft = new THREE.Mesh(new THREE.ConeGeometry(0.48, 0.7, 18), shipDarkMat);
+      aft.rotation.z = Math.PI / 2;
+      aft.position.x = -2.46;
+      shipGroup.add(aft);
+
+      for (let i = 0; i < 4; i++) {
+        const panel = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 2.8), shipPanelMat);
+        const ang = i * Math.PI / 2;
+        panel.position.set(-0.75, Math.cos(ang) * 1.62, Math.sin(ang) * 1.62);
+        panel.rotation.x = i % 2 === 0 ? 0 : Math.PI / 2;
+        shipGroup.add(panel);
+      }
+
+      const shipLabel = makeLabelSprite('Orion', '#6dffcb', 20);
+      shipLabel.position.set(0, 4.2, 0);
+      shipGroup.add(shipLabel);
+
+      const moonOrbitLine = (() => {
+        const points = [];
+        const orbitSpan = 27.321661 * DAY;
+        for (let i = 0; i <= 480; i++) {
+          const t = mission.flybyCenter - orbitSpan * 0.5 + (orbitSpan * i) / 480;
+          points.push(moonPosAt(t));
+        }
+        const geo = new THREE.BufferGeometry().setFromPoints(points);
+        const mat = new THREE.LineBasicMaterial({
+          color: 0x37518a,
+          transparent: true,
+          opacity: 0.52
+        });
+        return new THREE.Line(geo, mat);
+      })();
+      scene.add(moonOrbitLine);
+
+      function moonBasisAt(timeMs) {
+        const pos = moonPosAt(timeMs);
+        const prev = moonPosAt(timeMs - 30 * MINUTE);
+        const next = moonPosAt(timeMs + 30 * MINUTE);
+        const radial = pos.clone().normalize();
+        const tangent = next.clone().sub(prev).normalize();
+        const normal = new THREE.Vector3().crossVectors(radial, tangent).normalize();
+        const tangentOrtho = new THREE.Vector3().crossVectors(normal, radial).normalize();
+        return { pos, radial, tangent: tangentOrtho, normal };
+      }
+
+      function localToWorld(local, basis, origin = null) {
+        const v = basis.radial.clone().multiplyScalar(local.x)
+          .add(basis.normal.clone().multiplyScalar(local.y))
+          .add(basis.tangent.clone().multiplyScalar(local.z));
+        if (origin) v.add(origin);
+        return v;
+      }
+
+      function padPosition(timeMs = mission.launch) {
+        return earthFixedToScene(28.6084, -80.6043, timeMs, EARTH_RADIUS * 1.02);
+      }
+
+      function earthOrbitPos(timeMs) {
+        if (timeMs <= mission.launch) return padPosition(mission.launch);
+
+        const u = clamp((timeMs - mission.launch) / (mission.tliEnd - mission.launch), 0, 1);
+        const orbitCount = 2.0;
+        const nu = orbitCount * 2 * Math.PI * u;
+        const eased = smoother(u);
+        const a = lerp(9000, 45000, eased) * SCALE;
+        const e = lerp(0.10, 0.82, eased);
+        const r = (a * (1 - e * e)) / (1 + e * Math.cos(nu));
+
+        const pos = new THREE.Vector3(
+          r * Math.cos(nu),
+          r * 0.34 * Math.sin(nu + deg(14)),
+          r * Math.sin(nu)
+        );
+
+        pos.applyAxisAngle(new THREE.Vector3(0, 1, 0), deg(38));
+        pos.applyAxisAngle(new THREE.Vector3(1, 0, 0), deg(18));
+
+        const launchBlend = clamp((timeMs - mission.launch) / (10 * MINUTE), 0, 1);
+        return padPosition(timeMs).lerp(pos, smooth(launchBlend));
+      }
+
+      const flybyBasis = moonBasisAt(mission.flybyCenter);
+
+      const flybyRelPoints = [
+        new THREE.Vector3(-90, 18, -24),
+        new THREE.Vector3(-45, 26, -18),
+        new THREE.Vector3(  5, 16,  -6),
+        new THREE.Vector3( 11,  4,   0),
+        new THREE.Vector3(  2,-13,   6),
+        new THREE.Vector3(-42,-24,  18),
+        new THREE.Vector3(-92,-18,  26)
+      ].map(v => v.multiplyScalar(1)); // already in scene units
+      const flybyCurveRel = new THREE.CatmullRomCurve3(flybyRelPoints, false, 'centripetal', 0.2);
+
+      const outboundStart = earthOrbitPos(mission.tliEnd);
+      const outboundWaypoints = [
+        outboundStart.clone(),
+        localToWorld(new THREE.Vector3(70, 10, -18), flybyBasis),
+        localToWorld(new THREE.Vector3(170, 26, -34), flybyBasis),
+        localToWorld(new THREE.Vector3(285, 18, -26), flybyBasis),
+        localToWorld(new THREE.Vector3(345, 8, -10), flybyBasis),
+        localToWorld(flybyRelPoints[0], flybyBasis, moonPosAt(mission.flybyStart))
+      ];
+      const outboundCurve = new THREE.CatmullRomCurve3(outboundWaypoints, false, 'centripetal', 0.18);
+
+      const returnStart = localToWorld(flybyRelPoints[flybyRelPoints.length - 1], flybyBasis, moonPosAt(mission.flybyEnd));
+      const splashdownPos = earthFixedToScene(14.0, -132.0, mission.splashdown, EARTH_RADIUS * 1.015);
+      const returnWaypoints = [
+        returnStart.clone(),
+        localToWorld(new THREE.Vector3(285, -28, 46), flybyBasis),
+        localToWorld(new THREE.Vector3(150, -22, 24), flybyBasis),
+        new THREE.Vector3(48, -10, 22),
+        new THREE.Vector3(18, -5, 9),
+        splashdownPos.clone()
+      ];
+      const returnCurve = new THREE.CatmullRomCurve3(returnWaypoints, false, 'centripetal', 0.18);
+
+      function positionAt(timeMs) {
+        if (timeMs <= mission.launch) return padPosition();
+        if (timeMs < mission.tliEnd) return earthOrbitPos(timeMs);
+
+        if (timeMs < mission.flybyStart) {
+          const u = clamp((timeMs - mission.tliEnd) / (mission.flybyStart - mission.tliEnd), 0, 1);
+          return outboundCurve.getPoint(u);
+        }
+
+        if (timeMs < mission.flybyEnd) {
+          const u = clamp((timeMs - mission.flybyStart) / (mission.flybyEnd - mission.flybyStart), 0, 1);
+          const rel = flybyCurveRel.getPoint(u);
+          return localToWorld(rel, flybyBasis, moonPosAt(timeMs));
+        }
+
+        if (timeMs < mission.splashdown) {
+          const u = clamp((timeMs - mission.flybyEnd) / (mission.splashdown - mission.flybyEnd), 0, 1);
+          return returnCurve.getPoint(u);
+        }
+
+        return splashdownPos.clone();
+      }
+
+      const PATH_SAMPLES = 1200;
+      const pathPoints = [];
+      for (let i = 0; i < PATH_SAMPLES; i++) {
+        const t = mission.launch + (mission.duration * i) / (PATH_SAMPLES - 1);
+        pathPoints.push(positionAt(t));
+      }
+
+      const pathGeometry = new THREE.BufferGeometry().setFromPoints(pathPoints);
+      const futurePath = new THREE.Line(
+        pathGeometry,
+        new THREE.LineBasicMaterial({
+          color: 0x4cc2ff,
+          transparent: true,
+          opacity: 0.48
+        })
+      );
+      scene.add(futurePath);
+
+      const doneGeometry = pathGeometry.clone();
+      const donePath = new THREE.Line(
+        doneGeometry,
+        new THREE.LineBasicMaterial({
+          color: 0xffd46d,
+          transparent: true,
+          opacity: 0.95
+        })
+      );
+      doneGeometry.setDrawRange(0, 2);
+      scene.add(donePath);
+
+      const officialTelemetryGroup = new THREE.Group();
+      scene.add(officialTelemetryGroup);
+
+      const milestoneDots = new THREE.Group();
+      scene.add(milestoneDots);
+      [
+        { time: mission.launch, color: 0x7affcf, size: 0.9 },
+        { time: mission.tliStart, color: 0x92c1ff, size: 1.0 },
+        { time: mission.flybyCenter, color: 0xffd46d, size: 1.2 },
+        { time: mission.splashdown, color: 0xff9f9f, size: 1.0 }
+      ].forEach(m => {
+        const mesh = new THREE.Mesh(
+          new THREE.SphereGeometry(m.size, 14, 14),
+          new THREE.MeshBasicMaterial({ color: m.color, transparent: true, opacity: 0.85 })
+        );
+        mesh.position.copy(positionAt(m.time));
+        milestoneDots.add(mesh);
+      });
+
+      flybyMoonGhost.position.copy(moonPosAt(mission.flybyCenter));
+
+      TIMELINE_MARKERS.forEach((m, idx) => {
+        const pct = ((m.time - mission.launch) / mission.duration) * 100;
+        const marker = document.createElement('div');
+        marker.className = 'marker' + (idx % 2 ? ' alt' : '');
+        marker.style.left = pct + '%';
+        const span = document.createElement('span');
+        span.textContent = m.label;
+        marker.appendChild(span);
+        markerBar.appendChild(marker);
+      });
+
+      let officialTrack = null;
+      let officialTelemetryLine = null;
+
+      function rawOfficialStateAt(track, timeMs) {
+        if (!track || timeMs < track.start || timeMs > track.end) return null;
+        const recs = track.records;
+        if (timeMs <= recs[0].time) {
+          return {
+            time: timeMs,
+            positionKm: recs[0].positionKm.clone(),
+            velocityKmps: recs[0].velocityKmps.clone()
+          };
+        }
+        if (timeMs >= recs[recs.length - 1].time) {
+          const last = recs[recs.length - 1];
+          return {
+            time: timeMs,
+            positionKm: last.positionKm.clone(),
+            velocityKmps: last.velocityKmps.clone()
+          };
+        }
+
+        let lo = 0;
+        let hi = recs.length - 1;
+        while (hi - lo > 1) {
+          const mid = (lo + hi) >> 1;
+          if (recs[mid].time <= timeMs) lo = mid; else hi = mid;
+        }
+
+        const a = recs[lo];
+        const b = recs[hi];
+        const u = clamp((timeMs - a.time) / (b.time - a.time), 0, 1);
+        return {
+          time: timeMs,
+          positionKm: a.positionKm.clone().lerp(b.positionKm, u),
+          velocityKmps: a.velocityKmps.clone().lerp(b.velocityKmps, u)
+        };
+      }
+
+      function buildOfficialReferenceQuaternion(track) {
+        const refTime = clamp(mission.flybyCenter, track.start, track.end);
+        const state = rawOfficialStateAt(track, refTime) || rawOfficialStateAt(track, track.start);
+        if (!state) return new THREE.Quaternion();
+
+        const localPos = positionAt(refTime).clone();
+        const localPrev = positionAt(clamp(refTime - 5 * MINUTE, mission.launch, mission.splashdown));
+        const localNext = positionAt(clamp(refTime + 5 * MINUTE, mission.launch, mission.splashdown));
+        const localVel = localNext.clone().sub(localPrev).normalize();
+
+        const axis = localPos.clone().normalize();
+        const rawScenePos = sceneVectorFromEquatorial(state.positionKm.x, state.positionKm.y, state.positionKm.z, SCALE);
+        const rawSceneVel = sceneVectorFromEquatorial(state.velocityKmps.x, state.velocityKmps.y, state.velocityKmps.z, 1);
+        const q1 = new THREE.Quaternion().setFromUnitVectors(rawScenePos.clone().normalize(), axis.clone());
+
+        const offVel1 = rawSceneVel.clone().applyQuaternion(q1);
+        const offProj = offVel1.clone().sub(axis.clone().multiplyScalar(offVel1.dot(axis)));
+        const localProj = localVel.clone().sub(axis.clone().multiplyScalar(localVel.dot(axis)));
+
+        if (offProj.lengthSq() < 1e-8 || localProj.lengthSq() < 1e-8) return q1;
+
+        offProj.normalize();
+        localProj.normalize();
+
+        let angle = Math.acos(clamp(offProj.dot(localProj), -1, 1));
+        const cross = new THREE.Vector3().crossVectors(offProj, localProj);
+        if (cross.dot(axis) < 0) angle = -angle;
+
+        const q2 = new THREE.Quaternion().setFromAxisAngle(axis, angle);
+        return q2.multiply(q1);
+      }
+
+      function hasDirectInertialFrame(track) {
+        const ref = String(track?.meta?.REF_FRAME || track?.meta?.REFERENCE_FRAME || '').toUpperCase();
+        const center = String(track?.meta?.CENTER_NAME || '').toUpperCase();
+        return /(EME2000|J2000|GCRF|ICRF|TOD|TEME|EME_J2000)/.test(ref) || (center === 'EARTH' && !ref);
+      }
+
+      function telemetryStateAt(timeMs) {
+        if (!officialTrack) return null;
+        const raw = rawOfficialStateAt(officialTrack, timeMs);
+        if (!raw) return null;
+        if (officialTrack.frameMode === 'eci') {
+          return {
+            time: raw.time,
+            position: sceneVectorFromEquatorial(raw.positionKm.x, raw.positionKm.y, raw.positionKm.z, SCALE),
+            velocityKmps: sceneVectorFromEquatorial(raw.velocityKmps.x, raw.velocityKmps.y, raw.velocityKmps.z, 1),
+            earthDistanceKm: raw.positionKm.length()
+          };
+        }
+        const q = officialTrack.rotationQ || new THREE.Quaternion();
+        const rawPosScene = sceneVectorFromEquatorial(raw.positionKm.x, raw.positionKm.y, raw.positionKm.z, SCALE).applyQuaternion(q);
+        const rawVelScene = sceneVectorFromEquatorial(raw.velocityKmps.x, raw.velocityKmps.y, raw.velocityKmps.z, 1).applyQuaternion(q);
+        return {
+          time: raw.time,
+          position: rawPosScene,
+          velocityKmps: rawVelScene,
+          earthDistanceKm: raw.positionKm.length()
+        };
+      }
+
+      function rebuildOfficialTelemetryLine() {
+        if (officialTelemetryLine) {
+          officialTelemetryGroup.remove(officialTelemetryLine);
+          officialTelemetryLine.geometry.dispose();
+          officialTelemetryLine.material.dispose();
+          officialTelemetryLine = null;
+        }
+        if (!officialTrack) return;
+        const pts = officialTrack.records.map(rec => {
+          const base = sceneVectorFromEquatorial(rec.positionKm.x, rec.positionKm.y, rec.positionKm.z, SCALE);
+          return officialTrack.frameMode === 'eci'
+            ? base
+            : base.applyQuaternion(officialTrack.rotationQ || new THREE.Quaternion());
+        });
+        const geo = new THREE.BufferGeometry().setFromPoints(pts);
+        const mat = new THREE.LineBasicMaterial({
+          color: 0x91ffcf,
+          transparent: true,
+          opacity: 0.88
+        });
+        officialTelemetryLine = new THREE.Line(geo, mat);
+        officialTelemetryGroup.add(officialTelemetryLine);
+      }
+
+      async function activateTrackFromText(text, sourceLabel, modeLabel) {
+        const track = parseOEMText(text, sourceLabel);
+        track.frameMode = hasDirectInertialFrame(track) ? 'eci' : 'fit';
+        track.rotationQ = track.frameMode === 'eci' ? new THREE.Quaternion() : buildOfficialReferenceQuaternion(track);
+        officialTrack = track;
+        rebuildOfficialTelemetryLine();
+        if (!pathDisplayManuallyChanged) {
+          showNominalPath = false;
+          showCompletedTrail = false;
+          showTelemetryTrack = true;
+          updateDisplayToggles();
+          updateSceneVisibility();
+        }
+        setTelemetryMode(
+          modeLabel,
+          modeLabel === 'file' ? 'Local OEM loaded' : 'NASA ephemeris',
+          'Loaded ' + formatNumber(track.records.length, 0) + ' state vectors from ' +
+            formatDateTime(track.start) + ' through ' + formatDateTime(track.end) +
+            (track.frameMode === 'eci'
+              ? ' using direct Earth-centered inertial mapping.'
+              : ' using a fitted fallback alignment because the frame metadata was unhelpfully vague.')
+        );
+        lastTelemetryRefreshAttempt = Date.now();
+        return true;
+      }
+
+      async function loadOfficialTelemetry(userRequested = false) {
+        const hadTrack = !!officialTrack;
+        setTelemetryMode('loading', 'Trying NASA data…', userRequested
+          ? 'Refreshing NASA Artemis II ephemeris...'
+          : 'Auto-trying NASA’s published Artemis II ephemeris...');
+
+        const errors = [];
+        for (const url of OFFICIAL_OEM_URLS) {
+          try {
+            const response = await fetch(url, { cache: 'no-store' });
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            const blob = await response.blob();
+            const oemText = await extractOEMTextFromBlob(blob, url);
+            await activateTrackFromText(oemText, 'NASA Artemis II OEM', 'nasa');
+            return true;
+          } catch (err) {
+            errors.push(err && err.message ? err.message : String(err));
+          }
+        }
+
+        if (hadTrack) {
+          setTelemetryMode('error', 'NASA refresh failed', 'Refresh failed, but the last loaded ephemeris is still in memory. Browser cross-origin rules remain a tedious little hobby.');
+        } else {
+          setTelemetryMode(userRequested ? 'error' : 'fallback', userRequested ? 'NASA fetch failed' : 'Local sim',
+            'Couldn’t read NASA’s OEM directly in this browser/session, so Orion stays on the built-in mission model. Manual OEM ZIP loading still works.');
+        }
+        return false;
+      }
+
+      async function loadTelemetryFile(file) {
+        setTelemetryMode('loading', 'Loading OEM file…', 'Parsing ' + file.name + ' ...');
+        try {
+          const text = await extractOEMTextFromBlob(file, file.name);
+          await activateTrackFromText(text, file.name, 'file');
+          return true;
+        } catch (err) {
+          setTelemetryMode('error', 'OEM parse failed', 'Couldn’t parse that file as a NASA-style OEM ephemeris. Humans do love naming random ZIPs like they matter.');
+          return false;
+        }
+      }
+
+      let showNominalPath = true;
+      let showCompletedTrail = true;
+      let showTelemetryTrack = true;
+      let showMilestones = true;
+      let showSunMarker = true;
+      let pathDisplayManuallyChanged = false;
+      let lastTelemetryRefreshAttempt = 0;
+      let telemetryRefreshInFlight = false;
+
+      function updateDisplayToggles() {
+        toggleNominalPathBtn.classList.toggle('active', showNominalPath);
+        toggleCompletedTrailBtn.classList.toggle('active', showCompletedTrail);
+        toggleTelemetryTrackBtn.classList.toggle('active', showTelemetryTrack);
+        toggleMilestonesBtn.classList.toggle('active', showMilestones);
+        toggleSunBtn.classList.toggle('active', showSunMarker);
+      }
+
+      function updateSceneVisibility() {
+        futurePath.visible = showNominalPath;
+        donePath.visible = showCompletedTrail;
+        officialTelemetryGroup.visible = showTelemetryTrack && !!officialTrack;
+        milestoneDots.visible = showMilestones;
+        sunGroup.visible = showSunMarker;
+      }
+
+      let mode = 'live';       // live | replay
+      let replayPlaying = true;
+      let replaySpeed = Number(speedSelect.value);
+      let simTime = Date.now();
+      let followMode = 'ship';
+      let previousFrame = performance.now();
+      let lastScheduleSecond = -1;
+
+      function nowClampedForTimeline() {
+        return clamp(Date.now(), mission.launch, mission.splashdown);
+      }
+
+      function setMode(nextMode) {
+        mode = nextMode;
+        liveBtn.classList.toggle('active', mode === 'live');
+        beginBtn.classList.toggle('active', mode === 'replay');
+        modeBadge.classList.toggle('live', mode === 'live');
+        modeBadge.classList.toggle('replay', mode === 'replay');
+        modeBadgeText.textContent = mode === 'live' ? 'Live' : 'Replay';
+      }
+
+      function setReplayPlaying(flag) {
+        replayPlaying = flag;
+        playBtn.textContent = replayPlaying ? 'Pause replay' : 'Play replay';
+        playBtn.classList.toggle('active', replayPlaying);
+      }
+
+      function setView(view) {
+        followMode = view;
+        viewButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.view === view));
+        if (view === 'ship') {
+          const target = shipGroup.position.clone();
+          controls.target.copy(target);
+          camera.position.copy(target.clone().add(new THREE.Vector3(-36, 24, 44)));
+        } else if (view === 'system') {
+          const target = moonGroup.position.clone().multiplyScalar(0.48);
+          controls.target.copy(target);
+          camera.position.copy(target.clone().add(new THREE.Vector3(-220, 110, 240)));
+        } else if (view === 'earth') {
+          controls.target.set(0, 0, 0);
+          camera.position.set(-42, 20, 50);
+        } else if (view === 'moon') {
+          const target = moonGroup.position.clone();
+          controls.target.copy(target);
+          camera.position.copy(target.clone().add(new THREE.Vector3(-28, 14, 34)));
+        } else if (view === 'sun') {
+          const target = sunGroup.position.clone();
+          controls.target.copy(target);
+          camera.position.copy(target.clone().add(new THREE.Vector3(-120, 60, 140)));
+        }
+      }
+
+      liveBtn.addEventListener('click', () => {
+        setMode('live');
+        setReplayPlaying(false);
+      });
+
+      beginBtn.addEventListener('click', () => {
+        simTime = mission.launch;
+        timeline.value = '0';
+        setMode('replay');
+        setReplayPlaying(true);
+      });
+
+      playBtn.addEventListener('click', () => {
+        if (mode === 'live') {
+          simTime = nowClampedForTimeline();
+          setMode('replay');
+          setReplayPlaying(false);
+        } else {
+          setReplayPlaying(!replayPlaying);
+        }
+      });
+
+      speedSelect.addEventListener('change', () => {
+        replaySpeed = Number(speedSelect.value);
+      });
+
+      refreshTelemetryBtn.addEventListener('click', () => {
+        loadOfficialTelemetry(true);
+      });
+
+      importTelemetryBtn.addEventListener('click', () => {
+        telemetryFileInput.click();
+      });
+
+      telemetryFileInput.addEventListener('change', async () => {
+        const file = telemetryFileInput.files && telemetryFileInput.files[0];
+        if (!file) return;
+        await loadTelemetryFile(file);
+        telemetryFileInput.value = '';
+      });
+
+      timeline.addEventListener('input', () => {
+        const ratio = Number(timeline.value) / Number(timeline.max);
+        simTime = mission.launch + mission.duration * ratio;
+        setMode('replay');
+        setReplayPlaying(false);
+      });
+
+      viewButtons.forEach(btn => {
+        btn.addEventListener('click', () => setView(btn.dataset.view));
+      });
+
+      toggleNominalPathBtn.addEventListener('click', () => {
+        pathDisplayManuallyChanged = true;
+        showNominalPath = !showNominalPath;
+        updateDisplayToggles();
+        updateSceneVisibility();
+      });
+
+      toggleCompletedTrailBtn.addEventListener('click', () => {
+        pathDisplayManuallyChanged = true;
+        showCompletedTrail = !showCompletedTrail;
+        updateDisplayToggles();
+        updateSceneVisibility();
+      });
+
+      toggleTelemetryTrackBtn.addEventListener('click', () => {
+        pathDisplayManuallyChanged = true;
+        showTelemetryTrack = !showTelemetryTrack;
+        updateDisplayToggles();
+        updateSceneVisibility();
+      });
+
+      toggleMilestonesBtn.addEventListener('click', () => {
+        pathDisplayManuallyChanged = true;
+        showMilestones = !showMilestones;
+        updateDisplayToggles();
+        updateSceneVisibility();
+      });
+
+      toggleSunBtn.addEventListener('click', () => {
+        pathDisplayManuallyChanged = true;
+        showSunMarker = !showSunMarker;
+        updateDisplayToggles();
+        updateSceneVisibility();
+      });
+
+      function syncTimelineDisplay(timeMs) {
+        const clamped = clamp(timeMs, mission.launch, mission.splashdown);
+        const ratio = (clamped - mission.launch) / mission.duration;
+        timeline.value = String(Math.round(ratio * Number(timeline.max)));
+        timelineTime.textContent = formatDateTime(clamped);
+      }
+
+      function shipStateAt(timeMs) {
+        const telemetry = telemetryStateAt(timeMs);
+        if (telemetry) return telemetry;
+        const position = positionAt(timeMs);
+        return {
+          time: timeMs,
+          position,
+          velocityKmps: null,
+          earthDistanceKm: km(position.length())
+        };
+      }
+
+      function speedAt(timeMs) {
+        const state = telemetryStateAt(timeMs);
+        if (state && state.velocityKmps) return state.velocityKmps.length();
+
+        const dt = 30 * SECOND;
+        const t0 = clamp(timeMs - dt, mission.launch, mission.splashdown);
+        const t1 = clamp(timeMs + dt, mission.launch, mission.splashdown);
+        if (t1 === t0) return 0;
+        const p0 = shipStateAt(t0).position;
+        const p1 = shipStateAt(t1).position;
+        const distanceKm = km(p0.distanceTo(p1));
+        return distanceKm / ((t1 - t0) / SECOND);
+      }
+
+      function updateHUD(timeMs) {
+        const shipState = shipStateAt(timeMs);
+        const shipPos = shipState.position;
+        const moonPos = moonPosAt(timeMs);
+        const phase = phaseForTime(timeMs);
+
+        phaseValue.textContent = phase;
+        metValue.textContent = formatMET(timeMs - mission.launch);
+        earthDistValue.textContent = formatDistanceKm(shipState.earthDistanceKm);
+        moonDistValue.textContent = formatDistanceKm(km(shipPos.distanceTo(moonPos)));
+        speedValue.textContent = formatSpeedKms(speedAt(timeMs));
+        simTimeValue.textContent = formatDateTime(timeMs);
+
+        const nowStamp = Math.floor(timeMs / SECOND);
+        if (nowStamp !== lastScheduleSecond) {
+          renderSchedule(timeMs);
+          lastScheduleSecond = nowStamp;
+        }
+
+        const currentEvent = currentEventAt(timeMs);
+        const upcoming = nextEventAt(timeMs);
+
+        if (telemetryStateAt(timeMs)) {
+          statusNote.textContent = currentEvent
+            ? ('NASA ephemeris is active for Orion position and speed. Current event: ' + currentEvent.label + '. Moon and Sun are now rebuilt in the same inertial frame, and the nominal rails are hidden by default so the view stops drawing two nearly-identical noodles.')
+            : ('NASA ephemeris is active for Orion position and speed. ' + (upcoming ? ('Next: ' + upcoming.label + ' ' + formatCountdown(upcoming.time - timeMs) + '.') : 'Mission is nearing completion.') + ' Moon and Sun are now rebuilt in the same inertial frame as the official state vectors.');
+        } else if (officialTrack) {
+          statusNote.textContent = 'NASA ephemeris is loaded, but this timeline segment sits outside the published vector window, so Orion falls back to the local mission model here while the Earth-Moon-Sun scene stays in the same inertial frame.';
+        } else if (timeMs < mission.launch) {
+          statusNote.textContent = 'Prelaunch on your current clock. Hit Start from beginning to watch the launch from the pad.';
+        } else if (timeMs < mission.tliEnd) {
+          statusNote.textContent = 'Live mode opens at the current mission time from your computer clock. Replay gives manual control, schedule tracking, and fast-forward.';
+        } else if (timeMs < mission.flybyStart) {
+          statusNote.textContent = 'Outbound coast. Burns and milestones below follow NASA’s public Artemis II mission schedule, while the 3D motion remains the built-in flight model.';
+        } else if (timeMs < mission.flybyEnd) {
+          statusNote.textContent = 'Lunar flyby window. Current Moon is the active body, pale Moon marks the flyby anchor, and the Sun marker follows the real direction with compressed distance so the eclipse geometry is easier to read.';
+        } else if (timeMs < mission.splashdown) {
+          statusNote.textContent = 'Return leg. Live mode keeps re-syncing to your clock, because time continues to happen whether anyone enjoys it or not.';
+        } else {
+          statusNote.textContent = 'Mission complete. Replay still lets you scrub the whole flight, schedule, and burns because humans cannot resist rewinding giant rockets.';
+        }
+      }
+
+      function updateShipAndBodies(timeMs) {
+        const clampedTime = clamp(timeMs, mission.launch, mission.splashdown);
+
+        const moonPos = moonPosAt(timeMs);
+        moonGroup.position.copy(moonPos);
+        flybyMoonGhost.position.copy(moonPosAt(mission.flybyCenter));
+
+        const sunDir = sunSceneDirectionAt(timeMs);
+        sunGroup.position.copy(sunDir.clone().multiplyScalar(SUN_RENDER_DISTANCE));
+        sunLight.position.copy(sunGroup.position);
+        fillLight.position.copy(sunDir.clone().multiplyScalar(-320));
+
+        earth.rotation.y = gmstRad(timeMs) + deg(200);
+        moon.rotation.y += 0.00028;
+
+        const shipState = shipStateAt(timeMs);
+        const pos = shipState.position;
+        shipGroup.position.copy(pos);
+
+        const prev = shipStateAt(clamp(timeMs - 2 * MINUTE, mission.launch, mission.splashdown)).position;
+        const next = shipStateAt(clamp(timeMs + 2 * MINUTE, mission.launch, mission.splashdown)).position;
+        const dir = next.clone().sub(prev).normalize();
+        if (dir.lengthSq() > 0.00001) {
+          const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir);
+          shipGroup.quaternion.slerp(q, 0.18);
+        }
+
+        const progress = clamp((clampedTime - mission.launch) / mission.duration, 0, 1);
+        const drawCount = Math.max(2, Math.floor(progress * (PATH_SAMPLES - 1)));
+        doneGeometry.setDrawRange(0, drawCount);
+
+        updateSceneVisibility();
+        updateHUD(timeMs);
+        syncTimelineDisplay(timeMs);
+      }
+
+      function followTargetPosition() {
+        if (followMode === 'ship') return shipGroup.position.clone();
+        if (followMode === 'earth') return new THREE.Vector3(0, 0, 0);
+        if (followMode === 'moon') return moonGroup.position.clone();
+        if (followMode === 'sun') return sunGroup.position.clone();
+        return moonGroup.position.clone().multiplyScalar(0.48);
+      }
+
+      async function maybeAutoRefreshTelemetry() {
+        if (telemetryRefreshInFlight) return;
+        const nowReal = Date.now();
+        if (nowReal - lastTelemetryRefreshAttempt < TELEMETRY_AUTO_REFRESH_MS) return;
+        if (mode !== 'live') return;
+        const currentTimelineNow = nowClampedForTimeline();
+        const needsTrack = !officialTrack;
+        const nearingEdge = !!officialTrack && currentTimelineNow > (officialTrack.end - 15 * MINUTE);
+        if (!needsTrack && !nearingEdge) return;
+        telemetryRefreshInFlight = true;
+        lastTelemetryRefreshAttempt = nowReal;
+        try {
+          await loadOfficialTelemetry(false);
+        } finally {
+          telemetryRefreshInFlight = false;
+        }
+      }
+
+      function animate(now) {
+        requestAnimationFrame(animate);
+        const dt = now - previousFrame;
+        previousFrame = now;
+
+        if (mode === 'live') {
+          simTime = Date.now();
+        } else if (replayPlaying) {
+          simTime += dt * replaySpeed;
+        }
+
+        if (mode === 'replay') {
+          simTime = clamp(simTime, mission.launch, mission.splashdown);
+          if (simTime >= mission.splashdown) setReplayPlaying(false);
+        }
+
+        updateShipAndBodies(simTime);
+        maybeAutoRefreshTelemetry();
+
+        const desiredTarget = followTargetPosition();
+        const delta = desiredTarget.clone().sub(controls.target);
+        camera.position.add(delta);
+        controls.target.copy(desiredTarget);
+
+        controls.update();
+        renderer.render(scene, camera);
+      }
+
+      function resize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        layoutPanels();
+      }
+      window.addEventListener('resize', resize);
+
+      scheduleHint.textContent = 'Official NASA mission events shown in your computer’s local time. Burn rows are highlighted, and the display toggles let you hide whichever rails offend you most.';
+
+      // Initial state
+      setMode('live');
+      setReplayPlaying(false);
+      setView('ship');
+      updateDisplayToggles();
+      updateSceneVisibility();
+      simTime = Date.now();
+      renderSchedule(simTime);
+      updateShipAndBodies(simTime);
+      layoutPanels();
+      loadOfficialTelemetry(false);
+      animate(performance.now());
+    })();
+  </script>
+</body>
+</html>

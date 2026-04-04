@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Newton vs Delayed Newton Solar System</title>
+  <style>
+    :root {
+      --bg: #0c111b;
+      --panel: #151c29;
+      --panel-2: #1c2638;
+      --text: #edf2ff;
+      --muted: #9fb0d7;
+      --accent: #79c0ff;
+      --accent-2: #ffb86b;
+      --border: rgba(255,255,255,0.09);
+      --good: #8be28b;
+      --bad: #ff8b8b;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top, rgba(121,192,255,0.09), transparent 24%),
+        radial-gradient(circle at 85% 12%, rgba(255,184,107,0.10), transparent 22%),
+        linear-gradient(180deg, #0a0f18 0%, #0c111b 100%);
+      color: var(--text);
+    }
+
+    .wrap {
+      width: min(1400px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 24px 0 36px;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(1.8rem, 2.4vw, 2.7rem);
+      letter-spacing: 0.01em;
+    }
+
+    .subhead {
+      margin: 0 0 20px;
+      color: var(--muted);
+      line-height: 1.55;
+      max-width: 1050px;
+    }
+
+    .controls, .note-box, .graph-card {
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px 18px;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 14px 40px rgba(0,0,0,0.25);
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: 14px;
+      align-items: end;
+      margin-bottom: 18px;
+    }
+
+    .control {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .control.wide { grid-column: span 4; }
+    .control.medium { grid-column: span 3; }
+    .control.small { grid-column: span 2; }
+    .control.tiny { grid-column: span 1; }
+    .control.buttons { grid-column: span 4; flex-direction: row; align-items: end; gap: 10px; flex-wrap: wrap; }
+
+    label {
+      font-size: 0.92rem;
+      color: var(--muted);
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+
+    .value {
+      font-size: 0.9rem;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+
+    button {
+      border: 1px solid rgba(255,255,255,0.12);
+      background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.025));
+      color: var(--text);
+      border-radius: 10px;
+      padding: 10px 14px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      border-color: rgba(121,192,255,0.38);
+      background: linear-gradient(180deg, rgba(121,192,255,0.12), rgba(121,192,255,0.03));
+    }
+
+    button:active { transform: translateY(0); }
+
+    .preset-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .toggle-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+      min-height: 40px;
+    }
+
+    .checkbox {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text);
+      font-size: 0.92rem;
+    }
+
+    .checkbox input { transform: translateY(1px); }
+
+    .views {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 14px 14px 16px;
+      box-shadow: 0 14px 40px rgba(0,0,0,0.25);
+    }
+
+    .card h2 {
+      margin: 0 0 6px;
+      font-size: 1.12rem;
+      letter-spacing: 0.01em;
+    }
+
+    .card p {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 0.93rem;
+      line-height: 1.5;
+    }
+
+    canvas {
+      width: 100%;
+      height: auto;
+      display: block;
+      background: radial-gradient(circle at 50% 50%, rgba(90,110,170,0.06), rgba(0,0,0,0.0) 38%), #09101a;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px 14px;
+      margin-top: 12px;
+    }
+
+    .metric {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px;
+      padding: 9px 11px;
+    }
+
+    .metric .name {
+      display: block;
+      color: var(--muted);
+      font-size: 0.8rem;
+      margin-bottom: 4px;
+    }
+
+    .metric .number {
+      display: block;
+      font-size: 1rem;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .metric.good .number { color: var(--good); }
+    .metric.bad .number { color: var(--bad); }
+
+    .graph-card {
+      margin-bottom: 18px;
+    }
+
+    .graph-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: baseline;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+
+    .graph-head h3 {
+      margin: 0;
+      font-size: 1rem;
+    }
+
+    .graph-head .legend {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    .legend .swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      display: inline-block;
+      margin-right: 6px;
+      transform: translateY(1px);
+    }
+
+    .note-box {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 18px;
+    }
+
+    .note-box h3 {
+      margin: 0 0 10px;
+      font-size: 1rem;
+    }
+
+    .note-box p,
+    .note-box li {
+      color: var(--muted);
+      line-height: 1.55;
+      font-size: 0.94rem;
+    }
+
+    .note-box ul {
+      margin: 10px 0 0 18px;
+      padding: 0;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background: rgba(255,255,255,0.05);
+      padding: 0.15em 0.35em;
+      border-radius: 0.35em;
+      color: #d9eaff;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 999px;
+      padding: 7px 10px;
+      color: var(--text);
+      background: rgba(255,255,255,0.03);
+      font-size: 0.9rem;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      display: inline-block;
+    }
+
+    @media (max-width: 1120px) {
+      .views,
+      .note-box { grid-template-columns: 1fr; }
+      .controls { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+      .control.wide { grid-column: span 6; }
+      .control.medium { grid-column: span 3; }
+      .control.small { grid-column: span 2; }
+      .control.buttons { grid-column: span 6; }
+    }
+
+    @media (max-width: 720px) {
+      .controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .control.wide, .control.medium, .control.small, .control.buttons { grid-column: span 2; }
+      .stats { grid-template-columns: 1fr; }
+      .wrap { width: min(100vw, calc(100vw - 18px)); }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Newton vs Delayed Newton in a toy solar system</h1>
+    <p class="subhead">
+      Left canvas: ordinary instantaneous Newtonian gravity. Right canvas: a naive delayed or retarded Newton model where each force points toward the source body’s position at
+      <code>t - r / c<sub>g</sub></code>. This is deliberately the crude toy law, not General Relativity. In other words, the whole point here is to let you watch the lag misalign the force and wreck orbits when <code>c<sub>g</sub></code> is low enough. Humans do love learning by breaking perfectly good planets.
+    </p>
+
+    <div class="controls">
+      <div class="control buttons">
+        <button id="playPauseBtn">Pause</button>
+        <button id="resetBtn">Reset</button>
+        <div class="preset-row">
+          <button class="preset" data-cg="12">Toy lag</button>
+          <button class="preset" data-cg="80">Moderate lag</button>
+          <button class="preset" data-cg="63241.077">Real c</button>
+        </div>
+      </div>
+
+      <div class="control wide">
+        <label for="cgSlider">Gravity signal speed <span class="value" id="cgValue"></span></label>
+        <input id="cgSlider" type="range" min="0" max="100" value="18" step="1" />
+      </div>
+
+      <div class="control medium">
+        <label for="stepsSlider">Simulation speed <span class="value" id="stepsValue"></span></label>
+        <input id="stepsSlider" type="range" min="1" max="180" value="70" step="1" />
+      </div>
+
+      <div class="control medium">
+        <label for="trailSlider">Trail length <span class="value" id="trailValue"></span></label>
+        <input id="trailSlider" type="range" min="200" max="6000" value="1800" step="100" />
+      </div>
+
+      <div class="control medium">
+        <label for="zoomSlider">Zoom <span class="value" id="zoomValue"></span></label>
+        <input id="zoomSlider" type="range" min="80" max="240" value="100" step="5" />
+      </div>
+
+      <div class="control wide">
+        <label>Overlays</label>
+        <div class="toggle-row">
+          <label class="checkbox"><input type="checkbox" id="labelsToggle" checked /> Labels</label>
+          <label class="checkbox"><input type="checkbox" id="guideToggle" checked /> Show Earth → current Sun and Earth → retarded Sun guide</label>
+          <label class="checkbox"><input type="checkbox" id="gridToggle" checked /> Orbit scale rings</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="views">
+      <div class="card">
+        <h2>Instantaneous Newton</h2>
+        <p>Planets feel the Sun where the Sun is right now.</p>
+        <canvas id="newtonCanvas" width="620" height="620"></canvas>
+        <div class="stats" id="newtonStats"></div>
+      </div>
+
+      <div class="card">
+        <h2>Naive delayed Newton</h2>
+        <p>Each force uses the source body’s retarded position. That sounds innocent until the tangential error starts wrecking the orbit.</p>
+        <canvas id="delayCanvas" width="620" height="620"></canvas>
+        <div class="stats" id="delayStats"></div>
+      </div>
+    </div>
+
+    <div class="graph-card">
+      <div class="graph-head">
+        <h3>Earth orbit radius vs time</h3>
+        <div class="legend">
+          <span><span class="swatch" style="background:#7db8ff"></span>Newton Earth-Sun distance</span>
+          <span><span class="swatch" style="background:#ffb86b"></span>Delayed Earth-Sun distance</span>
+          <span><span class="swatch" style="background:#f3f4f6"></span>Earth position difference between models</span>
+        </div>
+      </div>
+      <canvas id="graphCanvas" width="1240" height="280"></canvas>
+    </div>
+
+    <div class="note-box">
+      <div>
+        <h3>What this demo is actually doing</h3>
+        <p>
+          Units are astronomical units, years, and solar masses with <code>G = 4π²</code>. The bodies are Sun, Mercury, Venus, Earth, Mars, and Jupiter in one plane. For clarity, the main interaction is Sun ↔ planet only, so planet-planet forces are omitted. That keeps the comparison readable instead of turning the page into a tiny numerical therapy session.
+        </p>
+        <ul>
+          <li>Ordinary Newton canvas: force uses the source position at the same simulation time <code>t</code>.</li>
+          <li>Delayed Newton canvas: force on each body uses the source position sampled from history at approximately <code>t - r / c<sub>g</sub></code>, with linear interpolation.</li>
+          <li>The ghost marker and white line on the delayed canvas show the Sun position Earth is actually “aiming at” in the delayed model.</li>
+          <li>With realistic <code>c<sub>g</sub> = c</code>, the naive delay effect is tiny on this view. Lowering <code>c<sub>g</sub></code> exaggerates it so you can watch the failure mode instead of pretending your eyeballs do symbolic algebra.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Read the side-by-side like this</h3>
+        <p>
+          If the delayed force were harmless, both canvases would keep matching. They do not. As you lower <code>c<sub>g</sub></code>, the delayed model’s force no longer points where a stable central force wants to point, so the Earth orbit radius and the Earth position difference drift away from the Newtonian one.
+        </p>
+        <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:12px;">
+          <span class="pill"><span class="dot" style="background:#ffd54a"></span> Sun</span>
+          <span class="pill"><span class="dot" style="background:#c9cfd6"></span> Mercury</span>
+          <span class="pill"><span class="dot" style="background:#ffcf8b"></span> Venus</span>
+          <span class="pill"><span class="dot" style="background:#7db8ff"></span> Earth</span>
+          <span class="pill"><span class="dot" style="background:#ff7f6a"></span> Mars</span>
+          <span class="pill"><span class="dot" style="background:#d7a66c"></span> Jupiter</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const G = 4 * Math.PI * Math.PI;
+      const C_REAL = 63241.077;
+      const DT = 0.001; // years ≈ 0.365 days
+      const MIN_CG = 5;
+      const MAX_CG = C_REAL;
+      const HISTORY_DURATION = 1.55; // years, enough for Jupiter-to-Sun delay at the minimum c_g with margin
+      const TRACE_SAMPLE_EVERY = 2;
+      const GRAPH_SAMPLE_EVERY = 4;
+      const BASE_WORLD_RADIUS = 6.2;
+      const BODY_SPECS = [
+        { name: 'Sun',     mass: 1.0,         radius: 8.4, color: '#ffd54a' },
+        { name: 'Mercury', mass: 1.660e-7,    a: 0.387,  period: 0.2408467, phase: 0.70, radius: 2.8, color: '#c9cfd6' },
+        { name: 'Venus',   mass: 2.447e-6,    a: 0.723,  period: 0.615197,  phase: 2.35, radius: 3.3, color: '#ffcf8b' },
+        { name: 'Earth',   mass: 3.003e-6,    a: 1.000,  period: 1.000000,  phase: 4.15, radius: 3.8, color: '#7db8ff' },
+        { name: 'Mars',    mass: 3.227e-7,    a: 1.524,  period: 1.88082,   phase: 5.45, radius: 3.2, color: '#ff7f6a' },
+        { name: 'Jupiter', mass: 9.546e-4,    a: 5.204,  period: 11.862,    phase: 3.10, radius: 5.8, color: '#d7a66c' }
+      ];
+
+      const newtonCanvas = document.getElementById('newtonCanvas');
+      const delayCanvas = document.getElementById('delayCanvas');
+      const graphCanvas = document.getElementById('graphCanvas');
+      const nctx = newtonCanvas.getContext('2d');
+      const dctx = delayCanvas.getContext('2d');
+      const gctx = graphCanvas.getContext('2d');
+
+      const playPauseBtn = document.getElementById('playPauseBtn');
+      const resetBtn = document.getElementById('resetBtn');
+      const cgSlider = document.getElementById('cgSlider');
+      const stepsSlider = document.getElementById('stepsSlider');
+      const trailSlider = document.getElementById('trailSlider');
+      const zoomSlider = document.getElementById('zoomSlider');
+      const labelsToggle = document.getElementById('labelsToggle');
+      const guideToggle = document.getElementById('guideToggle');
+      const gridToggle = document.getElementById('gridToggle');
+      const cgValue = document.getElementById('cgValue');
+      const stepsValue = document.getElementById('stepsValue');
+      const trailValue = document.getElementById('trailValue');
+      const zoomValue = document.getElementById('zoomValue');
+      const newtonStats = document.getElementById('newtonStats');
+      const delayStats = document.getElementById('delayStats');
+
+      const state = {
+        running: true,
+        stepsPerFrame: Number(stepsSlider.value),
+        trailLimit: Number(trailSlider.value),
+        zoom: Number(zoomSlider.value) / 100,
+        cg: sliderToCg(Number(cgSlider.value)),
+        showLabels: labelsToggle.checked,
+        showGuide: guideToggle.checked,
+        showGrid: gridToggle.checked,
+        frameCounter: 0,
+        lastResetReason: 'initial load',
+        comparisonHistory: [],
+        newton: null,
+        delayed: null
+      };
+
+      const earthIndex = BODY_SPECS.findIndex(b => b.name === 'Earth');
+      const sunIndex = 0;
+
+      function sliderToCg(v) {
+        const minLog = Math.log10(MIN_CG);
+        const maxLog = Math.log10(MAX_CG);
+        return 10 ** (minLog + (maxLog - minLog) * (v / 100));
+      }
+
+      function cgToSlider(cg) {
+        const minLog = Math.log10(MIN_CG);
+        const maxLog = Math.log10(MAX_CG);
+        return Math.round(((Math.log10(cg) - minLog) / (maxLog - minLog)) * 100);
+      }
+
+      function formatNumber(x, digits = 3) {
+        if (!Number.isFinite(x)) return '—';
+        if (Math.abs(x) >= 10000 || (Math.abs(x) > 0 && Math.abs(x) < 0.001)) {
+          return x.toExponential(2);
+        }
+        return x.toFixed(digits);
+      }
+
+      function formatCg(cg) {
+        const fracC = cg / C_REAL;
+        return `${formatNumber(cg, cg >= 1000 ? 0 : 2)} AU/yr  (${formatNumber(fracC, fracC < 0.01 ? 5 : 3)} c)`;
+      }
+
+      function makeCircularBodiesAt(t) {
+        const relPlanets = [];
+        for (let i = 1; i < BODY_SPECS.length; i++) {
+          const spec = BODY_SPECS[i];
+          const omega = 2 * Math.PI / spec.period;
+          const phase = spec.phase + omega * t;
+          const x = spec.a * Math.cos(phase);
+          const y = spec.a * Math.sin(phase);
+          const vx = -spec.a * omega * Math.sin(phase);
+          const vy = spec.a * omega * Math.cos(phase);
+          relPlanets.push({ spec, x, y, vx, vy });
+        }
+
+        const totalMass = BODY_SPECS.reduce((sum, b) => sum + b.mass, 0);
+        let sunX = 0, sunY = 0, sunVx = 0, sunVy = 0;
+        for (const p of relPlanets) {
+          sunX -= p.spec.mass * p.x / totalMass;
+          sunY -= p.spec.mass * p.y / totalMass;
+          sunVx -= p.spec.mass * p.vx / totalMass;
+          sunVy -= p.spec.mass * p.vy / totalMass;
+        }
+
+        const bodies = [{
+          name: BODY_SPECS[0].name,
+          mass: BODY_SPECS[0].mass,
+          radius: BODY_SPECS[0].radius,
+          color: BODY_SPECS[0].color,
+          x: sunX,
+          y: sunY,
+          vx: sunVx,
+          vy: sunVy,
+          trail: []
+        }];
+
+        for (const p of relPlanets) {
+          bodies.push({
+            name: p.spec.name,
+            mass: p.spec.mass,
+            radius: p.spec.radius,
+            color: p.spec.color,
+            x: sunX + p.x,
+            y: sunY + p.y,
+            vx: sunVx + p.vx,
+            vy: sunVy + p.vy,
+            trail: []
+          });
+        }
+
+        return bodies;
+      }
+
+      function cloneBodies(bodies) {
+        return bodies.map(b => ({ ...b, trail: [] }));
+      }
+
+      function makeSnapshot(bodies, t) {
+        const pos = new Float64Array(bodies.length * 2);
+        for (let i = 0; i < bodies.length; i++) {
+          pos[2 * i] = bodies[i].x;
+          pos[2 * i + 1] = bodies[i].y;
+        }
+        return { t, pos };
+      }
+
+      function buildInitialHistory() {
+        const history = [];
+        for (let t = -HISTORY_DURATION; t <= 0.0000001; t += DT) {
+          history.push(makeSnapshot(makeCircularBodiesAt(t), Number(t.toFixed(6))));
+        }
+        return history;
+      }
+
+      function makeModel(delayed) {
+        const bodies = cloneBodies(makeCircularBodiesAt(0));
+        const model = {
+          delayed,
+          t: 0,
+          stepCount: 0,
+          bodies,
+          history: delayed ? buildInitialHistory() : null,
+          retardedGuide: null,
+          alert: ''
+        };
+        seedTrails(model);
+        return model;
+      }
+
+      function seedTrails(model) {
+        const seeds = Math.min(200, Math.floor(state.trailLimit / 4));
+        for (let s = seeds; s >= 0; s--) {
+          const t = -s * DT * TRACE_SAMPLE_EVERY;
+          const bodies = makeCircularBodiesAt(t);
+          for (let i = 0; i < model.bodies.length; i++) {
+            model.bodies[i].trail.push({ x: bodies[i].x, y: bodies[i].y });
+          }
+        }
+      }
+
+      function reset(reason = 'manual reset') {
+        state.newton = makeModel(false);
+        state.delayed = makeModel(true);
+        state.comparisonHistory = [];
+        state.frameCounter = 0;
+        state.lastResetReason = reason;
+        updateGraphHistory();
+        drawAll();
+      }
+
+      function zeroAccArray() {
+        return BODY_SPECS.map(() => ({ ax: 0, ay: 0 }));
+      }
+
+      function computeNewtonAccel(model) {
+        const acc = zeroAccArray();
+        const sun = model.bodies[0];
+        for (let i = 1; i < model.bodies.length; i++) {
+          const p = model.bodies[i];
+          const dx = sun.x - p.x;
+          const dy = sun.y - p.y;
+          const r2 = dx * dx + dy * dy;
+          const invR3 = 1 / Math.pow(r2, 1.5);
+          const fax = G * dx * invR3;
+          const fay = G * dy * invR3;
+          acc[i].ax += sun.mass * fax;
+          acc[i].ay += sun.mass * fay;
+          acc[0].ax -= p.mass * fax;
+          acc[0].ay -= p.mass * fay;
+        }
+        return acc;
+      }
+
+      function interpolateHistoryPosition(history, bodyIndex, queryTime) {
+        if (queryTime <= history[0].t) {
+          return { x: history[0].pos[2 * bodyIndex], y: history[0].pos[2 * bodyIndex + 1] };
+        }
+        const last = history[history.length - 1];
+        if (queryTime >= last.t) {
+          return { x: last.pos[2 * bodyIndex], y: last.pos[2 * bodyIndex + 1] };
+        }
+        let lo = 0;
+        let hi = history.length - 1;
+        while (hi - lo > 1) {
+          const mid = (lo + hi) >> 1;
+          if (history[mid].t <= queryTime) lo = mid;
+          else hi = mid;
+        }
+        const a = history[lo];
+        const b = history[hi];
+        const span = b.t - a.t || 1;
+        const f = (queryTime - a.t) / span;
+        const ax = a.pos[2 * bodyIndex];
+        const ay = a.pos[2 * bodyIndex + 1];
+        const bx = b.pos[2 * bodyIndex];
+        const by = b.pos[2 * bodyIndex + 1];
+        return {
+          x: ax + (bx - ax) * f,
+          y: ay + (by - ay) * f
+        };
+      }
+
+      function getRetardedPosition(model, sourceIndex, targetX, targetY, currentTime, cg, guessX, guessY) {
+        let srcX = guessX;
+        let srcY = guessY;
+        let queryTime = currentTime;
+        for (let iter = 0; iter < 2; iter++) {
+          const dx = targetX - srcX;
+          const dy = targetY - srcY;
+          const delay = Math.hypot(dx, dy) / cg;
+          queryTime = currentTime - delay;
+          const pos = interpolateHistoryPosition(model.history, sourceIndex, queryTime);
+          srcX = pos.x;
+          srcY = pos.y;
+        }
+        return { x: srcX, y: srcY, t: queryTime };
+      }
+
+      function computeDelayedAccel(model, cg) {
+        const acc = zeroAccArray();
+        const sun = model.bodies[0];
+        model.retardedGuide = null;
+
+        for (let i = 1; i < model.bodies.length; i++) {
+          const p = model.bodies[i];
+
+          const sunRet = getRetardedPosition(
+            model,
+            sunIndex,
+            p.x,
+            p.y,
+            model.t,
+            cg,
+            sun.x,
+            sun.y
+          );
+          let dx = sunRet.x - p.x;
+          let dy = sunRet.y - p.y;
+          let r2 = dx * dx + dy * dy;
+          let invR3 = 1 / Math.pow(r2, 1.5);
+          acc[i].ax += G * BODY_SPECS[0].mass * dx * invR3;
+          acc[i].ay += G * BODY_SPECS[0].mass * dy * invR3;
+
+          const planetRet = getRetardedPosition(
+            model,
+            i,
+            sun.x,
+            sun.y,
+            model.t,
+            cg,
+            p.x,
+            p.y
+          );
+          dx = planetRet.x - sun.x;
+          dy = planetRet.y - sun.y;
+          r2 = dx * dx + dy * dy;
+          invR3 = 1 / Math.pow(r2, 1.5);
+          acc[0].ax += G * p.mass * dx * invR3;
+          acc[0].ay += G * p.mass * dy * invR3;
+
+          if (i === earthIndex) {
+            model.retardedGuide = {
+              sunRetX: sunRet.x,
+              sunRetY: sunRet.y,
+              lagYears: Math.max(0, model.t - sunRet.t),
+              retardedTime: sunRet.t
+            };
+          }
+        }
+
+        return acc;
+      }
+
+      function pushHistory(model) {
+        model.history.push(makeSnapshot(model.bodies, Number(model.t.toFixed(6))));
+        const maxPoints = Math.ceil(HISTORY_DURATION / DT) + 24;
+        if (model.history.length > maxPoints + 64) {
+          model.history.splice(0, model.history.length - maxPoints);
+        }
+      }
+
+      function updateTrails(model) {
+        if (model.stepCount % TRACE_SAMPLE_EVERY !== 0) return;
+        for (const b of model.bodies) {
+          b.trail.push({ x: b.x, y: b.y });
+          if (b.trail.length > state.trailLimit + 32) {
+            b.trail.splice(0, b.trail.length - state.trailLimit);
+          }
+        }
+      }
+
+      function stepModel(model) {
+        const accel1 = model.delayed ? computeDelayedAccel(model, state.cg) : computeNewtonAccel(model);
+        for (let i = 0; i < model.bodies.length; i++) {
+          const b = model.bodies[i];
+          b.vx += 0.5 * accel1[i].ax * DT;
+          b.vy += 0.5 * accel1[i].ay * DT;
+          b.x += b.vx * DT;
+          b.y += b.vy * DT;
+        }
+        model.t += DT;
+        model.stepCount += 1;
+        if (model.delayed) pushHistory(model);
+        const accel2 = model.delayed ? computeDelayedAccel(model, state.cg) : computeNewtonAccel(model);
+        for (let i = 0; i < model.bodies.length; i++) {
+          const b = model.bodies[i];
+          b.vx += 0.5 * accel2[i].ax * DT;
+          b.vy += 0.5 * accel2[i].ay * DT;
+        }
+        updateTrails(model);
+        checkEscape(model);
+      }
+
+      function checkEscape(model) {
+        let escaped = false;
+        for (let i = 1; i < model.bodies.length; i++) {
+          const b = model.bodies[i];
+          const r = Math.hypot(b.x, b.y);
+          if (!Number.isFinite(r) || r > 60) escaped = true;
+        }
+        model.alert = escaped ? 'A body escaped beyond 60 AU in this toy model.' : '';
+      }
+
+      function updateGraphHistory() {
+        const eN = state.newton.bodies[earthIndex];
+        const sN = state.newton.bodies[sunIndex];
+        const eD = state.delayed.bodies[earthIndex];
+        const sD = state.delayed.bodies[sunIndex];
+        state.comparisonHistory.push({
+          t: state.newton.t,
+          rNewton: Math.hypot(eN.x - sN.x, eN.y - sN.y),
+          rDelayed: Math.hypot(eD.x - sD.x, eD.y - sD.y),
+          earthDiff: Math.hypot(eN.x - eD.x, eN.y - eD.y)
+        });
+        const maxPoints = 2000;
+        if (state.comparisonHistory.length > maxPoints) {
+          state.comparisonHistory.splice(0, state.comparisonHistory.length - maxPoints);
+        }
+      }
+
+      function totalMomentum(model) {
+        let px = 0, py = 0;
+        for (const b of model.bodies) {
+          px += b.mass * b.vx;
+          py += b.mass * b.vy;
+        }
+        return Math.hypot(px, py);
+      }
+
+      function totalAngularMomentum(model) {
+        let L = 0;
+        for (const b of model.bodies) {
+          L += b.mass * (b.x * b.vy - b.y * b.vx);
+        }
+        return L;
+      }
+
+      function currentWorldRadius() {
+        let maxR = BASE_WORLD_RADIUS;
+        const models = [state.newton, state.delayed];
+        for (const model of models) {
+          for (const b of model.bodies) {
+            maxR = Math.max(maxR, Math.hypot(b.x, b.y) * 1.2);
+          }
+        }
+        return maxR / state.zoom;
+      }
+
+      function worldToScreen(x, y, canvas, worldRadius) {
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+        const scale = Math.min(canvas.width, canvas.height) * 0.46 / worldRadius;
+        return {
+          x: cx + x * scale,
+          y: cy - y * scale,
+          scale
+        };
+      }
+
+      function drawBackground(ctx, canvas, worldRadius) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const g = ctx.createRadialGradient(canvas.width / 2, canvas.height / 2, 0, canvas.width / 2, canvas.height / 2, canvas.width * 0.55);
+        g.addColorStop(0, 'rgba(105,130,200,0.08)');
+        g.addColorStop(0.55, 'rgba(20,25,40,0.12)');
+        g.addColorStop(1, 'rgba(5,8,14,1)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.save();
+        const center = { x: canvas.width / 2, y: canvas.height / 2 };
+        if (state.showGrid) {
+          const scale = Math.min(canvas.width, canvas.height) * 0.46 / worldRadius;
+          ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+          ctx.lineWidth = 1;
+          for (const ring of [1, 2, 3, 5]) {
+            ctx.beginPath();
+            ctx.arc(center.x, center.y, ring * scale, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+          ctx.strokeStyle = 'rgba(255,255,255,0.045)';
+          ctx.beginPath();
+          ctx.moveTo(0, center.y);
+          ctx.lineTo(canvas.width, center.y);
+          ctx.moveTo(center.x, 0);
+          ctx.lineTo(center.x, canvas.height);
+          ctx.stroke();
+        }
+
+        for (let i = 0; i < 180; i++) {
+          const x = (Math.sin(i * 78.233) * 43758.5453) % 1;
+          const y = (Math.sin(i * 21.631) * 12435.8731) % 1;
+          const px = (x < 0 ? x + 1 : x) * canvas.width;
+          const py = (y < 0 ? y + 1 : y) * canvas.height;
+          const a = 0.15 + ((i * 37) % 100) / 500;
+          ctx.fillStyle = `rgba(255,255,255,${a})`;
+          ctx.fillRect(px, py, 1.2, 1.2);
+        }
+        ctx.restore();
+      }
+
+      function drawTrail(ctx, trail, color, canvas, worldRadius, width = 1.4, alphaBase = 0.22) {
+        if (trail.length < 2) return;
+        ctx.save();
+        for (let i = 1; i < trail.length; i++) {
+          const a = trail[i - 1];
+          const b = trail[i];
+          const pa = worldToScreen(a.x, a.y, canvas, worldRadius);
+          const pb = worldToScreen(b.x, b.y, canvas, worldRadius);
+          const alpha = alphaBase + 0.65 * (i / trail.length);
+          ctx.strokeStyle = colorToRgba(color, alpha);
+          ctx.lineWidth = width;
+          ctx.beginPath();
+          ctx.moveTo(pa.x, pa.y);
+          ctx.lineTo(pb.x, pb.y);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function colorToRgba(hex, alpha) {
+        const clean = hex.replace('#', '');
+        const bigint = parseInt(clean, 16);
+        const r = (bigint >> 16) & 255;
+        const g = (bigint >> 8) & 255;
+        const b = bigint & 255;
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+      }
+
+      function drawModel(ctx, canvas, model, titleColor) {
+        const worldRadius = currentWorldRadius();
+        drawBackground(ctx, canvas, worldRadius);
+
+        for (let i = 0; i < model.bodies.length; i++) {
+          const b = model.bodies[i];
+          const width = b.name === 'Earth' ? 2.2 : 1.2;
+          const alpha = b.name === 'Earth' ? 0.3 : 0.18;
+          drawTrail(ctx, b.trail, b.color, canvas, worldRadius, width, alpha);
+        }
+
+        if (model.delayed && model.retardedGuide && state.showGuide) {
+          const earth = model.bodies[earthIndex];
+          const sun = model.bodies[sunIndex];
+          const pEarth = worldToScreen(earth.x, earth.y, canvas, worldRadius);
+          const pSun = worldToScreen(sun.x, sun.y, canvas, worldRadius);
+          const pRet = worldToScreen(model.retardedGuide.sunRetX, model.retardedGuide.sunRetY, canvas, worldRadius);
+
+          ctx.save();
+          ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.moveTo(pEarth.x, pEarth.y);
+          ctx.lineTo(pSun.x, pSun.y);
+          ctx.stroke();
+
+          ctx.strokeStyle = 'rgba(255,255,255,0.82)';
+          ctx.setLineDash([7, 7]);
+          ctx.beginPath();
+          ctx.moveTo(pEarth.x, pEarth.y);
+          ctx.lineTo(pRet.x, pRet.y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          ctx.beginPath();
+          ctx.arc(pRet.x, pRet.y, 8, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+          ctx.lineWidth = 1.6;
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        for (let i = 0; i < model.bodies.length; i++) {
+          const b = model.bodies[i];
+          const p = worldToScreen(b.x, b.y, canvas, worldRadius);
+          ctx.save();
+          const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, b.radius * 4.5);
+          glow.addColorStop(0, colorToRgba(b.color, 0.95));
+          glow.addColorStop(0.25, colorToRgba(b.color, 0.5));
+          glow.addColorStop(1, colorToRgba(b.color, 0));
+          ctx.fillStyle = glow;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, b.radius * 4.2, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = b.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, b.radius, 0, Math.PI * 2);
+          ctx.fill();
+
+          if (b.name === 'Sun') {
+            ctx.strokeStyle = 'rgba(255,220,150,0.55)';
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, b.radius + 2.6, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+
+          if (state.showLabels) {
+            ctx.fillStyle = 'rgba(236,240,255,0.92)';
+            ctx.font = '12px Inter, sans-serif';
+            ctx.fillText(b.name, p.x + b.radius + 6, p.y - b.radius - 4);
+          }
+          ctx.restore();
+        }
+
+        ctx.save();
+        ctx.fillStyle = titleColor;
+        ctx.font = '600 13px Inter, sans-serif';
+        ctx.fillText(`t = ${formatNumber(model.t, 2)} yr`, 16, 24);
+        if (model.alert) {
+          ctx.fillStyle = 'rgba(255,130,130,0.95)';
+          ctx.fillText(model.alert, 16, 46);
+        }
+        ctx.restore();
+      }
+
+      function buildStatsHtml(model, delayed) {
+        const earth = model.bodies[earthIndex];
+        const sun = model.bodies[sunIndex];
+        const r = Math.hypot(earth.x - sun.x, earth.y - sun.y);
+        const speed = Math.hypot(earth.vx, earth.vy);
+        const sunOffset = Math.hypot(sun.x, sun.y);
+        const momentum = totalMomentum(model);
+        const L = totalAngularMomentum(model);
+        let lag = '—';
+        let lagAngle = '—';
+        if (delayed && model.retardedGuide) {
+          lag = `${formatNumber(model.retardedGuide.lagYears * 365.25, 2)} d`;
+          const curVecX = sun.x - earth.x;
+          const curVecY = sun.y - earth.y;
+          const retVecX = model.retardedGuide.sunRetX - earth.x;
+          const retVecY = model.retardedGuide.sunRetY - earth.y;
+          const dot = curVecX * retVecX + curVecY * retVecY;
+          const mags = Math.hypot(curVecX, curVecY) * Math.hypot(retVecX, retVecY);
+          const angle = mags > 0 ? Math.acos(Math.min(1, Math.max(-1, dot / mags))) : 0;
+          lagAngle = `${formatNumber(angle * 180 / Math.PI, 4)}°`;
+        }
+
+        return `
+          <div class="metric"><span class="name">Time</span><span class="number">${formatNumber(model.t, 2)} yr</span></div>
+          <div class="metric"><span class="name">Earth-Sun distance</span><span class="number">${formatNumber(r, 4)} AU</span></div>
+          <div class="metric"><span class="name">Earth speed</span><span class="number">${formatNumber(speed, 4)} AU/yr</span></div>
+          <div class="metric"><span class="name">Sun barycentric offset</span><span class="number">${formatNumber(sunOffset, 5)} AU</span></div>
+          <div class="metric ${momentum < 0.01 ? 'good' : 'bad'}"><span class="name">|Total momentum|</span><span class="number">${formatNumber(momentum, 6)}</span></div>
+          <div class="metric"><span class="name">Total angular momentum</span><span class="number">${formatNumber(L, 6)}</span></div>
+          <div class="metric"><span class="name">Retardation lag</span><span class="number">${lag}</span></div>
+          <div class="metric"><span class="name">Earth force-angle offset</span><span class="number">${lagAngle}</span></div>
+        `;
+      }
+
+      function drawGraph() {
+        const ctx = gctx;
+        const canvas = graphCanvas;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#09101a';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const pad = { left: 64, right: 26, top: 18, bottom: 38 };
+        const w = canvas.width - pad.left - pad.right;
+        const h = canvas.height - pad.top - pad.bottom;
+        const data = state.comparisonHistory;
+        if (data.length < 2) return;
+
+        const xMin = Math.max(0, data[0].t);
+        const xMax = data[data.length - 1].t;
+        let yMax = 1.4;
+        for (const d of data) {
+          yMax = Math.max(yMax, d.rNewton, d.rDelayed, d.earthDiff);
+        }
+        yMax *= 1.08;
+
+        ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 5; i++) {
+          const y = pad.top + (h * i / 5);
+          ctx.beginPath();
+          ctx.moveTo(pad.left, y);
+          ctx.lineTo(pad.left + w, y);
+          ctx.stroke();
+        }
+        for (let i = 0; i <= 6; i++) {
+          const x = pad.left + (w * i / 6);
+          ctx.beginPath();
+          ctx.moveTo(x, pad.top);
+          ctx.lineTo(x, pad.top + h);
+          ctx.stroke();
+        }
+
+        ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+        ctx.beginPath();
+        ctx.moveTo(pad.left, pad.top + h);
+        ctx.lineTo(pad.left + w, pad.top + h);
+        ctx.lineTo(pad.left + w, pad.top);
+        ctx.stroke();
+
+        ctx.fillStyle = 'rgba(238,242,255,0.8)';
+        ctx.font = '12px Inter, sans-serif';
+        for (let i = 0; i <= 5; i++) {
+          const value = yMax * (1 - i / 5);
+          const y = pad.top + (h * i / 5);
+          ctx.fillText(formatNumber(value, value < 2 ? 3 : 2), 10, y + 4);
+        }
+        for (let i = 0; i <= 6; i++) {
+          const value = xMin + (xMax - xMin) * (i / 6);
+          const x = pad.left + (w * i / 6) - 6;
+          ctx.fillText(formatNumber(value, 1), x, canvas.height - 12);
+        }
+        ctx.fillText('AU', 10, 16);
+        ctx.fillText('time (yr)', canvas.width - 78, canvas.height - 12);
+
+        function drawLine(key, color, width) {
+          ctx.strokeStyle = color;
+          ctx.lineWidth = width;
+          ctx.beginPath();
+          for (let i = 0; i < data.length; i++) {
+            const d = data[i];
+            const x = pad.left + ((d.t - xMin) / Math.max(1e-9, xMax - xMin)) * w;
+            const y = pad.top + h - (d[key] / yMax) * h;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+        }
+
+        drawLine('rNewton', '#7db8ff', 2.2);
+        drawLine('rDelayed', '#ffb86b', 2.2);
+        drawLine('earthDiff', 'rgba(245,245,245,0.92)', 1.7);
+      }
+
+      function drawAll() {
+        drawModel(nctx, newtonCanvas, state.newton, 'rgba(125,184,255,0.92)');
+        drawModel(dctx, delayCanvas, state.delayed, 'rgba(255,184,107,0.92)');
+        drawGraph();
+        newtonStats.innerHTML = buildStatsHtml(state.newton, false);
+        delayStats.innerHTML = buildStatsHtml(state.delayed, true);
+      }
+
+      function simulateFrame() {
+        for (let i = 0; i < state.stepsPerFrame; i++) {
+          stepModel(state.newton);
+          stepModel(state.delayed);
+          if (((state.newton.stepCount + state.delayed.stepCount) / 2) % GRAPH_SAMPLE_EVERY === 0) {
+            updateGraphHistory();
+          }
+        }
+      }
+
+      function animate() {
+        if (state.running) simulateFrame();
+        drawAll();
+        requestAnimationFrame(animate);
+      }
+
+      function updateUiReadouts() {
+        cgValue.textContent = formatCg(state.cg);
+        stepsValue.textContent = `${state.stepsPerFrame} steps/frame  (${formatNumber(state.stepsPerFrame * DT * 365.25, 1)} sim days/frame)`;
+        trailValue.textContent = `${state.trailLimit} points`;
+        zoomValue.textContent = `${formatNumber(state.zoom, 2)}×`;
+      }
+
+      playPauseBtn.addEventListener('click', () => {
+        state.running = !state.running;
+        playPauseBtn.textContent = state.running ? 'Pause' : 'Play';
+      });
+
+      resetBtn.addEventListener('click', () => reset('manual reset'));
+
+      cgSlider.addEventListener('input', () => {
+        state.cg = sliderToCg(Number(cgSlider.value));
+        updateUiReadouts();
+      });
+      cgSlider.addEventListener('change', () => {
+        state.cg = sliderToCg(Number(cgSlider.value));
+        updateUiReadouts();
+        reset('changed c_g');
+      });
+
+      stepsSlider.addEventListener('input', () => {
+        state.stepsPerFrame = Number(stepsSlider.value);
+        updateUiReadouts();
+      });
+
+      trailSlider.addEventListener('input', () => {
+        state.trailLimit = Number(trailSlider.value);
+        updateUiReadouts();
+      });
+
+      zoomSlider.addEventListener('input', () => {
+        state.zoom = Number(zoomSlider.value) / 100;
+        updateUiReadouts();
+      });
+
+      labelsToggle.addEventListener('change', () => { state.showLabels = labelsToggle.checked; });
+      guideToggle.addEventListener('change', () => { state.showGuide = guideToggle.checked; });
+      gridToggle.addEventListener('change', () => { state.showGrid = gridToggle.checked; });
+
+      document.querySelectorAll('.preset').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const cg = Number(btn.dataset.cg);
+          state.cg = cg;
+          cgSlider.value = String(cgToSlider(cg));
+          updateUiReadouts();
+          reset(`preset ${cg}`);
+        });
+      });
+
+      updateUiReadouts();
+      reset('initial load');
+      animate();
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wormhole Transit: Warp Drive Through Curved Spacetime</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      color: #fff;
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+      user-select: none;
+    }
+
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      cursor: grab;
+    }
+    canvas:active { cursor: grabbing; }
+
+    #ui-wrapper {
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      z-index: 10;
+    }
+
+    #toggle-btn {
+      background: rgba(10, 15, 20, 0.85);
+      border: 1px solid #00ffcc;
+      color: #00ffcc;
+      padding: 8px 15px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 0.9rem;
+      margin-bottom: 10px;
+      backdrop-filter: blur(10px);
+      transition: all 0.2s;
+      box-shadow: 0 0 10px rgba(0, 255, 204, 0.2);
+    }
+    #toggle-btn:hover {
+      background: #00ffcc;
+      color: #000;
+    }
+
+    #ui {
+      background: rgba(10, 15, 20, 0.85);
+      padding: 20px;
+      border: 1px solid #00ffcc;
+      border-radius: 8px;
+      width: 430px;
+      box-shadow: 0 4px 20px rgba(0, 255, 204, 0.2);
+      backdrop-filter: blur(10px);
+      transition: opacity 0.3s, transform 0.3s;
+      transform-origin: top left;
+    }
+    #ui.hidden {
+      opacity: 0;
+      transform: scale(0.95);
+      pointer-events: none;
+      position: absolute;
+    }
+
+    h1 {
+      font-size: 1.15rem;
+      margin: 0 0 5px 0;
+      color: #00ffcc;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    p {
+      font-size: 0.8rem;
+      color: #aaa;
+      line-height: 1.4;
+      margin-bottom: 15px;
+    }
+    strong { color: #fff; }
+
+    .slider-row { margin-bottom: 12px; }
+    .slider-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      margin-bottom: 4px;
+      color: #ccc;
+    }
+    .val {
+      color: #00ffcc;
+      font-family: monospace;
+    }
+    input[type=range] {
+      width: 100%;
+      accent-color: #00ffcc;
+      cursor: pointer;
+    }
+    input[type=checkbox] {
+      accent-color: #00ffcc;
+      transform: scale(1.15);
+      margin-right: 8px;
+      cursor: pointer;
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      font-size: 0.85rem;
+      margin-bottom: 10px;
+      color: #ccc;
+    }
+
+    .ai-panel {
+      margin-top: 15px;
+      padding: 15px;
+      border: 1px solid rgba(0, 255, 204, 0.3);
+      border-radius: 6px;
+      background: rgba(0, 50, 40, 0.3);
+    }
+    .ai-title {
+      font-size: 0.85rem;
+      font-weight: bold;
+      color: #00ffcc;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .progress-bar {
+      width: 100%;
+      height: 6px;
+      background: #222;
+      border-radius: 3px;
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+    .progress-fill {
+      height: 100%;
+      background: #00ffcc;
+      width: 0%;
+      transition: width 0.1s linear;
+    }
+    .ai-stats {
+      font-size: 0.75rem;
+      color: #aaa;
+      font-family: monospace;
+      display: flex;
+      justify-content: space-between;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+    }
+    .warn { color: #ff3366; }
+    .sync { color: #00ffcc; }
+    .phase { color: #ffd166; }
+  </style>
+</head>
+<body>
+  <div id="ui-wrapper">
+    <button id="toggle-btn">⚙️ Wormhole Parameters</button>
+    <div id="ui">
+      <h1>Wormhole Transit Manifold</h1>
+      <p><strong>WARP BUBBLE ENTERS A TRAVERSABLE THROAT.</strong> The ship is carried through a synthetic wormhole while the Attention-PINN learns the effective radial geometry and lensing gradient.</p>
+
+      <div class="slider-row">
+        <div class="slider-label"><span>Transit Velocity</span> <span class="val" id="val-v">0.80 c</span></div>
+        <input type="range" id="velocity" min="0.0" max="8.0" step="0.01" value="0.8" />
+      </div>
+
+      <div class="slider-row">
+        <div class="slider-label"><span>Mouth Radius</span> <span class="val" id="val-r">2.80</span></div>
+        <input type="range" id="radius" min="0.8" max="8.0" step="0.01" value="2.8" />
+      </div>
+
+      <div class="slider-row">
+        <div class="slider-label"><span>Throat Length</span> <span class="val" id="val-t">5.50</span></div>
+        <input type="range" id="thickness" min="0.5" max="16.0" step="0.02" value="5.5" />
+      </div>
+
+      <div class="slider-row">
+        <div class="slider-label"><span>Lens Strength</span> <span class="val" id="val-l">1.20</span></div>
+        <input type="range" id="lens" min="0.0" max="3.0" step="0.01" value="1.2" />
+      </div>
+
+      <div class="slider-row">
+        <div class="slider-label"><span>Transit Progress</span> <span class="val" id="val-p">0.00</span></div>
+        <input type="range" id="progress" min="0.0" max="1.0" step="0.001" value="0.0" />
+      </div>
+
+      <div class="toggle-row">
+        <input type="checkbox" id="auto-flight" checked />
+        <label for="auto-flight">Auto fly through wormhole</label>
+      </div>
+      <div class="toggle-row">
+        <input type="checkbox" id="show-energy" checked />
+        <label for="show-energy">Show Exotic Stress-Energy</label>
+      </div>
+      <div class="toggle-row">
+        <input type="checkbox" id="show-grid" checked />
+        <label for="show-grid">Show Curved Spacetime Grid</label>
+      </div>
+
+      <div class="ai-panel">
+        <div class="ai-title">
+          <span>Attention-PINN Handover</span>
+          <span id="ai-status" class="warn">LEARNING</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" id="ai-control-bar"></div></div>
+        <div class="ai-stats">
+          <div class="stat-row"><span>Control Weight:</span> <span id="val-control">0.00%</span></div>
+          <div class="stat-row"><span>Neural Loss (MSE):</span> <span id="val-loss">1.00000</span></div>
+          <div class="stat-row"><span>Transit Phase:</span> <span id="val-phase" class="phase">APPROACH</span></div>
+          <div class="stat-row"><span>FPS:</span> <span id="val-fps">60</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <canvas id="glcanvas"></canvas>
+
+  <script>
+    const canvas = document.getElementById('glcanvas');
+    const gl = canvas.getContext('webgl2', { antialias: false });
+
+    if (!gl) {
+      alert('WebGL2 is required. Humanity keeps inventing browsers and still makes this necessary.');
+      throw new Error('WebGL2 unavailable');
+    }
+
+    gl.getExtension('EXT_color_buffer_float');
+
+    const ui = document.getElementById('ui');
+    const toggleBtn = document.getElementById('toggle-btn');
+    let uiVisible = true;
+    toggleBtn.addEventListener('click', () => {
+      uiVisible = !uiVisible;
+      if (uiVisible) {
+        ui.classList.remove('hidden');
+        toggleBtn.innerText = '➖ Close Panel';
+      } else {
+        ui.classList.add('hidden');
+        toggleBtn.innerText = '⚙️ Wormhole Parameters';
+      }
+    });
+
+    class AttentionPINN {
+      constructor(nodes = 160, maxR = 20.0) {
+        this.nodes = nodes;
+        this.maxR = maxR;
+        this.weightsF = new Float32Array(nodes);
+        this.weightsDF = new Float32Array(nodes);
+        this.centers = new Float32Array(nodes);
+        for (let i = 0; i < nodes; i++) {
+          this.centers[i] = (i / (nodes - 1)) * maxR;
+        }
+        this.sigma = (maxR / nodes) * 1.8;
+        this.lr = 0.18;
+        this.loss = 1.0;
+        this.controlWeight = 0.0;
+      }
+
+      smoothPulse(x, c, w) {
+        return Math.exp(-((x - c) * (x - c)) / (w * w));
+      }
+
+      getExactPhysics(r, mouthR, throatLen, lens) {
+        const mouthShell = this.smoothPulse(r, mouthR, 0.6 + mouthR * 0.08);
+        const throatShell = this.smoothPulse(r, mouthR + throatLen * 0.35, 0.9 + throatLen * 0.06);
+        const farShell = this.smoothPulse(r, mouthR + throatLen * 0.72, 1.2 + throatLen * 0.09);
+
+        let f = Math.min(1.0, mouthShell * 1.25 + throatShell * 0.85 + farShell * 0.45);
+
+        const eps = 0.0025;
+        const rp = r + eps;
+        const rm = Math.max(0.0, r - eps);
+        const fp = Math.min(1.0,
+          this.smoothPulse(rp, mouthR, 0.6 + mouthR * 0.08) * 1.25 +
+          this.smoothPulse(rp, mouthR + throatLen * 0.35, 0.9 + throatLen * 0.06) * 0.85 +
+          this.smoothPulse(rp, mouthR + throatLen * 0.72, 1.2 + throatLen * 0.09) * 0.45
+        );
+        const fm = Math.min(1.0,
+          this.smoothPulse(rm, mouthR, 0.6 + mouthR * 0.08) * 1.25 +
+          this.smoothPulse(rm, mouthR + throatLen * 0.35, 0.9 + throatLen * 0.06) * 0.85 +
+          this.smoothPulse(rm, mouthR + throatLen * 0.72, 1.2 + throatLen * 0.09) * 0.45
+        );
+        let df = (fp - fm) / Math.max(0.0001, (rp - rm));
+        f *= lens;
+        df *= lens;
+        return { f, df };
+      }
+
+      trainStep(mouthR, throatLen, lens) {
+        let batchLoss = 0;
+        const batchSize = 96;
+
+        for (let b = 0; b < batchSize; b++) {
+          let r;
+          if (Math.random() > 0.18) {
+            r = mouthR + Math.random() * throatLen * 0.9 + (Math.random() * 2.0 - 1.0) * (0.9 + throatLen * 0.08);
+          } else {
+            r = Math.random() * this.maxR;
+          }
+          r = Math.max(0, Math.min(this.maxR, r));
+
+          const exact = this.getExactPhysics(r, mouthR, throatLen, lens);
+          let f_ai = 0, df_ai = 0;
+          const activations = new Float32Array(this.nodes);
+
+          for (let i = 0; i < this.nodes; i++) {
+            const diff = r - this.centers[i];
+            const act = Math.exp(-(diff * diff) / (this.sigma * this.sigma));
+            activations[i] = act;
+            f_ai += this.weightsF[i] * act;
+            df_ai += this.weightsDF[i] * act;
+          }
+
+          const errF = f_ai - exact.f;
+          const errDF = df_ai - exact.df;
+          batchLoss += (errF * errF) + (errDF * errDF * 7.0);
+
+          for (let i = 0; i < this.nodes; i++) {
+            this.weightsF[i] -= this.lr * errF * activations[i] * 0.35;
+            this.weightsDF[i] -= this.lr * errDF * activations[i] * 0.28;
+          }
+        }
+
+        this.loss = this.loss * 0.92 + (batchLoss / batchSize) * 0.08;
+        if (this.loss < 0.035) {
+          this.controlWeight = Math.min(1.0, this.controlWeight + 0.008);
+        } else {
+          this.controlWeight = Math.max(0.0, this.controlWeight - 0.035);
+        }
+      }
+
+      getTextureData() {
+        const data = new Float32Array(256 * 2);
+        for (let p = 0; p < 256; p++) {
+          const r = (p / 255.0) * this.maxR;
+          let f_ai = 0, df_ai = 0;
+          for (let i = 0; i < this.nodes; i++) {
+            const diff = r - this.centers[i];
+            const act = Math.exp(-(diff * diff) / (this.sigma * this.sigma));
+            f_ai += this.weightsF[i] * act;
+            df_ai += this.weightsDF[i] * act;
+          }
+          data[p * 2] = f_ai;
+          data[p * 2 + 1] = df_ai;
+        }
+        return data;
+      }
+    }
+
+    const aiNet = new AttentionPINN(160, 20.0);
+
+    const aiTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, aiTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, 256, 1, 0, gl.RG, gl.FLOAT, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+    function resize() {
+      const targetWidth = Math.floor(window.innerWidth);
+      const targetHeight = Math.floor(window.innerHeight);
+      if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+        gl.viewport(0, 0, canvas.width, canvas.height);
+      }
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    const vs = `#version 300 es
+      in vec4 a_pos;
+      out vec2 v_uv;
+      void main() {
+        v_uv = a_pos.xy;
+        gl_Position = a_pos;
+      }
+    `;
+
+    const fs = `#version 300 es
+      precision highp float;
+      in vec2 v_uv;
+      out vec4 fragColor;
+
+      uniform vec2 u_res;
+      uniform float u_time;
+      uniform vec3 u_camPos;
+      uniform float u_v;
+      uniform float u_R;
+      uniform float u_T;
+      uniform float u_lens;
+      uniform float u_progress;
+      uniform sampler2D u_aiMetric;
+      uniform float u_aiInfluence;
+      uniform int u_showEnergy;
+      uniform int u_showGrid;
+
+      float hash11(float p) {
+        p = fract(p * 0.1031);
+        p *= p + 33.33;
+        p *= p + p;
+        return fract(p);
+      }
+
+      float hash(vec3 p) {
+        p = fract(p * vec3(0.1031, 0.11369, 0.13787));
+        p += dot(p, p.yzx + 19.19);
+        return fract((p.x + p.y) * p.z);
+      }
+
+      float sdShip(vec3 p) {
+        float hull = length(p * vec3(1.65, 1.25, 0.48)) - 0.22;
+        float ring = length(vec2(length(p.xz) - 0.88, p.y)) - 0.07;
+        vec3 ap = abs(p);
+        float spine = max(ap.y - 0.03, ap.x - 0.03);
+        spine = max(spine, abs(p.z) - 0.7);
+        return min(min(hull, ring), spine);
+      }
+
+      vec3 calcShipNormal(vec3 p) {
+        vec2 e = vec2(0.004, 0.0);
+        return normalize(vec3(
+          sdShip(p + e.xyy) - sdShip(p - e.xyy),
+          sdShip(p + e.yxy) - sdShip(p - e.yxy),
+          sdShip(p + e.yyx) - sdShip(p - e.yyx)
+        ));
+      }
+
+      vec2 rot(vec2 p, float a) {
+        float c = cos(a), s = sin(a);
+        return mat2(c, -s, s, c) * p;
+      }
+
+      float wormholeFieldExact(float r, float R, float T, float lens) {
+        float mouth = exp(-pow((r - R) / (0.6 + R * 0.08), 2.0));
+        float throat = exp(-pow((r - (R + T * 0.35)) / (0.9 + T * 0.06), 2.0));
+        float far = exp(-pow((r - (R + T * 0.72)) / (1.2 + T * 0.09), 2.0));
+        return min(1.0, mouth * 1.25 + throat * 0.85 + far * 0.45) * lens;
+      }
+
+      float wormholeFieldExactDeriv(float r, float R, float T, float lens) {
+        float e = 0.005;
+        float fp = wormholeFieldExact(r + e, R, T, lens);
+        float fm = wormholeFieldExact(max(0.0, r - e), R, T, lens);
+        return (fp - fm) / max(0.0001, (r + e) - max(0.0, r - e));
+      }
+
+      vec3 starfield(vec3 dir, float progress, float swirl) {
+        vec3 nDir = normalize(dir);
+        vec3 q = nDir * (80.0 + progress * 220.0);
+        q.xy = rot(q.xy, swirl * 0.45);
+        q.yz = rot(q.yz, swirl * 0.22);
+        float h = hash(floor(q * 3.0));
+        float star = smoothstep(0.992, 1.0, h);
+        vec3 col = vec3(star);
+        col *= mix(vec3(0.3, 0.6, 1.0), vec3(1.0, 0.8, 0.35), 0.5 + 0.5 * sin(swirl + q.z * 0.01));
+        float band = exp(-pow(nDir.y * 2.2, 2.0));
+        col += vec3(0.03, 0.05, 0.09) * band;
+        return col;
+      }
+
+      void main() {
+        vec2 uv = (gl_FragCoord.xy - 0.5 * u_res) / min(u_res.x, u_res.y);
+
+        vec3 ro = u_camPos;
+        vec3 ta = vec3(0.0, 0.0, 0.0);
+        vec3 cw = normalize(ta - ro);
+        vec3 cu = normalize(cross(cw, vec3(0.0, 1.0, 0.0)));
+        vec3 cv = cross(cu, cw);
+        vec3 rd = normalize(uv.x * cu + uv.y * cv + 1.55 * cw);
+
+        vec3 p = ro;
+        vec4 vol = vec4(0.0);
+        bool hitShip = false;
+
+        float tProg = clamp(u_progress, 0.0, 1.0);
+        float mouthZ = mix(7.0, 0.0, smoothstep(0.0, 0.22, tProg));
+        float throatPull = smoothstep(0.16, 0.92, tProg);
+        float swirl = u_time * 0.45 + throatPull * 5.0;
+
+        for (int i = 0; i < 140; i++) {
+          float r = length(p.xy) + abs(p.z - mouthZ) * 0.22;
+
+          float exact_f = wormholeFieldExact(r, u_R, u_T, u_lens);
+          float exact_df = wormholeFieldExactDeriv(r, u_R, u_T, u_lens);
+
+          float ai_idx = clamp((r / 20.0) * 255.0, 0.0, 255.0);
+          int i_idx = int(floor(ai_idx));
+          float fracv = ai_idx - float(i_idx);
+          vec2 data0 = texelFetch(u_aiMetric, ivec2(clamp(i_idx, 0, 255), 0), 0).rg;
+          vec2 data1 = texelFetch(u_aiMetric, ivec2(clamp(i_idx + 1, 0, 255), 0), 0).rg;
+          vec2 ai_data = mix(data0, data1, fracv);
+
+          float current_f = mix(exact_f, ai_data.r, u_aiInfluence);
+          float current_df = mix(exact_df, ai_data.g, u_aiInfluence);
+
+          vec3 radial = vec3(p.xy, (p.z - mouthZ) * 0.22);
+          float radialLen = max(length(radial), 0.0001);
+          vec3 gradF = radial / radialLen * current_df;
+
+          float dt = clamp(0.035 + radialLen * 0.018, 0.016, 0.14);
+          float tube = 1.0 - smoothstep(u_R * 0.85, u_R * 1.9 + u_T * 0.4, radialLen);
+          float tunnelCore = exp(-pow(length(p.xy) / max(0.2, u_R * 0.7), 2.0));
+
+          float axialPull = (0.12 + 1.45 * current_f) * mix(0.2, 1.0, throatPull);
+          vec3 tunnelFlow = vec3(0.0, 0.0, -axialPull - u_v * 0.14);
+
+          vec3 twist = vec3(-p.y, p.x, 0.0) * (0.085 + 0.22 * current_f) * tube;
+
+          rd = normalize(rd - gradF * dt * (0.55 + u_lens * 0.15) + twist * dt * 0.14);
+          p += (rd + tunnelFlow + twist) * dt;
+
+          if (u_showGrid == 1) {
+            float localTube = length(p.xy) - (u_R + sin(p.z * 0.8 + swirl) * 0.08);
+            float gridR = smoothstep(0.06, 0.0, abs(fract(localTube * 3.6) - 0.5));
+            float gridZ = smoothstep(0.06, 0.0, abs(fract((p.z + swirl * 0.9) * 1.25) - 0.5));
+            float gAlpha = max(gridR, gridZ) * tube * 0.11;
+            vec3 gridCol = mix(vec3(0.2, 0.5, 1.0), vec3(0.0, 1.0, 0.85), u_aiInfluence);
+            vol += vec4(gridCol * gAlpha, gAlpha) * (1.0 - vol.a);
+          }
+
+          if (u_showEnergy == 1) {
+            float exoticBand = abs(current_df) * tube;
+            if (exoticBand > 0.04) {
+              vec3 glowColor = mix(vec3(1.0, 0.25, 0.05), vec3(0.1, 0.6, 1.0), step(0.0, -current_df));
+              float alpha = exoticBand * dt * 0.55;
+              vol += vec4(glowColor * alpha * (0.5 + 0.8 * tunnelCore), alpha) * (1.0 - vol.a);
+            }
+          }
+
+          float tunnelFog = (0.02 + 0.23 * current_f) * (0.35 + 0.65 * tube);
+          vec3 fogCol = mix(vec3(0.08, 0.2, 0.55), vec3(0.8, 0.45, 1.0), 0.5 + 0.5 * sin(swirl + p.z * 0.35));
+          vol += vec4(fogCol * tunnelFog * 0.16, tunnelFog * 0.09) * (1.0 - vol.a);
+
+          vec3 shipPos = vec3(0.0, 0.0, mix(3.8, -8.0 - u_T * 0.5, tProg));
+          float dShip = sdShip(p - shipPos);
+          if (dShip < 0.22) dt = min(dt, max(0.01, dShip * 0.55));
+
+          if (dShip < 0.006) {
+            hitShip = true;
+            vec3 n = calcShipNormal(p - shipPos);
+            vec3 l = normalize(vec3(2.0, 3.0, -1.5));
+            float diff = max(dot(n, l), 0.12);
+            vec3 shipCol = vec3(0.68, 0.72, 0.78) * diff;
+            shipCol += vec3(0.0, 0.9, 1.0) * smoothstep(0.16, -0.02, abs((p - shipPos).z));
+            shipCol += vec3(0.6, 0.1, 0.9) * tunnelCore * 0.25;
+            vol += vec4(shipCol * (1.0 - vol.a), 1.0 - vol.a);
+            break;
+          }
+
+          if (length(p.xy) > 18.0 || abs(p.z) > 26.0 || vol.a > 0.995) break;
+        }
+
+        vec3 finalCol = vol.rgb;
+        if (!hitShip && vol.a < 0.995) {
+          finalCol += starfield(rd, tProg, swirl) * (1.0 - vol.a);
+        }
+
+        float vignette = smoothstep(1.45, 0.2, length(uv));
+        finalCol *= vignette;
+        finalCol = finalCol / (finalCol + vec3(1.0));
+        finalCol = pow(finalCol, vec3(1.0 / 2.2));
+        fragColor = vec4(finalCol, 1.0);
+      }
+    `;
+
+    function buildShader(type, src) {
+      const s = gl.createShader(type);
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+        console.error(gl.getShaderInfoLog(s));
+        throw new Error('Shader compile failed');
+      }
+      return s;
+    }
+
+    const prog = gl.createProgram();
+    gl.attachShader(prog, buildShader(gl.VERTEX_SHADER, vs));
+    gl.attachShader(prog, buildShader(gl.FRAGMENT_SHADER, fs));
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+      console.error(gl.getProgramInfoLog(prog));
+      throw new Error('Program link failed');
+    }
+
+    const posBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+      -1,  1,
+       1, -1,
+       1,  1
+    ]), gl.STATIC_DRAW);
+
+    gl.useProgram(prog);
+    const posLoc = gl.getAttribLocation(prog, 'a_pos');
+    gl.enableVertexAttribArray(posLoc);
+    gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+
+    const uRes = gl.getUniformLocation(prog, 'u_res');
+    const uTime = gl.getUniformLocation(prog, 'u_time');
+    const uCam = gl.getUniformLocation(prog, 'u_camPos');
+    const uV = gl.getUniformLocation(prog, 'u_v');
+    const uR = gl.getUniformLocation(prog, 'u_R');
+    const uT = gl.getUniformLocation(prog, 'u_T');
+    const uLens = gl.getUniformLocation(prog, 'u_lens');
+    const uProgress = gl.getUniformLocation(prog, 'u_progress');
+    const uShowEnergy = gl.getUniformLocation(prog, 'u_showEnergy');
+    const uShowGrid = gl.getUniformLocation(prog, 'u_showGrid');
+    const uAiInfluence = gl.getUniformLocation(prog, 'u_aiInfluence');
+    const uAiMetric = gl.getUniformLocation(prog, 'u_aiMetric');
+
+    const bindSlider = (id, valId, suffix = '', digits = 2) => {
+      const el = document.getElementById(id);
+      const valEl = document.getElementById(valId);
+      const refresh = () => valEl.innerText = parseFloat(el.value).toFixed(digits) + suffix;
+      el.addEventListener('input', refresh);
+      refresh();
+      return el;
+    };
+
+    const vSlider = bindSlider('velocity', 'val-v', ' c', 2);
+    const rSlider = bindSlider('radius', 'val-r', '', 2);
+    const tSlider = bindSlider('thickness', 'val-t', '', 2);
+    const lensSlider = bindSlider('lens', 'val-l', '', 2);
+    const progressSlider = bindSlider('progress', 'val-p', '', 3);
+
+    const chkAuto = document.getElementById('auto-flight');
+    const chkEnergy = document.getElementById('show-energy');
+    const chkGrid = document.getElementById('show-grid');
+
+    const aiBar = document.getElementById('ai-control-bar');
+    const aiStatusText = document.getElementById('ai-status');
+    const valControl = document.getElementById('val-control');
+    const valLoss = document.getElementById('val-loss');
+    const valFps = document.getElementById('val-fps');
+    const valPhase = document.getElementById('val-phase');
+
+    let camX = 2.35;
+    let camY = 0.24;
+    let isDrag = false, lX = 0, lY = 0;
+
+    window.addEventListener('mousedown', e => {
+      if (e.target === canvas) {
+        isDrag = true;
+        lX = e.clientX;
+        lY = e.clientY;
+      }
+    });
+    window.addEventListener('mouseup', () => isDrag = false);
+    window.addEventListener('mousemove', e => {
+      if (!isDrag) return;
+      camX -= (e.clientX - lX) * 0.01;
+      camY = Math.max(-1.45, Math.min(1.45, camY + (e.clientY - lY) * 0.01));
+      lX = e.clientX;
+      lY = e.clientY;
+    });
+
+    let lastFpsUpdate = performance.now();
+    let frameCount = 0;
+    let flightProgress = 0;
+
+    function phaseLabel(p) {
+      if (p < 0.18) return 'APPROACH';
+      if (p < 0.42) return 'MOUTH ENTRY';
+      if (p < 0.72) return 'THROAT TRANSIT';
+      if (p < 0.94) return 'EXIT CASCADE';
+      return 'EMERGENCE';
+    }
+
+    function render(now) {
+      frameCount++;
+
+      const currentR = parseFloat(rSlider.value);
+      const currentT = parseFloat(tSlider.value);
+      const currentLens = parseFloat(lensSlider.value);
+      const currentV = parseFloat(vSlider.value);
+
+      if (chkAuto.checked) {
+        flightProgress += 0.00075 + currentV * 0.00055;
+        if (flightProgress > 1.0) flightProgress = 0.0;
+        progressSlider.value = flightProgress.toFixed(3);
+        document.getElementById('val-p').innerText = parseFloat(progressSlider.value).toFixed(3);
+      } else {
+        flightProgress = parseFloat(progressSlider.value);
+      }
+
+      aiNet.trainStep(currentR, currentT, currentLens);
+      const aiData = aiNet.getTextureData();
+      gl.bindTexture(gl.TEXTURE_2D, aiTex);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 256, 1, gl.RG, gl.FLOAT, aiData);
+
+      if (now - lastFpsUpdate > 250) {
+        const fps = Math.round((frameCount * 1000) / (now - lastFpsUpdate));
+        valFps.innerText = String(fps);
+        valLoss.innerText = aiNet.loss.toFixed(6);
+        const pctl = Math.round(aiNet.controlWeight * 100);
+        valControl.innerText = pctl + '%';
+        aiBar.style.width = pctl + '%';
+        valPhase.innerText = phaseLabel(flightProgress);
+
+        if (aiNet.controlWeight > 0.95) {
+          aiStatusText.innerText = 'IN CONTROL (SYNCED)';
+          aiStatusText.className = 'sync';
+        } else if (aiNet.controlWeight > 0.1) {
+          aiStatusText.innerText = 'HANDOVER IN PROGRESS';
+          aiStatusText.className = 'sync';
+        } else {
+          aiStatusText.innerText = 'RECALCULATING GEOMETRY';
+          aiStatusText.className = 'warn';
+        }
+
+        frameCount = 0;
+        lastFpsUpdate = now;
+      }
+
+      gl.useProgram(prog);
+
+      const dynamicDist = 7.2 - flightProgress * 1.6;
+      const cx = dynamicDist * Math.cos(camY) * Math.sin(camX);
+      const cy = dynamicDist * Math.sin(camY);
+      const cz = dynamicDist * Math.cos(camY) * Math.cos(camX);
+
+      gl.uniform3f(uCam, cx, cy, cz);
+      gl.uniform2f(uRes, canvas.width, canvas.height);
+      gl.uniform1f(uTime, now * 0.001);
+      gl.uniform1f(uV, currentV);
+      gl.uniform1f(uR, currentR);
+      gl.uniform1f(uT, currentT);
+      gl.uniform1f(uLens, currentLens);
+      gl.uniform1f(uProgress, flightProgress);
+      gl.uniform1i(uShowEnergy, chkEnergy.checked ? 1 : 0);
+      gl.uniform1i(uShowGrid, chkGrid.checked ? 1 : 0);
+      gl.uniform1f(uAiInfluence, aiNet.controlWeight);
+
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, aiTex);
+      gl.uniform1i(uAiMetric, 0);
+
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+      requestAnimationFrame(render);
+    }
+
+    requestAnimationFrame(render);
+  </script>
+</body>
+</html>

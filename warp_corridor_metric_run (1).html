@@ -1,0 +1,1717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Warp Corridor: Metric Run</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: rgba(10, 15, 20, 0.85);
+            --accent: #00ffcc;
+            --danger: #ff4d6d;
+            --good: #7fffd4;
+            --warn: #ffbf69;
+            --text: #f2f6f7;
+            --muted: #97a6ad;
+        }
+
+        * { box-sizing: border-box; }
+
+        html, body {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+            color: var(--text);
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            user-select: none;
+        }
+
+        canvas {
+            position: fixed;
+            inset: 0;
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+
+        #overlay {
+            pointer-events: none;
+        }
+
+        #ui-wrapper {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            z-index: 20;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            align-items: flex-start;
+        }
+
+        #toggle-btn {
+            background: var(--bg);
+            border: 1px solid var(--accent);
+            color: var(--accent);
+            padding: 8px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 0.9rem;
+            backdrop-filter: blur(10px);
+            transition: all 0.2s ease;
+            box-shadow: 0 0 10px rgba(0, 255, 204, 0.2);
+        }
+
+        #toggle-btn:hover {
+            background: var(--accent);
+            color: #000;
+        }
+
+        #ui {
+            width: 400px;
+            max-width: min(90vw, 400px);
+            max-height: calc(100vh - 80px);
+            overflow: auto;
+            background: var(--bg);
+            padding: 18px;
+            border: 1px solid var(--accent);
+            border-radius: 10px;
+            box-shadow: 0 4px 25px rgba(0, 255, 204, 0.16);
+            backdrop-filter: blur(10px);
+            transform-origin: top left;
+            transition: opacity 0.25s ease, transform 0.25s ease;
+        }
+
+        #ui.hidden {
+            opacity: 0;
+            transform: scale(0.95);
+            pointer-events: none;
+            position: absolute;
+        }
+
+        h1 {
+            margin: 0 0 6px 0;
+            font-size: 1.18rem;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: var(--accent);
+        }
+
+        p {
+            margin: 0 0 12px 0;
+            line-height: 1.45;
+            color: var(--muted);
+            font-size: 0.83rem;
+        }
+
+        strong { color: #fff; }
+
+        .panel {
+            margin-top: 14px;
+            padding: 14px;
+            border: 1px solid rgba(0, 255, 204, 0.22);
+            border-radius: 8px;
+            background: rgba(0, 45, 40, 0.28);
+        }
+
+        .panel-title {
+            margin: 0 0 10px 0;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 0.9px;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 14px;
+            font-size: 0.82rem;
+            margin-bottom: 7px;
+            color: #d5dde0;
+        }
+
+        .stat-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .value {
+            color: var(--accent);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-weight: 700;
+        }
+
+        .value.warn { color: var(--warn); }
+        .value.danger { color: var(--danger); }
+        .value.good { color: var(--good); }
+
+        .meter-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.77rem;
+            margin-bottom: 5px;
+            color: #c6d0d4;
+        }
+
+        .bar {
+            width: 100%;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 999px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        .fill {
+            height: 100%;
+            width: 0%;
+            transition: width 0.12s linear;
+        }
+
+        #hull-fill { background: linear-gradient(90deg, #ff4d6d, #ff9f80); }
+        #energy-fill { background: linear-gradient(90deg, #00d4ff, #7fffd4); }
+        #ai-fill { background: linear-gradient(90deg, #00ffcc, #8af7ff); }
+
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            font-size: 0.82rem;
+            color: #d5dde0;
+            margin-bottom: 8px;
+        }
+
+        .toggle-row:last-child { margin-bottom: 0; }
+
+        input[type="checkbox"] {
+            accent-color: var(--accent);
+            margin-right: 8px;
+            transform: scale(1.12);
+            cursor: pointer;
+        }
+
+        .control-grid {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 7px 12px;
+            font-size: 0.8rem;
+            color: #d5dde0;
+            align-items: center;
+        }
+
+        kbd {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 5px;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            background: rgba(255, 255, 255, 0.08);
+            color: #fff;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 0.75rem;
+            min-width: 26px;
+            text-align: center;
+        }
+
+        #message-layer {
+            position: absolute;
+            inset: 0;
+            z-index: 15;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            padding: 20px;
+        }
+
+        #message-card {
+            max-width: min(92vw, 560px);
+            background: rgba(5, 10, 14, 0.74);
+            pointer-events: auto;
+            cursor: pointer;
+            border: 1px solid rgba(0, 255, 204, 0.45);
+            border-radius: 14px;
+            padding: 24px 28px;
+            box-shadow: 0 10px 45px rgba(0, 0, 0, 0.35), 0 0 18px rgba(0, 255, 204, 0.16);
+            backdrop-filter: blur(12px);
+            text-align: center;
+        }
+
+        #message-card.hidden {
+            display: none;
+        }
+
+        #message-title {
+            margin: 0 0 10px 0;
+            font-size: clamp(1.4rem, 4vw, 2.25rem);
+            font-weight: 800;
+            color: var(--accent);
+            letter-spacing: 1.4px;
+            text-transform: uppercase;
+        }
+
+        #message-body {
+            margin: 0;
+            color: #dbe7eb;
+            line-height: 1.6;
+            font-size: 0.95rem;
+        }
+
+        .footer-note {
+            margin-top: 12px;
+            font-size: 0.8rem;
+            color: #95a6ae;
+        }
+
+        @media (max-width: 700px) {
+            #ui { padding: 15px; }
+            .panel { padding: 12px; }
+            #message-card { padding: 20px; }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="glcanvas"></canvas>
+    <canvas id="overlay"></canvas>
+
+    <div id="ui-wrapper">
+        <button id="toggle-btn">➖ Close Panel</button>
+        <div id="ui">
+            <h1>Warp Corridor: Metric Run</h1>
+            <p><strong>Thread the corridor.</strong> Pass stabilisation gates, collect sync relays, and avoid shear knots. Thick walls protect the bubble, but they burn energy and make tight gates nastier. Human design, naturally, needed a cosmic babysitter.</p>
+
+            <div class="panel">
+                <div class="panel-title">Run Status</div>
+                <div class="stat-row"><span>State</span><span class="value" id="val-state">READY</span></div>
+                <div class="stat-row"><span>Score</span><span class="value" id="val-score">0</span></div>
+                <div class="stat-row"><span>Best</span><span class="value" id="val-best">0</span></div>
+                <div class="stat-row"><span>Distance</span><span class="value" id="val-distance">0 m.u.</span></div>
+                <div class="stat-row"><span>Combo</span><span class="value" id="val-combo">x0</span></div>
+                <div class="stat-row"><span>Difficulty</span><span class="value" id="val-level">Lv 1</span></div>
+
+                <div class="meter-label"><span>Hull Integrity</span><span id="val-hull">100%</span></div>
+                <div class="bar"><div class="fill" id="hull-fill"></div></div>
+
+                <div class="meter-label"><span>Bubble Energy</span><span id="val-energy">100%</span></div>
+                <div class="bar"><div class="fill" id="energy-fill"></div></div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-title">Metric Parameters</div>
+                <div class="stat-row"><span>Warp Velocity</span><span class="value" id="val-speed">0.80 c</span></div>
+                <div class="stat-row"><span>Bubble Radius</span><span class="value" id="val-radius">2.50</span></div>
+                <div class="stat-row"><span>Wall Thickness</span><span class="value" id="val-thickness">0.35</span></div>
+                <div class="stat-row"><span>Bubble Footprint</span><span class="value" id="val-footprint">1.02</span></div>
+                <div class="stat-row"><span>Boost</span><span class="value" id="val-boost">OFF</span></div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-title">Attention-PINN Handover</div>
+                <div class="meter-label"><span>Control Weight</span><span id="val-control">0%</span></div>
+                <div class="bar"><div class="fill" id="ai-fill"></div></div>
+                <div class="stat-row"><span>Status</span><span class="value warn" id="ai-status">LEARNING</span></div>
+                <div class="stat-row"><span>Neural Loss</span><span class="value" id="val-loss">1.00000</span></div>
+                <div class="stat-row"><span>Override Burst</span><span class="value" id="val-burst">READY</span></div>
+                <div class="stat-row"><span>FPS</span><span class="value" id="val-fps">60</span></div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-title">Render Flags</div>
+                <div class="toggle-row">
+                    <input type="checkbox" id="show-energy" checked>
+                    <label for="show-energy">Show stress-matter glow</label>
+                </div>
+                <div class="toggle-row">
+                    <input type="checkbox" id="show-grid" checked>
+                    <label for="show-grid">Show spacetime corridor grid</label>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-title">Controls</div>
+                <div class="control-grid">
+                    <kbd>W A S D</kbd><span>Steer the bubble</span>
+                    <kbd>Q / E</kbd><span>Shrink or expand bubble radius</span>
+                    <kbd>Z / C</kbd><span>Thin or thicken the bubble wall</span>
+                    <kbd>Shift</kbd><span>Boost speed and score, burn more energy</span>
+                    <kbd>F</kbd><span>AI override burst when sync is charged</span>
+                    <kbd>Space</kbd><span>Start run</span>
+                    <kbd>P</kbd><span>Pause</span>
+                    <kbd>R</kbd><span>Restart</span>
+                </div>
+                <div class="footer-note">Gate color is nice, but what matters is whether your bubble fits through the thing without exfoliating the hull.</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="message-layer">
+        <div id="message-card">
+            <div id="message-title">Metric Run</div>
+            <p id="message-body">Press <strong>Space</strong> to launch. Pass gates for big score, grab blue energy cells, collect green sync relays, and use <strong>F</strong> once the AI has enough control weight to yank you back into line.</p>
+        </div>
+    </div>
+
+    <script>
+        (() => {
+            const glCanvas = document.getElementById('glcanvas');
+            const overlayCanvas = document.getElementById('overlay');
+            const ctx = overlayCanvas.getContext('2d');
+            const gl = glCanvas.getContext('webgl2', { antialias: false, alpha: false });
+
+            if (!gl) {
+                document.getElementById('message-title').textContent = 'WebGL2 Required';
+                document.getElementById('message-body').textContent = 'This game needs WebGL2. Some browsers still live in the stone age.';
+                throw new Error('WebGL2 unavailable');
+            }
+
+            const messageCard = document.getElementById('message-card');
+            const messageTitle = document.getElementById('message-title');
+            const messageBody = document.getElementById('message-body');
+
+            const ui = document.getElementById('ui');
+            const toggleBtn = document.getElementById('toggle-btn');
+            let uiVisible = true;
+            toggleBtn.addEventListener('click', () => {
+                uiVisible = !uiVisible;
+                ui.classList.toggle('hidden', !uiVisible);
+                toggleBtn.textContent = uiVisible ? '➖ Close Panel' : '⚙️ Open Panel';
+            });
+
+            const elState = document.getElementById('val-state');
+            const elScore = document.getElementById('val-score');
+            const elBest = document.getElementById('val-best');
+            const elDistance = document.getElementById('val-distance');
+            const elCombo = document.getElementById('val-combo');
+            const elLevel = document.getElementById('val-level');
+            const elHull = document.getElementById('val-hull');
+            const elEnergy = document.getElementById('val-energy');
+            const elSpeed = document.getElementById('val-speed');
+            const elRadius = document.getElementById('val-radius');
+            const elThickness = document.getElementById('val-thickness');
+            const elFootprint = document.getElementById('val-footprint');
+            const elBoost = document.getElementById('val-boost');
+            const elControl = document.getElementById('val-control');
+            const elLoss = document.getElementById('val-loss');
+            const elBurst = document.getElementById('val-burst');
+            const elFPS = document.getElementById('val-fps');
+            const elAIStatus = document.getElementById('ai-status');
+            const hullFill = document.getElementById('hull-fill');
+            const energyFill = document.getElementById('energy-fill');
+            const aiFill = document.getElementById('ai-fill');
+            const chkEnergy = document.getElementById('show-energy');
+            const chkGrid = document.getElementById('show-grid');
+
+            const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+
+            function safeGetBest() {
+                try {
+                    return Number(localStorage.getItem('metricRunBest') || 0);
+                } catch (error) {
+                    return 0;
+                }
+            }
+
+            function safeStoreBest(value) {
+                try {
+                    localStorage.setItem('metricRunBest', String(value));
+                } catch (error) {
+                    // Some file:// contexts get dramatic about storage. Let them sulk.
+                }
+            }
+            const lerp = (a, b, t) => a + (b - a) * t;
+            const expLerp = (a, b, speed, dt) => lerp(a, b, 1.0 - Math.exp(-speed * dt));
+            const rnd = (min, max) => min + Math.random() * (max - min);
+            const TAU = Math.PI * 2.0;
+            const PLAYER_Z = 2.65;
+            const MAX_METRIC_R = 10.0;
+
+            function showMessage(title, body) {
+                messageTitle.innerHTML = title;
+                messageBody.innerHTML = body;
+                messageCard.classList.remove('hidden');
+            }
+
+            function hideMessage() {
+                messageCard.classList.add('hidden');
+            }
+
+            class AttentionPINN {
+                constructor(nodes = 96, maxR = MAX_METRIC_R) {
+                    this.nodes = nodes;
+                    this.maxR = maxR;
+                    this.weightsF = new Float32Array(nodes);
+                    this.weightsDF = new Float32Array(nodes);
+                    this.centers = new Float32Array(nodes);
+                    this.activations = new Float32Array(nodes);
+                    this.textureData = new Float32Array(256 * 2);
+                    this.sigma = (maxR / nodes) * 2.0;
+                    this.lr = 0.018;
+                    this.loss = 1.0;
+                    this.controlWeight = 0.0;
+
+                    for (let i = 0; i < nodes; i++) {
+                        this.centers[i] = (i / (nodes - 1)) * maxR;
+                    }
+                }
+
+                reset() {
+                    this.weightsF.fill(0.0);
+                    this.weightsDF.fill(0.0);
+                    this.loss = 1.0;
+                    this.controlWeight = 0.0;
+                }
+
+                getExactPhysics(r, uR, uT) {
+                    let f = 0.0;
+                    let df = 0.0;
+                    if (r <= uR - uT) {
+                        f = 1.0;
+                    } else if (r >= uR + uT) {
+                        f = 0.0;
+                    } else {
+                        const t = (r - (uR - uT)) / (2.0 * uT);
+                        f = 1.0 - (t * t * (3.0 - 2.0 * t));
+                        df = -(6.0 * t * (1.0 - t)) / (2.0 * uT);
+                    }
+                    return { f, df };
+                }
+
+                trainStep(uR, uT, steps = 1) {
+                    const batchSize = 48;
+                    let batchLoss = 0.0;
+
+                    for (let s = 0; s < steps; s++) {
+                        for (let b = 0; b < batchSize; b++) {
+                            let r;
+                            if (Math.random() > 0.25) {
+                                r = uR + (Math.random() * 2.0 - 1.0) * (uT * 1.8 + 0.18);
+                            } else {
+                                r = Math.random() * this.maxR;
+                            }
+                            r = clamp(r, 0.0, this.maxR);
+
+                            const exact = this.getExactPhysics(r, uR, uT);
+                            let fAI = 0.0;
+                            let dfAI = 0.0;
+
+                            for (let i = 0; i < this.nodes; i++) {
+                                const diff = r - this.centers[i];
+                                const act = Math.exp(-(diff * diff) / (this.sigma * this.sigma));
+                                this.activations[i] = act;
+                                fAI += this.weightsF[i] * act;
+                                dfAI += this.weightsDF[i] * act;
+                            }
+
+                            const errF = fAI - exact.f;
+                            const errDF = dfAI - exact.df;
+                            batchLoss += (errF * errF) + (errDF * errDF * 7.5);
+
+                            for (let i = 0; i < this.nodes; i++) {
+                                const act = this.activations[i];
+                                this.weightsF[i] -= this.lr * errF * act;
+                                this.weightsDF[i] -= this.lr * errDF * act;
+                            }
+                        }
+                    }
+
+                    const averaged = batchLoss / (batchSize * steps);
+                    this.loss = this.loss * 0.92 + averaged * 0.08;
+
+                    if (this.loss < 0.11) {
+                        this.controlWeight = clamp(this.controlWeight + 0.006, 0.0, 1.0);
+                    } else {
+                        this.controlWeight = clamp(this.controlWeight - 0.0025, 0.0, 1.0);
+                    }
+                }
+
+                nudgeControl(amount) {
+                    this.controlWeight = clamp(this.controlWeight + amount, 0.0, 1.0);
+                }
+
+                softenLoss(scale) {
+                    this.loss *= scale;
+                }
+
+                getTextureData() {
+                    for (let p = 0; p < 256; p++) {
+                        const r = (p / 255.0) * this.maxR;
+                        let fAI = 0.0;
+                        let dfAI = 0.0;
+                        for (let i = 0; i < this.nodes; i++) {
+                            const diff = r - this.centers[i];
+                            const act = Math.exp(-(diff * diff) / (this.sigma * this.sigma));
+                            fAI += this.weightsF[i] * act;
+                            dfAI += this.weightsDF[i] * act;
+                        }
+                        this.textureData[p * 2] = fAI;
+                        this.textureData[p * 2 + 1] = dfAI;
+                    }
+                    return this.textureData;
+                }
+            }
+
+            const aiNet = new AttentionPINN();
+
+            if (!gl.getExtension('EXT_color_buffer_float')) {
+                console.warn('EXT_color_buffer_float not fully supported. Nearest float sampling will still do the job. Civilisation survives another day.');
+            }
+
+            function resize() {
+                const width = Math.floor(window.innerWidth * Math.max(1, Math.min(2, window.devicePixelRatio || 1)));
+                const height = Math.floor(window.innerHeight * Math.max(1, Math.min(2, window.devicePixelRatio || 1)));
+                if (glCanvas.width !== width || glCanvas.height !== height) {
+                    glCanvas.width = width;
+                    glCanvas.height = height;
+                    overlayCanvas.width = width;
+                    overlayCanvas.height = height;
+                    gl.viewport(0, 0, width, height);
+                }
+            }
+            window.addEventListener('resize', resize);
+            resize();
+
+            const vs = `#version 300 es
+                in vec4 a_pos;
+                out vec2 v_uv;
+                void main() {
+                    v_uv = a_pos.xy;
+                    gl_Position = a_pos;
+                }
+            `;
+
+            const fs = `#version 300 es
+                precision highp float;
+                in vec2 v_uv;
+                out vec4 fragColor;
+
+                uniform vec2 u_res;
+                uniform float u_time;
+                uniform vec3 u_camPos;
+                uniform float u_v;
+                uniform float u_R;
+                uniform float u_T;
+                uniform sampler2D u_aiMetric;
+                uniform float u_aiInfluence;
+                uniform vec2 u_shipOffset;
+                uniform float u_hitFlash;
+                uniform float u_syncPulse;
+                uniform float u_shake;
+                uniform int u_showEnergy;
+                uniform int u_showGrid;
+
+                float sdShip(vec3 p) {
+                    float hull = length(p * vec3(1.6, 1.55, 0.42)) - 0.26;
+                    float ring = length(vec2(length(p.xz) - 0.9, p.y)) - 0.09;
+                    vec3 absp = abs(p);
+                    float struts = max(absp.z - 0.04, absp.y - 0.04);
+                    struts = max(struts, length(p.xz) - 0.9);
+                    float nacelles = length(vec2(length(p.xz - vec2(0.0, -0.35)) - 0.55, p.y * 1.6)) - 0.06;
+                    return min(min(hull, ring), min(struts, nacelles));
+                }
+
+                vec3 calcShipNormal(vec3 p) {
+                    vec2 e = vec2(0.005, 0.0);
+                    return normalize(vec3(
+                        sdShip(p + e.xyy) - sdShip(p - e.xyy),
+                        sdShip(p + e.yxy) - sdShip(p - e.yxy),
+                        sdShip(p + e.yyx) - sdShip(p - e.yyx)
+                    ));
+                }
+
+                float hash(vec3 p) {
+                    p = fract(p * vec3(123.34, 456.21, 85.714));
+                    p += dot(p, p + 45.32);
+                    return fract(p.x * p.y);
+                }
+
+                vec3 getStarfield(vec3 dir, float warpVelocity, float time) {
+                    vec3 nDir = normalize(dir);
+                    vec3 starPos = nDir * 320.0;
+                    starPos.z += time * (6.0 + warpVelocity * 16.0);
+                    float n = hash(floor(starPos));
+                    float star = smoothstep(0.988, 1.0, n);
+                    vec3 color = vec3(star);
+                    float cosTheta = dot(nDir, vec3(0.0, 0.0, -1.0));
+                    if (warpVelocity > 0.1) {
+                        if (cosTheta > 0.45) {
+                            color *= mix(vec3(1.0), vec3(0.12, 0.55, 1.0), (cosTheta - 0.45) * 1.8 * warpVelocity);
+                        } else if (cosTheta < -0.45) {
+                            color *= mix(vec3(1.0), vec3(1.0, 0.24, 0.08), (-cosTheta - 0.45) * 1.8 * warpVelocity);
+                        }
+                    }
+                    float band = exp(-pow(dir.y * 3.0, 2.0));
+                    color += vec3(0.05, 0.1, 0.16) * band;
+                    return color;
+                }
+
+                void main() {
+                    vec2 jitter = vec2(
+                        sin(u_time * 31.0) * 0.0025,
+                        cos(u_time * 27.0) * 0.0025
+                    ) * u_shake;
+
+                    vec2 uv = (gl_FragCoord.xy - 0.5 * u_res) / min(u_res.x, u_res.y) + jitter;
+
+                    vec3 bubbleCenter = vec3(u_shipOffset, 0.0);
+                    vec3 ro = u_camPos + vec3(u_shipOffset * 0.20, 0.0);
+                    vec3 ta = bubbleCenter + vec3(0.0, 0.0, -0.55);
+                    vec3 cw = normalize(ta - ro);
+                    vec3 cu = normalize(cross(cw, vec3(0.0, 1.0, 0.0)));
+                    vec3 cv = cross(cu, cw);
+                    vec3 rd = normalize(uv.x * cu + uv.y * cv + 1.25 * cw);
+
+                    vec3 p = ro;
+                    vec4 vol = vec4(0.0);
+                    bool hitShip = false;
+
+                    for (int i = 0; i < 112; i++) {
+                        vec3 rel = p - bubbleCenter;
+                        float r = length(rel);
+
+                        float exactF = smoothstep(u_R + u_T, u_R - u_T, r);
+                        float tVal = clamp((r - (u_R - u_T)) / (2.0 * u_T), 0.0, 1.0);
+                        float exactDF = (r > u_R - u_T && r < u_R + u_T)
+                            ? -(6.0 * tVal * (1.0 - tVal)) / (2.0 * u_T)
+                            : 0.0;
+
+                        float aiIdx = (r / ${MAX_METRIC_R.toFixed(1)}) * 255.0;
+                        int iIdx = int(floor(aiIdx));
+                        float fracPart = aiIdx - float(iIdx);
+                        vec2 data0 = texelFetch(u_aiMetric, ivec2(clamp(iIdx, 0, 255), 0), 0).rg;
+                        vec2 data1 = texelFetch(u_aiMetric, ivec2(clamp(iIdx + 1, 0, 255), 0), 0).rg;
+                        vec2 aiData = clamp(mix(data0, data1, fracPart), vec2(-0.2, -6.0), vec2(1.2, 6.0));
+
+                        float currentF = clamp(mix(exactF, aiData.r, u_aiInfluence), 0.0, 1.0);
+                        float currentDF = clamp(mix(exactDF, aiData.g, u_aiInfluence), -6.0, 6.0);
+
+                        vec3 gradF = (r > 0.001) ? normalize(rel) * currentDF : vec3(0.0);
+                        float theta = u_v * gradF.z;
+
+                        float dt = max(0.02, min(0.18, r * 0.08 + 0.03));
+                        float dShip = sdShip(rel);
+                        if (dShip < 0.25) dt = min(dt, max(0.01, dShip * 0.45));
+
+                        rd = normalize(rd - gradF * u_v * dt * 0.5);
+                        vec3 beta = vec3(0.0, 0.0, u_v * currentF);
+                        p += (rd - beta) * dt;
+
+                        if (u_showGrid == 1) {
+                            float gridY = abs(rel.y);
+                            if (gridY < 0.07) {
+                                float lineX = smoothstep(0.045, 0.0, abs(fract((rel.x + 20.0) * 1.6) - 0.5));
+                                float lineZ = smoothstep(0.045, 0.0, abs(fract((rel.z + u_time * u_v * 4.0 + 20.0) * 1.4) - 0.5));
+                                float guide = smoothstep(0.1, 0.0, abs(rel.x)) * 0.35;
+                                float gAlpha = (max(max(lineX, lineZ), guide)) * (0.07 - gridY) * 10.0 * 0.42;
+                                vec3 gridCol = mix(vec3(0.11, 0.8, 0.42), vec3(0.0, 1.0, 0.86), u_aiInfluence + u_syncPulse * 0.4);
+                                vol += vec4(gridCol * gAlpha, gAlpha) * (1.0 - vol.a);
+                            }
+                        }
+
+                        if (u_showEnergy == 1 && abs(theta) > 0.045) {
+                            vec3 glowColor = theta < 0.0 ? vec3(0.0, 0.5, 1.0) : vec3(1.0, 0.12, 0.0);
+                            float alpha = abs(theta) * dt * 0.23;
+                            vol += vec4(glowColor * alpha, alpha) * (1.0 - vol.a);
+                        }
+
+                        if (dShip < 0.005) {
+                            hitShip = true;
+                            vec3 n = calcShipNormal(rel);
+                            vec3 l = normalize(vec3(2.0, 3.0, -1.0));
+                            float diff = max(dot(n, l), 0.12);
+                            vec3 shipCol = vec3(0.63, 0.68, 0.74) * diff;
+                            if (rel.z > 0.2 && length(rel.xy) < 0.22) {
+                                shipCol += vec3(0.0, 0.85, 1.0) * (2.0 + u_syncPulse * 1.5);
+                            }
+                            shipCol = mix(shipCol, vec3(1.0, 0.35, 0.35), u_hitFlash * 0.6);
+                            vol += vec4(shipCol * (1.0 - vol.a), 1.0 - vol.a);
+                            break;
+                        }
+
+                        if (r > 18.0 || vol.a > 0.99) break;
+                    }
+
+                    vec3 finalCol = vol.rgb;
+                    if (!hitShip && vol.a < 0.99) {
+                        vec3 stars = getStarfield(rd, u_v, u_time);
+                        finalCol += stars * (1.0 - vol.a);
+                    }
+
+                    finalCol += vec3(u_syncPulse * 0.05, u_syncPulse * 0.09, u_syncPulse * 0.12);
+                    finalCol = mix(finalCol, vec3(finalCol.r + 0.28, finalCol.g * 0.65, finalCol.b * 0.65), u_hitFlash * 0.14);
+                    finalCol = finalCol / (finalCol + vec3(1.0));
+                    finalCol = pow(finalCol, vec3(1.0 / 2.2));
+                    fragColor = vec4(finalCol, 1.0);
+                }
+            `;
+
+            function buildShader(type, source) {
+                const shader = gl.createShader(type);
+                gl.shaderSource(shader, source);
+                gl.compileShader(shader);
+                if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                    const log = gl.getShaderInfoLog(shader);
+                    console.error(log);
+                    throw new Error(log || 'Shader compile failed');
+                }
+                return shader;
+            }
+
+            const prog = gl.createProgram();
+            gl.attachShader(prog, buildShader(gl.VERTEX_SHADER, vs));
+            gl.attachShader(prog, buildShader(gl.FRAGMENT_SHADER, fs));
+            gl.linkProgram(prog);
+            if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+                throw new Error(gl.getProgramInfoLog(prog) || 'Program link failed');
+            }
+
+            const posBuf = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+                -1, -1,
+                 1, -1,
+                -1,  1,
+                -1,  1,
+                 1, -1,
+                 1,  1,
+            ]), gl.STATIC_DRAW);
+
+            gl.useProgram(prog);
+            const posLoc = gl.getAttribLocation(prog, 'a_pos');
+            gl.enableVertexAttribArray(posLoc);
+            gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+
+            const uRes = gl.getUniformLocation(prog, 'u_res');
+            const uTime = gl.getUniformLocation(prog, 'u_time');
+            const uCam = gl.getUniformLocation(prog, 'u_camPos');
+            const uV = gl.getUniformLocation(prog, 'u_v');
+            const uR = gl.getUniformLocation(prog, 'u_R');
+            const uT = gl.getUniformLocation(prog, 'u_T');
+            const uShowEnergy = gl.getUniformLocation(prog, 'u_showEnergy');
+            const uShowGrid = gl.getUniformLocation(prog, 'u_showGrid');
+            const uAiInfluence = gl.getUniformLocation(prog, 'u_aiInfluence');
+            const uAiMetric = gl.getUniformLocation(prog, 'u_aiMetric');
+            const uShipOffset = gl.getUniformLocation(prog, 'u_shipOffset');
+            const uHitFlash = gl.getUniformLocation(prog, 'u_hitFlash');
+            const uSyncPulse = gl.getUniformLocation(prog, 'u_syncPulse');
+            const uShake = gl.getUniformLocation(prog, 'u_shake');
+
+            const aiTex = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, aiTex);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, 256, 1, 0, gl.RG, gl.FLOAT, null);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+            function makePlayer() {
+                return {
+                    x: 0,
+                    y: 0,
+                    vx: 0,
+                    vy: 0,
+                    hull: 100,
+                    energy: 100,
+                    speed: 0.80,
+                    radius: 2.50,
+                    thickness: 0.35,
+                    aiBurst: 0,
+                };
+            }
+
+            const game = {
+                state: 'menu',
+                player: makePlayer(),
+                objects: [],
+                particles: [],
+                popups: [],
+                distance: 0,
+                score: 0,
+                combo: 0,
+                level: 1,
+                spawnTimer: 0.8,
+                best: safeGetBest(),
+                hitFlash: 0,
+                syncPulse: 0,
+                cameraShake: 0,
+                worldTime: 0,
+            };
+
+            const input = Object.create(null);
+            const edgeConsumed = new Set();
+
+            function setKey(event, isDown) {
+                const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+                input[key] = isDown;
+                if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(event.key)) {
+                    event.preventDefault();
+                }
+            }
+
+            window.addEventListener('keydown', (event) => {
+                const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+                const firstPress = !input[key];
+                setKey(event, true);
+
+                if (!firstPress) return;
+
+                if ((key === ' ' || key === 'Enter') && (game.state === 'menu' || game.state === 'gameover')) {
+                    startGame();
+                } else if (key === 'p') {
+                    togglePause();
+                } else if (key === 'r') {
+                    restartGame();
+                } else if (key === 'f') {
+                    activateAIBurst();
+                }
+            });
+
+            window.addEventListener('keyup', (event) => setKey(event, false));
+            window.addEventListener('blur', () => {
+                Object.keys(input).forEach((key) => { input[key] = false; });
+                if (game.state === 'playing') {
+                    togglePause(true);
+                }
+            });
+
+            messageCard.addEventListener('click', () => {
+                if (game.state === 'menu' || game.state === 'gameover') startGame();
+                else if (game.state === 'paused') togglePause();
+            });
+
+            function formatInt(n) {
+                return Math.round(n).toLocaleString();
+            }
+
+            function bubbleFootprint(player = game.player) {
+                return player.radius * 0.31 + player.thickness * 0.24;
+            }
+
+            function gateOpeningForRadius(targetR) {
+                return 0.45 + targetR * 0.33;
+            }
+
+            function addPopup(text, color = '#7fffd4') {
+                game.popups.push({ text, color, life: 1.4 });
+                if (game.popups.length > 6) game.popups.shift();
+            }
+
+            function spawnParticles(x, y, count, color, magnitude = 1.0) {
+                for (let i = 0; i < count; i++) {
+                    game.particles.push({
+                        x,
+                        y,
+                        vx: rnd(-1.0, 1.0) * magnitude,
+                        vy: rnd(-1.0, 1.0) * magnitude,
+                        life: rnd(0.4, 1.1),
+                        maxLife: 1.1,
+                        size: rnd(2, 5),
+                        color,
+                    });
+                }
+                if (game.particles.length > 180) {
+                    game.particles.splice(0, game.particles.length - 180);
+                }
+            }
+
+            function damageHull(amount, label = 'impact') {
+                if (game.state !== 'playing') return;
+                const protection = clamp(game.player.thickness * 0.18, 0.0, 0.45);
+                const finalAmount = amount * (1.0 - protection);
+                game.player.hull = clamp(game.player.hull - finalAmount, 0, 100);
+                game.combo = 0;
+                game.hitFlash = clamp(game.hitFlash + finalAmount / 18.0, 0.0, 1.0);
+                game.cameraShake = clamp(game.cameraShake + finalAmount / 14.0, 0.0, 1.3);
+                addPopup(`-${Math.round(finalAmount)} ${label}`, '#ff6b82');
+                if (game.player.hull <= 0) {
+                    endGame();
+                }
+            }
+
+            function gainEnergy(amount) {
+                game.player.energy = clamp(game.player.energy + amount, 0, 100);
+            }
+
+            function addScore(amount, label = '', color = '#7fffd4') {
+                game.score += amount;
+                if (label) addPopup(`${label} +${Math.round(amount)}`, color);
+            }
+
+            function spawnGate() {
+                const targetR = rnd(1.2, 5.4);
+                const open = gateOpeningForRadius(targetR);
+                const marginX = Math.min(2.8, 0.55 + open * 0.45);
+                const marginY = Math.min(1.7, 0.45 + open * 0.35);
+                game.objects.push({
+                    type: 'gate',
+                    x: rnd(-3.2 + marginX, 3.2 - marginX),
+                    y: rnd(-1.9 + marginY, 1.9 - marginY),
+                    z: rnd(26, 34),
+                    prevZ: 999,
+                    targetR,
+                    open,
+                    rot: rnd(0, TAU),
+                    spin: rnd(-1.5, 1.5),
+                    resolved: false,
+                });
+            }
+
+            function spawnShear() {
+                const size = rnd(0.35, 0.85) + (game.level - 1) * 0.015;
+                game.objects.push({
+                    type: 'shear',
+                    x: rnd(-3.0, 3.0),
+                    y: rnd(-1.8, 1.8),
+                    z: rnd(24, 34),
+                    prevZ: 999,
+                    size,
+                    rot: rnd(0, TAU),
+                    spin: rnd(-2.0, 2.0),
+                    wobble: rnd(0.4, 1.3),
+                    resolved: false,
+                });
+            }
+
+            function spawnCell() {
+                game.objects.push({
+                    type: 'cell',
+                    x: rnd(-3.0, 3.0),
+                    y: rnd(-1.8, 1.8),
+                    z: rnd(24, 32),
+                    prevZ: 999,
+                    size: rnd(0.24, 0.32),
+                    rot: rnd(0, TAU),
+                    spin: rnd(-3.0, 3.0),
+                    resolved: false,
+                });
+            }
+
+            function spawnRelay() {
+                game.objects.push({
+                    type: 'relay',
+                    x: rnd(-2.8, 2.8),
+                    y: rnd(-1.7, 1.7),
+                    z: rnd(24, 32),
+                    prevZ: 999,
+                    size: rnd(0.28, 0.38),
+                    rot: rnd(0, TAU),
+                    spin: rnd(-2.5, 2.5),
+                    resolved: false,
+                });
+            }
+
+            function spawnPattern() {
+                const roll = Math.random();
+                if (roll < 0.44) spawnGate();
+                else if (roll < 0.72) spawnShear();
+                else if (roll < 0.88) spawnCell();
+                else spawnRelay();
+
+                const extraChance = clamp(0.08 + game.level * 0.03, 0.08, 0.42);
+                if (Math.random() < extraChance) {
+                    const extraRoll = Math.random();
+                    if (extraRoll < 0.48) spawnShear();
+                    else if (extraRoll < 0.76) spawnGate();
+                    else if (extraRoll < 0.90) spawnCell();
+                    else spawnRelay();
+                }
+            }
+
+            function resetRun() {
+                game.player = makePlayer();
+                game.objects.length = 0;
+                game.particles.length = 0;
+                game.popups.length = 0;
+                game.distance = 0;
+                game.score = 0;
+                game.combo = 0;
+                game.level = 1;
+                game.spawnTimer = 0.55;
+                game.hitFlash = 0;
+                game.syncPulse = 0;
+                game.cameraShake = 0;
+                game.worldTime = 0;
+                aiNet.reset();
+            }
+
+            function startGame() {
+                resetRun();
+                game.state = 'playing';
+                hideMessage();
+                addPopup('Run started', '#9afcff');
+            }
+
+            function restartGame() {
+                if (game.state === 'menu') {
+                    startGame();
+                    return;
+                }
+                resetRun();
+                game.state = 'playing';
+                hideMessage();
+                addPopup('Run restarted', '#9afcff');
+            }
+
+            function togglePause(forcePause = false) {
+                if (game.state === 'menu' || game.state === 'gameover') return;
+                if (forcePause || game.state === 'playing') {
+                    game.state = 'paused';
+                    showMessage('Paused', 'Press <strong>P</strong> to continue. The universe remains indifferent while you catch your breath.');
+                } else if (game.state === 'paused') {
+                    game.state = 'playing';
+                    hideMessage();
+                }
+            }
+
+            function endGame() {
+                game.state = 'gameover';
+                if (game.score > game.best) {
+                    game.best = game.score;
+                    safeStoreBest(game.best);
+                }
+                showMessage(
+                    'Hull Failure',
+                    `Final score: <strong>${formatInt(game.score)}</strong><br>` +
+                    `Distance: <strong>${formatInt(game.distance)} m.u.</strong><br>` +
+                    `Best: <strong>${formatInt(game.best)}</strong><br><br>` +
+                    `Press <strong>R</strong> to launch another run.`
+                );
+            }
+
+            function activateAIBurst() {
+                if (game.state !== 'playing') return;
+                if (game.player.aiBurst > 0) return;
+                if (aiNet.controlWeight < 0.35) {
+                    addPopup('AI sync too low', '#ffbf69');
+                    return;
+                }
+                game.player.aiBurst = 3.6;
+                aiNet.controlWeight = clamp(aiNet.controlWeight - 0.35, 0, 1);
+                game.syncPulse = 1.0;
+                addPopup('AI override engaged', '#78f6ff');
+            }
+
+            function findAssistTarget() {
+                const p = game.player;
+                let best = null;
+                let bestScore = -Infinity;
+
+                for (const obj of game.objects) {
+                    if (obj.resolved) continue;
+                    if (obj.z < PLAYER_Z || obj.z > 20) continue;
+                    let score = -obj.z * 0.35;
+                    const dist = Math.hypot(obj.x - p.x, obj.y - p.y);
+                    if (obj.type === 'gate') {
+                        score += 40 - dist * 7 - Math.abs(obj.targetR - p.radius) * 6;
+                    } else if (obj.type === 'relay') {
+                        score += 28 - dist * 7;
+                    } else if (obj.type === 'cell') {
+                        score += 18 - dist * 6;
+                    } else {
+                        continue;
+                    }
+                    if (score > bestScore) {
+                        bestScore = score;
+                        best = obj;
+                    }
+                }
+
+                return best;
+            }
+
+            function updatePlayer(dt) {
+                const p = game.player;
+                const left = !!input['a'];
+                const right = !!input['d'];
+                const up = !!input['w'];
+                const down = !!input['s'];
+                const boost = !!input['Shift'];
+
+                let ax = 0;
+                let ay = 0;
+                if (left) ax -= 14.0;
+                if (right) ax += 14.0;
+                if (up) ay += 14.0;
+                if (down) ay -= 14.0;
+
+                p.vx = (p.vx + ax * dt) * Math.exp(-4.8 * dt);
+                p.vy = (p.vy + ay * dt) * Math.exp(-4.8 * dt);
+                p.x = clamp(p.x + p.vx * dt, -3.15, 3.15);
+                p.y = clamp(p.y + p.vy * dt, -1.95, 1.95);
+
+                if (input['q']) p.radius -= dt * 2.1;
+                if (input['e']) p.radius += dt * 2.1;
+                if (input['z']) p.thickness -= dt * 0.9;
+                if (input['c']) p.thickness += dt * 0.9;
+
+                p.radius = clamp(p.radius, 1.0, 5.8);
+                p.thickness = clamp(p.thickness, 0.12, 1.18);
+
+                const baseSpeed = clamp(0.78 + game.level * 0.045, 0.78, 1.65);
+                const targetSpeed = baseSpeed + (boost && p.energy > 0 ? 0.55 : 0.0);
+                p.speed = expLerp(p.speed, targetSpeed, 2.8, dt);
+
+                if (p.aiBurst > 0) {
+                    p.aiBurst = Math.max(0, p.aiBurst - dt);
+                    const target = findAssistTarget();
+                    if (target) {
+                        p.x = expLerp(p.x, target.x, 3.6, dt);
+                        p.y = expLerp(p.y, target.y, 3.6, dt);
+                        if (target.type === 'gate') {
+                            p.radius = expLerp(p.radius, target.targetR, 3.0, dt);
+                            p.thickness = expLerp(p.thickness, 0.42, 2.6, dt);
+                        } else {
+                            p.thickness = expLerp(p.thickness, 0.46, 1.8, dt);
+                        }
+                    } else {
+                        p.x = expLerp(p.x, 0, 1.5, dt);
+                        p.y = expLerp(p.y, 0, 1.5, dt);
+                    }
+                }
+
+                const drain =
+                    1.05 +
+                    p.speed * 0.78 +
+                    p.thickness * 1.75 +
+                    (boost ? 4.8 : 0.0) +
+                    (p.aiBurst > 0 ? 2.1 : 0.0);
+
+                p.energy = clamp(p.energy - drain * dt, 0, 100);
+                if (p.energy <= 0.01) {
+                    damageHull(6.0 * dt, 'energy collapse');
+                }
+            }
+
+            function resolveGate(obj) {
+                const p = game.player;
+                const centerDist = Math.hypot(p.x - obj.x, p.y - obj.y);
+                const footprint = bubbleFootprint(p);
+                const fitMargin = obj.open - centerDist - footprint;
+                const radiusError = Math.abs(p.radius - obj.targetR);
+                const scoreMult = 1.0 + game.combo * 0.08 + (p.aiBurst > 0 ? 0.35 : 0.0);
+
+                if (fitMargin > 0.12) {
+                    let base = 90;
+                    let label = 'Gate clear';
+                    let color = '#8dfed2';
+                    if (radiusError < 0.28) {
+                        base = 220;
+                        label = 'Perfect gate';
+                        color = '#7ffcff';
+                        game.combo += 2;
+                        gainEnergy(7);
+                    } else if (radiusError < 0.75) {
+                        base = 145;
+                        label = 'Clean pass';
+                        color = '#a8ffb7';
+                        game.combo += 1;
+                        gainEnergy(4);
+                    } else {
+                        game.combo += 1;
+                        gainEnergy(2);
+                    }
+                    const amount = Math.round(base * scoreMult);
+                    addScore(amount, label, color);
+                    spawnParticles(obj.x, obj.y, 16, color, 1.4);
+                    game.syncPulse = clamp(game.syncPulse + 0.25, 0, 1.0);
+                    aiNet.softenLoss(0.97);
+                } else {
+                    damageHull(16 + Math.abs(fitMargin) * 24, 'gate scrape');
+                    spawnParticles(obj.x, obj.y, 18, '#ff7c7c', 1.8);
+                }
+            }
+
+            function resolveShear(obj) {
+                const p = game.player;
+                const centerDist = Math.hypot(p.x - obj.x, p.y - obj.y);
+                const hitRadius = obj.size + bubbleFootprint(p) * 0.92;
+                if (centerDist < hitRadius) {
+                    damageHull(12 + obj.size * 12, 'shear knot');
+                    spawnParticles(obj.x, obj.y, 22, '#ff5c7d', 1.9);
+                }
+            }
+
+            function resolveCell(obj) {
+                const p = game.player;
+                const centerDist = Math.hypot(p.x - obj.x, p.y - obj.y);
+                if (centerDist < obj.size + bubbleFootprint(p) * 0.46) {
+                    gainEnergy(18);
+                    addScore(55 + game.level * 3, 'Energy cell', '#7ed9ff');
+                    spawnParticles(obj.x, obj.y, 14, '#4ed5ff', 1.3);
+                }
+            }
+
+            function resolveRelay(obj) {
+                const p = game.player;
+                const centerDist = Math.hypot(p.x - obj.x, p.y - obj.y);
+                if (centerDist < obj.size + bubbleFootprint(p) * 0.46) {
+                    aiNet.nudgeControl(0.18);
+                    aiNet.softenLoss(0.72);
+                    addScore(85 + game.level * 4, 'Sync relay', '#8dff9d');
+                    spawnParticles(obj.x, obj.y, 16, '#74ff9e', 1.5);
+                    game.syncPulse = 1.0;
+                }
+            }
+
+            function updateObjects(dt) {
+                const p = game.player;
+                const worldSpeed = 9.5 + p.speed * 8.5 + (input['Shift'] ? 3.0 : 0.0) + game.level * 0.35;
+
+                game.spawnTimer -= dt;
+                if (game.spawnTimer <= 0) {
+                    spawnPattern();
+                    const minGap = clamp(0.62 - game.level * 0.018, 0.24, 0.62);
+                    const variance = clamp(0.55 - game.level * 0.012, 0.15, 0.55);
+                    game.spawnTimer = minGap + Math.random() * variance;
+                }
+
+                for (let i = game.objects.length - 1; i >= 0; i--) {
+                    const obj = game.objects[i];
+                    obj.prevZ = obj.z;
+                    obj.z -= worldSpeed * dt;
+                    obj.rot += obj.spin * dt;
+
+                    if (obj.type === 'shear') {
+                        obj.x += Math.sin(game.worldTime * obj.wobble + obj.rot) * dt * 0.18;
+                        obj.x = clamp(obj.x, -3.2, 3.2);
+                    }
+
+                    if (!obj.resolved && obj.prevZ > PLAYER_Z && obj.z <= PLAYER_Z) {
+                        if (obj.type === 'gate') resolveGate(obj);
+                        else if (obj.type === 'shear') resolveShear(obj);
+                        else if (obj.type === 'cell') resolveCell(obj);
+                        else if (obj.type === 'relay') resolveRelay(obj);
+                        obj.resolved = true;
+                    }
+
+                    if (obj.z < -2.5) {
+                        game.objects.splice(i, 1);
+                    }
+                }
+            }
+
+            function updateParticles(dt) {
+                for (let i = game.particles.length - 1; i >= 0; i--) {
+                    const p = game.particles[i];
+                    p.life -= dt;
+                    p.x += p.vx * dt;
+                    p.y += p.vy * dt;
+                    p.vx *= Math.exp(-1.5 * dt);
+                    p.vy *= Math.exp(-1.5 * dt);
+                    if (p.life <= 0) game.particles.splice(i, 1);
+                }
+
+                for (let i = game.popups.length - 1; i >= 0; i--) {
+                    const p = game.popups[i];
+                    p.life -= dt;
+                    if (p.life <= 0) game.popups.splice(i, 1);
+                }
+            }
+
+            function updateGame(dt) {
+                game.worldTime += dt;
+                game.hitFlash = Math.max(0, game.hitFlash - dt * 1.8);
+                game.syncPulse = Math.max(0, game.syncPulse - dt * 0.9);
+                game.cameraShake = Math.max(0, game.cameraShake - dt * 1.7);
+
+                if (game.state !== 'playing') {
+                    updateParticles(dt);
+                    return;
+                }
+
+                updatePlayer(dt);
+                updateObjects(dt);
+                updateParticles(dt);
+
+                aiNet.trainStep(game.player.radius, game.player.thickness, game.player.aiBurst > 0 ? 2 : 1);
+
+                const distanceGain = (13.0 + game.player.speed * 15.0 + (input['Shift'] ? 4.0 : 0.0)) * dt;
+                game.distance += distanceGain;
+                game.score += distanceGain * (1.0 + game.combo * 0.035 + (game.player.aiBurst > 0 ? 0.2 : 0.0));
+                game.level = Math.max(1, 1 + Math.floor(game.distance / 420));
+                game.best = Math.max(game.best, Math.round(game.score));
+            }
+
+            function projectWorld(x, y, z) {
+                const focal = Math.min(overlayCanvas.width, overlayCanvas.height) * 0.78;
+                const depth = Math.max(0.8, z + 0.9);
+                return {
+                    x: overlayCanvas.width * 0.5 + x * focal / depth,
+                    y: overlayCanvas.height * 0.52 - y * focal / depth,
+                    scale: focal / depth,
+                };
+            }
+
+            function projectPlayer(x, y) {
+                const focal = Math.min(overlayCanvas.width, overlayCanvas.height) * 0.78;
+                const depth = PLAYER_Z + 0.9;
+                return {
+                    x: overlayCanvas.width * 0.5 + x * focal / depth,
+                    y: overlayCanvas.height * 0.52 - y * focal / depth,
+                    scale: focal / depth,
+                };
+            }
+
+            function drawCorridor() {
+                const w = overlayCanvas.width;
+                const h = overlayCanvas.height;
+                ctx.save();
+                ctx.strokeStyle = 'rgba(110, 255, 220, 0.18)';
+                ctx.lineWidth = Math.max(1, w * 0.0015);
+                ctx.beginPath();
+                for (let lane = -3; lane <= 3; lane += 1.5) {
+                    const a = projectWorld(lane, -0.9, 2.2);
+                    const b = projectWorld(lane * 0.18, -0.04, 26.0);
+                    ctx.moveTo(a.x, a.y);
+                    ctx.lineTo(b.x, b.y);
+                }
+                ctx.stroke();
+
+                ctx.strokeStyle = 'rgba(0, 255, 204, 0.12)';
+                for (let z = 3; z <= 26; z += 2.4) {
+                    const left = projectWorld(-3.35, -0.92, z);
+                    const right = projectWorld(3.35, -0.92, z);
+                    ctx.beginPath();
+                    ctx.moveTo(left.x, left.y);
+                    ctx.lineTo(right.x, right.y);
+                    ctx.stroke();
+                }
+                ctx.restore();
+            }
+
+            function drawGate(obj) {
+                const p = projectWorld(obj.x, obj.y, obj.z);
+                const radius = obj.open * p.scale;
+                const thickness = Math.max(3, radius * 0.12);
+                ctx.save();
+                ctx.translate(p.x, p.y);
+                ctx.rotate(obj.rot);
+                ctx.lineWidth = thickness;
+                ctx.strokeStyle = 'rgba(0, 255, 210, 0.9)';
+                ctx.shadowBlur = radius * 0.45;
+                ctx.shadowColor = 'rgba(0, 255, 210, 0.8)';
+                ctx.beginPath();
+                ctx.arc(0, 0, radius, 0, TAU);
+                ctx.stroke();
+
+                ctx.lineWidth = Math.max(2, thickness * 0.36);
+                ctx.strokeStyle = 'rgba(130, 255, 240, 0.8)';
+                ctx.beginPath();
+                ctx.arc(0, 0, radius * 0.74, 0, TAU);
+                ctx.stroke();
+
+                const notch = radius * 0.94;
+                for (let i = 0; i < 6; i++) {
+                    const a = (i / 6) * TAU;
+                    ctx.beginPath();
+                    ctx.moveTo(Math.cos(a) * notch, Math.sin(a) * notch);
+                    ctx.lineTo(Math.cos(a) * (notch + thickness * 1.2), Math.sin(a) * (notch + thickness * 1.2));
+                    ctx.stroke();
+                }
+
+                if (radius > 40) {
+                    ctx.shadowBlur = 0;
+                    ctx.fillStyle = 'rgba(220, 255, 255, 0.9)';
+                    ctx.font = `${Math.max(11, radius * 0.12)}px ui-monospace, monospace`;
+                    ctx.textAlign = 'center';
+                    ctx.fillText(`R ${obj.targetR.toFixed(2)}`, 0, -radius - 14);
+                }
+                ctx.restore();
+            }
+
+            function drawShear(obj) {
+                const p = projectWorld(obj.x, obj.y, obj.z);
+                const size = obj.size * p.scale;
+                ctx.save();
+                ctx.translate(p.x, p.y);
+                ctx.rotate(obj.rot);
+                ctx.strokeStyle = 'rgba(255, 90, 120, 0.95)';
+                ctx.fillStyle = 'rgba(255, 70, 100, 0.18)';
+                ctx.lineWidth = Math.max(2, size * 0.12);
+                ctx.shadowBlur = size * 0.6;
+                ctx.shadowColor = 'rgba(255, 80, 110, 0.85)';
+                ctx.beginPath();
+                for (let i = 0; i < 8; i++) {
+                    const a = (i / 8) * TAU;
+                    const r = i % 2 === 0 ? size : size * 0.44;
+                    const x = Math.cos(a) * r;
+                    const y = Math.sin(a) * r;
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            function drawPickup(obj, color, label) {
+                const p = projectWorld(obj.x, obj.y, obj.z);
+                const size = obj.size * p.scale;
+                ctx.save();
+                ctx.translate(p.x, p.y);
+                ctx.rotate(obj.rot);
+                ctx.strokeStyle = color;
+                ctx.fillStyle = color.replace('0.95', '0.18');
+                ctx.lineWidth = Math.max(2, size * 0.18);
+                ctx.shadowBlur = size * 0.7;
+                ctx.shadowColor = color;
+                ctx.beginPath();
+                if (label === 'relay') {
+                    for (let i = 0; i < 6; i++) {
+                        const a = (i / 6) * TAU;
+                        const x = Math.cos(a) * size;
+                        const y = Math.sin(a) * size;
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                } else {
+                    ctx.arc(0, 0, size, 0, TAU);
+                }
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            function drawObjects() {
+                const sorted = [...game.objects].sort((a, b) => b.z - a.z);
+                for (const obj of sorted) {
+                    if (obj.z <= 0.6) continue;
+                    if (obj.type === 'gate') drawGate(obj);
+                    else if (obj.type === 'shear') drawShear(obj);
+                    else if (obj.type === 'cell') drawPickup(obj, 'rgba(78, 213, 255, 0.95)', 'cell');
+                    else if (obj.type === 'relay') drawPickup(obj, 'rgba(116, 255, 158, 0.95)', 'relay');
+                }
+            }
+
+            function drawPlayer() {
+                const p = projectPlayer(game.player.x, game.player.y);
+                const footprint = bubbleFootprint();
+                const bubbleRadius = footprint * p.scale;
+                const shipScale = Math.max(16, bubbleRadius * 0.38);
+
+                ctx.save();
+                ctx.translate(p.x, p.y);
+
+                ctx.shadowBlur = bubbleRadius * 0.55;
+                ctx.shadowColor = game.player.aiBurst > 0
+                    ? 'rgba(120, 245, 255, 0.95)'
+                    : 'rgba(0, 255, 204, 0.7)';
+                ctx.strokeStyle = game.player.aiBurst > 0
+                    ? 'rgba(140, 248, 255, 0.96)'
+                    : 'rgba(0, 255, 204, 0.88)';
+                ctx.lineWidth = Math.max(3, bubbleRadius * 0.11);
+                ctx.beginPath();
+                ctx.arc(0, 0, bubbleRadius, 0, TAU);
+                ctx.stroke();
+
+                ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+                ctx.lineWidth = Math.max(1.2, bubbleRadius * 0.035);
+                ctx.beginPath();
+                ctx.arc(0, 0, bubbleRadius * 0.68, 0, TAU);
+                ctx.stroke();
+
+                ctx.shadowBlur = 18;
+                ctx.shadowColor = 'rgba(0, 200, 255, 0.8)';
+                ctx.fillStyle = 'rgba(208, 218, 226, 0.95)';
+                ctx.beginPath();
+                ctx.moveTo(0, -shipScale * 0.9);
+                ctx.lineTo(shipScale * 0.48, shipScale * 0.7);
+                ctx.lineTo(0, shipScale * 0.24);
+                ctx.lineTo(-shipScale * 0.48, shipScale * 0.7);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.fillStyle = 'rgba(0, 240, 255, 0.9)';
+                ctx.beginPath();
+                ctx.arc(0, shipScale * 0.28, shipScale * 0.18, 0, TAU);
+                ctx.fill();
+
+                ctx.restore();
+            }
+
+            function drawParticles() {
+                for (const p of game.particles) {
+                    const proj = projectPlayer(p.x, p.y);
+                    const alpha = clamp(p.life / p.maxLife, 0, 1);
+                    ctx.save();
+                    ctx.globalAlpha = alpha * 0.8;
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    ctx.arc(proj.x, proj.y, p.size * (0.6 + alpha), 0, TAU);
+                    ctx.fill();
+                    ctx.restore();
+                }
+            }
+
+            function drawReticle() {
+                const w = overlayCanvas.width;
+                const h = overlayCanvas.height;
+                ctx.save();
+                ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+                ctx.lineWidth = 1.2;
+                ctx.beginPath();
+                ctx.moveTo(w * 0.5 - 16, h * 0.52);
+                ctx.lineTo(w * 0.5 + 16, h * 0.52);
+                ctx.moveTo(w * 0.5, h * 0.52 - 16);
+                ctx.lineTo(w * 0.5, h * 0.52 + 16);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            function drawPopups() {
+                ctx.save();
+                ctx.font = `${Math.max(16, overlayCanvas.width * 0.015)}px 'Segoe UI', sans-serif`;
+                ctx.textAlign = 'center';
+                for (let i = 0; i < game.popups.length; i++) {
+                    const popup = game.popups[i];
+                    const alpha = clamp(popup.life / 1.4, 0, 1);
+                    ctx.fillStyle = popup.color;
+                    ctx.globalAlpha = alpha;
+                    ctx.fillText(
+                        popup.text,
+                        overlayCanvas.width * 0.5,
+                        overlayCanvas.height * 0.19 + i * 24
+                    );
+                }
+                ctx.restore();
+            }
+
+            function drawStateLabels() {
+                ctx.save();
+                ctx.font = `${Math.max(13, overlayCanvas.width * 0.010)}px ui-monospace, monospace`;
+                ctx.fillStyle = 'rgba(235, 245, 248, 0.75)';
+                ctx.textAlign = 'left';
+                ctx.fillText(`SYNC ${Math.round(aiNet.controlWeight * 100)}%`, 18, overlayCanvas.height - 42);
+                ctx.fillText(`MODE ${game.state.toUpperCase()}`, 18, overlayCanvas.height - 20);
+                ctx.textAlign = 'right';
+                ctx.fillText(`BOOST ${input['Shift'] ? 'ON' : 'OFF'}`, overlayCanvas.width - 18, overlayCanvas.height - 42);
+                ctx.fillText(`BURST ${game.player.aiBurst > 0 ? game.player.aiBurst.toFixed(1) + 's' : 'READY'}`, overlayCanvas.width - 18, overlayCanvas.height - 20);
+                ctx.restore();
+            }
+
+            function drawOverlay() {
+                ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+                drawCorridor();
+                drawObjects();
+                drawParticles();
+                drawPlayer();
+                drawReticle();
+                drawPopups();
+                drawStateLabels();
+            }
+
+            function updateUI(fps) {
+                const p = game.player;
+                const hull = clamp(p.hull, 0, 100);
+                const energy = clamp(p.energy, 0, 100);
+                const control = clamp(aiNet.controlWeight, 0, 1);
+                const footprint = bubbleFootprint(p);
+
+                elState.textContent = game.state.toUpperCase();
+                elState.className = 'value ' + (game.state === 'gameover' ? 'danger' : game.state === 'paused' ? 'warn' : 'good');
+                elScore.textContent = formatInt(game.score);
+                elBest.textContent = formatInt(game.best);
+                elDistance.textContent = `${formatInt(game.distance)} m.u.`;
+                elCombo.textContent = `x${game.combo}`;
+                elLevel.textContent = `Lv ${game.level}`;
+                elHull.textContent = `${Math.round(hull)}%`;
+                elEnergy.textContent = `${Math.round(energy)}%`;
+                elSpeed.textContent = `${p.speed.toFixed(2)} c`;
+                elRadius.textContent = p.radius.toFixed(2);
+                elThickness.textContent = p.thickness.toFixed(2);
+                elFootprint.textContent = footprint.toFixed(2);
+                elBoost.textContent = input['Shift'] ? 'ON' : 'OFF';
+                elBoost.className = 'value ' + (input['Shift'] ? 'warn' : 'good');
+                elControl.textContent = `${Math.round(control * 100)}%`;
+                elLoss.textContent = aiNet.loss.toFixed(5);
+                elBurst.textContent = p.aiBurst > 0 ? `${p.aiBurst.toFixed(1)} s` : (control >= 0.35 ? 'READY' : 'CHARGING');
+                elFPS.textContent = String(Math.round(fps));
+
+                hullFill.style.width = `${hull}%`;
+                energyFill.style.width = `${energy}%`;
+                aiFill.style.width = `${Math.round(control * 100)}%`;
+
+                if (control > 0.95) {
+                    elAIStatus.textContent = 'SYNCED';
+                    elAIStatus.className = 'value good';
+                } else if (p.aiBurst > 0) {
+                    elAIStatus.textContent = 'OVERRIDING';
+                    elAIStatus.className = 'value good';
+                } else if (control >= 0.35) {
+                    elAIStatus.textContent = 'BURST READY';
+                    elAIStatus.className = 'value good';
+                } else if (control > 0.0) {
+                    elAIStatus.textContent = 'HANDOVER';
+                    elAIStatus.className = 'value warn';
+                } else {
+                    elAIStatus.textContent = 'LEARNING';
+                    elAIStatus.className = 'value warn';
+                }
+            }
+
+            let lastTime = performance.now();
+            let fpsClock = performance.now();
+            let fpsFrames = 0;
+            let fpsValue = 60;
+
+            function render(now) {
+                const dt = Math.min(0.033, (now - lastTime) * 0.001);
+                lastTime = now;
+                fpsFrames += 1;
+                if (now - fpsClock >= 300) {
+                    fpsValue = fpsFrames * 1000 / (now - fpsClock);
+                    fpsFrames = 0;
+                    fpsClock = now;
+                }
+
+                updateGame(dt);
+
+                const aiData = aiNet.getTextureData();
+                gl.bindTexture(gl.TEXTURE_2D, aiTex);
+                gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 256, 1, gl.RG, gl.FLOAT, aiData);
+
+                gl.useProgram(prog);
+                gl.uniform2f(uRes, glCanvas.width, glCanvas.height);
+                gl.uniform1f(uTime, now * 0.001);
+                gl.uniform3f(
+                    uCam,
+                    game.player.x * 0.05 + Math.sin(game.worldTime * 0.9) * 0.02 * game.cameraShake,
+                    0.42 + game.player.y * 0.08 + Math.cos(game.worldTime * 0.7) * 0.02 * game.cameraShake,
+                    5.6
+                );
+                gl.uniform1f(uV, game.player.speed);
+                gl.uniform1f(uR, game.player.radius);
+                gl.uniform1f(uT, game.player.thickness);
+                gl.uniform1i(uShowEnergy, chkEnergy.checked ? 1 : 0);
+                gl.uniform1i(uShowGrid, chkGrid.checked ? 1 : 0);
+                gl.uniform1f(uAiInfluence, clamp(aiNet.controlWeight + (game.player.aiBurst > 0 ? 0.2 : 0.0), 0, 1));
+                gl.uniform2f(uShipOffset, game.player.x, game.player.y);
+                gl.uniform1f(uHitFlash, game.hitFlash);
+                gl.uniform1f(uSyncPulse, clamp(game.syncPulse + (game.player.aiBurst > 0 ? 0.4 : 0.0), 0, 1));
+                gl.uniform1f(uShake, game.cameraShake);
+                gl.activeTexture(gl.TEXTURE0);
+                gl.bindTexture(gl.TEXTURE_2D, aiTex);
+                gl.uniform1i(uAiMetric, 0);
+                gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+                drawOverlay();
+                updateUI(fpsValue);
+                requestAnimationFrame(render);
+            }
+
+            updateUI(60);
+            showMessage(
+                'Metric Run',
+                'Press <strong>Space</strong> to launch.<br><br>' +
+                'Use <strong>W A S D</strong> to steer, <strong>Q / E</strong> for bubble radius, <strong>Z / C</strong> for wall thickness, hold <strong>Shift</strong> to boost, and hit <strong>F</strong> when the AI sync bar is charged enough to save you from your own decisions.'
+            );
+            requestAnimationFrame(render);
+        })();
+    </script>
+</body>
+</html>

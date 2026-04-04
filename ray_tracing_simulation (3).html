@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Single-File Ray Tracing Simulation • Quantum FX</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --panel-bg: rgba(12, 15, 24, 0.78);
+      --panel-border: rgba(255, 255, 255, 0.12);
+      --text: #eef2ff;
+      --muted: #b7bfd6;
+      --accent: #7db0ff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: #0a0c12;
+      color: var(--text);
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow: hidden;
+    }
+
+    #app {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(circle at top, #1a2238 0%, #0a0c12 60%, #05060b 100%);
+      cursor: grab;
+    }
+
+    canvas.dragging {
+      cursor: grabbing;
+    }
+
+    .panel {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      z-index: 2;
+      width: min(380px, calc(100vw - 32px));
+      padding: 16px 16px 14px;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+      user-select: none;
+    }
+
+    .panel h1 {
+      margin: 0 0 6px;
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    .panel p {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.35;
+    }
+
+    .controls {
+      display: grid;
+      gap: 12px;
+    }
+
+    .control {
+      display: grid;
+      gap: 6px;
+    }
+
+    .control-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 28px;
+    }
+
+    .control-row label,
+    .control-row span,
+    .control-row button {
+      font-size: 0.92rem;
+    }
+
+    .value {
+      color: var(--accent);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+
+    input[type="checkbox"] {
+      transform: translateY(1px);
+      accent-color: var(--accent);
+    }
+
+    button {
+      appearance: none;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+    }
+
+    button:hover {
+      background: rgba(255, 255, 255, 0.10);
+      border-color: rgba(255, 255, 255, 0.22);
+    }
+
+    button:active {
+      transform: translateY(1px);
+    }
+
+    .footer {
+      margin-top: 12px;
+      display: grid;
+      gap: 4px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.3;
+    }
+
+    .status {
+      position: absolute;
+      right: 16px;
+      bottom: 16px;
+      z-index: 2;
+      padding: 10px 12px;
+      background: rgba(12, 15, 24, 0.72);
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      border-radius: 12px;
+      backdrop-filter: blur(10px);
+      color: var(--muted);
+      font-size: 0.9rem;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.4;
+      white-space: pre-line;
+      max-width: min(320px, calc(100vw - 32px));
+    }
+
+    .error {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      text-align: center;
+      background: rgba(5, 6, 11, 0.94);
+      z-index: 4;
+    }
+
+    .error-card {
+      max-width: 560px;
+      padding: 24px;
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(255, 255, 255, 0.04);
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.42);
+    }
+
+    .error-card h2 {
+      margin-top: 0;
+      margin-bottom: 8px;
+      font-size: 1.3rem;
+    }
+
+    .error-card p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    @media (max-width: 720px) {
+      .panel {
+        width: calc(100vw - 24px);
+        left: 12px;
+        top: 12px;
+        padding: 14px;
+      }
+
+      .status {
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
+        max-width: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <canvas id="glcanvas" aria-label="Ray tracing simulation"></canvas>
+
+    <div class="panel">
+      <h1>Single-File Ray Tracing Simulation</h1>
+      <p>
+        Drag to orbit, use the mouse wheel to zoom, and adjust the renderer and deterministic
+        quantum-inspired visual effects.
+      </p>
+
+      <div class="controls">
+        <div class="control">
+          <div class="control-row">
+            <label for="animToggle">Animation</label>
+            <input id="animToggle" type="checkbox" checked />
+          </div>
+        </div>
+
+        <div class="control">
+          <div class="control-row">
+            <label for="quantumToggle">Quantum effects</label>
+            <input id="quantumToggle" type="checkbox" checked />
+          </div>
+        </div>
+
+        <div class="control">
+          <div class="control-row">
+            <label for="quantumSlider">Quantum intensity</label>
+            <span class="value" id="quantumValue">65%</span>
+          </div>
+          <input id="quantumSlider" type="range" min="0" max="100" step="1" value="65" />
+        </div>
+
+        <div class="control">
+          <div class="control-row">
+            <label for="bounceSlider">Reflection bounces</label>
+            <span class="value" id="bounceValue">3</span>
+          </div>
+          <input id="bounceSlider" type="range" min="1" max="4" step="1" value="3" />
+        </div>
+
+        <div class="control">
+          <div class="control-row">
+            <label for="sampleSlider">Anti-aliasing samples</label>
+            <span class="value" id="sampleValue">2</span>
+          </div>
+          <input id="sampleSlider" type="range" min="1" max="4" step="1" value="2" />
+        </div>
+
+        <div class="control">
+          <div class="control-row">
+            <label for="scaleSlider">Render scale</label>
+            <span class="value" id="scaleValue">75%</span>
+          </div>
+          <input id="scaleSlider" type="range" min="35" max="100" step="5" value="75" />
+        </div>
+
+        <div class="control-row">
+          <button id="resetCamera" type="button">Reset camera</button>
+          <button id="snapshot" type="button">Save PNG</button>
+        </div>
+      </div>
+
+      <div class="footer">
+        <div>Scene: three spheres, checker plane, reflections, shadows, and a moving light.</div>
+        <div>Quantum mode adds deterministic pilot-wave interference, a tunneling barrier, and quantized shell glow.</div>
+      </div>
+    </div>
+
+    <div class="status" id="status">Initialising WebGL…</div>
+
+    <div class="error" id="errorBox" role="alert">
+      <div class="error-card">
+        <h2>WebGL could not start</h2>
+        <p>
+          This demo needs WebGL. Use a modern browser with hardware acceleration enabled.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const canvas = document.getElementById('glcanvas');
+      const statusEl = document.getElementById('status');
+      const errorBox = document.getElementById('errorBox');
+
+      const gl = canvas.getContext('webgl', {
+        antialias: false,
+        alpha: false,
+        depth: false,
+        stencil: false,
+        premultipliedAlpha: false,
+        preserveDrawingBuffer: true
+      });
+
+      if (!gl) {
+        errorBox.style.display = 'flex';
+        statusEl.textContent = 'WebGL unavailable';
+        return;
+      }
+
+      const vertexSource = `
+        attribute vec2 a_position;
+        void main() {
+          gl_Position = vec4(a_position, 0.0, 1.0);
+        }
+      `;
+
+      const fragmentSource = `
+        precision highp float;
+
+        uniform vec2 u_resolution;
+        uniform float u_time;
+        uniform vec3 u_cameraPos;
+        uniform vec3 u_cameraTarget;
+        uniform float u_fov;
+        uniform int u_bounces;
+        uniform int u_samples;
+        uniform vec3 u_lightPos;
+        uniform float u_quantumEnabled;
+        uniform float u_quantumAmount;
+
+        const int MAX_BOUNCES = 4;
+        const int MAX_SAMPLES = 4;
+        const float EPS = 0.001;
+        const float FAR = 1000.0;
+        const float PI = 3.14159265359;
+
+        struct Hit {
+          float t;
+          vec3 position;
+          vec3 normal;
+          vec3 albedo;
+          float reflectivity;
+          float roughness;
+          vec3 emission;
+          float transmission;
+          float barrierDepth;
+        };
+
+        float quantumMix() {
+          return clamp(u_quantumEnabled * u_quantumAmount, 0.0, 1.0);
+        }
+
+        float hash(vec2 p) {
+          p = fract(p * vec2(123.34, 456.21));
+          p += dot(p, p + 45.32);
+          return fract(p.x * p.y);
+        }
+
+        vec2 hash2(vec2 p) {
+          return vec2(hash(p + 17.0), hash(p + 93.0));
+        }
+
+        vec3 phasePalette(float x) {
+          vec3 a = vec3(0.24, 0.84, 1.08);
+          vec3 b = vec3(0.98, 0.44, 1.18);
+          vec3 c = vec3(0.72, 0.92, 1.0);
+          float s = 0.5 + 0.5 * sin(6.2831853 * x);
+          return mix(a, b, s) * mix(vec3(0.74), c, 0.4);
+        }
+
+        float pilotWave(vec3 p) {
+          vec3 slitA = vec3(-0.36, -0.04, -1.33);
+          vec3 slitB = vec3(0.36, -0.04, -1.33);
+          float d1 = length(p - slitA);
+          float d2 = length(p - slitB);
+          float envelope = exp(-0.18 * min(d1, d2));
+          float phase = 12.0 * (d1 - d2) - u_time * 1.9;
+          return 0.5 + 0.5 * sin(phase) * envelope;
+        }
+
+        float standingWave(vec3 n, float m1, float m2) {
+          float theta = acos(clamp(n.y, -1.0, 1.0));
+          float phi = atan(n.z, n.x);
+          return 0.5 + 0.5 * cos(m1 * phi + u_time * 0.7) * sin(m2 * theta);
+        }
+
+        float slitGlow(vec3 p) {
+          vec3 slitA = vec3(-0.36, -0.04, -1.33);
+          vec3 slitB = vec3(0.36, -0.04, -1.33);
+          float a = exp(-75.0 * dot(p - slitA, p - slitA));
+          float b = exp(-75.0 * dot(p - slitB, p - slitB));
+          return a + b;
+        }
+
+        float tunnelingFactor(float barrierDepth, float phaseField) {
+          float density = mix(3.9, 1.6, phaseField);
+          return exp(-barrierDepth * density);
+        }
+
+        vec3 skyColor(vec3 rd) {
+          float t = clamp(rd.y * 0.5 + 0.5, 0.0, 1.0);
+          vec3 horizon = vec3(0.83, 0.90, 1.0);
+          vec3 zenith = vec3(0.12, 0.20, 0.36);
+          vec3 ground = vec3(0.05, 0.05, 0.07);
+          vec3 base = mix(ground, mix(horizon, zenith, pow(1.0 - t, 1.7)), smoothstep(-0.2, 0.25, rd.y));
+          float q = quantumMix();
+          float aurora = 0.5 + 0.5 * sin(8.0 * rd.x + 11.0 * rd.z - u_time * 0.7);
+          vec3 quantumSky = phasePalette(0.25 + 0.25 * aurora) * pow(max(0.0, rd.y), 1.4) * 0.18;
+          return mix(base, base + quantumSky, q * 0.55);
+        }
+
+        bool sphereIntersect(vec3 ro, vec3 rd, vec3 center, float radius, out float t) {
+          vec3 oc = ro - center;
+          float b = dot(oc, rd);
+          float c = dot(oc, oc) - radius * radius;
+          float h = b * b - c;
+          if (h < 0.0) {
+            return false;
+          }
+          h = sqrt(h);
+          float tNear = -b - h;
+          float tFar = -b + h;
+          t = tNear > EPS ? tNear : tFar;
+          return t > EPS;
+        }
+
+        bool planeIntersect(vec3 ro, vec3 rd, float height, out float t) {
+          float denom = rd.y;
+          if (abs(denom) < 0.0001) {
+            return false;
+          }
+          t = (height - ro.y) / denom;
+          return t > EPS;
+        }
+
+        bool boxIntersect(vec3 ro, vec3 rd, vec3 bmin, vec3 bmax, out float t, out vec3 normal, out float depth) {
+          vec3 invDir = 1.0 / rd;
+          vec3 t0 = (bmin - ro) * invDir;
+          vec3 t1 = (bmax - ro) * invDir;
+          vec3 tmin = min(t0, t1);
+          vec3 tmax = max(t0, t1);
+          float tEnter = max(max(tmin.x, tmin.y), tmin.z);
+          float tExit = min(min(tmax.x, tmax.y), tmax.z);
+          if (tExit < max(tEnter, 0.0)) {
+            return false;
+          }
+          t = tEnter > EPS ? tEnter : tExit;
+          if (t <= EPS) {
+            return false;
+          }
+          depth = max(0.0, tExit - max(tEnter, 0.0));
+          vec3 hitPos = ro + rd * t;
+          const float nEps = 0.002;
+          if (abs(hitPos.x - bmin.x) < nEps) {
+            normal = vec3(-1.0, 0.0, 0.0);
+          } else if (abs(hitPos.x - bmax.x) < nEps) {
+            normal = vec3(1.0, 0.0, 0.0);
+          } else if (abs(hitPos.y - bmin.y) < nEps) {
+            normal = vec3(0.0, -1.0, 0.0);
+          } else if (abs(hitPos.y - bmax.y) < nEps) {
+            normal = vec3(0.0, 1.0, 0.0);
+          } else if (abs(hitPos.z - bmin.z) < nEps) {
+            normal = vec3(0.0, 0.0, -1.0);
+          } else {
+            normal = vec3(0.0, 0.0, 1.0);
+          }
+          if (dot(normal, rd) > 0.0) {
+            normal *= -1.0;
+          }
+          return true;
+        }
+
+        vec3 checkerColor(vec3 p) {
+          float scale = 0.85;
+          float c = mod(floor(p.x * scale) + floor(p.z * scale), 2.0);
+          if (c < 0.0) {
+            c += 2.0;
+          }
+          vec3 a = vec3(0.14, 0.16, 0.18);
+          vec3 b = vec3(0.82, 0.83, 0.86);
+          vec3 base = mix(a, b, c);
+          float line = smoothstep(0.0, 0.05, abs(fract(p.x * scale) - 0.5)) *
+                       smoothstep(0.0, 0.05, abs(fract(p.z * scale) - 0.5));
+          return mix(base, base * 0.95, line);
+        }
+
+        bool traceScene(vec3 ro, vec3 rd, out Hit hit) {
+          hit.t = FAR;
+          bool found = false;
+          float t;
+          float q = quantumMix();
+
+          vec3 sphereA = vec3(-1.8, -0.10 + sin(u_time * 1.4) * 0.18, 0.15 + cos(u_time * 0.8) * 0.25);
+          vec3 sphereB = vec3(0.25 + sin(u_time * 0.9 + 1.8) * 0.65, -0.35, -0.85 + cos(u_time * 1.1) * 0.18);
+          vec3 sphereC = vec3(1.95 + cos(u_time * 0.7) * 0.18, -0.10, 0.45 + sin(u_time * 0.65) * 0.2);
+
+          if (sphereIntersect(ro, rd, sphereA, 0.9, t) && t < hit.t) {
+            found = true;
+            hit.t = t;
+            hit.position = ro + rd * t;
+            hit.normal = normalize(hit.position - sphereA);
+            float phaseField = pilotWave(hit.position);
+            float orbital = standingWave(hit.normal, 4.0, 2.0);
+            vec3 base = vec3(0.92, 0.36, 0.31);
+            vec3 tint = phasePalette(phaseField * 0.65 + orbital * 0.35);
+            hit.albedo = mix(base, mix(base * 0.55, tint, 0.55 + 0.20 * orbital), q * (0.28 + 0.32 * orbital));
+            hit.reflectivity = mix(0.14, 0.28, q * phaseField);
+            hit.roughness = mix(0.70, 0.34, q * orbital);
+            hit.emission = tint * q * orbital * 0.12;
+            hit.transmission = 0.0;
+            hit.barrierDepth = 0.0;
+          }
+
+          if (sphereIntersect(ro, rd, sphereB, 0.65, t) && t < hit.t) {
+            found = true;
+            hit.t = t;
+            hit.position = ro + rd * t;
+            hit.normal = normalize(hit.position - sphereB);
+            float phaseField = pilotWave(hit.position + vec3(0.0, 0.18, 0.0));
+            float orbital = standingWave(hit.normal, 3.0, 3.0);
+            vec3 base = vec3(0.30, 0.74, 0.56);
+            vec3 tint = phasePalette(phaseField + orbital * 0.18);
+            hit.albedo = mix(base, mix(base * 0.68, tint, 0.42 + 0.22 * orbital), q * 0.65);
+            hit.reflectivity = mix(0.38, 0.50, q * (0.25 + 0.75 * phaseField));
+            hit.roughness = mix(0.32, 0.18, q * orbital);
+            hit.emission = tint * q * (0.05 + 0.11 * orbital);
+            hit.transmission = 0.0;
+            hit.barrierDepth = 0.0;
+          }
+
+          if (sphereIntersect(ro, rd, sphereC, 0.95, t) && t < hit.t) {
+            found = true;
+            hit.t = t;
+            hit.position = ro + rd * t;
+            hit.normal = normalize(hit.position - sphereC);
+            float phaseField = pilotWave(hit.position + vec3(0.0, 0.0, 0.24));
+            float orbital = standingWave(hit.normal, 5.0, 2.0);
+            vec3 base = vec3(0.50, 0.66, 1.0);
+            vec3 tint = phasePalette(phaseField * 0.5 + orbital * 0.5);
+            hit.albedo = mix(base, mix(base * 0.52, tint, 0.58 + 0.18 * orbital), q * 0.82);
+            hit.reflectivity = mix(0.82, 0.93, q * (0.25 + 0.75 * phaseField));
+            hit.roughness = mix(0.12, 0.04, q * (0.55 + 0.45 * orbital));
+            hit.emission = tint * q * (0.16 + 0.24 * orbital);
+            hit.transmission = 0.0;
+            hit.barrierDepth = 0.0;
+          }
+
+          if (q > 0.001) {
+            vec3 barrierMin = vec3(-1.15, -0.55, -1.40);
+            vec3 barrierMax = vec3(1.15, 0.82, -1.26);
+            vec3 barrierNormal;
+            float barrierDepth;
+            if (boxIntersect(ro, rd, barrierMin, barrierMax, t, barrierNormal, barrierDepth) && t < hit.t) {
+              found = true;
+              hit.t = t;
+              hit.position = ro + rd * t;
+              hit.normal = barrierNormal;
+              float phaseField = pilotWave(hit.position);
+              float slits = slitGlow(hit.position);
+              vec3 tint = phasePalette(phaseField + 0.15);
+              vec3 base = mix(vec3(0.10, 0.12, 0.16), tint, 0.22 + 0.18 * phaseField);
+              hit.albedo = mix(base, tint, 0.20 + 0.22 * phaseField);
+              hit.reflectivity = 0.06 + 0.16 * phaseField;
+              hit.roughness = 0.08;
+              hit.emission = tint * q * (0.08 + 0.26 * slits);
+              hit.transmission = 0.58 + 0.30 * phaseField;
+              hit.barrierDepth = barrierDepth;
+            }
+          }
+
+          if (planeIntersect(ro, rd, -1.05, t) && t < hit.t) {
+            found = true;
+            hit.t = t;
+            hit.position = ro + rd * t;
+            hit.normal = vec3(0.0, 1.0, 0.0);
+            vec3 base = checkerColor(hit.position);
+            float phaseField = pilotWave(hit.position + vec3(0.0, 0.0, 0.28));
+            float ripple = 0.5 + 0.5 * sin(14.0 * length(hit.position.xz - vec2(0.0, -1.2)) - u_time * 1.6);
+            vec3 tint = phasePalette(phaseField + 0.08 * ripple);
+            hit.albedo = mix(base, mix(base, tint, 0.28 + 0.22 * ripple), q * (0.35 + 0.35 * phaseField));
+            hit.reflectivity = mix(0.03, 0.09, q * phaseField);
+            hit.roughness = mix(1.0, 0.82, q * 0.35);
+            hit.emission = tint * q * (0.03 + 0.10 * phaseField * ripple);
+            hit.transmission = 0.0;
+            hit.barrierDepth = 0.0;
+          }
+
+          return found;
+        }
+
+        float shadowTerm(vec3 origin, vec3 lightPos) {
+          vec3 toLight = lightPos - origin;
+          float remainingDist = length(toLight);
+          vec3 shadowDir = toLight / remainingDist;
+          vec3 currentOrigin = origin + shadowDir * EPS * 2.0;
+          float visibility = 1.0;
+
+          for (int i = 0; i < 3; i++) {
+            Hit shadowHit;
+            if (!traceScene(currentOrigin, shadowDir, shadowHit) || shadowHit.t >= remainingDist) {
+              break;
+            }
+
+            if (shadowHit.transmission > 0.0) {
+              float phaseField = pilotWave(shadowHit.position);
+              float tunnel = tunnelingFactor(max(shadowHit.barrierDepth, 0.01), phaseField);
+              visibility *= shadowHit.transmission * mix(0.45, 1.0, tunnel);
+              currentOrigin = shadowHit.position + shadowDir * EPS * 6.0;
+              remainingDist -= shadowHit.t;
+              if (visibility <= 0.02) {
+                return 0.0;
+              }
+              continue;
+            }
+
+            return 0.0;
+          }
+
+          return clamp(visibility, 0.0, 1.0);
+        }
+
+        vec3 shade(vec3 ro, vec3 rd) {
+          vec3 color = vec3(0.0);
+          vec3 throughput = vec3(1.0);
+          vec3 currentOrigin = ro;
+          vec3 currentDir = rd;
+
+          for (int bounce = 0; bounce < MAX_BOUNCES; bounce++) {
+            if (bounce >= u_bounces) {
+              break;
+            }
+
+            Hit hit;
+            if (!traceScene(currentOrigin, currentDir, hit)) {
+              color += throughput * skyColor(currentDir);
+              break;
+            }
+
+            vec3 lightDir = normalize(u_lightPos - hit.position);
+            float lightDist = length(u_lightPos - hit.position);
+            float attenuation = 24.0 / (1.0 + lightDist * lightDist * 0.28);
+            float shadow = shadowTerm(hit.position + hit.normal * EPS * 2.0, u_lightPos);
+
+            float diffuse = max(dot(hit.normal, lightDir), 0.0);
+            vec3 viewDir = normalize(-currentDir);
+            vec3 halfDir = normalize(lightDir + viewDir);
+            float gloss = mix(10.0, 120.0, 1.0 - hit.roughness);
+            float specular = pow(max(dot(hit.normal, halfDir), 0.0), gloss);
+            float fresnel = pow(1.0 - max(dot(hit.normal, viewDir), 0.0), 5.0);
+            float ambient = 0.12 + 0.08 * max(hit.normal.y, 0.0);
+
+            vec3 local = hit.albedo * (ambient + diffuse * attenuation * shadow);
+            local += vec3(1.0) * specular * attenuation * shadow * mix(0.08, 1.0, hit.reflectivity + fresnel * 0.4);
+            local += hit.emission;
+
+            if (hit.normal.y > 0.99) {
+              float floorGlow = 0.02 * smoothstep(0.0, 1.0, 1.0 - length(hit.position.xz) * 0.08);
+              float phaseField = pilotWave(hit.position);
+              local += phasePalette(phaseField + 0.15) * floorGlow * quantumMix();
+            }
+
+            if (hit.transmission > 0.0) {
+              color += throughput * local;
+              float phaseField = pilotWave(hit.position);
+              float tunnel = tunnelingFactor(max(hit.barrierDepth, 0.01), phaseField);
+              vec3 tint = phasePalette(phaseField + 0.15);
+              throughput *= mix(vec3(0.72), tint, 0.35) * mix(0.35, 1.0, tunnel) * hit.transmission;
+              vec3 phaseDrift = normalize(vec3(
+                sin(6.2831853 * phaseField + u_time * 0.5),
+                0.25 * sin(12.5663706 * phaseField),
+                cos(6.2831853 * phaseField + u_time * 0.5)
+              ));
+              currentOrigin = hit.position + currentDir * EPS * 8.0;
+              currentDir = normalize(mix(currentDir, normalize(currentDir + phaseDrift * 0.12 * u_quantumAmount), 0.28 * u_quantumAmount));
+              if (max(max(throughput.r, throughput.g), throughput.b) < 0.01) {
+                break;
+              }
+              continue;
+            }
+
+            color += throughput * local;
+
+            if (hit.reflectivity < 0.05) {
+              break;
+            }
+
+            vec2 jitter = hash2(gl_FragCoord.xy + float(bounce) * 19.73 + hit.position.xz * 2.41) - 0.5;
+            vec3 tangent = normalize(abs(hit.normal.y) < 0.99 ? cross(hit.normal, vec3(0.0, 1.0, 0.0)) : cross(hit.normal, vec3(1.0, 0.0, 0.0)));
+            vec3 bitangent = normalize(cross(hit.normal, tangent));
+            vec3 reflected = reflect(currentDir, hit.normal);
+            reflected = normalize(reflected + (tangent * jitter.x + bitangent * jitter.y) * hit.roughness * 0.16);
+
+            throughput *= mix(vec3(0.35), hit.albedo, 0.35) * hit.reflectivity;
+            currentOrigin = hit.position + hit.normal * EPS * 2.0;
+            currentDir = reflected;
+
+            if (max(max(throughput.r, throughput.g), throughput.b) < 0.01) {
+              break;
+            }
+          }
+
+          return color;
+        }
+
+        void main() {
+          vec3 forward = normalize(u_cameraTarget - u_cameraPos);
+          vec3 right = normalize(cross(forward, vec3(0.0, 1.0, 0.0)));
+          vec3 up = normalize(cross(right, forward));
+          float tanHalfFov = tan(radians(u_fov) * 0.5);
+
+          vec3 color = vec3(0.0);
+
+          for (int sampleIndex = 0; sampleIndex < MAX_SAMPLES; sampleIndex++) {
+            if (sampleIndex >= u_samples) {
+              break;
+            }
+
+            vec2 jitter = hash2(gl_FragCoord.xy + float(sampleIndex) * 37.91) - 0.5;
+            vec2 uv = ((gl_FragCoord.xy + jitter) / u_resolution) * 2.0 - 1.0;
+            uv.x *= u_resolution.x / u_resolution.y;
+
+            vec3 rd = normalize(forward + uv.x * tanHalfFov * right + uv.y * tanHalfFov * up);
+            color += shade(u_cameraPos, rd);
+          }
+
+          color /= float(u_samples);
+          color = color / (color + vec3(1.0));
+          color = pow(color, vec3(1.0 / 2.2));
+          gl_FragColor = vec4(color, 1.0);
+        }
+      `;
+
+      function createShader(type, source) {
+        const shader = gl.createShader(type);
+        gl.shaderSource(shader, source);
+        gl.compileShader(shader);
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+          const info = gl.getShaderInfoLog(shader);
+          gl.deleteShader(shader);
+          throw new Error(info || 'Unknown shader compile error');
+        }
+        return shader;
+      }
+
+      function createProgram(vertexSrc, fragmentSrc) {
+        const program = gl.createProgram();
+        const vertexShader = createShader(gl.VERTEX_SHADER, vertexSrc);
+        const fragmentShader = createShader(gl.FRAGMENT_SHADER, fragmentSrc);
+        gl.attachShader(program, vertexShader);
+        gl.attachShader(program, fragmentShader);
+        gl.linkProgram(program);
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+          const info = gl.getProgramInfoLog(program);
+          gl.deleteProgram(program);
+          gl.deleteShader(vertexShader);
+          gl.deleteShader(fragmentShader);
+          throw new Error(info || 'Unknown program link error');
+        }
+        gl.deleteShader(vertexShader);
+        gl.deleteShader(fragmentShader);
+        return program;
+      }
+
+      let program;
+      try {
+        program = createProgram(vertexSource, fragmentSource);
+      } catch (error) {
+        console.error(error);
+        errorBox.style.display = 'flex';
+        statusEl.textContent = 'Shader compilation failed';
+        return;
+      }
+
+      const positionBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.bufferData(
+        gl.ARRAY_BUFFER,
+        new Float32Array([
+          -1, -1,
+           3, -1,
+          -1,  3,
+        ]),
+        gl.STATIC_DRAW
+      );
+
+      gl.useProgram(program);
+
+      const attribs = {
+        position: gl.getAttribLocation(program, 'a_position')
+      };
+
+      const uniforms = {
+        resolution: gl.getUniformLocation(program, 'u_resolution'),
+        time: gl.getUniformLocation(program, 'u_time'),
+        cameraPos: gl.getUniformLocation(program, 'u_cameraPos'),
+        cameraTarget: gl.getUniformLocation(program, 'u_cameraTarget'),
+        fov: gl.getUniformLocation(program, 'u_fov'),
+        bounces: gl.getUniformLocation(program, 'u_bounces'),
+        samples: gl.getUniformLocation(program, 'u_samples'),
+        lightPos: gl.getUniformLocation(program, 'u_lightPos'),
+        quantumEnabled: gl.getUniformLocation(program, 'u_quantumEnabled'),
+        quantumAmount: gl.getUniformLocation(program, 'u_quantumAmount')
+      };
+
+      gl.enableVertexAttribArray(attribs.position);
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.vertexAttribPointer(attribs.position, 2, gl.FLOAT, false, 0, 0);
+
+      const controls = {
+        animToggle: document.getElementById('animToggle'),
+        quantumToggle: document.getElementById('quantumToggle'),
+        quantumSlider: document.getElementById('quantumSlider'),
+        bounceSlider: document.getElementById('bounceSlider'),
+        sampleSlider: document.getElementById('sampleSlider'),
+        scaleSlider: document.getElementById('scaleSlider'),
+        quantumValue: document.getElementById('quantumValue'),
+        bounceValue: document.getElementById('bounceValue'),
+        sampleValue: document.getElementById('sampleValue'),
+        scaleValue: document.getElementById('scaleValue'),
+        resetCamera: document.getElementById('resetCamera'),
+        snapshot: document.getElementById('snapshot')
+      };
+
+      const state = {
+        quantumEnabled: controls.quantumToggle.checked,
+        quantumAmount: Number(controls.quantumSlider.value) / 100,
+        bounces: Number(controls.bounceSlider.value),
+        samples: Number(controls.sampleSlider.value),
+        renderScale: Number(controls.scaleSlider.value) / 100,
+        yaw: 0.55,
+        pitch: 0.24,
+        radius: 6.9,
+        target: [0.2, -0.1, -0.1],
+        fov: 52,
+        dragging: false,
+        lastPointerX: 0,
+        lastPointerY: 0,
+        isAnimating: controls.animToggle.checked,
+        frozenTime: 0,
+        startTime: performance.now(),
+        fps: 0,
+        frameCounter: 0,
+        fpsTime: performance.now(),
+        lastNow: performance.now()
+      };
+
+      function updateLabels() {
+        controls.quantumValue.textContent = `${Math.round(state.quantumAmount * 100)}%`;
+        controls.bounceValue.textContent = String(state.bounces);
+        controls.sampleValue.textContent = String(state.samples);
+        controls.scaleValue.textContent = `${Math.round(state.renderScale * 100)}%`;
+      }
+
+      function resize() {
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const width = Math.max(1, Math.floor(window.innerWidth * state.renderScale * dpr));
+        const height = Math.max(1, Math.floor(window.innerHeight * state.renderScale * dpr));
+
+        if (canvas.width !== width || canvas.height !== height) {
+          canvas.width = width;
+          canvas.height = height;
+        }
+
+        canvas.style.width = `${window.innerWidth}px`;
+        canvas.style.height = `${window.innerHeight}px`;
+        gl.viewport(0, 0, canvas.width, canvas.height);
+      }
+
+      function getCameraPosition() {
+        const cosPitch = Math.cos(state.pitch);
+        const sinPitch = Math.sin(state.pitch);
+        const cosYaw = Math.cos(state.yaw);
+        const sinYaw = Math.sin(state.yaw);
+
+        return [
+          state.target[0] + state.radius * cosPitch * sinYaw,
+          state.target[1] + state.radius * sinPitch,
+          state.target[2] + state.radius * cosPitch * cosYaw
+        ];
+      }
+
+      function currentSimTime(now) {
+        return state.isAnimating ? (now - state.startTime) * 0.001 : state.frozenTime;
+      }
+
+      function setAnimationEnabled(enabled) {
+        if (enabled === state.isAnimating) {
+          return;
+        }
+
+        if (enabled) {
+          state.startTime = performance.now() - state.frozenTime * 1000;
+          state.isAnimating = true;
+        } else {
+          state.frozenTime = currentSimTime(performance.now());
+          state.isAnimating = false;
+        }
+      }
+
+      controls.animToggle.addEventListener('change', () => {
+        setAnimationEnabled(controls.animToggle.checked);
+      });
+
+      controls.quantumToggle.addEventListener('change', () => {
+        state.quantumEnabled = controls.quantumToggle.checked;
+      });
+
+      controls.quantumSlider.addEventListener('input', () => {
+        state.quantumAmount = Number(controls.quantumSlider.value) / 100;
+        updateLabels();
+      });
+
+      controls.bounceSlider.addEventListener('input', () => {
+        state.bounces = Number(controls.bounceSlider.value);
+        updateLabels();
+      });
+
+      controls.sampleSlider.addEventListener('input', () => {
+        state.samples = Number(controls.sampleSlider.value);
+        updateLabels();
+      });
+
+      controls.scaleSlider.addEventListener('input', () => {
+        state.renderScale = Number(controls.scaleSlider.value) / 100;
+        updateLabels();
+        resize();
+      });
+
+      controls.resetCamera.addEventListener('click', () => {
+        state.yaw = 0.55;
+        state.pitch = 0.24;
+        state.radius = 6.9;
+        state.target = [0.2, -0.1, -0.1];
+      });
+
+      controls.snapshot.addEventListener('click', () => {
+        try {
+          const link = document.createElement('a');
+          link.href = canvas.toDataURL('image/png');
+          link.download = 'ray-tracing-quantum-snapshot.png';
+          link.click();
+        } catch (error) {
+          console.error('Could not save snapshot:', error);
+        }
+      });
+
+      canvas.addEventListener('pointerdown', (event) => {
+        state.dragging = true;
+        state.lastPointerX = event.clientX;
+        state.lastPointerY = event.clientY;
+        canvas.classList.add('dragging');
+        canvas.setPointerCapture(event.pointerId);
+      });
+
+      canvas.addEventListener('pointermove', (event) => {
+        if (!state.dragging) {
+          return;
+        }
+
+        const dx = event.clientX - state.lastPointerX;
+        const dy = event.clientY - state.lastPointerY;
+        state.lastPointerX = event.clientX;
+        state.lastPointerY = event.clientY;
+
+        state.yaw -= dx * 0.0065;
+        state.pitch -= dy * 0.0055;
+        const maxPitch = Math.PI * 0.48;
+        state.pitch = Math.max(-maxPitch, Math.min(maxPitch, state.pitch));
+      });
+
+      function endDrag(event) {
+        if (state.dragging) {
+          state.dragging = false;
+          canvas.classList.remove('dragging');
+          if (typeof event.pointerId === 'number') {
+            try {
+              canvas.releasePointerCapture(event.pointerId);
+            } catch (_) {
+              // Ignore release errors.
+            }
+          }
+        }
+      }
+
+      canvas.addEventListener('pointerup', endDrag);
+      canvas.addEventListener('pointercancel', endDrag);
+      canvas.addEventListener('pointerleave', endDrag);
+
+      canvas.addEventListener('wheel', (event) => {
+        event.preventDefault();
+        const zoomFactor = Math.exp(event.deltaY * 0.0012);
+        state.radius = Math.max(2.2, Math.min(16.0, state.radius * zoomFactor));
+      }, { passive: false });
+
+      window.addEventListener('resize', resize, { passive: true });
+
+      function updateFPS(now) {
+        state.frameCounter += 1;
+        const elapsed = now - state.fpsTime;
+        if (elapsed >= 350) {
+          state.fps = (state.frameCounter * 1000) / elapsed;
+          state.frameCounter = 0;
+          state.fpsTime = now;
+        }
+      }
+
+      function render(now) {
+        resize();
+        updateFPS(now);
+
+        const t = currentSimTime(now);
+        const cameraPos = getCameraPosition();
+        const lightPos = [
+          Math.sin(t * 0.9) * 4.2,
+          3.8 + Math.sin(t * 0.55) * 0.45,
+          Math.cos(t * 0.9) * 4.2
+        ];
+
+        gl.useProgram(program);
+        gl.uniform2f(uniforms.resolution, canvas.width, canvas.height);
+        gl.uniform1f(uniforms.time, t);
+        gl.uniform3f(uniforms.cameraPos, cameraPos[0], cameraPos[1], cameraPos[2]);
+        gl.uniform3f(uniforms.cameraTarget, state.target[0], state.target[1], state.target[2]);
+        gl.uniform1f(uniforms.fov, state.fov);
+        gl.uniform1i(uniforms.bounces, state.bounces);
+        gl.uniform1i(uniforms.samples, state.samples);
+        gl.uniform3f(uniforms.lightPos, lightPos[0], lightPos[1], lightPos[2]);
+        gl.uniform1f(uniforms.quantumEnabled, state.quantumEnabled ? 1 : 0);
+        gl.uniform1f(uniforms.quantumAmount, state.quantumAmount);
+
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+        const quantumText = state.quantumEnabled
+          ? `${Math.round(state.quantumAmount * 100)}% intensity`
+          : 'off';
+
+        statusEl.textContent = [
+          `FPS: ${state.fps.toFixed(1)}`,
+          `Resolution: ${canvas.width} × ${canvas.height}`,
+          `Camera radius: ${state.radius.toFixed(2)}`,
+          `Quantum: ${quantumText}`,
+          `Time: ${t.toFixed(2)} s`
+        ].join('\n');
+
+        state.lastNow = now;
+        requestAnimationFrame(render);
+      }
+
+      updateLabels();
+      resize();
+      requestAnimationFrame(render);
+    })();
+  </script>
+</body>
+</html>

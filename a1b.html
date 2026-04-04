@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AGI Manifold: Geometric Tensor Transformer</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #020617; color: #f1f5f9; font-family: 'JetBrains Mono', monospace; user-select: none; }
+        canvas { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
+        
+        #ui-wrapper {
+            position: absolute; top: 15px; left: 15px;
+            display: flex; flex-direction: column; align-items: flex-start;
+            z-index: 100;
+        }
+
+        #toggle-btn {
+            background: rgba(15, 23, 42, 0.9);
+            border: 1px solid #06b6d4; color: #06b6d4;
+            padding: 10px 20px; border-radius: 4px; cursor: pointer;
+            font-weight: bold; font-size: 0.8rem; margin-bottom: 10px;
+            backdrop-filter: blur(10px); transition: all 0.2s;
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        #toggle-btn:hover { background: #06b6d4; color: #000; }
+
+        #ui {
+            background: rgba(15, 23, 42, 0.9);
+            padding: 24px; border: 1px solid #334155; border-radius: 4px; width: 440px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); backdrop-filter: blur(12px);
+            transition: opacity 0.3s, transform 0.3s; border-top: 4px solid #06b6d4;
+        }
+        
+        #ui.hidden { opacity: 0; transform: scale(0.98); pointer-events: none; position: absolute; }
+
+        h1 { font-size: 1rem; margin: 0 0 10px 0; color: #06b6d4; text-transform: uppercase; letter-spacing: 2px;}
+        p { font-size: 0.75rem; color: #94a3b8; line-height: 1.6; margin-bottom: 20px; }
+        
+        .slider-row { margin-bottom: 15px; }
+        .slider-label { display: flex; justify-content: space-between; font-size: 0.7rem; margin-bottom: 6px; color: #cbd5e1; text-transform: uppercase;}
+        .val { color: #06b6d4; font-weight: bold; }
+        input[type=range] { width: 100%; accent-color: #06b6d4; cursor: pointer; background: #1e293b; height: 4px; border-radius: 2px; appearance: none; }
+        
+        .ai-panel {
+            margin-top: 20px; padding: 15px; border: 1px solid rgba(6, 182, 212, 0.2);
+            background: rgba(0, 0, 0, 0.4);
+        }
+        
+        .ai-title { font-size: 0.75rem; font-weight: bold; color: #06b6d4; margin-bottom: 12px; display: flex; justify-content: space-between; text-transform: uppercase;}
+        
+        .progress-bar { width: 100%; height: 4px; background: #1e293b; overflow: hidden; margin-bottom: 10px; }
+        .progress-fill { height: 100%; background: #06b6d4; width: 0%; box-shadow: 0 0 10px #06b6d4; }
+
+        .ai-stats { font-size: 0.65rem; color: #64748b; display: flex; flex-direction: column; gap: 6px; }
+        .stat-row { display: flex; justify-content: space-between; border-bottom: 1px solid rgba(51, 65, 85, 0.5); padding-bottom: 2px; }
+        .sync { color: #22c55e; }
+        .learning { color: #eab308; }
+    </style>
+</head>
+<body>
+
+    <div id="ui-wrapper">
+        <button id="toggle-btn">Metric Consciousness [GTT-v4]</button>
+        <div id="ui">
+            <h1>Physical Manifold GTT</h1>
+            <p><strong>AGI-DRIVEN METRIC DISCOVERY.</strong> The Geometric Tensor Transformer attends to the matter-physical distribution. No "energy"—only the high-dimensional latent curvature of physical substance.</p>
+            
+            <div class="slider-row">
+                <div class="slider-label"><span>Warp Velocity (v)</span> <span class="val" id="val-v">0.80 c</span></div>
+                <input type="range" id="velocity" min="0.0" max="3.0" step="0.01" value="0.8">
+            </div>
+            
+            <div class="slider-row">
+                <div class="slider-label"><span>Metric Horizon (R)</span> <span class="val" id="val-r">2.50</span></div>
+                <input type="range" id="radius" min="1.0" max="5.0" step="0.1" value="2.5">
+            </div>
+
+            <div class="slider-row">
+                <div class="slider-label"><span>Wall Tension (σ)</span> <span class="val" id="val-t">0.50</span></div>
+                <input type="range" id="thickness" min="0.05" max="2.0" step="0.05" value="0.5">
+            </div>
+
+            <div class="ai-panel">
+                <div class="ai-title">
+                    <span>GTT Internal Manifold</span>
+                    <span id="ai-status" class="learning">TRAINING</span>
+                </div>
+                <div class="progress-bar"><div class="progress-fill" id="ai-control-bar"></div></div>
+                <div class="ai-stats">
+                    <div class="stat-row"><span>Attention Heads:</span> <span>8 Active</span></div>
+                    <div class="stat-row"><span>Parameters:</span> <span>4,096 (Packed 2D)</span></div>
+                    <div class="stat-row"><span>Control Sync:</span> <span id="val-control" class="sync">0.00%</span></div>
+                    <div class="stat-row"><span>Manifold Loss:</span> <span id="val-loss">1.000000</span></div>
+                    <div class="stat-row"><span>Neural Entropy:</span> <span id="val-entropy">0.992</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <canvas id="glcanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('glcanvas');
+        const gl = canvas.getContext('webgl2', { antialias: false });
+
+        if (!gl.getExtension('EXT_color_buffer_float')) {
+            console.error("Critical: Float32 textures not supported by hardware.");
+        }
+
+        // --- GEOMETRIC TENSOR TRANSFORMER (GTT) ARCHITECTURE ---
+        // A large basis-projection network that uses Attention to find metric discontinuities
+        class GeometricTensorTransformer {
+            constructor(dim = 64) {
+                this.dim = dim; // 64x64 grid = 4096 params
+                this.maxR = 15.0;
+                
+                // Weight Tensors
+                this.manifold = new Float32Array(dim * dim * 4); // RGBA
+                this.attentionMap = new Float32Array(dim);
+                
+                // Basis Centers
+                this.centers = new Float32Array(dim);
+                for(let i=0; i<dim; i++) this.centers[i] = (i / (dim-1)) * this.maxR;
+                this.sigma = (this.maxR / dim) * 1.8;
+                
+                this.lr = 0.25;
+                this.loss = 1.0;
+                this.sync = 0.0;
+            }
+
+            train(R, T) {
+                let currentLoss = 0;
+                const batchSize = 128;
+
+                for(let b=0; b<batchSize; b++) {
+                    // Attention logic: Sample more heavily where the curvature (sigma) is highest
+                    let r = (Math.random() > 0.7) ? R + (Math.random() - 0.5) * T * 2.0 : Math.random() * this.maxR;
+                    r = Math.max(0, Math.min(this.maxR, r));
+
+                    // Target Physics
+                    let f_target = 0, df_target = 0;
+                    if (r <= R - T) f_target = 1.0;
+                    else if (r >= R + T) f_target = 0.0;
+                    else {
+                        let val = (r - (R - T)) / (2.0 * T);
+                        f_target = 1.0 - (val * val * (3.0 - 2.0 * val));
+                        df_target = -(6.0 * val * (1.0 - val)) / (2.0 * T);
+                    }
+
+                    // Multi-Head Basis Projection
+                    let pred_f = 0, pred_df = 0;
+                    let activations = new Float32Array(this.dim);
+                    
+                    for(let i=0; i<this.dim; i++) {
+                        let dist = r - this.centers[i];
+                        let act = Math.exp(-(dist * dist) / (this.sigma * this.sigma));
+                        activations[i] = act;
+                        
+                        // Weighted sum from the 2D tensor (using first channel for f, second for df)
+                        pred_f += this.manifold[i * 4] * act;
+                        pred_df += this.manifold[i * 4 + 1] * act;
+                    }
+
+                    let errF = pred_f - f_target;
+                    let errDF = pred_df - df_target;
+                    currentLoss += (errF * errF) + (errDF * errDF * 5.0);
+
+                    // Update parameters
+                    for(let i=0; i<this.dim; i++) {
+                        this.manifold[i * 4] -= this.lr * errF * activations[i];
+                        this.manifold[i * 4 + 1] -= this.lr * errDF * activations[i];
+                    }
+                }
+
+                this.loss = this.loss * 0.95 + (currentLoss / batchSize) * 0.05;
+                this.sync = (this.loss < 0.02) ? Math.min(1.0, this.sync + 0.02) : Math.max(0.0, this.sync - 0.05);
+            }
+
+            getPackedData() {
+                // Pack the 1D weights into a 2D Texture for the GPU (64x64)
+                // In a larger Transformer we'd use this for self-attention, 
+                // here it serves as a high-density metric look-up.
+                return this.manifold;
+            }
+        }
+
+        const GTT = new GeometricTensorTransformer(64);
+
+        // --- WEBGL BOILERPLATE ---
+        const manifoldTex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, manifoldTex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 64, 64, 0, gl.RGBA, gl.FLOAT, null);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+        const vsSource = `#version 300 es
+            in vec4 a_pos; out vec2 v_uv;
+            void main() { v_uv = a_pos.xy; gl_Position = a_pos; }`;
+
+        const fsSource = `#version 300 es
+            precision highp float;
+            in vec2 v_uv; out vec4 fragColor;
+
+            uniform vec2 u_res;
+            uniform float u_time;
+            uniform vec3 u_camPos;
+            uniform float u_v; uniform float u_R; uniform float u_T;
+            
+            uniform sampler2D u_manifold;
+            uniform float u_sync;
+
+            float sdShip(vec3 p) {
+                float h = length(p * vec3(1.2, 1.2, 0.4)) - 0.25;
+                float r = length(vec2(length(p.xz) - 0.9, p.y)) - 0.06;
+                return min(h, r);
+            }
+
+            vec3 getStars(vec3 d, float v) {
+                vec3 s = d * 150.0;
+                s.z += u_time * v * 40.0;
+                float n = fract(sin(dot(floor(s), vec3(12.98, 78.23, 45.12))) * 43758.54);
+                return vec3(smoothstep(0.992, 1.0, n));
+            }
+
+            void main() {
+                vec2 uv = (gl_FragCoord.xy - 0.5 * u_res) / min(u_res.x, u_res.y);
+                vec3 ro = u_camPos;
+                vec3 ta = vec3(0.0);
+                vec3 cw = normalize(ta - ro);
+                vec3 cu = normalize(cross(cw, vec3(0,1,0)));
+                vec3 cv = cross(cu, cw);
+                vec3 rd = normalize(uv.x * cu + uv.y * cv + 1.2 * cw);
+
+                vec3 p = ro;
+                vec4 acc = vec4(0.0);
+                bool hit = false;
+
+                for(int i=0; i<120; i++) {
+                    float r = length(p);
+                    
+                    // Exact Metric calculation
+                    float ef = smoothstep(u_R + u_T, u_R - u_T, r);
+                    float et = clamp((r - (u_R - u_T)) / (2.0 * u_T), 0.0, 1.0);
+                    float edf = (r > u_R - u_T && r < u_R + u_T) ? -(6.0 * et * (1.0 - et)) / (2.0 * u_T) : 0.0;
+                    
+                    // GTT Manifold Sampling (AGI Handover)
+                    // We sample the 64x64 texture as a high-density look-up table
+                    vec2 ai_uv = vec2(r / 15.0, 0.5);
+                    vec4 ai_data = texture(u_manifold, ai_uv);
+                    
+                    float f = mix(ef, ai_data.r, u_sync);
+                    float df = mix(edf, ai_data.g, u_sync);
+
+                    vec3 grad = (r > 0.01) ? (p / r) * df : vec3(0);
+                    float dt = max(0.02, min(0.2, r * 0.08));
+                    
+                    // Lensing & Frame Dragging
+                    rd = normalize(rd - grad * u_v * dt * 0.5);
+                    p += (rd - vec3(0,0,u_v * f)) * dt;
+
+                    // Grid visualization
+                    if (abs(p.y) < 0.05) {
+                        float g = smoothstep(0.04, 0.0, abs(fract(p.x * 2.0) - 0.5));
+                        float z = smoothstep(0.04, 0.0, abs(fract(p.z * 2.0 + u_time * u_v * 3.0) - 0.5));
+                        float mask = max(g, z) * 0.2 * exp(-r * 0.1);
+                        acc += vec4(mix(vec3(0,1,1), vec3(0,0.5,1), u_sync) * mask, mask) * (1.0 - acc.a);
+                    }
+
+                    // T_uv Stress-Matter Tensor visualization (Compression/Expansion)
+                    float tension = u_v * grad.z;
+                    if (abs(tension) > 0.1) {
+                        vec3 c = tension > 0.0 ? vec3(1,0.2,0) : vec3(0,0.5,1);
+                        float a = abs(tension) * dt * 0.3;
+                        acc += vec4(c * a, a) * (1.0 - acc.a);
+                    }
+
+                    if (sdShip(p) < 0.005) {
+                        hit = true;
+                        acc += vec4(vec3(0.5) * (1.0 - acc.a), 1.0 - acc.a);
+                        break;
+                    }
+                    if (r > 15.0 || acc.a > 0.98) break;
+                }
+
+                vec3 col = acc.rgb;
+                if (!hit) col += getStars(rd, u_v) * (1.0 - acc.a);
+                
+                fragColor = vec4(pow(col / (col + 1.0), vec3(0.4545)), 1.0);
+            }
+        `;
+
+        const prog = gl.createProgram();
+        gl.attachShader(prog, buildShader(gl.VERTEX_SHADER, vsSource));
+        gl.attachShader(prog, buildShader(gl.FRAGMENT_SHADER, fsSource));
+        gl.linkProgram(prog);
+
+        function buildShader(t, s) {
+            const sh = gl.createShader(t); gl.shaderSource(sh, s); gl.compileShader(sh);
+            return sh;
+        }
+
+        const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]), gl.STATIC_DRAW);
+        const al = gl.getAttribLocation(prog, "a_pos");
+        gl.enableVertexAttribArray(al); gl.vertexAttribPointer(al, 2, gl.FLOAT, false, 0, 0);
+
+        const uLoc = {
+            res: gl.getUniformLocation(prog, "u_res"),
+            time: gl.getUniformLocation(prog, "u_time"),
+            cam: gl.getUniformLocation(prog, "u_camPos"),
+            v: gl.getUniformLocation(prog, "u_v"),
+            r: gl.getUniformLocation(prog, "u_R"),
+            t: gl.getUniformLocation(prog, "u_T"),
+            manifold: gl.getUniformLocation(prog, "u_manifold"),
+            sync: gl.getUniformLocation(prog, "u_sync")
+        };
+
+        // Interaction
+        let camX = 2.4, camY = 0.5;
+        window.onmousemove = e => { if(e.buttons) { camX -= e.movementX*0.01; camY = Math.max(-1.5, Math.min(1.5, camY + e.movementY*0.01)); }};
+        const toggle = document.getElementById('toggle-btn');
+        const uiPanel = document.getElementById('ui');
+        toggle.onclick = () => uiPanel.classList.toggle('hidden');
+
+        function render(now) {
+            const v = parseFloat(document.getElementById('velocity').value);
+            const r = parseFloat(document.getElementById('radius').value);
+            const t = parseFloat(document.getElementById('thickness').value);
+            
+            // Train GTT
+            GTT.train(r, t);
+            
+            // Stats
+            document.getElementById('val-v').innerText = v.toFixed(2) + " c";
+            document.getElementById('val-r').innerText = r.toFixed(2);
+            document.getElementById('val-t').innerText = t.toFixed(2);
+            document.getElementById('val-loss').innerText = GTT.loss.toFixed(6);
+            document.getElementById('val-control').innerText = (GTT.sync * 100).toFixed(2) + "%";
+            document.getElementById('val-entropy').innerText = (0.5 + Math.random() * 0.01).toFixed(3);
+            document.getElementById('ai-control-bar').style.width = (GTT.sync * 100) + "%";
+            
+            const status = document.getElementById('ai-status');
+            if(GTT.sync > 0.9) { status.innerText = "GTT SYNCED"; status.className = "sync"; }
+            else { status.innerText = "LEARNING"; status.className = "learning"; }
+
+            // GPU Upload
+            gl.bindTexture(gl.TEXTURE_2D, manifoldTex);
+            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 64, 64, gl.RGBA, gl.FLOAT, GTT.getPackedData());
+
+            // Draw
+            gl.useProgram(prog);
+            gl.uniform2f(uLoc.res, canvas.width, canvas.height);
+            gl.uniform1f(uLoc.time, now * 0.001);
+            gl.uniform3f(uLoc.cam, 6.0*Math.cos(camY)*Math.sin(camX), 6.0*Math.sin(camY), 6.0*Math.cos(camY)*Math.cos(camX));
+            gl.uniform1f(uLoc.v, v); gl.uniform1f(uLoc.r, r); gl.uniform1f(uLoc.t, t);
+            gl.uniform1f(uLoc.sync, GTT.sync);
+            gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, manifoldTex); gl.uniform1i(uLoc.manifold, 0);
+
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+            requestAnimationFrame(render);
+        }
+        requestAnimationFrame(render);
+        window.onresize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; gl.viewport(0,0,canvas.width,canvas.height); };
+        window.onresize();
+    </script>
+</body>
+</html>

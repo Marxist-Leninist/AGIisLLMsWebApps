@@ -1,0 +1,1348 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Artemis II 3D Mission Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --bg: #050814;
+      --panel: rgba(8, 14, 30, 0.80);
+      --border: rgba(255, 255, 255, 0.12);
+      --text: #ecf4ff;
+      --muted: #9fb2d2;
+      --accent: #73c5ff;
+      --accent-2: #ffd46d;
+      --accent-3: #93b4ff;
+      --danger: #ff9f9f;
+      --shadow: 0 18px 60px rgba(0, 0, 0, 0.4);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: radial-gradient(circle at 20% 20%, #0a1230 0%, #040812 45%, #02040a 100%);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    a { color: var(--accent); }
+
+    #app {
+      position: fixed;
+      inset: 0;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(14px);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+    }
+
+    #titlePanel {
+      position: fixed;
+      left: 16px;
+      top: 16px;
+      width: min(420px, calc(100vw - 32px));
+      padding: 16px 18px 14px;
+      z-index: 20;
+      pointer-events: auto;
+    }
+
+    #titleRow {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.1;
+      letter-spacing: 0.02em;
+    }
+
+    .sub {
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .badges {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.04);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .badge .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 14px rgba(115, 197, 255, 0.85);
+    }
+
+    .badge.live .dot { background: #31ff9f; box-shadow: 0 0 14px rgba(49,255,159,0.8); }
+    .badge.replay .dot { background: var(--accent-2); box-shadow: 0 0 14px rgba(255,212,109,0.7); }
+
+    #telemetryPanel {
+      position: fixed;
+      left: 16px;
+      top: 196px;
+      width: min(420px, calc(100vw - 32px));
+      padding: 14px 16px 16px;
+      z-index: 20;
+      pointer-events: auto;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .stat {
+      padding: 10px 11px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.035);
+      min-height: 72px;
+    }
+
+    .statLabel {
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 6px;
+    }
+
+    .statValue {
+      font-size: 17px;
+      line-height: 1.18;
+      font-weight: 700;
+      word-break: break-word;
+    }
+
+    .statValue.smallish {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    #phaseValue { color: var(--accent-2); }
+
+    #controlsPanel {
+      position: fixed;
+      right: 16px;
+      top: 16px;
+      width: min(380px, calc(100vw - 32px));
+      padding: 15px 16px 16px;
+      z-index: 20;
+      pointer-events: auto;
+    }
+
+    #controlsPanel h2, #telemetryPanel h2 {
+      margin: 0 0 10px 0;
+      font-size: 14px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    button, select, input[type="range"] {
+      appearance: none;
+      border: 1px solid rgba(255,255,255,0.11);
+      border-radius: 12px;
+      background: rgba(255,255,255,0.055);
+      color: var(--text);
+      font: inherit;
+      transition: transform .12s ease, border-color .12s ease, background .12s ease;
+    }
+
+    button:hover, select:hover { border-color: rgba(115, 197, 255, 0.55); }
+    button:active { transform: translateY(1px) scale(0.99); }
+
+    button {
+      padding: 10px 12px;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 13px;
+    }
+
+    button.active {
+      background: rgba(115, 197, 255, 0.18);
+      border-color: rgba(115, 197, 255, 0.65);
+      box-shadow: inset 0 0 0 1px rgba(115, 197, 255, 0.18);
+    }
+
+    button.secondary.active {
+      background: rgba(255, 212, 109, 0.18);
+      border-color: rgba(255, 212, 109, 0.65);
+      box-shadow: inset 0 0 0 1px rgba(255, 212, 109, 0.18);
+    }
+
+    select {
+      padding: 10px 12px;
+      min-width: 110px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    .hint {
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 14px;
+      margin-top: 12px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .legendItem {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .swatch {
+      width: 11px;
+      height: 11px;
+      border-radius: 999px;
+      display: inline-block;
+      flex: 0 0 auto;
+    }
+
+    #timelinePanel {
+      position: fixed;
+      left: 16px;
+      right: 16px;
+      bottom: 16px;
+      padding: 14px 16px 12px;
+      z-index: 20;
+      pointer-events: auto;
+    }
+
+    #timelineHeader {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    #timelineHeader strong {
+      font-size: 14px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    #timelineTime {
+      font-size: 13px;
+      color: var(--text);
+      font-weight: 700;
+      text-align: right;
+    }
+
+    #timeline {
+      width: 100%;
+      height: 14px;
+      border-radius: 999px;
+      background: transparent;
+      outline: none;
+      cursor: pointer;
+      margin: 0;
+    }
+
+    #timeline::-webkit-slider-runnable-track {
+      height: 8px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(115,197,255,0.5), rgba(255,212,109,0.55));
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    #timeline::-moz-range-track {
+      height: 8px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(115,197,255,0.5), rgba(255,212,109,0.55));
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    #timeline::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #ffffff;
+      border: 2px solid rgba(115, 197, 255, 0.9);
+      margin-top: -6px;
+      box-shadow: 0 0 18px rgba(115, 197, 255, 0.45);
+    }
+
+    #timeline::-moz-range-thumb {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #ffffff;
+      border: 2px solid rgba(115, 197, 255, 0.9);
+      box-shadow: 0 0 18px rgba(115, 197, 255, 0.45);
+    }
+
+    #markerBar {
+      position: relative;
+      height: 28px;
+      margin-top: 4px;
+      user-select: none;
+    }
+
+    .marker {
+      position: absolute;
+      top: 8px;
+      width: 2px;
+      height: 12px;
+      background: rgba(255,255,255,0.4);
+    }
+
+    .marker span {
+      position: absolute;
+      top: -10px;
+      transform: translateX(-50%);
+      font-size: 10px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    #timeEnds {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 2px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    #sceneHint {
+      position: fixed;
+      right: 16px;
+      bottom: 122px;
+      padding: 10px 12px;
+      z-index: 20;
+      font-size: 12px;
+      color: var(--muted);
+      pointer-events: none;
+    }
+
+    #officialLink {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.95em;
+    }
+
+    @media (max-width: 1000px) {
+      #titlePanel, #telemetryPanel, #controlsPanel {
+        position: fixed;
+        left: 10px;
+        right: 10px;
+        width: auto;
+      }
+      #titlePanel { top: 10px; }
+      #telemetryPanel { top: 212px; }
+      #controlsPanel { top: auto; bottom: 176px; }
+      #timelinePanel { left: 10px; right: 10px; bottom: 10px; }
+      #sceneHint { display: none; }
+    }
+
+    @media (max-width: 640px) {
+      h1 { font-size: 20px; }
+      #telemetryPanel { top: 228px; }
+      .grid { grid-template-columns: 1fr 1fr; }
+      .statValue { font-size: 14px; }
+      .statValue.smallish { font-size: 12px; }
+      #controlsPanel { bottom: 196px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <section id="titlePanel" class="panel">
+    <div id="titleRow">
+      <div>
+        <h1>Artemis II 3D Tracker</h1>
+        <div class="sub">
+          Live mode uses your computer clock so the ship opens at its current mission position when the file loads.
+          Replay mode lets you start at launch and fast-forward the whole flight instead of staring at reality in normal time.
+        </div>
+      </div>
+    </div>
+    <div class="badges">
+      <div class="badge live" id="modeBadge"><span class="dot"></span><span id="modeBadgeText">Live</span></div>
+      <div class="badge"><span class="dot" style="background:#ffd46d; box-shadow: 0 0 14px rgba(255,212,109,0.7);"></span><span>3D sim</span></div>
+      <div class="badge"><span class="dot" style="background:#93b4ff; box-shadow: 0 0 14px rgba(147,180,255,0.7);"></span><span>single file</span></div>
+    </div>
+    <a id="officialLink" href="https://www.nasa.gov/missions/artemis-ii/arow/" target="_blank" rel="noopener noreferrer">
+      Open NASA AROW official live tracker
+    </a>
+  </section>
+
+  <section id="telemetryPanel" class="panel">
+    <h2>Telemetry</h2>
+    <div class="grid">
+      <div class="stat">
+        <div class="statLabel">Phase</div>
+        <div class="statValue" id="phaseValue">Loading...</div>
+      </div>
+      <div class="stat">
+        <div class="statLabel">Mission elapsed</div>
+        <div class="statValue" id="metValue">--</div>
+      </div>
+      <div class="stat">
+        <div class="statLabel">Approx from Earth center</div>
+        <div class="statValue smallish" id="earthDistValue">--</div>
+      </div>
+      <div class="stat">
+        <div class="statLabel">Approx to Moon center</div>
+        <div class="statValue smallish" id="moonDistValue">--</div>
+      </div>
+      <div class="stat">
+        <div class="statLabel">Approx speed</div>
+        <div class="statValue" id="speedValue">--</div>
+      </div>
+      <div class="stat">
+        <div class="statLabel">Sim time</div>
+        <div class="statValue smallish" id="simTimeValue">--</div>
+      </div>
+    </div>
+    <div class="hint" id="statusNote" style="margin-top:10px;">
+      Approximate visual simulation anchored to NASA mission timing. Current Moon = solid sphere. Pale Moon = approximate flyby-position target.
+    </div>
+  </section>
+
+  <section id="controlsPanel" class="panel">
+    <h2>Controls</h2>
+    <div class="row">
+      <button id="liveBtn" class="active">Live now</button>
+      <button id="beginBtn">Start from beginning</button>
+      <button id="playBtn" class="secondary">Pause replay</button>
+    </div>
+    <div class="row" style="align-items:center;">
+      <select id="speedSelect" aria-label="Replay speed">
+        <option value="1">1×</option>
+        <option value="10">10×</option>
+        <option value="60">60×</option>
+        <option value="240" selected>240×</option>
+        <option value="1000">1000×</option>
+        <option value="5000">5000×</option>
+        <option value="25000">25000×</option>
+      </select>
+      <div class="hint" id="speedHint">Replay speed</div>
+    </div>
+    <div class="row">
+      <button class="viewBtn active" data-view="ship">Follow Orion</button>
+      <button class="viewBtn" data-view="system">System view</button>
+      <button class="viewBtn" data-view="earth">Earth</button>
+      <button class="viewBtn" data-view="moon">Moon</button>
+    </div>
+    <div class="legend">
+      <span class="legendItem"><span class="swatch" style="background:#4cc2ff;"></span>planned path</span>
+      <span class="legendItem"><span class="swatch" style="background:#ffd46d;"></span>completed trail</span>
+      <span class="legendItem"><span class="swatch" style="background:#6dffcb;"></span>Orion now</span>
+      <span class="legendItem"><span class="swatch" style="background:#93b4ff;"></span>Moon at flyby</span>
+    </div>
+    <div class="hint" style="margin-top:10px;">
+      Drag to orbit the camera, scroll to zoom, right-drag to pan. Because apparently nobody can leave well enough alone.
+    </div>
+  </section>
+
+  <section id="timelinePanel" class="panel">
+    <div id="timelineHeader">
+      <strong>Mission timeline</strong>
+      <div id="timelineTime">--</div>
+    </div>
+    <input id="timeline" type="range" min="0" max="10000" value="0" step="1">
+    <div id="markerBar"></div>
+    <div id="timeEnds">
+      <span>Launch</span>
+      <span>Splashdown</span>
+    </div>
+  </section>
+
+  <div id="sceneHint" class="panel">
+    Current Moon is solid.<br>
+    Pale Moon marks the approximate flyby position.
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script>
+    (() => {
+      const app = document.getElementById('app');
+      const timeline = document.getElementById('timeline');
+      const markerBar = document.getElementById('markerBar');
+      const liveBtn = document.getElementById('liveBtn');
+      const beginBtn = document.getElementById('beginBtn');
+      const playBtn = document.getElementById('playBtn');
+      const speedSelect = document.getElementById('speedSelect');
+      const modeBadge = document.getElementById('modeBadge');
+      const modeBadgeText = document.getElementById('modeBadgeText');
+      const phaseValue = document.getElementById('phaseValue');
+      const metValue = document.getElementById('metValue');
+      const earthDistValue = document.getElementById('earthDistValue');
+      const moonDistValue = document.getElementById('moonDistValue');
+      const speedValue = document.getElementById('speedValue');
+      const simTimeValue = document.getElementById('simTimeValue');
+      const timelineTime = document.getElementById('timelineTime');
+      const statusNote = document.getElementById('statusNote');
+      const viewButtons = Array.from(document.querySelectorAll('.viewBtn'));
+
+      const MS = 1;
+      const SECOND = 1000 * MS;
+      const MINUTE = 60 * SECOND;
+      const HOUR = 60 * MINUTE;
+      const DAY = 24 * HOUR;
+
+      const SCALE = 1 / 1000; // 1 scene unit = 1000 km
+      const EARTH_RADIUS_KM = 6371;
+      const MOON_RADIUS_KM = 1737.4;
+      const MOON_DISTANCE_KM = 384400;
+      const EARTH_RADIUS = EARTH_RADIUS_KM * SCALE;
+      const MOON_RADIUS = MOON_RADIUS_KM * SCALE;
+      const MOON_DISTANCE = MOON_DISTANCE_KM * SCALE;
+
+      const mission = {
+        launch: Date.parse('2026-04-01T22:35:00Z'),
+        tliStart: Date.parse('2026-04-02T23:49:00Z'),
+        tliEnd: Date.parse('2026-04-02T23:54:50Z'),
+        moonSOIIn: Date.parse('2026-04-06T10:30:00Z'),   // approximate timing anchor for this visual sim
+        flybyStart: Date.parse('2026-04-07T00:00:00Z'),  // approximate
+        flybyCenter: Date.parse('2026-04-07T02:30:00Z'), // approximate
+        flybyEnd: Date.parse('2026-04-07T05:00:00Z'),    // approximate
+        moonSOIOut: Date.parse('2026-04-08T10:00:00Z'),  // approximate
+        splashdown: Date.parse('2026-04-11T22:35:00Z')   // approximate end of ~10 day mission
+      };
+      mission.duration = mission.splashdown - mission.launch;
+
+      const MILESTONES = [
+        { key: 'launch', label: 'Launch', time: mission.launch },
+        { key: 'tliStart', label: 'TLI', time: mission.tliStart },
+        { key: 'moonSOIIn', label: 'Moon SOI in', time: mission.moonSOIIn },
+        { key: 'flybyCenter', label: 'Flyby', time: mission.flybyCenter },
+        { key: 'moonSOIOut', label: 'Moon SOI out', time: mission.moonSOIOut },
+        { key: 'splashdown', label: 'Splashdown', time: mission.splashdown }
+      ];
+
+      const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+      const lerp = (a, b, t) => a + (b - a) * t;
+      const smooth = (t) => t * t * (3 - 2 * t);
+      const smoother = (t) => t * t * t * (t * (t * 6 - 15) + 10);
+      const deg = (d) => d * Math.PI / 180;
+
+      function km(v) { return v / SCALE; }
+
+      function formatNumber(value, digits = 0) {
+        return Number(value).toLocaleString(undefined, {
+          maximumFractionDigits: digits,
+          minimumFractionDigits: digits
+        });
+      }
+
+      function formatDateTime(ms) {
+        const d = new Date(ms);
+        const local = d.toLocaleString(undefined, {
+          year: 'numeric', month: 'short', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', second: '2-digit'
+        });
+        const utc = d.toUTCString().replace(' GMT', ' UTC');
+        return local + ' / ' + utc;
+      }
+
+      function formatMET(ms) {
+        const sign = ms < 0 ? '-' : '+';
+        const abs = Math.abs(ms);
+        const days = Math.floor(abs / DAY);
+        const hours = Math.floor((abs % DAY) / HOUR);
+        const minutes = Math.floor((abs % HOUR) / MINUTE);
+        const seconds = Math.floor((abs % MINUTE) / SECOND);
+        const dayPart = days > 0 ? (days + 'd ') : '';
+        return sign + dayPart +
+          String(hours).padStart(2, '0') + ':' +
+          String(minutes).padStart(2, '0') + ':' +
+          String(seconds).padStart(2, '0');
+      }
+
+      function formatSpeedKms(kms) {
+        if (!isFinite(kms)) return '--';
+        return formatNumber(kms, kms < 10 ? 2 : 1) + ' km/s';
+      }
+
+      function formatDistanceKm(kmValue) {
+        if (!isFinite(kmValue)) return '--';
+        return formatNumber(kmValue, 0) + ' km';
+      }
+
+      function phaseForTime(t) {
+        if (t < mission.launch) return 'Prelaunch';
+        if (t < mission.tliStart) return 'Earth orbits & checkout';
+        if (t < mission.tliEnd) return 'TLI burn';
+        if (t < mission.moonSOIIn) return 'Outbound coast';
+        if (t < mission.flybyStart) return 'Approaching Moon';
+        if (t < mission.flybyEnd) return 'Lunar flyby';
+        if (t < mission.moonSOIOut) return 'Leaving lunar sphere';
+        if (t < mission.splashdown) return 'Return to Earth';
+        return 'Mission complete';
+      }
+
+      function makeLabelSprite(text, color = '#ffffff', scale = 24) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.font = '700 44px Inter, Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = 'rgba(0,0,0,0.7)';
+        ctx.fillStyle = color;
+        ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.needsUpdate = true;
+        const material = new THREE.SpriteMaterial({
+          map: texture,
+          transparent: true,
+          depthWrite: false
+        });
+        const sprite = new THREE.Sprite(material);
+        sprite.scale.set(scale, scale * 0.25, 1);
+        return sprite;
+      }
+
+      function makeEarthTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 2048;
+        canvas.height = 1024;
+        const ctx = canvas.getContext('2d');
+
+        const ocean = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        ocean.addColorStop(0, '#0b1e58');
+        ocean.addColorStop(0.35, '#0b3d91');
+        ocean.addColorStop(0.7, '#0c5fb8');
+        ocean.addColorStop(1, '#103c7c');
+        ctx.fillStyle = ocean;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        function blob(x, y, rx, ry, rot, color) {
+          ctx.save();
+          ctx.translate(x, y);
+          ctx.rotate(rot);
+          ctx.beginPath();
+          for (let i = 0; i < 18; i++) {
+            const a = (i / 18) * Math.PI * 2;
+            const k = 0.82 + Math.sin(a * 3.1 + x * 0.002 + y * 0.001) * 0.15 + Math.cos(a * 5.2) * 0.08;
+            const px = Math.cos(a) * rx * k;
+            const py = Math.sin(a) * ry * k;
+            if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+          }
+          ctx.closePath();
+          ctx.fillStyle = color;
+          ctx.fill();
+          ctx.restore();
+        }
+
+        const landColors = ['#1f8e49', '#2ca25f', '#3ea76d', '#5bb274'];
+        blob(410, 380, 170, 120, 0.25, landColors[0]);   // N. America-ish
+        blob(540, 630, 90, 150, -0.2, landColors[1]);    // S. America-ish
+        blob(1060, 360, 110, 75, 0.12, landColors[2]);   // Europe-ish
+        blob(1120, 560, 180, 210, 0.08, landColors[1]);  // Africa-ish
+        blob(1450, 420, 280, 150, -0.08, landColors[0]); // Asia-ish
+        blob(1650, 750, 100, 65, 0.18, landColors[2]);   // Australia-ish
+        blob(1800, 180, 70, 38, 0.0, landColors[3]);     // Greenland-ish
+
+        ctx.fillStyle = 'rgba(255,255,255,0.18)';
+        for (let i = 0; i < 900; i++) {
+          const x = Math.random() * canvas.width;
+          const y = Math.random() * canvas.height;
+          const w = 8 + Math.random() * 24;
+          const h = 4 + Math.random() * 12;
+          ctx.beginPath();
+          ctx.ellipse(x, y, w, h, Math.random() * Math.PI, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.needsUpdate = true;
+        return tex;
+      }
+
+      function makeMoonTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 1024;
+        canvas.height = 512;
+        const ctx = canvas.getContext('2d');
+        const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        grad.addColorStop(0, '#d4d4d4');
+        grad.addColorStop(0.45, '#adadad');
+        grad.addColorStop(1, '#858585');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        for (let i = 0; i < 1500; i++) {
+          const shade = 120 + Math.random() * 110;
+          ctx.fillStyle = `rgba(${shade},${shade},${shade},${0.08 + Math.random() * 0.12})`;
+          const x = Math.random() * canvas.width;
+          const y = Math.random() * canvas.height;
+          const r = 1 + Math.random() * 3;
+          ctx.beginPath();
+          ctx.arc(x, y, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        for (let i = 0; i < 220; i++) {
+          const x = Math.random() * canvas.width;
+          const y = Math.random() * canvas.height;
+          const r = 6 + Math.random() * 38;
+          ctx.beginPath();
+          ctx.fillStyle = 'rgba(60,60,60,0.18)';
+          ctx.arc(x, y, r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+          ctx.lineWidth = Math.max(1, r * 0.08);
+          ctx.arc(x - r * 0.1, y - r * 0.1, r * 0.82, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.needsUpdate = true;
+        return tex;
+      }
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.outputEncoding = THREE.sRGBEncoding;
+      app.appendChild(renderer.domElement);
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x030710);
+
+      const camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 6000);
+      camera.position.set(-70, 80, 180);
+
+      const controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.08;
+      controls.minDistance = 8;
+      controls.maxDistance = 2400;
+      controls.target.set(0, 0, 0);
+
+      const ambient = new THREE.AmbientLight(0x7891c0, 0.9);
+      scene.add(ambient);
+
+      const sunLight = new THREE.DirectionalLight(0xffffff, 1.35);
+      sunLight.position.set(220, 80, 140);
+      scene.add(sunLight);
+
+      const fillLight = new THREE.DirectionalLight(0x7fb3ff, 0.3);
+      fillLight.position.set(-160, -50, -120);
+      scene.add(fillLight);
+
+      const stars = (() => {
+        const count = 5000;
+        const positions = new Float32Array(count * 3);
+        for (let i = 0; i < count; i++) {
+          const radius = 1200 + Math.random() * 2600;
+          const theta = Math.random() * Math.PI * 2;
+          const phi = Math.acos(2 * Math.random() - 1);
+          positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+          positions[i * 3 + 1] = radius * Math.cos(phi);
+          positions[i * 3 + 2] = radius * Math.sin(phi) * Math.sin(theta);
+        }
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        const mat = new THREE.PointsMaterial({
+          color: 0xffffff,
+          size: 1.85,
+          sizeAttenuation: true,
+          transparent: true,
+          opacity: 0.82,
+          depthWrite: false
+        });
+        const pts = new THREE.Points(geo, mat);
+        return pts;
+      })();
+      scene.add(stars);
+
+      const earthGroup = new THREE.Group();
+      scene.add(earthGroup);
+      const earth = new THREE.Mesh(
+        new THREE.SphereGeometry(EARTH_RADIUS, 72, 72),
+        new THREE.MeshStandardMaterial({
+          map: makeEarthTexture(),
+          roughness: 1,
+          metalness: 0,
+          emissive: 0x072456,
+          emissiveIntensity: 0.22
+        })
+      );
+      earthGroup.add(earth);
+      const earthGlow = new THREE.Mesh(
+        new THREE.SphereGeometry(EARTH_RADIUS * 1.08, 48, 48),
+        new THREE.MeshBasicMaterial({
+          color: 0x3ca0ff,
+          transparent: true,
+          opacity: 0.12,
+          side: THREE.BackSide,
+          depthWrite: false
+        })
+      );
+      earthGroup.add(earthGlow);
+      const earthLabel = makeLabelSprite('Earth', '#ffffff', 24);
+      earthLabel.position.set(0, EARTH_RADIUS * 2.1, 0);
+      earthGroup.add(earthLabel);
+
+      const moonGroup = new THREE.Group();
+      scene.add(moonGroup);
+      const moon = new THREE.Mesh(
+        new THREE.SphereGeometry(MOON_RADIUS, 56, 56),
+        new THREE.MeshStandardMaterial({
+          map: makeMoonTexture(),
+          roughness: 1,
+          metalness: 0
+        })
+      );
+      moonGroup.add(moon);
+      const moonLabel = makeLabelSprite('Moon now', '#ffffff', 22);
+      moonLabel.position.set(0, MOON_RADIUS * 2.2, 0);
+      moonGroup.add(moonLabel);
+
+      const flybyMoonGhost = new THREE.Group();
+      scene.add(flybyMoonGhost);
+      const flybyMoonSphere = new THREE.Mesh(
+        new THREE.SphereGeometry(MOON_RADIUS, 40, 40),
+        new THREE.MeshBasicMaterial({
+          color: 0x93b4ff,
+          transparent: true,
+          opacity: 0.14,
+          depthWrite: false
+        })
+      );
+      flybyMoonGhost.add(flybyMoonSphere);
+      const flybyLabel = makeLabelSprite('Moon at flyby', '#93b4ff', 26);
+      flybyLabel.position.set(0, MOON_RADIUS * 2.2, 0);
+      flybyMoonGhost.add(flybyLabel);
+
+      const moonOrbitLine = (() => {
+        const points = [];
+        const moonIncl = deg(5.145);
+        for (let i = 0; i <= 360; i++) {
+          const a = (i / 360) * Math.PI * 2;
+          const x = MOON_DISTANCE * Math.cos(a);
+          const p = MOON_DISTANCE * Math.sin(a);
+          const y = p * Math.sin(moonIncl);
+          const z = p * Math.cos(moonIncl);
+          points.push(new THREE.Vector3(x, y, z));
+        }
+        const geo = new THREE.BufferGeometry().setFromPoints(points);
+        const mat = new THREE.LineBasicMaterial({
+          color: 0x37518a,
+          transparent: true,
+          opacity: 0.52
+        });
+        return new THREE.LineLoop(geo, mat);
+      })();
+      scene.add(moonOrbitLine);
+
+      const shipGroup = new THREE.Group();
+      scene.add(shipGroup);
+
+      const shipGlow = new THREE.Mesh(
+        new THREE.SphereGeometry(1.6, 18, 18),
+        new THREE.MeshBasicMaterial({
+          color: 0x6dffcb,
+          transparent: true,
+          opacity: 0.82,
+          depthWrite: false
+        })
+      );
+      shipGroup.add(shipGlow);
+
+      const shipBodyMat = new THREE.MeshStandardMaterial({ color: 0xdfe9ff, roughness: 0.55, metalness: 0.25 });
+      const shipDarkMat = new THREE.MeshStandardMaterial({ color: 0x6f7a94, roughness: 0.65, metalness: 0.2 });
+      const shipPanelMat = new THREE.MeshBasicMaterial({ color: 0x52a8ff, transparent: true, opacity: 0.95 });
+
+      const commandModule = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.84, 1.55, 20), shipBodyMat);
+      commandModule.rotation.z = Math.PI / 2;
+      shipGroup.add(commandModule);
+
+      const serviceModule = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 1.75, 18), shipDarkMat);
+      serviceModule.rotation.z = Math.PI / 2;
+      serviceModule.position.x = -1.42;
+      shipGroup.add(serviceModule);
+
+      const nose = new THREE.Mesh(new THREE.ConeGeometry(0.52, 0.92, 20), shipBodyMat);
+      nose.rotation.z = -Math.PI / 2;
+      nose.position.x = 1.18;
+      shipGroup.add(nose);
+
+      const aft = new THREE.Mesh(new THREE.ConeGeometry(0.48, 0.7, 18), shipDarkMat);
+      aft.rotation.z = Math.PI / 2;
+      aft.position.x = -2.46;
+      shipGroup.add(aft);
+
+      for (let i = 0; i < 4; i++) {
+        const panel = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 2.8), shipPanelMat);
+        const ang = i * Math.PI / 2;
+        panel.position.set(-0.75, Math.cos(ang) * 1.62, Math.sin(ang) * 1.62);
+        panel.rotation.x = i % 2 === 0 ? 0 : Math.PI / 2;
+        shipGroup.add(panel);
+      }
+
+      const shipLabel = makeLabelSprite('Orion', '#6dffcb', 20);
+      shipLabel.position.set(0, 4.2, 0);
+      shipGroup.add(shipLabel);
+
+      function moonPosAt(timeMs) {
+        const moonIncl = deg(5.145);
+        const orbitPeriod = 27.321661 * DAY;
+        const omega = (Math.PI * 2) / orbitPeriod;
+        const theta = omega * (timeMs - mission.flybyCenter);
+        const x = MOON_DISTANCE * Math.cos(theta);
+        const p = MOON_DISTANCE * Math.sin(theta);
+        const y = p * Math.sin(moonIncl);
+        const z = p * Math.cos(moonIncl);
+        return new THREE.Vector3(x, y, z);
+      }
+
+      function moonBasisAt(timeMs) {
+        const pos = moonPosAt(timeMs);
+        const prev = moonPosAt(timeMs - 5 * MINUTE);
+        const next = moonPosAt(timeMs + 5 * MINUTE);
+        const radial = pos.clone().normalize();
+        const tangent = next.clone().sub(prev).normalize();
+        const normal = new THREE.Vector3().crossVectors(radial, tangent).normalize();
+        const tangentOrtho = new THREE.Vector3().crossVectors(normal, radial).normalize();
+        return { pos, radial, tangent: tangentOrtho, normal };
+      }
+
+      const flybyBasis = moonBasisAt(mission.flybyCenter);
+
+      function localToWorld(local, basis, origin = null) {
+        const v = basis.radial.clone().multiplyScalar(local.x)
+          .add(basis.normal.clone().multiplyScalar(local.y))
+          .add(basis.tangent.clone().multiplyScalar(local.z));
+        if (origin) v.add(origin);
+        return v;
+      }
+
+      function padPosition() {
+        const lat = deg(28.6084);
+        const lon = deg(-80.6043);
+        const r = EARTH_RADIUS * 1.02;
+        const x = r * Math.cos(lat) * Math.cos(lon);
+        const y = r * Math.sin(lat);
+        const z = r * Math.cos(lat) * Math.sin(lon);
+        return new THREE.Vector3(x, y, z);
+      }
+
+      function earthOrbitPos(timeMs) {
+        if (timeMs <= mission.launch) return padPosition();
+
+        const u = clamp((timeMs - mission.launch) / (mission.tliEnd - mission.launch), 0, 1);
+        const orbitCount = 2.0;
+        const nu = orbitCount * 2 * Math.PI * u;
+        const eased = smoother(u);
+        const a = lerp(9000, 45000, eased) * SCALE;
+        const e = lerp(0.10, 0.82, eased);
+        const r = (a * (1 - e * e)) / (1 + e * Math.cos(nu));
+
+        const pos = new THREE.Vector3(
+          r * Math.cos(nu),
+          0,
+          r * Math.sin(nu)
+        );
+
+        pos.applyAxisAngle(new THREE.Vector3(0, 1, 0), deg(28));
+        pos.applyAxisAngle(new THREE.Vector3(1, 0, 0), deg(24));
+
+        const launchBlend = clamp((timeMs - mission.launch) / (10 * MINUTE), 0, 1);
+        return padPosition().lerp(pos, smooth(launchBlend));
+      }
+
+      const flybyRelPoints = [
+        new THREE.Vector3(-90, 18, -24),
+        new THREE.Vector3(-45, 26, -18),
+        new THREE.Vector3(  5, 16,  -6),
+        new THREE.Vector3( 11,  4,   0),
+        new THREE.Vector3(  2,-13,   6),
+        new THREE.Vector3(-42,-24,  18),
+        new THREE.Vector3(-92,-18,  26)
+      ].map(v => v.multiplyScalar(1)); // already in scene units
+      const flybyCurveRel = new THREE.CatmullRomCurve3(flybyRelPoints, false, 'centripetal', 0.2);
+
+      const outboundStart = earthOrbitPos(mission.tliEnd);
+      const outboundWaypoints = [
+        outboundStart.clone(),
+        localToWorld(new THREE.Vector3(70, 10, -18), flybyBasis),
+        localToWorld(new THREE.Vector3(170, 26, -34), flybyBasis),
+        localToWorld(new THREE.Vector3(285, 18, -26), flybyBasis),
+        localToWorld(new THREE.Vector3(345, 8, -10), flybyBasis),
+        localToWorld(flybyRelPoints[0], flybyBasis, moonPosAt(mission.flybyStart))
+      ];
+      const outboundCurve = new THREE.CatmullRomCurve3(outboundWaypoints, false, 'centripetal', 0.18);
+
+      const returnStart = localToWorld(flybyRelPoints[flybyRelPoints.length - 1], flybyBasis, moonPosAt(mission.flybyEnd));
+      const splashdownPos = localToWorld(new THREE.Vector3(-EARTH_RADIUS * 0.15, -EARTH_RADIUS * 0.72, EARTH_RADIUS * 0.63), {
+        radial: new THREE.Vector3(1,0,0),
+        normal: new THREE.Vector3(0,1,0),
+        tangent: new THREE.Vector3(0,0,1)
+      });
+      const returnWaypoints = [
+        returnStart.clone(),
+        localToWorld(new THREE.Vector3(285, -28, 46), flybyBasis),
+        localToWorld(new THREE.Vector3(150, -22, 24), flybyBasis),
+        new THREE.Vector3(48, -10, 22),
+        new THREE.Vector3(18, -5, 9),
+        splashdownPos.clone()
+      ];
+      const returnCurve = new THREE.CatmullRomCurve3(returnWaypoints, false, 'centripetal', 0.18);
+
+      function positionAt(timeMs) {
+        if (timeMs <= mission.launch) return padPosition();
+        if (timeMs < mission.tliEnd) return earthOrbitPos(timeMs);
+
+        if (timeMs < mission.flybyStart) {
+          const u = clamp((timeMs - mission.tliEnd) / (mission.flybyStart - mission.tliEnd), 0, 1);
+          return outboundCurve.getPoint(u);
+        }
+
+        if (timeMs < mission.flybyEnd) {
+          const u = clamp((timeMs - mission.flybyStart) / (mission.flybyEnd - mission.flybyStart), 0, 1);
+          const rel = flybyCurveRel.getPoint(u);
+          return localToWorld(rel, flybyBasis, moonPosAt(timeMs));
+        }
+
+        if (timeMs < mission.splashdown) {
+          const u = clamp((timeMs - mission.flybyEnd) / (mission.splashdown - mission.flybyEnd), 0, 1);
+          return returnCurve.getPoint(u);
+        }
+
+        return splashdownPos.clone();
+      }
+
+      const PATH_SAMPLES = 1200;
+      const pathPoints = [];
+      for (let i = 0; i < PATH_SAMPLES; i++) {
+        const t = mission.launch + (mission.duration * i) / (PATH_SAMPLES - 1);
+        pathPoints.push(positionAt(t));
+      }
+
+      const pathGeometry = new THREE.BufferGeometry().setFromPoints(pathPoints);
+      const futurePath = new THREE.Line(
+        pathGeometry,
+        new THREE.LineBasicMaterial({
+          color: 0x4cc2ff,
+          transparent: true,
+          opacity: 0.48
+        })
+      );
+      scene.add(futurePath);
+
+      const doneGeometry = pathGeometry.clone();
+      const donePath = new THREE.Line(
+        doneGeometry,
+        new THREE.LineBasicMaterial({
+          color: 0xffd46d,
+          transparent: true,
+          opacity: 0.95
+        })
+      );
+      doneGeometry.setDrawRange(0, 2);
+      scene.add(donePath);
+
+      const milestoneDots = new THREE.Group();
+      scene.add(milestoneDots);
+      [
+        { time: mission.launch, color: 0x7affcf, size: 0.9 },
+        { time: mission.tliStart, color: 0x92c1ff, size: 1.0 },
+        { time: mission.flybyCenter, color: 0xffd46d, size: 1.2 },
+        { time: mission.splashdown, color: 0xff9f9f, size: 1.0 }
+      ].forEach(m => {
+        const mesh = new THREE.Mesh(
+          new THREE.SphereGeometry(m.size, 14, 14),
+          new THREE.MeshBasicMaterial({ color: m.color, transparent: true, opacity: 0.85 })
+        );
+        mesh.position.copy(positionAt(m.time));
+        milestoneDots.add(mesh);
+      });
+
+      flybyMoonGhost.position.copy(moonPosAt(mission.flybyCenter));
+
+      MILESTONES.forEach(m => {
+        const pct = ((m.time - mission.launch) / mission.duration) * 100;
+        const marker = document.createElement('div');
+        marker.className = 'marker';
+        marker.style.left = pct + '%';
+        const span = document.createElement('span');
+        span.textContent = m.label;
+        marker.appendChild(span);
+        markerBar.appendChild(marker);
+      });
+
+      let mode = 'live';       // live | replay
+      let replayPlaying = true;
+      let replaySpeed = Number(speedSelect.value);
+      let simTime = Date.now();
+      let followMode = 'ship';
+      let previousFrame = performance.now();
+
+      function nowClampedForTimeline() {
+        return clamp(Date.now(), mission.launch, mission.splashdown);
+      }
+
+      function setMode(nextMode) {
+        mode = nextMode;
+        liveBtn.classList.toggle('active', mode === 'live');
+        beginBtn.classList.toggle('active', mode === 'replay');
+        modeBadge.classList.toggle('live', mode === 'live');
+        modeBadge.classList.toggle('replay', mode === 'replay');
+        modeBadgeText.textContent = mode === 'live' ? 'Live' : 'Replay';
+      }
+
+      function setReplayPlaying(flag) {
+        replayPlaying = flag;
+        playBtn.textContent = replayPlaying ? 'Pause replay' : 'Play replay';
+        playBtn.classList.toggle('active', replayPlaying);
+      }
+
+      function setView(view) {
+        followMode = view;
+        viewButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.view === view));
+        if (view === 'ship') {
+          const target = shipGroup.position.clone();
+          controls.target.copy(target);
+          camera.position.copy(target.clone().add(new THREE.Vector3(-36, 24, 44)));
+        } else if (view === 'system') {
+          const target = moonGroup.position.clone().multiplyScalar(0.48);
+          controls.target.copy(target);
+          camera.position.copy(target.clone().add(new THREE.Vector3(-220, 110, 240)));
+        } else if (view === 'earth') {
+          controls.target.set(0, 0, 0);
+          camera.position.set(-42, 20, 50);
+        } else if (view === 'moon') {
+          const target = moonGroup.position.clone();
+          controls.target.copy(target);
+          camera.position.copy(target.clone().add(new THREE.Vector3(-28, 14, 34)));
+        }
+      }
+
+      liveBtn.addEventListener('click', () => {
+        setMode('live');
+        setReplayPlaying(false);
+      });
+
+      beginBtn.addEventListener('click', () => {
+        simTime = mission.launch;
+        timeline.value = '0';
+        setMode('replay');
+        setReplayPlaying(true);
+      });
+
+      playBtn.addEventListener('click', () => {
+        if (mode === 'live') {
+          simTime = nowClampedForTimeline();
+          setMode('replay');
+          setReplayPlaying(false);
+        } else {
+          setReplayPlaying(!replayPlaying);
+        }
+      });
+
+      speedSelect.addEventListener('change', () => {
+        replaySpeed = Number(speedSelect.value);
+      });
+
+      timeline.addEventListener('input', () => {
+        const ratio = Number(timeline.value) / Number(timeline.max);
+        simTime = mission.launch + mission.duration * ratio;
+        setMode('replay');
+        setReplayPlaying(false);
+      });
+
+      viewButtons.forEach(btn => {
+        btn.addEventListener('click', () => setView(btn.dataset.view));
+      });
+
+      function syncTimelineDisplay(timeMs) {
+        const clamped = clamp(timeMs, mission.launch, mission.splashdown);
+        const ratio = (clamped - mission.launch) / mission.duration;
+        timeline.value = String(Math.round(ratio * Number(timeline.max)));
+        timelineTime.textContent = formatDateTime(clamped);
+      }
+
+      function speedAt(timeMs) {
+        const dt = 30 * SECOND;
+        const t0 = clamp(timeMs - dt, mission.launch, mission.splashdown);
+        const t1 = clamp(timeMs + dt, mission.launch, mission.splashdown);
+        if (t1 === t0) return 0;
+        const p0 = positionAt(t0);
+        const p1 = positionAt(t1);
+        const distanceKm = km(p0.distanceTo(p1));
+        return distanceKm / ((t1 - t0) / SECOND);
+      }
+
+      function updateHUD(timeMs) {
+        const shipPos = positionAt(timeMs);
+        const moonPos = moonPosAt(timeMs);
+        const phase = phaseForTime(timeMs);
+
+        phaseValue.textContent = phase;
+        metValue.textContent = formatMET(timeMs - mission.launch);
+        earthDistValue.textContent = formatDistanceKm(km(shipPos.length()));
+        moonDistValue.textContent = formatDistanceKm(km(shipPos.distanceTo(moonPos)));
+        speedValue.textContent = formatSpeedKms(speedAt(timeMs));
+        simTimeValue.textContent = formatDateTime(timeMs);
+
+        if (timeMs < mission.launch) {
+          statusNote.textContent = 'Prelaunch on your current clock. Hit Start from beginning to watch the launch from the pad.';
+        } else if (timeMs < mission.tliEnd) {
+          statusNote.textContent = 'In live mode the file jumps to your current mission time on load. Replay gives manual control and fast-forward.';
+        } else if (timeMs < mission.flybyStart) {
+          statusNote.textContent = 'Outbound coast. The pale Moon shows the approximate flyby-position target, because celestial bodies insist on moving.';
+        } else if (timeMs < mission.flybyEnd) {
+          statusNote.textContent = 'Lunar flyby window. Current Moon and flyby-target Moon nearly coincide here.';
+        } else if (timeMs < mission.splashdown) {
+          statusNote.textContent = 'Return leg. Live mode keeps re-syncing to your computer clock every frame.';
+        } else {
+          statusNote.textContent = 'Mission complete. Replay still lets you scrub the whole flight because humans enjoy rewinding giant rockets.';
+        }
+      }
+
+      function updateShipAndBodies(timeMs) {
+        const clampedTime = clamp(timeMs, mission.launch, mission.splashdown);
+
+        const moonPos = moonPosAt(timeMs);
+        moonGroup.position.copy(moonPos);
+        flybyMoonGhost.position.copy(moonPosAt(mission.flybyCenter));
+
+        earth.rotation.y += 0.0012;
+        moon.rotation.y += 0.00028;
+
+        const pos = positionAt(timeMs);
+        shipGroup.position.copy(pos);
+
+        const prev = positionAt(clamp(timeMs - 2 * MINUTE, mission.launch, mission.splashdown));
+        const next = positionAt(clamp(timeMs + 2 * MINUTE, mission.launch, mission.splashdown));
+        const dir = next.clone().sub(prev).normalize();
+        if (dir.lengthSq() > 0.00001) {
+          const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir);
+          shipGroup.quaternion.slerp(q, 0.18);
+        }
+
+        const progress = clamp((clampedTime - mission.launch) / mission.duration, 0, 1);
+        const drawCount = Math.max(2, Math.floor(progress * (PATH_SAMPLES - 1)));
+        doneGeometry.setDrawRange(0, drawCount);
+
+        updateHUD(timeMs);
+        syncTimelineDisplay(timeMs);
+      }
+
+      function followTargetPosition() {
+        if (followMode === 'ship') return shipGroup.position.clone();
+        if (followMode === 'earth') return new THREE.Vector3(0, 0, 0);
+        if (followMode === 'moon') return moonGroup.position.clone();
+        return moonGroup.position.clone().multiplyScalar(0.48);
+      }
+
+      function animate(now) {
+        requestAnimationFrame(animate);
+        const dt = now - previousFrame;
+        previousFrame = now;
+
+        if (mode === 'live') {
+          simTime = Date.now();
+        } else if (replayPlaying) {
+          simTime += dt * replaySpeed;
+        }
+
+        if (mode === 'replay') {
+          simTime = clamp(simTime, mission.launch, mission.splashdown);
+          if (simTime >= mission.splashdown) setReplayPlaying(false);
+        }
+
+        updateShipAndBodies(simTime);
+
+        const desiredTarget = followTargetPosition();
+        const delta = desiredTarget.clone().sub(controls.target);
+        camera.position.add(delta);
+        controls.target.copy(desiredTarget);
+
+        controls.update();
+        renderer.render(scene, camera);
+      }
+
+      function resize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+      window.addEventListener('resize', resize);
+
+      // Initial state
+      setMode('live');
+      setReplayPlaying(false);
+      setView('ship');
+      simTime = Date.now();
+      updateShipAndBodies(simTime);
+      animate(performance.now());
+    })();
+  </script>
+</body>
+</html>

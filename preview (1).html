@@ -1,0 +1,1415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>General Relativity: Transformer Metric Handover</title>
+    <style>
+        :root{
+            --accent:#00ffd0;
+            --accent2:#67f0ff;
+            --bg:rgba(10,15,20,.88);
+            --border:rgba(0,255,208,.26);
+            --text:#eef6fb;
+            --muted:#9fb0bc;
+            --warn:#ff4f7b;
+            --good:#00ffd0;
+            --gold:#ffd166;
+            --shadow:0 8px 28px rgba(0,0,0,.35),0 0 22px rgba(0,255,208,.08);
+        }
+        *{box-sizing:border-box}
+        html,body{
+            margin:0;
+            width:100%;
+            height:100%;
+            overflow:hidden;
+            background:#000;
+            color:var(--text);
+            font-family:"Segoe UI",Tahoma,Geneva,Verdana,sans-serif;
+        }
+        body{user-select:none}
+        canvas{
+            display:block;
+            width:100vw;
+            height:100vh;
+            cursor:grab;
+            touch-action:none;
+        }
+        canvas:active{cursor:grabbing}
+
+        #fallback{
+            position:absolute;
+            inset:0;
+            display:none;
+            place-items:center;
+            background:radial-gradient(circle at 50% 35%, rgba(0,255,208,.08), transparent 35%), #040708;
+            z-index:50;
+            padding:24px;
+        }
+        #fallback .card{
+            max-width:560px;
+            padding:22px;
+            border-radius:16px;
+            border:1px solid rgba(0,255,208,.24);
+            background:rgba(10,15,20,.9);
+            box-shadow:var(--shadow);
+        }
+        #fallback h2{
+            margin:0 0 8px 0;
+            color:var(--accent);
+            letter-spacing:.06em;
+            text-transform:uppercase;
+            font-size:1.08rem;
+        }
+        #fallback p{
+            margin:0;
+            line-height:1.5;
+            color:#d4dfe6;
+            font-size:.92rem;
+        }
+
+        #ui-wrap{
+            position:absolute;
+            top:14px;
+            left:14px;
+            z-index:20;
+            display:flex;
+            flex-direction:column;
+            align-items:flex-start;
+            max-width:min(450px, calc(100vw - 28px));
+        }
+
+        button{
+            appearance:none;
+            border:none;
+            outline:none;
+            font:inherit;
+        }
+
+        #toggle-btn, .minor-btn{
+            border:1px solid var(--accent);
+            background:rgba(10,15,20,.9);
+            color:var(--accent);
+            padding:8px 14px;
+            border-radius:10px;
+            cursor:pointer;
+            font-weight:700;
+            font-size:.9rem;
+            transition:transform .15s ease, background .15s ease, color .15s ease, box-shadow .15s ease;
+            box-shadow:0 0 14px rgba(0,255,208,.12);
+            backdrop-filter:blur(12px);
+        }
+        #toggle-btn:hover, .minor-btn:hover{
+            background:var(--accent);
+            color:#061014;
+            transform:translateY(-1px);
+        }
+        #toggle-btn{margin-bottom:10px}
+
+        #ui{
+            width:min(450px, calc(100vw - 28px));
+            padding:18px 18px 16px;
+            border-radius:14px;
+            border:1px solid var(--border);
+            background:var(--bg);
+            backdrop-filter:blur(14px);
+            box-shadow:var(--shadow);
+            transition:opacity .22s ease, transform .22s ease;
+            transform-origin:top left;
+        }
+        #ui.hidden{
+            opacity:0;
+            transform:scale(.965);
+            pointer-events:none;
+            position:absolute;
+        }
+
+        h1{
+            margin:0 0 6px 0;
+            font-size:1.08rem;
+            color:var(--accent);
+            letter-spacing:.08em;
+            text-transform:uppercase;
+        }
+        p.desc{
+            margin:0 0 14px 0;
+            color:var(--muted);
+            font-size:.82rem;
+            line-height:1.46;
+        }
+        strong{color:#fff}
+
+        .slider-row{margin-bottom:12px}
+        .slider-label{
+            display:flex;
+            justify-content:space-between;
+            gap:12px;
+            margin-bottom:6px;
+            font-size:.85rem;
+            color:#d4dfe7;
+        }
+        .val{
+            color:var(--accent);
+            font-family:Consolas, Monaco, monospace;
+            white-space:nowrap;
+        }
+
+        input[type="range"]{
+            width:100%;
+            accent-color:var(--accent);
+            cursor:pointer;
+        }
+        input[type="checkbox"]{
+            accent-color:var(--accent);
+            transform:scale(1.12);
+            margin-right:8px;
+            cursor:pointer;
+        }
+        .toggle-row{
+            display:flex;
+            align-items:center;
+            margin-bottom:10px;
+            color:#c8d4dd;
+            font-size:.85rem;
+        }
+
+        .panel{
+            margin-top:14px;
+            padding:14px;
+            border-radius:12px;
+            border:1px solid rgba(0,255,208,.18);
+            background:linear-gradient(180deg, rgba(0,55,45,.28), rgba(0,25,22,.18));
+        }
+        .title-row{
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            gap:10px;
+            margin-bottom:10px;
+            font-size:.85rem;
+            font-weight:700;
+            color:var(--accent);
+        }
+        .progress-bar{
+            width:100%;
+            height:8px;
+            margin-bottom:10px;
+            border-radius:999px;
+            overflow:hidden;
+            background:rgba(255,255,255,.08);
+        }
+        .progress-fill{
+            width:0%;
+            height:100%;
+            background:linear-gradient(90deg, var(--accent2), var(--accent));
+            box-shadow:0 0 18px rgba(0,255,208,.35);
+            transition:width .12s linear;
+        }
+
+        .stats{
+            display:grid;
+            gap:6px;
+            font-size:.76rem;
+            color:#a8b5bf;
+            font-family:Consolas, Monaco, monospace;
+        }
+        .stat-row{
+            display:flex;
+            justify-content:space-between;
+            gap:10px;
+        }
+        .warn{color:var(--warn)}
+        .good{color:var(--good)}
+        .gold{color:var(--gold)}
+
+        .button-row{
+            display:flex;
+            gap:8px;
+            margin-top:12px;
+            flex-wrap:wrap;
+        }
+        .minor-btn{
+            padding:7px 12px;
+            font-size:.8rem;
+        }
+
+        .note-row{
+            display:flex;
+            justify-content:space-between;
+            gap:12px;
+            margin-top:10px;
+            color:#90a1ad;
+            font-size:.73rem;
+        }
+
+        @media (max-width:560px){
+            #ui-wrap{
+                top:10px;
+                left:10px;
+                max-width:calc(100vw - 20px);
+            }
+            #ui{
+                width:calc(100vw - 20px);
+                padding:16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="fallback">
+        <div class="card">
+            <h2>WebGL2 Required</h2>
+            <p>This demo needs a browser and GPU path with WebGL2 support.</p>
+        </div>
+    </div>
+
+    <div id="ui-wrap">
+        <button id="toggle-btn" type="button">➖ Close Panel</button>
+        <div id="ui">
+            <h1>Physical Spacetime Manifold</h1>
+            <p class="desc">
+                <strong>MATTER DRIVES CURVATURE.</strong>
+                Light follows deterministic null-geodesics. A tiny transformer-style controller protects frame rate,
+                while a smarter token-conditioned learner handles radial GR metric handover.
+            </p>
+
+            <div class="slider-row">
+                <div class="slider-label"><span>Warp Velocity (v)</span><span class="val" id="val-v">0.80 c</span></div>
+                <input type="range" id="velocity" min="0.00" max="2.50" step="0.01" value="0.80">
+            </div>
+
+            <div class="slider-row">
+                <div class="slider-label"><span>Bubble Radius (R)</span><span class="val" id="val-r">2.50</span></div>
+                <input type="range" id="radius" min="1.50" max="4.00" step="0.05" value="2.50">
+            </div>
+
+            <div class="slider-row">
+                <div class="slider-label"><span>Bubble Wall Thickness (σ)</span><span class="val" id="val-t">0.50</span></div>
+                <input type="range" id="thickness" min="0.10" max="1.50" step="0.05" value="0.50">
+            </div>
+
+            <div class="toggle-row">
+                <input type="checkbox" id="show-energy" checked>
+                <label for="show-energy">Show Stress-Matter Tensor (T<sub>μν</sub>)</label>
+            </div>
+
+            <div class="toggle-row">
+                <input type="checkbox" id="show-grid" checked>
+                <label for="show-grid">Show Spacetime Grid</label>
+            </div>
+
+            <div class="panel">
+                <div class="title-row">
+                    <span>Metric Handover</span>
+                    <span id="ai-status" class="warn">TEACHER FORCING</span>
+                </div>
+                <div class="progress-bar"><div class="progress-fill" id="ai-bar"></div></div>
+                <div class="stats">
+                    <div class="stat-row"><span>Control Weight:</span><span id="val-control">0%</span></div>
+                    <div class="stat-row"><span>Metric Loss:</span><span id="val-loss">1.000e+0</span></div>
+                    <div class="stat-row"><span>Residual Power:</span><span id="val-resid">0.000</span></div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="title-row">
+                    <span>Transformer FPS Governor</span>
+                    <span id="fps-status" class="gold">BALANCING</span>
+                </div>
+                <div class="progress-bar"><div class="progress-fill" id="fps-bar"></div></div>
+                <div class="stats">
+                    <div class="stat-row"><span>FPS:</span><span id="val-fps">60</span></div>
+                    <div class="stat-row"><span>Render Scale:</span><span id="val-scale">1.00</span></div>
+                    <div class="stat-row"><span>Ray Steps:</span><span id="val-steps">120</span></div>
+                    <div class="stat-row"><span>Train Iters/Frame:</span><span id="val-train">3</span></div>
+                    <div class="stat-row"><span>Target FPS:</span><span id="val-target">60</span></div>
+                </div>
+            </div>
+
+            <div class="button-row">
+                <button id="reset-ai" class="minor-btn" type="button">Reset Learner</button>
+                <button id="recenter-cam" class="minor-btn" type="button">Recenter Camera</button>
+                <button id="turbo-toggle" class="minor-btn" type="button">Turbo: Off</button>
+            </div>
+
+            <div class="note-row">
+                <span>Drag to orbit</span>
+                <span>Wheel to zoom</span>
+            </div>
+        </div>
+    </div>
+
+    <canvas id="glcanvas" aria-label="Warp metric visualization"></canvas>
+
+    <script>
+    (() => {
+        'use strict';
+
+        const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+        const lerp = (a, b, t) => a + (b - a) * t;
+        const smooth01 = (x) => {
+            x = clamp(x, 0, 1);
+            return x * x * (3 - 2 * x);
+        };
+        const fmtExp = (x) => Number.isFinite(x) ? x.toExponential(3) : 'nan';
+        const TAU = Math.PI * 2;
+
+        const MAX_R = 15.0;
+        const AI_TEX_W = 256;
+        const DPR_CAP_BASE = 1.5;
+
+        const canvas = document.getElementById('glcanvas');
+        const fallback = document.getElementById('fallback');
+        const gl = canvas.getContext('webgl2', {
+            alpha: false,
+            antialias: true,
+            depth: false,
+            stencil: false,
+            powerPreference: 'high-performance',
+            premultipliedAlpha: false,
+            preserveDrawingBuffer: false
+        });
+
+        if (!gl) {
+            fallback.style.display = 'grid';
+            return;
+        }
+
+        const dom = {
+            ui: document.getElementById('ui'),
+            toggleBtn: document.getElementById('toggle-btn'),
+            velocity: document.getElementById('velocity'),
+            radius: document.getElementById('radius'),
+            thickness: document.getElementById('thickness'),
+            showEnergy: document.getElementById('show-energy'),
+            showGrid: document.getElementById('show-grid'),
+            valV: document.getElementById('val-v'),
+            valR: document.getElementById('val-r'),
+            valT: document.getElementById('val-t'),
+            aiStatus: document.getElementById('ai-status'),
+            aiBar: document.getElementById('ai-bar'),
+            valControl: document.getElementById('val-control'),
+            valLoss: document.getElementById('val-loss'),
+            valResid: document.getElementById('val-resid'),
+            fpsStatus: document.getElementById('fps-status'),
+            fpsBar: document.getElementById('fps-bar'),
+            valFps: document.getElementById('val-fps'),
+            valScale: document.getElementById('val-scale'),
+            valSteps: document.getElementById('val-steps'),
+            valTrain: document.getElementById('val-train'),
+            valTarget: document.getElementById('val-target'),
+            resetAI: document.getElementById('reset-ai'),
+            recenterCam: document.getElementById('recenter-cam'),
+            turboToggle: document.getElementById('turbo-toggle')
+        };
+
+        const state = {
+            v: parseFloat(dom.velocity.value),
+            R: parseFloat(dom.radius.value),
+            T: parseFloat(dom.thickness.value),
+            showEnergy: dom.showEnergy.checked,
+            showGrid: dom.showGrid.checked,
+            camTheta: 2.35,
+            camPhi: 0.35,
+            camDist: 5.7,
+            dragging: false,
+            lastPointerX: 0,
+            lastPointerY: 0,
+            uiVisible: true,
+            rafId: 0,
+            turbo: false
+        };
+
+        function syncSliderLabels() {
+            dom.valV.textContent = `${state.v.toFixed(2)} c`;
+            dom.valR.textContent = state.R.toFixed(2);
+            dom.valT.textContent = state.T.toFixed(2);
+        }
+        syncSliderLabels();
+
+        dom.velocity.addEventListener('input', () => {
+            state.v = parseFloat(dom.velocity.value);
+            syncSliderLabels();
+        });
+        dom.radius.addEventListener('input', () => {
+            state.R = parseFloat(dom.radius.value);
+            syncSliderLabels();
+        });
+        dom.thickness.addEventListener('input', () => {
+            state.T = parseFloat(dom.thickness.value);
+            syncSliderLabels();
+        });
+        dom.showEnergy.addEventListener('change', () => state.showEnergy = dom.showEnergy.checked);
+        dom.showGrid.addEventListener('change', () => state.showGrid = dom.showGrid.checked);
+
+        dom.toggleBtn.addEventListener('click', () => {
+            state.uiVisible = !state.uiVisible;
+            dom.ui.classList.toggle('hidden', !state.uiVisible);
+            dom.toggleBtn.textContent = state.uiVisible ? '➖ Close Panel' : '⚙️ Metric Parameters';
+        });
+
+        dom.recenterCam.addEventListener('click', () => {
+            state.camTheta = 2.35;
+            state.camPhi = 0.35;
+            state.camDist = 5.7;
+        });
+
+        dom.turboToggle.addEventListener('click', () => {
+            state.turbo = !state.turbo;
+            dom.turboToggle.textContent = `Turbo: ${state.turbo ? 'On' : 'Off'}`;
+        });
+
+        function exactProfile(r, R, T) {
+            const left = R - T;
+            const right = R + T;
+            if (r <= left) return { f: 1.0, df: 0.0 };
+            if (r >= right) return { f: 0.0, df: 0.0 };
+            const denom = Math.max(2.0 * T, 1e-5);
+            const t = (r - left) / denom;
+            const f = 1.0 - (t * t * (3.0 - 2.0 * t));
+            const df = -(6.0 * t * (1.0 - t)) / denom;
+            return { f, df };
+        }
+
+        class TinyAttentionFPSController {
+            constructor(seqLen = 16, dModel = 8) {
+                this.seqLen = seqLen;
+                this.dModel = dModel;
+                this.history = [];
+                this.targetFPS = 60;
+                this.renderScale = 1.0;
+                this.raySteps = 120;
+                this.trainIters = 3;
+
+                this.Wq = new Float32Array(dModel * dModel);
+                this.Wk = new Float32Array(dModel * dModel);
+                this.Wv = new Float32Array(dModel * dModel);
+                this.Wo = new Float32Array(dModel * dModel);
+                this.head = new Float32Array(dModel * 3);
+
+                let idx = 0;
+                const init = (arr, scale) => {
+                    for (let i = 0; i < arr.length; i++) {
+                        arr[i] = (Math.sin((i + 1) * 1.713 + idx++ * 0.11) * 0.5) * scale;
+                    }
+                };
+                init(this.Wq, 0.6);
+                init(this.Wk, 0.6);
+                init(this.Wv, 0.6);
+                init(this.Wo, 0.6);
+                init(this.head, 0.5);
+
+                this.emaPressure = 0.0;
+            }
+
+            push(frame) {
+                this.history.push(frame);
+                if (this.history.length > this.seqLen) this.history.shift();
+            }
+
+            _embed(frame) {
+                const x = new Float32Array(this.dModel);
+                const fpsNorm = clamp(frame.fps / 60, 0, 2);
+                const dtNorm = clamp(frame.dt / 16.666, 0, 3);
+                const scaleNorm = clamp(frame.scale, 0.5, 1.2);
+                const trainNorm = frame.trainIters / 8;
+                const stepNorm = frame.steps / 160;
+                const motion = clamp(frame.motion, 0, 1);
+                const loss = clamp(Math.log10(frame.loss + 1e-8) + 8, 0, 8) / 8;
+                const vNorm = clamp(frame.v / 2.5, 0, 1);
+
+                const base = [
+                    fpsNorm, dtNorm, scaleNorm, trainNorm,
+                    stepNorm, motion, loss, vNorm
+                ];
+                for (let i = 0; i < this.dModel; i++) x[i] = base[i % base.length];
+                return x;
+            }
+
+            _matVec(M, x, out) {
+                const D = this.dModel;
+                for (let r = 0; r < D; r++) {
+                    let s = 0;
+                    const off = r * D;
+                    for (let c = 0; c < D; c++) s += M[off + c] * x[c];
+                    out[r] = Math.tanh(s);
+                }
+            }
+
+            decide() {
+                if (this.history.length === 0) {
+                    return { pressure: 0, renderScale: this.renderScale, raySteps: this.raySteps, trainIters: this.trainIters };
+                }
+
+                const D = this.dModel;
+                const n = this.history.length;
+                const tokens = new Array(n);
+                const q = new Float32Array(D);
+                const k = new Float32Array(D);
+                const v = new Float32Array(D);
+                const tmp = new Float32Array(D);
+
+                for (let i = 0; i < n; i++) tokens[i] = this._embed(this.history[i]);
+
+                const last = tokens[n - 1];
+                this._matVec(this.Wq, last, q);
+
+                const scores = new Float32Array(n);
+                let maxScore = -1e9;
+
+                for (let i = 0; i < n; i++) {
+                    this._matVec(this.Wk, tokens[i], k);
+                    let s = 0;
+                    for (let j = 0; j < D; j++) s += q[j] * k[j];
+                    s /= Math.sqrt(D);
+                    s += i / n * 0.07;
+                    scores[i] = s;
+                    if (s > maxScore) maxScore = s;
+                }
+
+                let denom = 0;
+                for (let i = 0; i < n; i++) {
+                    scores[i] = Math.exp(scores[i] - maxScore);
+                    denom += scores[i];
+                }
+
+                const ctx = new Float32Array(D);
+                for (let i = 0; i < n; i++) {
+                    const a = scores[i] / Math.max(1e-8, denom);
+                    this._matVec(this.Wv, tokens[i], v);
+                    for (let j = 0; j < D; j++) ctx[j] += a * v[j];
+                }
+
+                this._matVec(this.Wo, ctx, tmp);
+
+                let outScale = 0, outSteps = 0, outTrain = 0;
+                for (let i = 0; i < D; i++) {
+                    outScale += tmp[i] * this.head[i * 3 + 0];
+                    outSteps += tmp[i] * this.head[i * 3 + 1];
+                    outTrain += tmp[i] * this.head[i * 3 + 2];
+                }
+
+                const recent = this.history[n - 1];
+                const fpsErr = (this.targetFPS - recent.fps) / this.targetFPS;
+                const dtErr = (recent.dt - 16.666) / 16.666;
+                const rawPressure = clamp(0.8 * fpsErr + 0.4 * dtErr + 0.1 * outScale, -1, 1);
+                this.emaPressure = lerp(this.emaPressure, rawPressure, 0.18);
+
+                let desiredScale = 1.0 - clamp(this.emaPressure, -0.4, 0.7) * 0.38;
+                let desiredSteps = Math.round(120 - clamp(this.emaPressure, -0.4, 0.8) * 50 - outSteps * 4);
+                let desiredTrain = Math.round(3 - clamp(this.emaPressure, -0.4, 0.8) * 2 - outTrain * 0.25);
+
+                if (recent.fps > this.targetFPS + 8) {
+                    desiredScale += 0.03;
+                    desiredSteps += 4;
+                    desiredTrain += 1;
+                }
+
+                this.renderScale = lerp(this.renderScale, clamp(desiredScale, 0.62, 1.0), 0.12);
+                this.raySteps = Math.round(lerp(this.raySteps, clamp(desiredSteps, 56, 132), 0.15));
+                this.trainIters = Math.round(lerp(this.trainIters, clamp(desiredTrain, 1, 6), 0.18));
+
+                return {
+                    pressure: clamp(this.emaPressure * 0.5 + 0.5, 0, 1),
+                    renderScale: this.renderScale,
+                    raySteps: this.raySteps,
+                    trainIters: this.trainIters
+                };
+            }
+        }
+
+        class SmarterMetricLearner {
+            constructor(nodes = 96, maxR = MAX_R, texWidth = AI_TEX_W) {
+                this.nodes = nodes;
+                this.maxR = maxR;
+                this.texWidth = texWidth;
+
+                this.centers = new Float32Array(nodes);
+                this.baseW = new Float32Array(nodes);
+                this.m = new Float32Array(nodes);
+                this.v = new Float32Array(nodes);
+                this.grad = new Float32Array(nodes);
+
+                this.tokenQ = new Float32Array(8 * 8);
+                this.tokenK = new Float32Array(8 * 8);
+                this.tokenV = new Float32Array(8 * 8);
+                this.tokenO = new Float32Array(8 * 8);
+                this.resHead = new Float32Array(8 * 3);
+
+                this.sigma = (maxR / (nodes - 1)) * 1.4;
+                this.invSigma2 = 1.0 / (this.sigma * this.sigma);
+                this.lr = 0.010;
+                this.beta1 = 0.9;
+                this.beta2 = 0.999;
+                this.eps = 1e-8;
+                this.weightDecay = 2e-5;
+
+                this.loss = 1.0;
+                this.controlWeight = 0.0;
+                this.residualPower = 0.0;
+                this.stepCount = 0;
+                this.targetR = 2.5;
+                this.targetT = 0.5;
+                this.targetV = 0.8;
+                this.targetKey = '';
+                this.textureData = new Float32Array(texWidth * 2);
+
+                for (let i = 0; i < nodes; i++) {
+                    this.centers[i] = (i / (nodes - 1)) * maxR;
+                }
+
+                let seed = 1;
+                const init = (arr, scale) => {
+                    for (let i = 0; i < arr.length; i++) {
+                        arr[i] = Math.sin((i + 1) * 1.717 + seed * 0.131) * scale;
+                        seed++;
+                    }
+                };
+                init(this.tokenQ, 0.28);
+                init(this.tokenK, 0.28);
+                init(this.tokenV, 0.28);
+                init(this.tokenO, 0.28);
+                init(this.resHead, 0.22);
+
+                this.seed(this.targetR, this.targetT, this.targetV);
+            }
+
+            seed(R, T, v = 0.8) {
+                this.targetR = R;
+                this.targetT = T;
+                this.targetV = v;
+                this.targetKey = `${R.toFixed(3)}|${T.toFixed(3)}|${v.toFixed(3)}`;
+                this.loss = 1.0;
+                this.controlWeight = 0.0;
+                this.residualPower = 0.0;
+                this.stepCount = 0;
+
+                for (let i = 0; i < this.nodes; i++) {
+                    this.baseW[i] = exactProfile(this.centers[i], R, T).f;
+                    this.m[i] = 0.0;
+                    this.v[i] = 0.0;
+                    this.grad[i] = 0.0;
+                }
+            }
+
+            retarget(R, T, v) {
+                const key = `${R.toFixed(3)}|${T.toFixed(3)}|${v.toFixed(3)}`;
+                if (key === this.targetKey) return;
+
+                this.targetR = R;
+                this.targetT = T;
+                this.targetV = v;
+                this.targetKey = key;
+                this.loss = Math.max(this.loss, 0.004);
+                this.controlWeight *= 0.6;
+
+                for (let i = 0; i < this.nodes; i++) {
+                    const guided = exactProfile(this.centers[i], R, T).f;
+                    this.baseW[i] = this.baseW[i] * 0.76 + guided * 0.24;
+                    this.m[i] *= 0.4;
+                    this.v[i] *= 0.4;
+                }
+            }
+
+            _token(r, R, T, v) {
+                return new Float32Array([
+                    clamp(r / this.maxR, 0, 1),
+                    clamp(R / 4.0, 0, 1),
+                    clamp(T / 1.5, 0, 1),
+                    clamp(v / 2.5, 0, 1),
+                    Math.sin(r * 0.9),
+                    Math.cos(r * 0.9),
+                    Math.sin((R + T) * 0.8),
+                    1.0
+                ]);
+            }
+
+            _matVec(M, x, out, D = 8) {
+                for (let r = 0; r < D; r++) {
+                    let s = 0;
+                    const off = r * D;
+                    for (let c = 0; c < D; c++) s += M[off + c] * x[c];
+                    out[r] = Math.tanh(s);
+                }
+            }
+
+            residual(r, R, T, v) {
+                const D = 8;
+                const qTok = this._token(r, R, T, v);
+                const memA = this._token(Math.max(0, R - T), R, T, v);
+                const memB = this._token(R, R, T, v);
+                const memC = this._token(Math.min(this.maxR, R + T), R, T, v);
+                const memory = [memA, memB, memC];
+
+                const q = new Float32Array(D);
+                const k = new Float32Array(D);
+                const vv = new Float32Array(D);
+                const tmp = new Float32Array(D);
+                this._matVec(this.tokenQ, qTok, q, D);
+
+                const scores = new Float32Array(memory.length);
+                let maxS = -1e9;
+                for (let i = 0; i < memory.length; i++) {
+                    this._matVec(this.tokenK, memory[i], k, D);
+                    let s = 0;
+                    for (let j = 0; j < D; j++) s += q[j] * k[j];
+                    s /= Math.sqrt(D);
+                    scores[i] = s;
+                    if (s > maxS) maxS = s;
+                }
+
+                let denom = 0;
+                for (let i = 0; i < scores.length; i++) {
+                    scores[i] = Math.exp(scores[i] - maxS);
+                    denom += scores[i];
+                }
+
+                const ctx = new Float32Array(D);
+                for (let i = 0; i < memory.length; i++) {
+                    const a = scores[i] / Math.max(1e-8, denom);
+                    this._matVec(this.tokenV, memory[i], vv, D);
+                    for (let j = 0; j < D; j++) ctx[j] += a * vv[j];
+                }
+
+                this._matVec(this.tokenO, ctx, tmp, D);
+
+                let rf = 0, rdf = 0, gate = 0;
+                for (let i = 0; i < D; i++) {
+                    rf += tmp[i] * this.resHead[i * 3 + 0];
+                    rdf += tmp[i] * this.resHead[i * 3 + 1];
+                    gate += tmp[i] * this.resHead[i * 3 + 2];
+                }
+
+                const g = smooth01(0.5 + 0.5 * Math.tanh(gate));
+                return {
+                    f: rf * 0.06 * g,
+                    df: rdf * 0.45 * g,
+                    gate: g
+                };
+            }
+
+            sampleRadius() {
+                const a = Math.random();
+                let r;
+                if (a < 0.74) {
+                    r = this.targetR + (Math.random() * 2.0 - 1.0) * (this.targetT * 1.6 + 0.18);
+                } else if (a < 0.9) {
+                    r = Math.random() * (this.targetR + this.targetT + 1.0);
+                } else {
+                    r = Math.random() * this.maxR;
+                }
+                return clamp(r, 0.0, this.maxR);
+            }
+
+            eval(r, R = this.targetR, T = this.targetT, v = this.targetV) {
+                const nodes = this.nodes;
+                let sumPhi = 1e-6;
+                let sumDPhi = 0;
+                let num = 0;
+                let dNum = 0;
+
+                for (let i = 0; i < nodes; i++) {
+                    const diff = r - this.centers[i];
+                    const phi = Math.exp(-(diff * diff) * this.invSigma2);
+                    const dphi = -2 * diff * this.invSigma2 * phi;
+                    sumPhi += phi;
+                    sumDPhi += dphi;
+                    num += this.baseW[i] * phi;
+                    dNum += this.baseW[i] * dphi;
+                }
+
+                const invD = 1.0 / sumPhi;
+                let f = num * invD;
+                let df = (dNum * sumPhi - num * sumDPhi) * invD * invD;
+
+                const res = this.residual(r, R, T, v);
+                f += res.f;
+                df += res.df;
+
+                return {
+                    f: clamp(f, -0.15, 1.15),
+                    df: clamp(df, -12.0, 12.0),
+                    gate: res.gate
+                };
+            }
+
+            train(iterations = 1) {
+                const batchSize = 72;
+                const lambdaDf = 6.5;
+
+                for (let iter = 0; iter < iterations; iter++) {
+                    this.grad.fill(0);
+                    let batchLoss = 0;
+                    let gateAccum = 0;
+
+                    for (let b = 0; b < batchSize; b++) {
+                        const r = this.sampleRadius();
+                        const truth = exactProfile(r, this.targetR, this.targetT);
+                        const pred = this.eval(r);
+                        const errF = pred.f - truth.f;
+                        const errDF = pred.df - truth.df;
+                        const wallFocus = 1.0 + 2.8 * Math.exp(-Math.pow((r - this.targetR) / Math.max(0.18, this.targetT * 1.1), 2));
+                        const loss = wallFocus * (errF * errF + lambdaDf * errDF * errDF);
+                        batchLoss += loss;
+                        gateAccum += pred.gate;
+
+                        let sumPhi = 1e-6;
+                        let sumDPhi = 0;
+                        const phiArr = new Float32Array(this.nodes);
+                        const dphiArr = new Float32Array(this.nodes);
+
+                        for (let i = 0; i < this.nodes; i++) {
+                            const diff = r - this.centers[i];
+                            const phi = Math.exp(-(diff * diff) * this.invSigma2);
+                            const dphi = -2 * diff * this.invSigma2 * phi;
+                            phiArr[i] = phi;
+                            dphiArr[i] = dphi;
+                            sumPhi += phi;
+                            sumDPhi += dphi;
+                        }
+
+                        const invD = 1.0 / sumPhi;
+                        const invD2 = invD * invD;
+                        const kF = 2.0 * wallFocus * errF;
+                        const kDF = 2.0 * wallFocus * lambdaDf * errDF;
+
+                        for (let i = 0; i < this.nodes; i++) {
+                            const df_dwi = phiArr[i] * invD;
+                            const ddf_dwi = (dphiArr[i] * sumPhi - phiArr[i] * sumDPhi) * invD2;
+                            this.grad[i] += kF * df_dwi + kDF * ddf_dwi;
+                        }
+                    }
+
+                    this.stepCount++;
+                    const gradScale = 1 / batchSize;
+                    const bias1 = 1 - Math.pow(this.beta1, this.stepCount);
+                    const bias2 = 1 - Math.pow(this.beta2, this.stepCount);
+
+                    for (let i = 0; i < this.nodes; i++) {
+                        const g = this.grad[i] * gradScale + this.weightDecay * this.baseW[i];
+                        const m = this.m[i] = this.beta1 * this.m[i] + (1 - this.beta1) * g;
+                        const v = this.v[i] = this.beta2 * this.v[i] + (1 - this.beta2) * g * g;
+                        const mHat = m / bias1;
+                        const vHat = v / bias2;
+                        this.baseW[i] = clamp(this.baseW[i] - this.lr * mHat / (Math.sqrt(vHat) + this.eps), -0.2, 1.2);
+                    }
+
+                    const instantLoss = batchLoss / batchSize;
+                    this.loss = lerp(this.loss, instantLoss, 0.12);
+                    this.residualPower = lerp(this.residualPower, gateAccum / batchSize, 0.10);
+
+                    const targetControl =
+                        this.loss < 7e-4 ? 1.0 :
+                        this.loss < 2e-3 ? 0.86 :
+                        this.loss < 6e-3 ? 0.58 :
+                        this.loss < 1.7e-2 ? 0.24 : 0.0;
+
+                    this.controlWeight = lerp(this.controlWeight, targetControl, 0.09);
+                }
+            }
+
+            writeTextureData() {
+                for (let p = 0; p < this.texWidth; p++) {
+                    const r = (p / (this.texWidth - 1)) * this.maxR;
+                    const e = this.eval(r, this.targetR, this.targetT, this.targetV);
+                    this.textureData[p * 2 + 0] = e.f;
+                    this.textureData[p * 2 + 1] = e.df;
+                }
+                return this.textureData;
+            }
+        }
+
+        function createShader(glCtx, type, source) {
+            const shader = glCtx.createShader(type);
+            glCtx.shaderSource(shader, source);
+            glCtx.compileShader(shader);
+            if (!glCtx.getShaderParameter(shader, glCtx.COMPILE_STATUS)) {
+                const log = glCtx.getShaderInfoLog(shader) || 'Unknown shader compile failure';
+                glCtx.deleteShader(shader);
+                throw new Error(log);
+            }
+            return shader;
+        }
+
+        function createProgram(glCtx, vsSource, fsSource) {
+            const program = glCtx.createProgram();
+            const vs = createShader(glCtx, glCtx.VERTEX_SHADER, vsSource);
+            const fs = createShader(glCtx, glCtx.FRAGMENT_SHADER, fsSource);
+            glCtx.attachShader(program, vs);
+            glCtx.attachShader(program, fs);
+            glCtx.linkProgram(program);
+            glCtx.deleteShader(vs);
+            glCtx.deleteShader(fs);
+
+            if (!glCtx.getProgramParameter(program, glCtx.LINK_STATUS)) {
+                const log = glCtx.getProgramInfoLog(program) || 'Unknown link failure';
+                glCtx.deleteProgram(program);
+                throw new Error(log);
+            }
+            return program;
+        }
+
+        const vertexShaderSource = `#version 300 es
+            precision highp float;
+            in vec2 a_pos;
+            out vec2 v_uv;
+            void main() {
+                v_uv = a_pos * 0.5 + 0.5;
+                gl_Position = vec4(a_pos, 0.0, 1.0);
+            }
+        `;
+
+        const fragmentShaderSource = `#version 300 es
+            precision highp float;
+
+            in vec2 v_uv;
+            out vec4 fragColor;
+
+            uniform vec2 u_res;
+            uniform float u_time;
+            uniform vec3 u_camPos;
+            uniform float u_v;
+            uniform float u_R;
+            uniform float u_T;
+            uniform float u_aiInfluence;
+            uniform sampler2D u_aiMetric;
+            uniform int u_showEnergy;
+            uniform int u_showGrid;
+            uniform int u_maxSteps;
+
+            const float MAX_R = 15.0;
+            const float TEX_W = 256.0;
+
+            vec2 exactShape(float r, float R, float T) {
+                float left = R - T;
+                float right = R + T;
+                if (r <= left) return vec2(1.0, 0.0);
+                if (r >= right) return vec2(0.0, 0.0);
+                float denom = max(2.0 * T, 1e-4);
+                float t = (r - left) / denom;
+                float f = 1.0 - (t * t * (3.0 - 2.0 * t));
+                float df = -(6.0 * t * (1.0 - t)) / denom;
+                return vec2(f, df);
+            }
+
+            vec2 sampleAIMetric(float r) {
+                float coord = clamp(r / MAX_R, 0.0, 1.0) * (TEX_W - 1.0);
+                int idx = int(floor(coord));
+                float fracPart = coord - float(idx);
+                vec2 a = texelFetch(u_aiMetric, ivec2(clamp(idx, 0, 255), 0), 0).rg;
+                vec2 b = texelFetch(u_aiMetric, ivec2(clamp(idx + 1, 0, 255), 0), 0).rg;
+                return mix(a, b, fracPart);
+            }
+
+            float hash13(vec3 p) {
+                p = fract(p * 0.1031);
+                p += dot(p, p.zyx + 31.32);
+                return fract((p.x + p.y) * p.z);
+            }
+
+            float sdCapsule(vec3 p, vec3 a, vec3 b, float r) {
+                vec3 pa = p - a;
+                vec3 ba = b - a;
+                float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0);
+                return length(pa - ba * h) - r;
+            }
+
+            float sdTorus(vec3 p, vec2 t) {
+                vec2 q = vec2(length(p.xz) - t.x, p.y);
+                return length(q) - t.y;
+            }
+
+            float sdShip(vec3 p) {
+                float hull = sdCapsule(p, vec3(0.0, 0.0, -0.42), vec3(0.0, 0.0, 0.58), 0.18);
+                float bridge = length((p - vec3(0.0, 0.12, 0.12)) * vec3(1.8, 2.2, 1.5)) - 0.11;
+                float ring = sdTorus(p - vec3(0.0, 0.0, -0.05), vec2(0.92, 0.06));
+                float strutA = sdCapsule(p, vec3(0.18, 0.0, 0.12), vec3(0.72, 0.0, -0.08), 0.028);
+                float strutB = sdCapsule(p, vec3(-0.18, 0.0, 0.12), vec3(-0.72, 0.0, -0.08), 0.028);
+                float nacelleA = sdCapsule(p, vec3(0.75, 0.0, -0.32), vec3(0.75, 0.0, 0.30), 0.07);
+                float nacelleB = sdCapsule(p, vec3(-0.75, 0.0, -0.32), vec3(-0.75, 0.0, 0.30), 0.07);
+                return min(min(min(hull, bridge), min(ring, min(strutA, strutB))), min(nacelleA, nacelleB));
+            }
+
+            vec3 calcShipNormal(vec3 p) {
+                vec2 e = vec2(0.003, 0.0);
+                return normalize(vec3(
+                    sdShip(p + e.xyy) - sdShip(p - e.xyy),
+                    sdShip(p + e.yxy) - sdShip(p - e.yxy),
+                    sdShip(p + e.yyx) - sdShip(p - e.yyx)
+                ));
+            }
+
+            float gridLine(float value, float scale, float width) {
+                float cell = abs(fract(value * scale) - 0.5);
+                return smoothstep(width, 0.0, cell);
+            }
+
+            vec3 starfield(vec3 rd, float time, float warp) {
+                vec3 dir = normalize(rd);
+                vec3 col = vec3(0.0);
+
+                for (int i = 0; i < 3; i++) {
+                    float layer = float(i) + 1.0;
+                    vec3 p = floor(dir * (240.0 * layer) + vec3(0.0, 0.0, time * warp * 14.0 * layer));
+                    float n = hash13(p);
+                    float s = smoothstep(0.9952, 1.0, n);
+                    col += vec3(s) * (1.25 / layer);
+                }
+
+                float band = exp(-12.0 * dir.y * dir.y);
+                col += vec3(0.025, 0.05, 0.08) * band;
+
+                float forward = max(dot(dir, vec3(0.0, 0.0, -1.0)), 0.0);
+                float aft = max(dot(dir, vec3(0.0, 0.0, 1.0)), 0.0);
+                col *= 1.0 + forward * warp * 0.22;
+                col += vec3(0.08, 0.22, 0.55) * pow(forward, 6.0) * warp * 0.8;
+                col += vec3(0.58, 0.12, 0.07) * pow(aft, 6.0) * warp * 0.55;
+
+                return col;
+            }
+
+            void main() {
+                vec2 uv = (gl_FragCoord.xy - 0.5 * u_res) / min(u_res.x, u_res.y);
+
+                vec3 ro = u_camPos;
+                vec3 ta = vec3(0.0);
+                vec3 ww = normalize(ta - ro);
+                vec3 up = abs(ww.y) > 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(0.0, 1.0, 0.0);
+                vec3 uu = normalize(cross(ww, up));
+                vec3 vv = normalize(cross(uu, ww));
+
+                vec3 rd = normalize(uv.x * uu + uv.y * vv + 1.55 * ww);
+                vec3 p = ro;
+                vec4 accum = vec4(0.0);
+                bool hitShip = false;
+
+                for (int i = 0; i < 132; i++) {
+                    if (i >= u_maxSteps) break;
+
+                    float r = length(p);
+                    if (r > MAX_R || accum.a > 0.995) break;
+
+                    vec2 exactData = exactShape(r, u_R, u_T);
+                    vec2 aiData = sampleAIMetric(r);
+                    vec2 metric = mix(exactData, aiData, clamp(u_aiInfluence, 0.0, 1.0));
+
+                    float currentF = clamp(metric.x, -0.1, 1.1);
+                    float currentDF = clamp(metric.y, -12.0, 12.0);
+
+                    vec3 gradF = r > 1e-4 ? p * (currentDF / r) : vec3(0.0);
+                    vec3 beta = vec3(0.0, 0.0, u_v * currentF);
+
+                    float dShip = sdShip(p);
+                    float dt = clamp(0.035 + r * 0.09, 0.012, 0.18);
+                    if (dShip < 0.35) dt = min(dt, max(0.008, dShip * 0.45));
+
+                    rd = normalize(rd - gradF * u_v * dt * 0.7);
+                    p += (rd - beta) * dt;
+
+                    if (u_showGrid == 1) {
+                        float gy = abs(p.y);
+                        if (gy < 0.05) {
+                            float gx = gridLine(p.x, 0.5, 0.03);
+                            float gz = gridLine(p.z + u_time * u_v * 1.15, 0.5, 0.03);
+                            float gAlpha = max(gx, gz) * (0.05 - gy) * 11.0 * 0.45;
+                            vec3 gridColor = mix(vec3(0.08, 0.78, 0.36), vec3(0.0, 1.0, 0.84), u_aiInfluence);
+                            accum += vec4(gridColor * gAlpha, gAlpha) * (1.0 - accum.a);
+                        }
+                    }
+
+                    if (u_showEnergy == 1) {
+                        float theta = u_v * gradF.z;
+                        if (abs(theta) > 0.02) {
+                            vec3 glowColor = theta < 0.0 ? vec3(0.0, 0.54, 1.0) : vec3(1.0, 0.16, 0.04);
+                            float shellBoost = smoothstep(u_T * 1.8, 0.0, abs(r - u_R));
+                            float alpha = abs(theta) * dt * (0.12 + 0.38 * shellBoost);
+                            accum += vec4(glowColor * alpha, alpha) * (1.0 - accum.a);
+                        }
+                    }
+
+                    if (dShip < 0.0035) {
+                        hitShip = true;
+                        vec3 n = calcShipNormal(p);
+                        vec3 l = normalize(vec3(2.0, 3.0, -1.0));
+                        float diff = max(dot(n, l), 0.0);
+                        float rim = pow(1.0 - max(dot(n, -rd), 0.0), 3.0);
+                        vec3 shipColor = vec3(0.58, 0.64, 0.72) * (0.18 + 0.82 * diff) + vec3(0.22, 0.42, 0.76) * rim * 0.65;
+                        if (p.z > 0.26 && length(p.xy) < 0.13) {
+                            shipColor += vec3(0.0, 0.84, 1.0) * 2.6;
+                        }
+                        accum += vec4(shipColor * (1.0 - accum.a), 1.0 - accum.a);
+                        break;
+                    }
+                }
+
+                vec3 color = accum.rgb;
+                if (!hitShip && accum.a < 0.995) {
+                    color += starfield(rd, u_time, u_v) * (1.0 - accum.a);
+                }
+
+                float vignette = smoothstep(1.5, 0.25, length(uv));
+                color *= mix(0.72, 1.0, vignette);
+                color = color / (color + vec3(1.0));
+                color = pow(color, vec3(1.0 / 2.2));
+                fragColor = vec4(color, 1.0);
+            }
+        `;
+
+        let program;
+        try {
+            program = createProgram(gl, vertexShaderSource, fragmentShaderSource);
+        } catch (err) {
+            console.error(err);
+            fallback.style.display = 'grid';
+            fallback.querySelector('p').textContent = `Shader compilation failed: ${String(err.message || err)}`;
+            return;
+        }
+
+        const vao = gl.createVertexArray();
+        gl.bindVertexArray(vao);
+
+        const quad = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+            -1.0, -1.0,
+             3.0, -1.0,
+            -1.0,  3.0
+        ]), gl.STATIC_DRAW);
+
+        const posLoc = gl.getAttribLocation(program, 'a_pos');
+        gl.enableVertexAttribArray(posLoc);
+        gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+        gl.bindVertexArray(null);
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+        const loc = {
+            res: gl.getUniformLocation(program, 'u_res'),
+            time: gl.getUniformLocation(program, 'u_time'),
+            cam: gl.getUniformLocation(program, 'u_camPos'),
+            v: gl.getUniformLocation(program, 'u_v'),
+            R: gl.getUniformLocation(program, 'u_R'),
+            T: gl.getUniformLocation(program, 'u_T'),
+            aiInfluence: gl.getUniformLocation(program, 'u_aiInfluence'),
+            aiMetric: gl.getUniformLocation(program, 'u_aiMetric'),
+            showEnergy: gl.getUniformLocation(program, 'u_showEnergy'),
+            showGrid: gl.getUniformLocation(program, 'u_showGrid'),
+            maxSteps: gl.getUniformLocation(program, 'u_maxSteps')
+        };
+
+        const aiTexture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, aiTexture);
+        gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, AI_TEX_W, 1, 0, gl.RG, gl.FLOAT, null);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.bindTexture(gl.TEXTURE_2D, null);
+
+        const metricLearner = new SmarterMetricLearner(96, MAX_R, AI_TEX_W);
+        const fpsController = new TinyAttentionFPSController(16, 8);
+
+        function updateAITexture() {
+            const texData = metricLearner.writeTextureData();
+            gl.bindTexture(gl.TEXTURE_2D, aiTexture);
+            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, AI_TEX_W, 1, gl.RG, gl.FLOAT, texData);
+        }
+
+        const runtime = {
+            fpsEMA: 60,
+            lastFrameTime: performance.now(),
+            lastHudUpdate: 0,
+            frameMotionEMA: 0,
+            renderScale: 1.0,
+            raySteps: 120,
+            trainIters: 3,
+            targetFPS: 60
+        };
+
+        function resizeCanvas() {
+            const dynScale = runtime.renderScale;
+            const dprCap = state.turbo ? 1.8 : DPR_CAP_BASE;
+            const dpr = Math.min((window.devicePixelRatio || 1) * dynScale, dprCap);
+            const width = Math.max(1, Math.round(window.innerWidth * dpr));
+            const height = Math.max(1, Math.round(window.innerHeight * dpr));
+            if (canvas.width !== width || canvas.height !== height) {
+                canvas.width = width;
+                canvas.height = height;
+                gl.viewport(0, 0, width, height);
+            }
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        document.addEventListener('visibilitychange', () => {
+            runtime.lastFrameTime = performance.now();
+        });
+
+        canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        canvas.addEventListener('pointerdown', (e) => {
+            if (e.button !== 0 && e.pointerType !== 'touch') return;
+            state.dragging = true;
+            state.lastPointerX = e.clientX;
+            state.lastPointerY = e.clientY;
+            canvas.setPointerCapture(e.pointerId);
+        });
+
+        canvas.addEventListener('pointermove', (e) => {
+            if (!state.dragging) return;
+            const dx = e.clientX - state.lastPointerX;
+            const dy = e.clientY - state.lastPointerY;
+            state.camTheta -= dx * 0.008;
+            state.camPhi = clamp(state.camPhi + dy * 0.008, -1.25, 1.25);
+            state.lastPointerX = e.clientX;
+            state.lastPointerY = e.clientY;
+            runtime.frameMotionEMA = lerp(runtime.frameMotionEMA, clamp((Math.abs(dx) + Math.abs(dy)) / 40, 0, 1), 0.3);
+        });
+
+        const stopDragging = (e) => {
+            if (!state.dragging) return;
+            state.dragging = false;
+            try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+        };
+        canvas.addEventListener('pointerup', stopDragging);
+        canvas.addEventListener('pointercancel', stopDragging);
+        canvas.addEventListener('pointerleave', stopDragging);
+
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            state.camDist = clamp(state.camDist + e.deltaY * 0.0055, 3.6, 10.5);
+        }, { passive: false });
+
+        canvas.addEventListener('webglcontextlost', (e) => {
+            e.preventDefault();
+            cancelAnimationFrame(state.rafId);
+            fallback.style.display = 'grid';
+            fallback.querySelector('p').textContent = 'WebGL context lost. Reload the page to rebuild the renderer.';
+        });
+
+        dom.resetAI.addEventListener('click', () => {
+            metricLearner.seed(state.R, state.T, state.v);
+            metricLearner.train(18);
+            updateAITexture();
+        });
+
+        gl.clearColor(0, 0, 0, 1);
+        gl.useProgram(program);
+        gl.uniform1i(loc.aiMetric, 0);
+
+        function updateHud(now) {
+            if (now - runtime.lastHudUpdate < 120) return;
+            runtime.lastHudUpdate = now;
+
+            const handPct = Math.round(metricLearner.controlWeight * 100);
+            dom.aiBar.style.width = `${handPct}%`;
+            dom.valControl.textContent = `${handPct}%`;
+            dom.valLoss.textContent = fmtExp(metricLearner.loss);
+            dom.valResid.textContent = metricLearner.residualPower.toFixed(3);
+
+            if (metricLearner.controlWeight > 0.96) {
+                dom.aiStatus.textContent = 'SYNCED';
+                dom.aiStatus.className = 'good';
+            } else if (metricLearner.controlWeight > 0.18) {
+                dom.aiStatus.textContent = 'HANDOVER';
+                dom.aiStatus.className = 'good';
+            } else {
+                dom.aiStatus.textContent = 'TEACHER FORCING';
+                dom.aiStatus.className = 'warn';
+            }
+
+            const pressure = fpsController.emaPressure * 0.5 + 0.5;
+            dom.fpsBar.style.width = `${Math.round(clamp(pressure, 0, 1) * 100)}%`;
+            dom.valFps.textContent = `${Math.round(runtime.fpsEMA)}`;
+            dom.valScale.textContent = runtime.renderScale.toFixed(2);
+            dom.valSteps.textContent = `${runtime.raySteps}`;
+            dom.valTrain.textContent = `${runtime.trainIters}`;
+            dom.valTarget.textContent = `${runtime.targetFPS}`;
+
+            if (runtime.fpsEMA >= runtime.targetFPS - 3) {
+                dom.fpsStatus.textContent = 'STABLE';
+                dom.fpsStatus.className = 'good';
+            } else if (runtime.fpsEMA >= runtime.targetFPS - 10) {
+                dom.fpsStatus.textContent = 'BALANCING';
+                dom.fpsStatus.className = 'gold';
+            } else {
+                dom.fpsStatus.textContent = 'PROTECTING FPS';
+                dom.fpsStatus.className = 'warn';
+            }
+        }
+
+        function render(now) {
+            state.rafId = requestAnimationFrame(render);
+
+            const dtMs = clamp(now - runtime.lastFrameTime, 1.0, 100.0);
+            runtime.lastFrameTime = now;
+            const fps = 1000.0 / dtMs;
+            runtime.fpsEMA = lerp(runtime.fpsEMA, fps, 0.14);
+            runtime.frameMotionEMA = lerp(runtime.frameMotionEMA, 0.0, 0.04);
+
+            runtime.targetFPS = state.turbo ? 75 : 60;
+            fpsController.targetFPS = runtime.targetFPS;
+
+            fpsController.push({
+                fps: runtime.fpsEMA,
+                dt: dtMs,
+                scale: runtime.renderScale,
+                trainIters: runtime.trainIters,
+                steps: runtime.raySteps,
+                motion: runtime.frameMotionEMA,
+                loss: metricLearner.loss,
+                v: state.v
+            });
+
+            const perfDecision = fpsController.decide();
+            runtime.renderScale = perfDecision.renderScale;
+            runtime.raySteps = perfDecision.raySteps;
+            runtime.trainIters = perfDecision.trainIters;
+
+            if (state.turbo) {
+                runtime.renderScale = clamp(runtime.renderScale + 0.06, 0.72, 1.0);
+                runtime.raySteps = clamp(runtime.raySteps + 8, 72, 132);
+                runtime.trainIters = clamp(runtime.trainIters + 1, 1, 6);
+            }
+
+            resizeCanvas();
+
+            metricLearner.retarget(state.R, state.T, state.v);
+            metricLearner.train(runtime.trainIters);
+            updateAITexture();
+            updateHud(now);
+
+            const dist = state.camDist;
+            const cx = dist * Math.cos(state.camPhi) * Math.sin(state.camTheta);
+            const cy = dist * Math.sin(state.camPhi);
+            const cz = dist * Math.cos(state.camPhi) * Math.cos(state.camTheta);
+
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            gl.useProgram(program);
+            gl.bindVertexArray(vao);
+
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, aiTexture);
+
+            gl.uniform2f(loc.res, canvas.width, canvas.height);
+            gl.uniform1f(loc.time, now * 0.001);
+            gl.uniform3f(loc.cam, cx, cy, cz);
+            gl.uniform1f(loc.v, state.v);
+            gl.uniform1f(loc.R, state.R);
+            gl.uniform1f(loc.T, state.T);
+            gl.uniform1f(loc.aiInfluence, metricLearner.controlWeight);
+            gl.uniform1i(loc.showEnergy, state.showEnergy ? 1 : 0);
+            gl.uniform1i(loc.showGrid, state.showGrid ? 1 : 0);
+            gl.uniform1i(loc.maxSteps, runtime.raySteps);
+
+            gl.drawArrays(gl.TRIANGLES, 0, 3);
+            gl.bindVertexArray(null);
+        }
+
+        resizeCanvas();
+        metricLearner.train(24);
+        updateAITexture();
+        state.rafId = requestAnimationFrame(render);
+    })();
+    </script>
+</body>
+</html>

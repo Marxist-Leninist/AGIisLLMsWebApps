@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live Transformer Attention Field</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: #0e0e12; color: #e0e0e0; padding: 1.5rem; min-height: 100vh; }
+  canvas { display: block; width: 100%; border-radius: 12px; background: #16161d; }
+  .ctrl-row { display: flex; align-items: center; gap: 12px; margin-bottom: 0.5rem; }
+  .ctrl-row label { font-size: 14px; color: #999; min-width: 130px; }
+  .ctrl-row span { font-size: 14px; font-weight: 500; min-width: 36px; color: #e0e0e0; }
+  .ctrl-row input[type="range"] { flex: 1; accent-color: #534AB7; }
+  .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 1.25rem; }
+  .stat { background: #1e1e28; border-radius: 8px; padding: 0.75rem 1rem; }
+  .stat-label { font-size: 12px; color: #888; }
+  .stat-val { font-size: 20px; font-weight: 500; color: #e0e0e0; }
+  h1 { font-size: 20px; font-weight: 500; margin-bottom: 1.25rem; color: #ccc; }
+</style>
+</head>
+<body>
+
+<h1>Live transformer self-attention field</h1>
+
+<div class="stat-grid">
+  <div class="stat"><div class="stat-label">Tokens</div><div class="stat-val" id="s-tok">16</div></div>
+  <div class="stat"><div class="stat-label">Attention heads</div><div class="stat-val" id="s-heads">4</div></div>
+  <div class="stat"><div class="stat-label">Active connections</div><div class="stat-val" id="s-conn">0</div></div>
+  <div class="stat"><div class="stat-label">Entropy</div><div class="stat-val" id="s-ent">0.00</div></div>
+</div>
+
+<div class="ctrl-row">
+  <label>Sequence length</label>
+  <input type="range" min="6" max="32" value="16" step="1" id="c-seq" />
+  <span id="o-seq">16</span>
+</div>
+<div class="ctrl-row">
+  <label>Attention heads</label>
+  <input type="range" min="1" max="8" value="4" step="1" id="c-heads" />
+  <span id="o-heads">4</span>
+</div>
+<div class="ctrl-row">
+  <label>Temperature</label>
+  <input type="range" min="1" max="50" value="10" step="1" id="c-temp" />
+  <span id="o-temp">1.0</span>
+</div>
+<div class="ctrl-row" style="margin-bottom: 1.5rem;">
+  <label>Causal mask</label>
+  <input type="range" min="0" max="1" value="1" step="1" id="c-causal" />
+  <span id="o-causal">on</span>
+</div>
+
+<canvas id="field" height="520"></canvas>
+
+<script>
+const C = document.getElementById('field');
+const ctx = C.getContext('2d');
+const headColors = [
+  [83,74,183],[29,158,117],[216,90,48],[212,83,126],
+  [55,138,221],[99,153,34],[186,117,23],[162,45,45]
+];
+
+let W, H, dpr;
+function resize() {
+  dpr = window.devicePixelRatio || 1;
+  const r = C.getBoundingClientRect();
+  W = r.width; H = 520;
+  C.width = W * dpr; C.height = H * dpr;
+  C.style.height = H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (tokens.length) {
+    const cx = W / 2, cy = H / 2;
+    const radius = Math.min(W, H) * 0.35;
+    for (let i = 0; i < nTok; i++) {
+      const angle = (i / nTok) * Math.PI * 2 - Math.PI / 2;
+      tokens[i].baseX = cx + Math.cos(angle) * radius;
+      tokens[i].baseY = cy + Math.sin(angle) * radius;
+    }
+  }
+}
+
+let nTok = 16, nHeads = 4, temp = 1.0, causal = true;
+let tokens = [], attnWeights = [], time = 0;
+
+function initTokens() {
+  tokens = [];
+  const cx = W / 2, cy = H / 2;
+  const radius = Math.min(W, H) * 0.35;
+  for (let i = 0; i < nTok; i++) {
+    const angle = (i / nTok) * Math.PI * 2 - Math.PI / 2;
+    tokens.push({
+      x: cx + Math.cos(angle) * radius,
+      y: cy + Math.sin(angle) * radius,
+      baseX: cx + Math.cos(angle) * radius,
+      baseY: cy + Math.sin(angle) * radius,
+      vx: 0, vy: 0,
+      phase: Math.random() * Math.PI * 2,
+      freq: 0.3 + Math.random() * 0.4
+    });
+  }
+  recomputeAttention();
+}
+
+function softmax(arr, t) {
+  const maxV = Math.max(...arr);
+  const exps = arr.map(v => Math.exp((v - maxV) / Math.max(t, 0.01)));
+  const sum = exps.reduce((a, b) => a + b, 0);
+  return exps.map(e => e / sum);
+}
+
+function recomputeAttention() {
+  attnWeights = [];
+  for (let h = 0; h < nHeads; h++) {
+    const headW = [];
+    for (let i = 0; i < nTok; i++) {
+      const scores = [];
+      for (let j = 0; j < nTok; j++) {
+        if (causal && j > i) { scores.push(-1e9); }
+        else { scores.push(Math.random() * 2 - 0.5 + (i === j ? 0.5 : 0)); }
+      }
+      headW.push(softmax(scores, temp));
+    }
+    attnWeights.push(headW);
+  }
+}
+
+function entropy() {
+  let totalE = 0, count = 0;
+  for (let h = 0; h < nHeads; h++) {
+    for (let i = 0; i < nTok; i++) {
+      let e = 0;
+      for (let j = 0; j < nTok; j++) {
+        const p = attnWeights[h][i][j];
+        if (p > 1e-10) e -= p * Math.log2(p);
+      }
+      totalE += e; count++;
+    }
+  }
+  return count > 0 ? totalE / count : 0;
+}
+
+function draw() {
+  time += 0.016;
+  ctx.clearRect(0, 0, W, H);
+
+  for (let i = 0; i < nTok; i++) {
+    const t = tokens[i];
+    t.x = t.baseX + Math.sin(time * t.freq + t.phase) * 8;
+    t.y = t.baseY + Math.cos(time * t.freq * 0.7 + t.phase + 1) * 6;
+  }
+
+  let connCount = 0;
+  const pulseT = (Math.sin(time * 1.5) + 1) / 2;
+
+  for (let h = 0; h < nHeads; h++) {
+    const [r, g, b] = headColors[h % 8];
+    for (let i = 0; i < nTok; i++) {
+      for (let j = 0; j < nTok; j++) {
+        if (i === j) continue;
+        const w = attnWeights[h]?.[i]?.[j] || 0;
+        if (w < 0.04) continue;
+        connCount++;
+        const alpha = w * (0.3 + 0.15 * pulseT);
+        const lw = w * 3.5;
+        ctx.beginPath();
+        const si = tokens[i], sj = tokens[j];
+        const mx = (si.x + sj.x) / 2 + (Math.sin(time + h) * 10);
+        const my = (si.y + sj.y) / 2 + (Math.cos(time + h) * 10);
+        ctx.moveTo(si.x, si.y);
+        ctx.quadraticCurveTo(mx, my, sj.x, sj.y);
+        ctx.strokeStyle = `rgba(${r},${g},${b},${alpha})`;
+        ctx.lineWidth = lw;
+        ctx.stroke();
+      }
+    }
+  }
+
+  for (let i = 0; i < nTok; i++) {
+    const t = tokens[i];
+    let maxW = 0, maxH = 0;
+    for (let h = 0; h < nHeads; h++) {
+      for (let j = 0; j < nTok; j++) {
+        const w = attnWeights[h]?.[i]?.[j] || 0;
+        if (w > maxW) { maxW = w; maxH = h; }
+      }
+    }
+    const [r, g, b] = headColors[maxH % 8];
+    const sz = 6 + maxW * 8;
+
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, sz + 3, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${r},${g},${b},${0.08 + 0.1 * pulseT})`;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, sz, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${r},${g},${b},${0.7 + 0.2 * pulseT})`;
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.font = '500 11px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(i, t.x, t.y);
+  }
+
+  document.getElementById('s-conn').textContent = connCount;
+  document.getElementById('s-ent').textContent = entropy().toFixed(2);
+  document.getElementById('s-tok').textContent = nTok;
+  document.getElementById('s-heads').textContent = nHeads;
+
+  requestAnimationFrame(draw);
+}
+
+const cSeq = document.getElementById('c-seq');
+const cHeads = document.getElementById('c-heads');
+const cTemp = document.getElementById('c-temp');
+const cCausal = document.getElementById('c-causal');
+
+cSeq.addEventListener('input', () => {
+  nTok = parseInt(cSeq.value);
+  document.getElementById('o-seq').textContent = nTok;
+  initTokens();
+});
+cHeads.addEventListener('input', () => {
+  nHeads = parseInt(cHeads.value);
+  document.getElementById('o-heads').textContent = nHeads;
+  recomputeAttention();
+});
+cTemp.addEventListener('input', () => {
+  temp = parseInt(cTemp.value) / 10;
+  document.getElementById('o-temp').textContent = temp.toFixed(1);
+  recomputeAttention();
+});
+cCausal.addEventListener('input', () => {
+  causal = parseInt(cCausal.value) === 1;
+  document.getElementById('o-causal').textContent = causal ? 'on' : 'off';
+  recomputeAttention();
+});
+
+window.addEventListener('resize', () => { resize(); initTokens(); });
+resize();
+initTokens();
+draw();
+setInterval(recomputeAttention, 3000);
+</script>
+</body>
+</html>

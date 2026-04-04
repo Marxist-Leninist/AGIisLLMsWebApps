@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>General Relativity: AI Manifold Handover</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; color: #fff; font-family: 'Segoe UI', Tahoma, sans-serif; user-select: none; }
+        canvas { display: block; width: 100vw; height: 100vh; cursor: grab; }
+        canvas:active { cursor: grabbing; }
+        
+        #ui-wrapper {
+            position: absolute; top: 15px; left: 15px;
+            display: flex; flex-direction: column; align-items: flex-start;
+        }
+
+        #toggle-btn {
+            background: rgba(10, 15, 20, 0.85);
+            border: 1px solid #00ffcc; color: #00ffcc;
+            padding: 8px 15px; border-radius: 8px; cursor: pointer;
+            font-weight: bold; font-size: 0.9rem; margin-bottom: 10px;
+            backdrop-filter: blur(10px); transition: all 0.2s;
+            box-shadow: 0 0 10px rgba(0, 255, 204, 0.2);
+        }
+        #toggle-btn:hover { background: #00ffcc; color: #000; }
+
+        #ui {
+            background: rgba(10, 15, 20, 0.85);
+            padding: 20px; border: 1px solid #00ffcc; border-radius: 8px; width: 400px;
+            box-shadow: 0 4px 20px rgba(0, 255, 204, 0.2); backdrop-filter: blur(10px);
+            transition: opacity 0.3s, transform 0.3s;
+            transform-origin: top left;
+        }
+        
+        #ui.hidden { opacity: 0; transform: scale(0.95); pointer-events: none; position: absolute; }
+
+        h1 { font-size: 1.2rem; margin: 0 0 5px 0; color: #00ffcc; text-transform: uppercase; letter-spacing: 1px;}
+        p { font-size: 0.8rem; color: #aaa; line-height: 1.4; margin-bottom: 15px; }
+        strong { color: #fff; }
+        
+        .slider-row { margin-bottom: 12px; }
+        .slider-label { display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 4px; color: #ccc;}
+        .val { color: #00ffcc; font-family: monospace; }
+        input[type=range] { width: 100%; accent-color: #00ffcc; cursor: pointer; }
+        input[type=checkbox] { accent-color: #00ffcc; transform: scale(1.2); margin-right: 8px; cursor: pointer; }
+        
+        .toggle-row { display: flex; align-items: center; font-size: 0.85rem; margin-bottom: 10px; color: #ccc; }
+
+        .ai-panel {
+            margin-top: 15px; padding: 15px; border: 1px solid rgba(0, 255, 204, 0.3);
+            border-radius: 6px; background: rgba(0, 50, 40, 0.3);
+        }
+        
+        .ai-title { font-size: 0.85rem; font-weight: bold; color: #00ffcc; margin-bottom: 8px; display: flex; justify-content: space-between;}
+        
+        .progress-bar { width: 100%; height: 6px; background: #222; border-radius: 3px; overflow: hidden; margin-bottom: 8px; }
+        .progress-fill { height: 100%; background: #00ffcc; width: 0%; transition: width 0.1s linear; }
+
+        .ai-stats {
+            font-size: 0.75rem; color: #aaa; font-family: monospace;
+            display: flex; justify-content: space-between; flex-direction: column; gap: 4px;
+        }
+        .stat-row { display: flex; justify-content: space-between; }
+        .warn { color: #ff3366; }
+        .sync { color: #00ffcc; }
+
+    </style>
+</head>
+<body>
+
+    <div id="ui-wrapper">
+        <button id="toggle-btn">⚙️ Metric Parameters</button>
+        <div id="ui">
+            <h1>Physical Spacetime Manifold</h1>
+            <p><strong>MATTER DRIVES CURVATURE.</strong> Light follows deterministic null-geodesics. The AI continuously learns the metric tensor below.</p>
+            
+            <div class="slider-row">
+                <div class="slider-label"><span>Warp Velocity (v)</span> <span class="val" id="val-v">0.80 c</span></div>
+                <input type="range" id="velocity" min="0.0" max="5" step="0.05" value="0.8">
+            </div>
+            
+            <div class="slider-row">
+                <div class="slider-label"><span>Bubble Radius (R)</span> <span class="val" id="val-r">2.50</span></div>
+                <input type="range" id="radius" min="0.75" max="8.0" step="0.05" value="2.5">
+            </div>
+
+            <div class="slider-row">
+                <div class="slider-label"><span>Bubble Wall Thickness (σ)</span> <span class="val" id="val-t">0.50</span></div>
+                <input type="range" id="thickness" min="0.05" max="3" step="0.025" value="0.5">
+            </div>
+
+            <div class="toggle-row">
+                <input type="checkbox" id="show-energy" checked>
+                <label for="show-energy">Show Stress-Matter Tensor (T_μν)</label>
+            </div>
+            <div class="toggle-row">
+                <input type="checkbox" id="show-grid" checked>
+                <label for="show-grid">Show Spacetime Grid</label>
+            </div>
+
+            <div class="ai-panel">
+                <div class="ai-title">
+                    <span>NN Metric Handover</span>
+                    <span id="ai-status" class="warn">LEARNING</span>
+                </div>
+                <div class="progress-bar"><div class="progress-fill" id="ai-control-bar"></div></div>
+                <div class="ai-stats">
+                    <div class="stat-row"><span>Control Weight:</span> <span id="val-control">0.00%</span></div>
+                    <div class="stat-row"><span>Neural Loss (MSE):</span> <span id="val-loss">1.00000</span></div>
+                    <div class="stat-row"><span>FPS:</span> <span id="val-fps">60</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <canvas id="glcanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('glcanvas');
+        const gl = canvas.getContext('webgl2', { antialias: false });
+
+        if (!gl.getExtension('EXT_color_buffer_float')) {
+            console.warn("Floating point textures not perfectly supported, visuals may degrade slightly.");
+        }
+
+        // UI Logic
+        const ui = document.getElementById('ui');
+        const toggleBtn = document.getElementById('toggle-btn');
+        let uiVisible = true;
+
+        toggleBtn.addEventListener('click', () => {
+            uiVisible = !uiVisible;
+            if (uiVisible) {
+                ui.classList.remove('hidden');
+                toggleBtn.innerText = '➖ Close Panel';
+            } else {
+                ui.classList.add('hidden');
+                toggleBtn.innerText = '⚙️ Metric Parameters';
+            }
+        });
+
+        // ========================================================
+        // RADIAL BASIS FUNCTION (RBF) NEURAL NETWORK
+        // Continuously maps the physical spacetime manifold in real-time
+        // ========================================================
+        class ManifoldLearner {
+            constructor(nodes = 64, maxR = 15.0) {
+                this.nodes = nodes;
+                this.maxR = maxR;
+                
+                // Learnable parameters
+                this.weightsF = new Float32Array(nodes);
+                this.weightsDF = new Float32Array(nodes);
+                
+                // Fixed Gaussian centers distributed across physical space
+                this.centers = new Float32Array(nodes);
+                for(let i=0; i<nodes; i++) {
+                    this.centers[i] = (i / (nodes-1)) * maxR;
+                }
+                this.sigma = (maxR / nodes) * 1.5;
+                
+                this.lr = 0.8; // Aggressive learning rate
+                this.loss = 1.0;
+                this.controlWeight = 0.0;
+            }
+
+            // Ground Truth Exact Physics
+            getExactPhysics(r, u_R, u_T) {
+                let f = 0, df = 0;
+                // JS Implementation of the smoothstep Alcubierre approximation used in the shader
+                if (r <= u_R - u_T) f = 1.0;
+                else if (r >= u_R + u_T) f = 0.0;
+                else {
+                    let t = (r - (u_R - u_T)) / (2.0 * u_T);
+                    f = t * t * (3.0 - 2.0 * t); // smoothstep
+                    f = 1.0 - f;
+                    df = -(6.0 * t * (1.0 - t)) / (2.0 * u_T);
+                }
+                return { f, df };
+            }
+
+            trainStep(u_R, u_T) {
+                let batchLoss = 0;
+                const batchSize = 64; // Samples per frame
+
+                for(let b=0; b<batchSize; b++) {
+                    // Randomly sample physical space, weighted slightly towards the bubble wall
+                    let r = Math.random() * this.maxR;
+                    if (Math.random() > 0.5) {
+                        r = u_R + (Math.random() * 2.0 - 1.0) * (u_T * 2.0);
+                        r = Math.max(0, Math.min(this.maxR, r));
+                    }
+
+                    // 1. Get Ground Truth
+                    let exact = this.getExactPhysics(r, u_R, u_T);
+
+                    // 2. Forward Pass (AI Prediction)
+                    let f_ai = 0, df_ai = 0;
+                    let activations = new Float32Array(this.nodes);
+                    
+                    for(let i=0; i<this.nodes; i++) {
+                        let diff = r - this.centers[i];
+                        let act = Math.exp(-(diff * diff) / (this.sigma * this.sigma));
+                        activations[i] = act;
+                        f_ai += this.weightsF[i] * act;
+                        df_ai += this.weightsDF[i] * act;
+                    }
+
+                    // 3. Calculate Error (Loss)
+                    let errF = f_ai - exact.f;
+                    let errDF = df_ai - exact.df;
+                    batchLoss += (errF * errF) + (errDF * errDF);
+
+                    // 4. Backpropagation (Update Weights)
+                    for(let i=0; i<this.nodes; i++) {
+                        this.weightsF[i] -= this.lr * errF * activations[i];
+                        this.weightsDF[i] -= this.lr * errDF * activations[i];
+                    }
+                }
+                
+                // Exponential moving average for smooth UI tracking
+                this.loss = this.loss * 0.90 + (batchLoss / batchSize) * 0.10;
+
+                // 5. Handover Logic
+                // If loss is very low, AI takes over physical calculations
+                if (this.loss < 0.005) {
+                    this.controlWeight = Math.min(1.0, this.controlWeight + 0.01);
+                } else {
+                    // If loss spikes (user moved slider), strip control rapidly
+                    this.controlWeight = Math.max(0.0, this.controlWeight - 0.1);
+                }
+            }
+
+            // Serialize AI brain to a texture for the GPU
+            getTextureData() {
+                let data = new Float32Array(256 * 2);
+                for(let p=0; p<256; p++) {
+                    let r = (p / 255.0) * this.maxR;
+                    let f_ai = 0, df_ai = 0;
+                    for(let i=0; i<this.nodes; i++) {
+                        let diff = r - this.centers[i];
+                        let act = Math.exp(-(diff * diff) / (this.sigma * this.sigma));
+                        f_ai += this.weightsF[i] * act;
+                        df_ai += this.weightsDF[i] * act;
+                    }
+                    data[p * 2] = f_ai;
+                    data[p * 2 + 1] = df_ai;
+                }
+                return data;
+            }
+        }
+
+        const aiNet = new ManifoldLearner(64, 15.0);
+
+        // --- WEBGL SETUP & TEXTURE ---
+        const aiTex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, aiTex);
+        // Using RG32F to store Shape Function (f) in R, and Derivative (df) in G
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, 256, 1, 0, gl.RG, gl.FLOAT, null);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+        function resize() {
+            // Hardcode 1.0 device ratio for stability and exact mathematical rendering
+            const scale = 1.0; 
+            const targetWidth = Math.floor(window.innerWidth * scale);
+            const targetHeight = Math.floor(window.innerHeight * scale);
+            if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+                canvas.width = targetWidth;
+                canvas.height = targetHeight;
+                gl.viewport(0, 0, canvas.width, canvas.height);
+            }
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // --- SHADERS ---
+        const vs = `#version 300 es
+            in vec4 a_pos; out vec2 v_uv;
+            void main() { v_uv = a_pos.xy; gl_Position = a_pos; }
+        `;
+
+        const fs = `#version 300 es
+            precision highp float;
+            in vec2 v_uv; out vec4 fragColor;
+
+            uniform vec2 u_res;
+            uniform float u_time;
+            uniform vec3 u_camPos;
+            
+            // GR Metric Parameters
+            uniform float u_v; 
+            uniform float u_R; 
+            uniform float u_T; 
+            
+            // AI Handover Parameters
+            uniform sampler2D u_aiMetric;
+            uniform float u_aiInfluence;
+            
+            uniform int u_showEnergy;
+            uniform int u_showGrid;
+
+            // Physical Spaceship SDF
+            float sdShip(vec3 p) {
+                float hull = length(p * vec3(1.5, 1.5, 0.4)) - 0.25;
+                float ring = length(vec2(length(p.xz) - 0.9, p.y)) - 0.08;
+                vec3 absp = abs(p);
+                float struts = max(absp.z - 0.04, absp.y - 0.04);
+                struts = max(struts, length(p.xz) - 0.9);
+                return min(min(hull, ring), struts);
+            }
+
+            vec3 calcShipNormal(vec3 p) {
+                vec2 e = vec2(0.005, 0.0);
+                return normalize(vec3(
+                    sdShip(p + e.xyy) - sdShip(p - e.xyy),
+                    sdShip(p + e.yxy) - sdShip(p - e.yxy),
+                    sdShip(p + e.yyx) - sdShip(p - e.yyx)
+                ));
+            }
+
+            // Procedural Starfield
+            float hash(vec3 p) {
+                p = fract(p * vec3(123.34, 456.21, 85.714));
+                p += dot(p, p + 45.32);
+                return fract(p.x * p.y);
+            }
+
+            vec3 getStarfield(vec3 dir, float warpVelocity, float time) {
+                vec3 nDir = normalize(dir);
+                vec3 starPos = nDir * 300.0;
+                starPos.z += time * warpVelocity * 20.0;
+                float n = hash(floor(starPos));
+                
+                float star = smoothstep(0.99, 1.0, n);
+                vec3 color = vec3(star);
+                
+                float cosTheta = dot(nDir, vec3(0.0, 0.0, -1.0)); 
+                if (warpVelocity > 0.1) {
+                    if (cosTheta > 0.5) {
+                        color *= mix(vec3(1.0), vec3(0.1, 0.5, 1.0), (cosTheta - 0.5) * 2.0 * warpVelocity);
+                    } else if (cosTheta < -0.5) {
+                        color *= mix(vec3(1.0), vec3(1.0, 0.2, 0.1), (-cosTheta - 0.5) * 2.0 * warpVelocity);
+                    }
+                }
+                
+                float band = exp(-pow(dir.y * 3.0, 2.0));
+                color += vec3(0.05, 0.1, 0.15) * band;
+                return color;
+            }
+
+            void main() {
+                vec2 uv = (gl_FragCoord.xy - 0.5 * u_res) / min(u_res.x, u_res.y);
+                
+                vec3 ro = u_camPos;
+                vec3 ta = vec3(0.0, 0.0, 0.0);
+                vec3 cw = normalize(ta - ro);
+                vec3 cu = normalize(cross(cw, vec3(0.0, 1.0, 0.0)));
+                vec3 cv = cross(cu, cw);
+                vec3 rd = normalize(uv.x * cu + uv.y * cv + 1.2 * cw);
+
+                vec3 p = ro;
+                vec4 vol = vec4(0.0);
+                bool hitShip = false;
+
+                // Null Geodesic Raymarch Integrator
+                for(int i = 0; i < 100; i++) {
+                    float r = length(p);
+                    
+                    // 1. EXACT MATHEMATICAL METRIC
+                    float exact_f = smoothstep(u_R + u_T, u_R - u_T, r);
+                    float t_val = clamp((r - (u_R - u_T)) / (2.0 * u_T), 0.0, 1.0);
+                    float exact_df = (r > u_R - u_T && r < u_R + u_T) ? -(6.0 * t_val * (1.0 - t_val)) / (2.0 * u_T) : 0.0;
+                    
+                    // 2. AI LEARNED METRIC (Sampled from JS Neural Net texture)
+                    // Maximum r learned is 15.0
+                    vec2 ai_data = texture(u_aiMetric, vec2(r / 15.0, 0.5)).rg;
+                    
+                    // 3. HANDOVER BLEND
+                    // When u_aiInfluence = 1.0, the shader calculates physics PURELY from the AI's predictions
+                    float current_f = mix(exact_f, ai_data.r, u_aiInfluence);
+                    float current_df = mix(exact_df, ai_data.g, u_aiInfluence);
+
+                    vec3 gradF = (r > 0.001) ? (p / r) * current_df : vec3(0.0);
+                    float theta = u_v * gradF.z; 
+
+                    float dt = max(0.02, min(0.2, r * 0.1));
+                    float dShip = sdShip(p);
+                    if (dShip < 0.2) dt = min(dt, dShip * 0.5);
+                    
+                    // Physical Lensing (Refraction)
+                    rd = normalize(rd - gradF * u_v * dt * 0.5);
+                    
+                    // Physical Frame Dragging
+                    vec3 beta = vec3(0.0, 0.0, u_v * current_f);
+                    p += (rd - beta) * dt;
+
+                    // Spacetime Grid
+                    if (u_showGrid == 1) {
+                        float gridY = abs(p.y);
+                        if (gridY < 0.05) {
+                            float lineX = smoothstep(0.04, 0.0, abs(fract(p.x * 2.0) - 0.5));
+                            float lineZ = smoothstep(0.04, 0.0, abs(fract(p.z * 2.0 + u_time * u_v * 2.0) - 0.5));
+                            
+                            // Visual cue: Grid slightly changes hue based on AI control
+                            vec3 gridCol = mix(vec3(0.1, 0.8, 0.4), vec3(0.0, 1.0, 0.8), u_aiInfluence);
+                            
+                            float gAlpha = max(lineX, lineZ) * (0.05 - gridY) * 20.0 * 0.4;
+                            vol += vec4(gridCol * gAlpha, gAlpha) * (1.0 - vol.a);
+                        }
+                    }
+                    
+                    // Stress-Matter Tensor Visualization (Expansion/Contraction)
+                    if (u_showEnergy == 1) {
+                        if (abs(theta) > 0.05) {
+                            vec3 glowColor = theta < 0.0 ? vec3(0.0, 0.5, 1.0) : vec3(1.0, 0.1, 0.0);
+                            float alpha = abs(theta) * dt * 0.25;
+                            vol += vec4(glowColor * alpha, alpha) * (1.0 - vol.a);
+                        }
+                    }
+
+                    if (dShip < 0.005) {
+                        hitShip = true;
+                        vec3 n = calcShipNormal(p);
+                        vec3 l = normalize(vec3(2.0, 3.0, -1.0));
+                        float diff = max(dot(n, l), 0.1);
+                        vec3 shipCol = vec3(0.6, 0.65, 0.7) * diff;
+                        if (p.z > 0.2 && length(p.xy) < 0.2) shipCol += vec3(0.0, 0.8, 1.0) * 2.0;
+                        vol += vec4(shipCol * (1.0 - vol.a), 1.0 - vol.a);
+                        break;
+                    }
+                    
+                    if (r > 15.0 || vol.a > 0.99) break;
+                }
+
+                vec3 finalCol = vol.rgb;
+
+                if (!hitShip && vol.a < 0.99) {
+                    vec3 stars = getStarfield(rd, u_v, u_time);
+                    finalCol += stars * (1.0 - vol.a);
+                }
+
+                finalCol = finalCol / (finalCol + vec3(1.0));
+                finalCol = pow(finalCol, vec3(1.0 / 2.2));
+
+                fragColor = vec4(finalCol, 1.0);
+            }
+        `;
+
+        function buildShader(type, src) {
+            const s = gl.createShader(type);
+            gl.shaderSource(s, src); gl.compileShader(s);
+            if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(s));
+            return s;
+        }
+
+        const prog = gl.createProgram();
+        gl.attachShader(prog, buildShader(gl.VERTEX_SHADER, vs));
+        gl.attachShader(prog, buildShader(gl.FRAGMENT_SHADER, fs));
+        gl.linkProgram(prog);
+
+        const posBuf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]), gl.STATIC_DRAW);
+        const posLoc = gl.getAttribLocation(prog, "a_pos");
+        gl.enableVertexAttribArray(posLoc);
+        gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+
+        // Uniforms
+        const uRes = gl.getUniformLocation(prog, "u_res");
+        const uTime = gl.getUniformLocation(prog, "u_time");
+        const uCam = gl.getUniformLocation(prog, "u_camPos");
+        const uV = gl.getUniformLocation(prog, "u_v");
+        const uR = gl.getUniformLocation(prog, "u_R");
+        const uT = gl.getUniformLocation(prog, "u_T");
+        const uShowEnergy = gl.getUniformLocation(prog, "u_showEnergy");
+        const uShowGrid = gl.getUniformLocation(prog, "u_showGrid");
+        
+        const uAiInfluence = gl.getUniformLocation(prog, "u_aiInfluence");
+        const uAiMetric = gl.getUniformLocation(prog, "u_aiMetric");
+
+        // UI Bindings
+        const bindSlider = (id, valId, suffix="") => {
+            const el = document.getElementById(id);
+            const valEl = document.getElementById(valId);
+            el.oninput = (e) => valEl.innerText = parseFloat(e.target.value).toFixed(2) + suffix;
+            return el;
+        };
+
+        const vSlider = bindSlider('velocity', 'val-v', ' c');
+        const rSlider = bindSlider('radius', 'val-r');
+        const tSlider = bindSlider('thickness', 'val-t');
+        const chkEnergy = document.getElementById('show-energy');
+        const chkGrid = document.getElementById('show-grid');
+        
+        // AI UI Elements
+        const aiBar = document.getElementById('ai-control-bar');
+        const aiStatusText = document.getElementById('ai-status');
+        const valControl = document.getElementById('val-control');
+        const valLoss = document.getElementById('val-loss');
+        const valFps = document.getElementById('val-fps');
+
+        // Orbit Camera
+        let camX = 2.4, camY = 0.4;
+        let isDrag = false, lX, lY;
+        
+        window.onmousedown = e => { if(e.target === canvas){ isDrag = true; lX = e.clientX; lY = e.clientY; }};
+        window.onmouseup = () => isDrag = false;
+        window.onmousemove = e => {
+            if (!isDrag) return;
+            camX -= (e.clientX - lX) * 0.01;
+            camY = Math.max(-1.5, Math.min(1.5, camY + (e.clientY - lY) * 0.01));
+            lX = e.clientX; lY = e.clientY;
+        };
+
+        let lastTime = performance.now();
+        let frameCount = 0;
+        let lastFpsUpdate = lastTime;
+
+        function render(now) {
+            frameCount++;
+            
+            // Current physical parameters
+            let currentR = parseFloat(rSlider.value);
+            let currentT = parseFloat(tSlider.value);
+
+            // 1. AI Learns the new physical state
+            aiNet.trainStep(currentR, currentT);
+
+            // 2. Upload AI Brain to WebGL Texture
+            const aiData = aiNet.getTextureData();
+            gl.bindTexture(gl.TEXTURE_2D, aiTex);
+            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 256, 1, gl.RG, gl.FLOAT, aiData);
+
+            // 3. Update UI
+            if (now - lastFpsUpdate > 250) {
+                valFps.innerText = Math.round((frameCount * 1000) / (now - lastFpsUpdate));
+                valLoss.innerText = aiNet.loss.toFixed(6);
+                
+                let pctl = Math.round(aiNet.controlWeight * 100);
+                valControl.innerText = pctl + "%";
+                aiBar.style.width = pctl + "%";
+                
+                if (aiNet.controlWeight > 0.95) {
+                    aiStatusText.innerText = "IN CONTROL (SYNCED)";
+                    aiStatusText.className = "sync";
+                } else if (aiNet.controlWeight > 0.0) {
+                    aiStatusText.innerText = "HANDOVER IN PROGRESS";
+                    aiStatusText.className = "sync";
+                } else {
+                    aiStatusText.innerText = "RECALCULATING METRIC";
+                    aiStatusText.className = "warn";
+                }
+
+                frameCount = 0;
+                lastFpsUpdate = now;
+            }
+
+            // 4. Render Graphics
+            gl.useProgram(prog);
+            
+            const dist = 5.5;
+            const cx = dist * Math.cos(camY) * Math.sin(camX);
+            const cy = dist * Math.sin(camY);
+            const cz = dist * Math.cos(camY) * Math.cos(camX);
+            
+            gl.uniform3f(uCam, cx, cy, cz);
+            gl.uniform2f(uRes, canvas.width, canvas.height);
+            gl.uniform1f(uTime, now * 0.001);
+            
+            gl.uniform1f(uV, parseFloat(vSlider.value));
+            gl.uniform1f(uR, currentR);
+            gl.uniform1f(uT, currentT);
+            
+            gl.uniform1i(uShowEnergy, chkEnergy.checked ? 1 : 0);
+            gl.uniform1i(uShowGrid, chkGrid.checked ? 1 : 0);
+
+            // Bind Texture and Handover parameter
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, aiTex);
+            gl.uniform1i(uAiMetric, 0);
+            gl.uniform1f(uAiInfluence, aiNet.controlWeight);
+
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+            requestAnimationFrame(render);
+        }
+        
+        requestAnimationFrame(render);
+    </script>
+</body>
+</html>

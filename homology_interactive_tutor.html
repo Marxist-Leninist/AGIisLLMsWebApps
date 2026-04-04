@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Interactive Homology Tutor</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #121933;
+      --panel-2: #182247;
+      --text: #edf2ff;
+      --muted: #a8b3d6;
+      --accent: #8ab4ff;
+      --accent-2: #7ef0c7;
+      --danger: #ff9aa2;
+      --warn: #ffd37e;
+      --line: #2a376c;
+      --good: #9dffb0;
+      --shadow: 0 12px 30px rgba(0,0,0,.25);
+      --radius: 18px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: radial-gradient(circle at top, #16214a 0%, var(--bg) 45%);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .app {
+      max-width: 1300px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    .hero {
+      background: linear-gradient(135deg, rgba(138,180,255,.18), rgba(126,240,199,.12));
+      border: 1px solid rgba(255,255,255,.08);
+      box-shadow: var(--shadow);
+      border-radius: 28px;
+      padding: 28px;
+      margin-bottom: 22px;
+    }
+    .hero h1 {
+      margin: 0 0 8px;
+      font-size: clamp(1.9rem, 2.8vw, 3rem);
+      line-height: 1.1;
+    }
+    .hero p {
+      margin: 0;
+      color: var(--muted);
+      max-width: 900px;
+      font-size: 1.05rem;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 18px;
+    }
+    @media (max-width: 980px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+    .card {
+      background: rgba(18, 25, 51, .9);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .sidebar {
+      padding: 18px;
+      position: sticky;
+      top: 16px;
+      align-self: start;
+    }
+    .sidebar h2 {
+      font-size: 1rem;
+      margin: 0 0 12px;
+      color: var(--muted);
+      font-weight: 700;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+    .module-list {
+      display: grid;
+      gap: 10px;
+    }
+    .module-btn {
+      width: 100%;
+      text-align: left;
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      color: var(--text);
+      padding: 12px 14px;
+      border-radius: 14px;
+      cursor: pointer;
+      transition: .18s ease;
+      font-size: .95rem;
+    }
+    .module-btn:hover, .module-btn.active {
+      transform: translateY(-1px);
+      border-color: var(--accent);
+      box-shadow: 0 8px 20px rgba(138,180,255,.16);
+    }
+    .sidebar .progress {
+      margin-top: 18px;
+      padding: 12px;
+      background: rgba(255,255,255,.04);
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.06);
+    }
+    .bar {
+      height: 12px;
+      background: #0f1430;
+      border-radius: 999px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+    .bar > span {
+      display: block;
+      height: 100%;
+      width: 0;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      transition: width .3s ease;
+    }
+    .content {
+      display: grid;
+      gap: 18px;
+    }
+    .panel {
+      padding: 22px;
+    }
+    h3 {
+      margin-top: 0;
+      font-size: 1.45rem;
+    }
+    .muted { color: var(--muted); }
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 14px 0 0;
+    }
+    .pill {
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.07);
+      font-size: .88rem;
+      color: var(--muted);
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1.15fr .85fr;
+      gap: 18px;
+    }
+    @media (max-width: 980px) {
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+    .formula {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background: #0d1330;
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 14px;
+      padding: 12px 14px;
+      overflow-x: auto;
+      color: #d8e2ff;
+      margin: 12px 0;
+    }
+    .callout {
+      background: rgba(126,240,199,.08);
+      border: 1px solid rgba(126,240,199,.25);
+      border-radius: 14px;
+      padding: 14px;
+      color: #eafdf6;
+    }
+    .warning {
+      background: rgba(255,211,126,.1);
+      border: 1px solid rgba(255,211,126,.25);
+      border-radius: 14px;
+      padding: 14px;
+      color: #fff6df;
+    }
+    .quiz {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .option {
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      color: var(--text);
+      padding: 11px 12px;
+      border-radius: 12px;
+      cursor: pointer;
+      text-align: left;
+    }
+    .option.correct { border-color: var(--good); background: rgba(157,255,176,.12); }
+    .option.wrong { border-color: var(--danger); background: rgba(255,154,162,.12); }
+    .feedback {
+      min-height: 1.5em;
+      color: var(--muted);
+      margin-top: 6px;
+      font-weight: 600;
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 16px;
+    }
+    button, select {
+      font: inherit;
+    }
+    .btn {
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, #22315f, #19264b);
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 12px;
+      cursor: pointer;
+    }
+    .btn.secondary { background: #121933; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .viz-wrap {
+      display: grid;
+      gap: 14px;
+    }
+    svg {
+      width: 100%;
+      max-width: 620px;
+      height: auto;
+      background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 20px;
+    }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-size: .9rem;
+      color: var(--muted);
+    }
+    .legend span {
+      background: rgba(255,255,255,.05);
+      border-radius: 999px;
+      padding: 6px 10px;
+      border: 1px solid rgba(255,255,255,.06);
+    }
+    .small {
+      font-size: .92rem;
+      color: var(--muted);
+    }
+    .checklist {
+      margin: 0;
+      padding-left: 20px;
+    }
+    .checklist li { margin: 6px 0; }
+    .footer-note {
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: .93rem;
+    }
+    .badge {
+      display: inline-block;
+      margin-left: 8px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(138,180,255,.12);
+      color: var(--accent);
+      font-size: .8rem;
+      vertical-align: middle;
+      border: 1px solid rgba(138,180,255,.25);
+    }
+    .stepper {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+    .step {
+      padding: 8px 10px;
+      border-radius: 12px;
+      background: rgba(255,255,255,.05);
+      border: 1px solid rgba(255,255,255,.06);
+      color: var(--muted);
+    }
+    .step.active {
+      border-color: var(--accent);
+      color: var(--text);
+      background: rgba(138,180,255,.12);
+    }
+    .kbd {
+      font-family: ui-monospace, monospace;
+      border: 1px solid rgba(255,255,255,.15);
+      background: rgba(0,0,0,.2);
+      border-bottom-width: 3px;
+      border-radius: 8px;
+      padding: 1px 6px;
+    }
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .95rem;
+    }
+    .table th, .table td {
+      padding: 10px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      text-align: left;
+      vertical-align: top;
+    }
+    .table th { color: var(--muted); font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <section class="hero card">
+      <h1>Interactive Homology Tutor</h1>
+      <p>
+        A single-file guide to the core ideas behind homology, built for curious learners from late secondary school through university level.
+        Because apparently the universe demanded that holes in shapes be turned into algebra. Fair enough.
+      </p>
+      <div class="pill-row">
+        <span class="pill">Topology basics</span>
+        <span class="pill">Chains and boundaries</span>
+        <span class="pill">Cycles vs boundaries</span>
+        <span class="pill">H0, H1, H2 intuition</span>
+        <span class="pill">Interactive examples</span>
+        <span class="pill">Quiz mode</span>
+      </div>
+    </section>
+
+    <div class="layout">
+      <aside class="sidebar card">
+        <h2>Modules</h2>
+        <div class="module-list" id="moduleList"></div>
+        <div class="progress">
+          <div><strong>Progress</strong> <span class="muted" id="progressText">0 / 7 complete</span></div>
+          <div class="bar"><span id="progressBar"></span></div>
+          <div class="footer-note">Complete quizzes to mark modules done.</div>
+        </div>
+      </aside>
+
+      <main class="content">
+        <section class="panel card" id="lessonPanel"></section>
+        <section class="panel card" id="interactivePanel"></section>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    const modules = [
+      {
+        id: 'intro',
+        title: '1. What homology is trying to do',
+        tags: ['intuition', 'big picture'],
+        lesson: `
+          <h3>What homology is trying to do <span class="badge">foundation</span></h3>
+          <p>
+            Homology is a mathematical machine for detecting <strong>holes</strong> in a space.
+            Not holes in the everyday drilling-through-wood sense only, but structural gaps of different dimensions.
+          </p>
+          <table class="table">
+            <tr><th>Homology group</th><th>Rough meaning</th><th>Example</th></tr>
+            <tr><td><code>H_0</code></td><td>Connected components</td><td>Two separate circles give two components</td></tr>
+            <tr><td><code>H_1</code></td><td>1-dimensional holes, loops</td><td>The hole in a circle or doughnut</td></tr>
+            <tr><td><code>H_2</code></td><td>2-dimensional voids / enclosed shells</td><td>The hollow surface of a sphere</td></tr>
+          </table>
+          <div class="callout">
+            The basic trick is elegant: convert geometry into algebra. Once a space becomes groups and maps, you can compute with it.
+          </div>
+          <div class="formula">Homology turns a space X into groups H_n(X).</div>
+          <p>
+            You do <em>not</em> need to start with terrifying abstraction. At first, think like this:
+          </p>
+          <ul class="checklist">
+            <li>Points are 0-dimensional pieces.</li>
+            <li>Edges are 1-dimensional pieces.</li>
+            <li>Filled triangles are 2-dimensional pieces.</li>
+            <li>We combine these into algebraic sums called chains.</li>
+            <li>Then we ask which chains have no boundary, and which are themselves boundaries of something higher-dimensional.</li>
+          </ul>
+          <div class="warning">
+            The whole subject can be compressed into one sentence:
+            <strong>cycles are things with no boundary, boundaries are things that bound something, and homology measures cycles that are not boundaries.</strong>
+          </div>
+        `,
+        quiz: {
+          q: 'What is the most useful first intuition for homology?',
+          options: [
+            'It measures the temperature of curved spaces',
+            'It detects holes by translating geometry into algebra',
+            'It counts only triangles in a diagram',
+            'It proves every loop is a boundary'
+          ],
+          answer: 1,
+          explain: 'Correct. Homology is a systematic way to detect holes of different dimensions using algebra.'
+        },
+        interactive: 'intro'
+      },
+      {
+        id: 'simplices',
+        title: '2. Simplices and building blocks',
+        tags: ['geometry', 'triangulation'],
+        lesson: `
+          <h3>Simplices and building blocks</h3>
+          <p>
+            Homology often starts by chopping a space into simple pieces called <strong>simplices</strong>.
+            These are the clean, minimal geometric atoms of the subject.
+          </p>
+          <table class="table">
+            <tr><th>Name</th><th>Dimension</th><th>What it is</th></tr>
+            <tr><td>0-simplex</td><td>0</td><td>A point</td></tr>
+            <tr><td>1-simplex</td><td>1</td><td>An edge between two vertices</td></tr>
+            <tr><td>2-simplex</td><td>2</td><td>A filled triangle</td></tr>
+            <tr><td>3-simplex</td><td>3</td><td>A filled tetrahedron</td></tr>
+          </table>
+          <p>
+            A circle can be approximated by edges in a loop. A surface can be approximated by gluing together triangles.
+            This is why triangulations matter: they let us turn spaces into combinatorial objects we can compute with.
+          </p>
+          <div class="formula">
+            Example chain: c = e_1 + e_2 - e_3
+          </div>
+          <p>
+            The signs matter because orientation matters. Going from vertex A to B is not the same as going from B to A.
+            Humans love making direction matter the moment algebra gets involved.
+          </p>
+        `,
+        quiz: {
+          q: 'What is a 2-simplex?',
+          options: [
+            'A point',
+            'An unfilled loop',
+            'A filled triangle',
+            'A cube'
+          ],
+          answer: 2,
+          explain: 'Correct. A 2-simplex is a filled triangle, not just its edges.'
+        },
+        interactive: 'simplex'
+      },
+      {
+        id: 'boundary',
+        title: '3. The boundary operator',
+        tags: ['algebra', 'core mechanism'],
+        lesson: `
+          <h3>The boundary operator</h3>
+          <p>
+            The boundary operator <code>∂</code> sends an <code>n</code>-dimensional simplex to its oriented collection of <code>(n-1)</code>-dimensional faces.
+          </p>
+          <div class="formula">∂([v_0,v_1]) = [v_1] - [v_0]</div>
+          <div class="formula">∂([v_0,v_1,v_2]) = [v_1,v_2] - [v_0,v_2] + [v_0,v_1]</div>
+          <p>
+            In plain language: the boundary of an edge is its two endpoints with signs; the boundary of a filled triangle is its surrounding edges.
+          </p>
+          <div class="callout">
+            The most important fact in early homology is this:
+            <div class="formula">∂ ∘ ∂ = 0</div>
+            The boundary of a boundary is always zero.
+          </div>
+          <p>
+            Why? Because faces cancel in pairs with opposite sign. The algebra is doing something beautifully physical-looking here: outer edges remain, internal cancellations vanish.
+          </p>
+        `,
+        quiz: {
+          q: 'What is the boundary of a filled triangle?',
+          options: [
+            'Its three surrounding oriented edges',
+            'Just one vertex',
+            'Zero always',
+            'A tetrahedron'
+          ],
+          answer: 0,
+          explain: 'Correct. The boundary of a 2-simplex is the sum of its three oriented edges.'
+        },
+        interactive: 'boundary'
+      },
+      {
+        id: 'cycles',
+        title: '4. Cycles and boundaries',
+        tags: ['definitions', 'essence'],
+        lesson: `
+          <h3>Cycles and boundaries</h3>
+          <p>
+            This is the beating heart of homology.
+          </p>
+          <div class="formula">Z_n = ker(∂_n) = n-chains whose boundary is zero</div>
+          <div class="formula">B_n = im(∂_{n+1}) = n-chains that are boundaries of higher-dimensional chains</div>
+          <div class="formula">H_n = Z_n / B_n</div>
+          <p>
+            A <strong>cycle</strong> is closed. A <strong>boundary</strong> comes from something one dimension higher.
+            Homology says: closed things are interesting only if they do <em>not</em> already arise as boundaries.
+          </p>
+          <div class="warning">
+            Every boundary is automatically a cycle because <code>∂∘∂ = 0</code>.
+            But not every cycle is a boundary. That gap is exactly what homology records.
+          </div>
+          <p>
+            For a circle, the loop around it is a cycle and not a boundary, so <code>H_1</code> is nontrivial.
+            For a filled disk, the outer loop is still a cycle, but now it <em>is</em> the boundary of the disk, so it becomes trivial in homology.
+          </p>
+        `,
+        quiz: {
+          q: 'When does a cycle represent a nontrivial homology class?',
+          options: [
+            'When it has lots of vertices',
+            'When it is closed but not itself a boundary',
+            'When it is oriented clockwise only',
+            'When it is a triangle specifically'
+          ],
+          answer: 1,
+          explain: 'Correct. Nontrivial homology classes are cycles that are not boundaries.'
+        },
+        interactive: 'cycle'
+      },
+      {
+        id: 'examples',
+        title: '5. Classic spaces: line, circle, disk, sphere, torus',
+        tags: ['examples', 'computation'],
+        lesson: `
+          <h3>Classic spaces</h3>
+          <table class="table">
+            <tr><th>Space</th><th>Key homology intuition</th></tr>
+            <tr><td>Line segment</td><td>One component, no loop-hole</td></tr>
+            <tr><td>Circle</td><td>One component, one independent 1D loop</td></tr>
+            <tr><td>Disk</td><td>One component, loop filled in so no 1D hole</td></tr>
+            <tr><td>Sphere</td><td>One component, no 1D loop-hole, but a 2D shell</td></tr>
+            <tr><td>Torus</td><td>One component, two basic independent 1D loops, one 2D shell</td></tr>
+          </table>
+          <div class="formula">
+            H_0(S^1) = Z,   H_1(S^1) = Z
+          </div>
+          <div class="formula">
+            H_0(D^2) = Z,   H_1(D^2) = 0
+          </div>
+          <div class="formula">
+            H_0(S^2) = Z,   H_1(S^2) = 0,   H_2(S^2) = Z
+          </div>
+          <div class="formula">
+            H_0(T^2) = Z,   H_1(T^2) = Z ⊕ Z,   H_2(T^2) = Z
+          </div>
+          <p>
+            Here <code>Z</code> means the integers. It tells you that a class can be wrapped around repeatedly with positive or negative orientation.
+          </p>
+        `,
+        quiz: {
+          q: 'Which space has nontrivial H_1 but trivial H_2 in the usual basic examples here?',
+          options: [
+            'Disk',
+            'Circle',
+            'Sphere',
+            'Single point'
+          ],
+          answer: 1,
+          explain: 'Correct. The circle has a 1-dimensional hole but no 2-dimensional shell.'
+        },
+        interactive: 'spaces'
+      },
+      {
+        id: 'levels',
+        title: '6. What to learn at ages 16 to 27',
+        tags: ['roadmap', 'education'],
+        lesson: `
+          <h3>Learning roadmap: roughly age 16 to 27</h3>
+          <p>This is not a rigid rule. It is a sane progression from intuition to serious university-level algebraic topology.</p>
+          <table class="table">
+            <tr><th>Stage</th><th>Main goals</th></tr>
+            <tr><td>16-18</td><td>Functions, sets, proof basics, vectors, matrices, graph intuition, geometric thinking, simple topology ideas like connectedness and holes.</td></tr>
+            <tr><td>18-20</td><td>Linear algebra, single and multivariable calculus, rigorous proof writing, abstract algebra basics, point-set topology foundations.</td></tr>
+            <tr><td>20-23</td><td>Simplicial complexes, chain groups, boundary maps, first homology computations, quotient groups, exact sequences at introductory level.</td></tr>
+            <tr><td>23-27</td><td>Singular homology, cohomology, fundamental group comparison, Mayer-Vietoris, CW complexes, algebraic topology as a mature subject.</td></tr>
+          </table>
+          <div class="callout">
+            Minimum prerequisites for real comfort with homology:
+            sets, functions, proof logic, linear algebra, and quotient groups.
+          </div>
+          <div class="stepper">
+            <div class="step active">Intuition</div>
+            <div class="step active">Algebra basics</div>
+            <div class="step active">Topology basics</div>
+            <div class="step">Homology machinery</div>
+            <div class="step">Abstract mastery</div>
+          </div>
+        `,
+        quiz: {
+          q: 'Which subject is most essential before serious homology becomes comfortable?',
+          options: [
+            'Astrology',
+            'Linear algebra and quotient-group style algebra',
+            'Only trigonometry',
+            'Chemistry lab practice'
+          ],
+          answer: 1,
+          explain: 'Correct. Homology uses algebra heavily, especially linear-style thinking and quotient constructions.'
+        },
+        interactive: 'roadmap'
+      },
+      {
+        id: 'summary',
+        title: '7. Final compression and memory hooks',
+        tags: ['revision', 'memory'],
+        lesson: `
+          <h3>Final compression</h3>
+          <p>If you remember only a few things, remember these:</p>
+          <ul class="checklist">
+            <li><strong>Break spaces into pieces</strong>: points, edges, triangles, tetrahedra.</li>
+            <li><strong>Form chains</strong>: algebraic sums of those pieces.</li>
+            <li><strong>Apply the boundary operator</strong>: each piece maps to its faces.</li>
+            <li><strong>Cycles</strong> have zero boundary.</li>
+            <li><strong>Boundaries</strong> come from one dimension higher.</li>
+            <li><strong>Homology = cycles mod boundaries</strong>.</li>
+          </ul>
+          <div class="formula">H_n = ker(∂_n) / im(∂_{n+1})</div>
+          <div class="warning">
+            Best verbal memory hook:
+            <strong>homology counts the holes left over after you ignore loops that are just boundaries of filled-in stuff.</strong>
+          </div>
+          <p>
+            Once this feels natural, the next sensible jump is to singular homology, then cohomology, then exact sequences and the deeper machinery.
+            Because mathematicians never met a clean idea they couldn't wrap in another layer of abstraction.
+          </p>
+        `,
+        quiz: {
+          q: 'Finish the sentence: homology is cycles...',
+          options: [
+            'plus boundaries',
+            'times curvature',
+            'mod boundaries',
+            'minus topology entirely'
+          ],
+          answer: 2,
+          explain: 'Correct. The slogan is exactly: homology is cycles mod boundaries.'
+        },
+        interactive: 'summary'
+      }
+    ];
+
+    const state = {
+      current: 0,
+      completed: JSON.parse(localStorage.getItem('homology-progress') || '{}')
+    };
+
+    const moduleList = document.getElementById('moduleList');
+    const lessonPanel = document.getElementById('lessonPanel');
+    const interactivePanel = document.getElementById('interactivePanel');
+    const progressText = document.getElementById('progressText');
+    const progressBar = document.getElementById('progressBar');
+
+    function saveProgress() {
+      localStorage.setItem('homology-progress', JSON.stringify(state.completed));
+    }
+
+    function renderSidebar() {
+      moduleList.innerHTML = '';
+      modules.forEach((m, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'module-btn' + (i === state.current ? ' active' : '');
+        btn.innerHTML = `${m.title}${state.completed[m.id] ? ' ✅' : ''}`;
+        btn.onclick = () => {
+          state.current = i;
+          render();
+        };
+        moduleList.appendChild(btn);
+      });
+      const done = Object.keys(state.completed).filter(k => state.completed[k]).length;
+      progressText.textContent = `${done} / ${modules.length} complete`;
+      progressBar.style.width = `${(done / modules.length) * 100}%`;
+    }
+
+    function renderQuiz(mod) {
+      return `
+        <div class="quiz-block">
+          <h4>Quick check</h4>
+          <p><strong>${mod.quiz.q}</strong></p>
+          <div class="quiz" id="quiz"></div>
+          <div class="feedback" id="feedback"></div>
+        </div>
+      `;
+    }
+
+    function attachQuiz(mod) {
+      const quiz = document.getElementById('quiz');
+      const feedback = document.getElementById('feedback');
+      mod.quiz.options.forEach((opt, idx) => {
+        const btn = document.createElement('button');
+        btn.className = 'option';
+        btn.textContent = opt;
+        btn.onclick = () => {
+          Array.from(quiz.children).forEach((child, childIdx) => {
+            child.disabled = true;
+            if (childIdx === mod.quiz.answer) child.classList.add('correct');
+            else if (childIdx === idx && idx !== mod.quiz.answer) child.classList.add('wrong');
+          });
+          if (idx === mod.quiz.answer) {
+            feedback.textContent = mod.quiz.explain;
+            state.completed[mod.id] = true;
+            saveProgress();
+            renderSidebar();
+          } else {
+            feedback.textContent = 'Not quite. ' + mod.quiz.explain;
+          }
+        };
+        quiz.appendChild(btn);
+      });
+    }
+
+    function renderLesson() {
+      const mod = modules[state.current];
+      lessonPanel.innerHTML = `
+        ${mod.lesson}
+        <div class="pill-row">${mod.tags.map(t => `<span class="pill">${t}</span>`).join('')}</div>
+        ${renderQuiz(mod)}
+        <div class="controls">
+          <button class="btn secondary" ${state.current === 0 ? 'disabled' : ''} id="prevBtn">← Previous</button>
+          <button class="btn" ${state.current === modules.length - 1 ? 'disabled' : ''} id="nextBtn">Next →</button>
+        </div>
+      `;
+      attachQuiz(mod);
+      document.getElementById('prevBtn').onclick = () => {
+        if (state.current > 0) { state.current--; render(); }
+      };
+      document.getElementById('nextBtn').onclick = () => {
+        if (state.current < modules.length - 1) { state.current++; render(); }
+      };
+    }
+
+    function renderIntroInteractive() {
+      return `
+        <div class="grid-2">
+          <div>
+            <h3>Hole intuition sandbox</h3>
+            <p class="muted">Pick a shape. The panel explains what homology sees in low dimensions.</p>
+            <div class="controls">
+              <select id="shapeSelect" class="btn secondary">
+                <option value="point">Point</option>
+                <option value="twoPoints">Two separate points</option>
+                <option value="circle">Circle</option>
+                <option value="disk">Filled disk</option>
+                <option value="sphere">Sphere surface</option>
+                <option value="torus">Torus</option>
+              </select>
+            </div>
+            <div class="formula" id="shapeFacts"></div>
+            <div class="small" id="shapeExplain"></div>
+          </div>
+          <div class="viz-wrap">
+            <svg viewBox="0 0 420 300" id="shapeSvg" aria-label="Shape visualisation"></svg>
+            <div class="legend">
+              <span>H0 = components</span>
+              <span>H1 = loops not filled in</span>
+              <span>H2 = shells / enclosed surfaces</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function drawShape(shape) {
+      const svg = document.getElementById('shapeSvg');
+      const facts = document.getElementById('shapeFacts');
+      const explain = document.getElementById('shapeExplain');
+      let html = '';
+      const stroke = '#8ab4ff';
+      const fill = 'rgba(126,240,199,.18)';
+      if (shape === 'point') {
+        html = `<circle cx="210" cy="150" r="10" fill="${stroke}" />`;
+        facts.textContent = 'H0 = Z, H1 = 0, H2 = 0';
+        explain.textContent = 'One connected component. No loops, no shells.';
+      }
+      if (shape === 'twoPoints') {
+        html = `<circle cx="150" cy="150" r="10" fill="${stroke}" /><circle cx="270" cy="150" r="10" fill="${stroke}" />`;
+        facts.textContent = 'H0 = Z ⊕ Z, H1 = 0, H2 = 0';
+        explain.textContent = 'Two separate connected components, so H0 has rank 2.';
+      }
+      if (shape === 'circle') {
+        html = `<circle cx="210" cy="150" r="70" fill="none" stroke="${stroke}" stroke-width="12" />`;
+        facts.textContent = 'H0 = Z, H1 = Z, H2 = 0';
+        explain.textContent = 'There is one component and one essential loop-hole.';
+      }
+      if (shape === 'disk') {
+        html = `<circle cx="210" cy="150" r="72" fill="${fill}" stroke="${stroke}" stroke-width="8" />`;
+        facts.textContent = 'H0 = Z, H1 = 0, H2 = 0';
+        explain.textContent = 'The loop is filled in, so the boundary circle becomes trivial in H1.';
+      }
+      if (shape === 'sphere') {
+        html = `
+          <ellipse cx="210" cy="150" rx="90" ry="70" fill="${fill}" stroke="${stroke}" stroke-width="8" />
+          <ellipse cx="210" cy="150" rx="90" ry="26" fill="none" stroke="rgba(255,255,255,.28)" stroke-width="3" />
+        `;
+        facts.textContent = 'H0 = Z, H1 = 0, H2 = Z';
+        explain.textContent = 'A sphere surface has one connected component and one essential 2-dimensional shell.';
+      }
+      if (shape === 'torus') {
+        html = `
+          <ellipse cx="210" cy="150" rx="110" ry="74" fill="${fill}" stroke="${stroke}" stroke-width="8" />
+          <ellipse cx="210" cy="150" rx="42" ry="28" fill="rgba(11,16,32,1)" stroke="${stroke}" stroke-width="8" />
+          <ellipse cx="210" cy="150" rx="110" ry="24" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="3" />
+        `;
+        facts.textContent = 'H0 = Z, H1 = Z ⊕ Z, H2 = Z';
+        explain.textContent = 'The torus has two independent 1D loops and one 2D surface class.';
+      }
+      svg.innerHTML = html;
+    }
+
+    function renderSimplexInteractive() {
+      return `
+        <div class="grid-2">
+          <div>
+            <h3>Simplex explorer</h3>
+            <p class="muted">Choose a dimension to see the geometric building block.</p>
+            <div class="controls">
+              <select id="simplexSelect" class="btn secondary">
+                <option value="0">0-simplex</option>
+                <option value="1">1-simplex</option>
+                <option value="2">2-simplex</option>
+                <option value="3">3-simplex</option>
+              </select>
+            </div>
+            <div class="formula" id="simplexText"></div>
+            <div class="small" id="simplexExplain"></div>
+          </div>
+          <div>
+            <svg viewBox="0 0 420 300" id="simplexSvg"></svg>
+          </div>
+        </div>
+      `;
+    }
+
+    function drawSimplex(dim) {
+      const svg = document.getElementById('simplexSvg');
+      const text = document.getElementById('simplexText');
+      const explain = document.getElementById('simplexExplain');
+      const p = [[120,220],[300,220],[210,80],[300,110]];
+      const dot = (x,y,l) => `<circle cx="${x}" cy="${y}" r="8" fill="#8ab4ff"/><text x="${x+12}" y="${y-10}" fill="#edf2ff" font-size="14">${l}</text>`;
+      if (dim === '0') {
+        svg.innerHTML = `${dot(210,150,'v0')}`;
+        text.textContent = '0-simplex = one vertex';
+        explain.textContent = 'A point is the basic 0-dimensional simplex.';
+      }
+      if (dim === '1') {
+        svg.innerHTML = `<line x1="120" y1="180" x2="300" y2="180" stroke="#8ab4ff" stroke-width="10"/>${dot(120,180,'v0')}${dot(300,180,'v1')}`;
+        text.textContent = '1-simplex = one oriented edge [v0,v1]';
+        explain.textContent = 'An edge has two endpoints.';
+      }
+      if (dim === '2') {
+        svg.innerHTML = `<polygon points="120,220 300,220 210,80" fill="rgba(126,240,199,.18)" stroke="#8ab4ff" stroke-width="8"/>${dot(...p[0],'v0')}${dot(...p[1],'v1')}${dot(...p[2],'v2')}`;
+        text.textContent = '2-simplex = filled triangle [v0,v1,v2]';
+        explain.textContent = 'The interior is included. It is not just the wireframe.';
+      }
+      if (dim === '3') {
+        svg.innerHTML = `
+          <polygon points="120,220 300,220 210,80" fill="rgba(126,240,199,.10)" stroke="#8ab4ff" stroke-width="4"/>
+          <polygon points="120,220 300,220 300,110" fill="rgba(126,240,199,.10)" stroke="#8ab4ff" stroke-width="4"/>
+          <polygon points="120,220 210,80 300,110" fill="rgba(126,240,199,.16)" stroke="#8ab4ff" stroke-width="4"/>
+          <polygon points="300,220 210,80 300,110" fill="rgba(126,240,199,.08)" stroke="#8ab4ff" stroke-width="4"/>
+          ${dot(...p[0],'v0')}${dot(...p[1],'v1')}${dot(...p[2],'v2')}${dot(...p[3],'v3')}
+        `;
+        text.textContent = '3-simplex = tetrahedron [v0,v1,v2,v3]';
+        explain.textContent = 'A tetrahedron is the 3-dimensional simplex.';
+      }
+    }
+
+    function renderBoundaryInteractive() {
+      return `
+        <div class="grid-2">
+          <div>
+            <h3>Boundary operator simulator</h3>
+            <p class="muted">Click the buttons to reveal boundaries. Watch dimension drop by one.</p>
+            <div class="controls">
+              <button class="btn" id="showEdgeBoundary">Boundary of edge</button>
+              <button class="btn" id="showTriBoundary">Boundary of triangle</button>
+              <button class="btn secondary" id="resetBoundary">Reset</button>
+            </div>
+            <div class="formula" id="boundaryText">Choose an object to compute its boundary.</div>
+            <div class="small">Key fact: applying boundary twice always gives zero.</div>
+          </div>
+          <div>
+            <svg viewBox="0 0 420 300" id="boundarySvg"></svg>
+          </div>
+        </div>
+      `;
+    }
+
+    function initBoundary() {
+      const svg = document.getElementById('boundarySvg');
+      const text = document.getElementById('boundaryText');
+      const base = () => {
+        svg.innerHTML = `
+          <polygon points="110,220 300,220 210,90" fill="rgba(126,240,199,.12)" stroke="#2a376c" stroke-width="6"/>
+          <circle cx="110" cy="220" r="8" fill="#8ab4ff"/>
+          <circle cx="300" cy="220" r="8" fill="#8ab4ff"/>
+          <circle cx="210" cy="90" r="8" fill="#8ab4ff"/>
+          <text x="122" y="210" fill="#edf2ff" font-size="14">v0</text>
+          <text x="312" y="210" fill="#edf2ff" font-size="14">v1</text>
+          <text x="222" y="80" fill="#edf2ff" font-size="14">v2</text>
+        `;
+      };
+      base();
+      document.getElementById('showEdgeBoundary').onclick = () => {
+        svg.innerHTML = `
+          <line x1="110" y1="220" x2="300" y2="220" stroke="#8ab4ff" stroke-width="10"/>
+          <circle cx="110" cy="220" r="10" fill="#ff9aa2"/>
+          <circle cx="300" cy="220" r="10" fill="#9dffb0"/>
+          <text x="80" y="250" fill="#ff9aa2" font-size="14">-v0</text>
+          <text x="300" y="250" fill="#9dffb0" font-size="14">+v1</text>
+        `;
+        text.textContent = '∂([v0,v1]) = [v1] - [v0]';
+      };
+      document.getElementById('showTriBoundary').onclick = () => {
+        svg.innerHTML = `
+          <line x1="110" y1="220" x2="300" y2="220" stroke="#8ab4ff" stroke-width="8"/>
+          <line x1="110" y1="220" x2="210" y2="90" stroke="#7ef0c7" stroke-width="8"/>
+          <line x1="210" y1="90" x2="300" y2="220" stroke="#ffd37e" stroke-width="8"/>
+          <circle cx="110" cy="220" r="8" fill="#edf2ff"/>
+          <circle cx="300" cy="220" r="8" fill="#edf2ff"/>
+          <circle cx="210" cy="90" r="8" fill="#edf2ff"/>
+        `;
+        text.textContent = '∂([v0,v1,v2]) = [v1,v2] - [v0,v2] + [v0,v1]';
+      };
+      document.getElementById('resetBoundary').onclick = () => {
+        base();
+        text.textContent = 'Choose an object to compute its boundary.';
+      };
+    }
+
+    function renderCycleInteractive() {
+      return `
+        <div class="grid-2">
+          <div>
+            <h3>Cycle or boundary?</h3>
+            <p class="muted">Try to classify the selected object.</p>
+            <div class="controls">
+              <select id="cycleSelect" class="btn secondary">
+                <option value="circleLoop">Loop around a circle</option>
+                <option value="diskEdge">Outer edge of a filled disk</option>
+                <option value="openPath">Open path</option>
+              </select>
+            </div>
+            <div class="formula" id="cycleClassification"></div>
+            <div class="small" id="cycleExplain"></div>
+          </div>
+          <div>
+            <svg viewBox="0 0 420 300" id="cycleSvg"></svg>
+          </div>
+        </div>
+      `;
+    }
+
+    function drawCycleCase(val) {
+      const svg = document.getElementById('cycleSvg');
+      const cl = document.getElementById('cycleClassification');
+      const ex = document.getElementById('cycleExplain');
+      if (val === 'circleLoop') {
+        svg.innerHTML = `<circle cx="210" cy="150" r="75" fill="none" stroke="#8ab4ff" stroke-width="12"/>`;
+        cl.textContent = 'Cycle: yes. Boundary: no in the circle itself. So it gives a nontrivial H1 class.';
+        ex.textContent = 'The loop closes, and there is no 2-dimensional filling inside the space.';
+      }
+      if (val === 'diskEdge') {
+        svg.innerHTML = `<circle cx="210" cy="150" r="75" fill="rgba(126,240,199,.18)" stroke="#8ab4ff" stroke-width="8"/>`;
+        cl.textContent = 'Cycle: yes. Boundary: yes. So it is trivial in H1.';
+        ex.textContent = 'The boundary circle bounds the filled disk.';
+      }
+      if (val === 'openPath') {
+        svg.innerHTML = `<polyline points="100,200 160,120 230,180 310,110" fill="none" stroke="#8ab4ff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>`;
+        cl.textContent = 'Cycle: no. Boundary is not zero because the endpoints remain.';
+        ex.textContent = 'Open paths are not cycles.';
+      }
+    }
+
+    function renderSpacesInteractive() {
+      return renderIntroInteractive();
+    }
+
+    function renderRoadmapInteractive() {
+      return `
+        <div>
+          <h3>Study planner</h3>
+          <p class="muted">Tick what you already know. The page tells you what comes next.</p>
+          <div class="quiz" id="roadmapChecks"></div>
+          <div class="formula" id="roadmapAdvice">Select your background.</div>
+        </div>
+      `;
+    }
+
+    function initRoadmap() {
+      const topics = [
+        'Sets and functions',
+        'Proof writing',
+        'Linear algebra',
+        'Group / quotient basics',
+        'Basic topology words: connected, compact, continuous'
+      ];
+      const wrap = document.getElementById('roadmapChecks');
+      const advice = document.getElementById('roadmapAdvice');
+      topics.forEach((topic, idx) => {
+        const label = document.createElement('label');
+        label.className = 'option';
+        label.style.display = 'block';
+        label.innerHTML = `<input type="checkbox" data-idx="${idx}" style="margin-right:10px; transform: scale(1.15);"/> ${topic}`;
+        wrap.appendChild(label);
+      });
+      wrap.addEventListener('change', () => {
+        const count = wrap.querySelectorAll('input:checked').length;
+        if (count <= 1) advice.textContent = 'Start with proofs, sets/functions, and linear algebra before serious homology.';
+        else if (count <= 3) advice.textContent = 'You are near the bridge. Next: quotient groups, simplicial complexes, and boundary maps.';
+        else advice.textContent = 'You are ready for a proper first course in homology or algebraic topology.';
+      });
+    }
+
+    function renderSummaryInteractive() {
+      return `
+        <div>
+          <h3>Memory machine</h3>
+          <p class="muted">Click to reveal the compressed slogan chain.</p>
+          <div class="controls">
+            <button class="btn" id="reveal1">1. Pieces</button>
+            <button class="btn" id="reveal2">2. Chains</button>
+            <button class="btn" id="reveal3">3. Boundary</button>
+            <button class="btn" id="reveal4">4. Cycles</button>
+            <button class="btn" id="reveal5">5. Boundaries</button>
+            <button class="btn" id="reveal6">6. Homology</button>
+          </div>
+          <div id="summaryStack" class="quiz" style="margin-top:16px"></div>
+        </div>
+      `;
+    }
+
+    function initSummary() {
+      const stack = document.getElementById('summaryStack');
+      const items = [
+        'Pieces: points, edges, triangles, tetrahedra.',
+        'Chains: formal sums of those pieces.',
+        'Boundary: each piece maps to its faces.',
+        'Cycles: chains with zero boundary.',
+        'Boundaries: chains that come from one dimension higher.',
+        'Homology: cycles mod boundaries.'
+      ];
+      items.forEach((text, idx) => {
+        document.getElementById('reveal' + (idx + 1)).onclick = () => {
+          if (![...stack.children].some(n => n.textContent === text)) {
+            const div = document.createElement('div');
+            div.className = 'option correct';
+            div.textContent = text;
+            stack.appendChild(div);
+          }
+        };
+      });
+    }
+
+    function renderInteractive() {
+      const mod = modules[state.current];
+      if (mod.interactive === 'intro') {
+        interactivePanel.innerHTML = renderIntroInteractive();
+        const select = document.getElementById('shapeSelect');
+        drawShape(select.value);
+        select.onchange = () => drawShape(select.value);
+      }
+      if (mod.interactive === 'simplex') {
+        interactivePanel.innerHTML = renderSimplexInteractive();
+        const select = document.getElementById('simplexSelect');
+        drawSimplex(select.value);
+        select.onchange = () => drawSimplex(select.value);
+      }
+      if (mod.interactive === 'boundary') {
+        interactivePanel.innerHTML = renderBoundaryInteractive();
+        initBoundary();
+      }
+      if (mod.interactive === 'cycle') {
+        interactivePanel.innerHTML = renderCycleInteractive();
+        const select = document.getElementById('cycleSelect');
+        drawCycleCase(select.value);
+        select.onchange = () => drawCycleCase(select.value);
+      }
+      if (mod.interactive === 'spaces') {
+        interactivePanel.innerHTML = renderSpacesInteractive();
+        const select = document.getElementById('shapeSelect');
+        select.value = 'torus';
+        drawShape(select.value);
+        select.onchange = () => drawShape(select.value);
+      }
+      if (mod.interactive === 'roadmap') {
+        interactivePanel.innerHTML = renderRoadmapInteractive();
+        initRoadmap();
+      }
+      if (mod.interactive === 'summary') {
+        interactivePanel.innerHTML = renderSummaryInteractive();
+        initSummary();
+      }
+    }
+
+    function render() {
+      renderSidebar();
+      renderLesson();
+      renderInteractive();
+    }
+
+    render();
+  </script>
+</body>
+</html>

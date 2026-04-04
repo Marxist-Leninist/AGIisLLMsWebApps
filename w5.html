@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lentz Soliton: Earth-Andromeda Transit</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap');
+
+        body { margin: 0; overflow: hidden; background: #000; color: #fff; font-family: 'IBM Plex Mono', monospace; user-select: none; }
+        canvas { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
+        
+        #ui-wrapper {
+            position: absolute; top: 15px; left: 15px;
+            display: flex; flex-direction: column; align-items: flex-start;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        #ui {
+            background: rgba(5, 10, 15, 0.85);
+            padding: 20px; border: 1px solid #00ccff; border-radius: 4px; width: 420px;
+            box-shadow: 0 4px 30px rgba(0, 200, 255, 0.2); backdrop-filter: blur(12px);
+            pointer-events: auto;
+        }
+
+        h1 { font-family: 'Chakra Petch', sans-serif; font-size: 1.2rem; margin: 0 0 5px 0; color: #00ccff; text-transform: uppercase; letter-spacing: 2px;}
+        p { font-size: 0.75rem; color: #b3e6ff; line-height: 1.4; margin-bottom: 15px; opacity: 0.8; }
+        
+        .slider-row { margin-bottom: 15px; }
+        .slider-label { display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 6px; color: #ccc;}
+        .val { color: #00ccff; font-weight: 600; }
+        input[type=range] { width: 100%; -webkit-appearance: none; background: rgba(0, 204, 255, 0.2); height: 4px; border-radius: 2px; outline: none; cursor: pointer; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #00ccff; box-shadow: 0 0 8px #00ccff; }
+
+        .telemetry-panel { margin-top: 15px; padding: 12px; border: 1px solid rgba(0, 204, 255, 0.4); border-radius: 4px; background: rgba(0, 20, 40, 0.6); }
+        .telemetry-title { font-family: 'Chakra Petch', sans-serif; font-size: 0.85rem; font-weight: 700; color: #ffcc00; margin-bottom: 8px; letter-spacing: 1px;}
+        .telemetry-stats { font-size: 0.75rem; color: #aaa; display: flex; justify-content: space-between; flex-direction: column; gap: 6px; }
+        .stat-row { display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 4px;}
+        
+        .phase-indicator {
+            position: absolute; top: 15px; right: 20px; font-family: 'Chakra Petch'; font-size: 1.5rem;
+            color: #00ccff; text-align: right; text-shadow: 0 0 10px rgba(0, 204, 255, 0.5); pointer-events: none;
+        }
+
+        .btn {
+            background: #00ccff; color: #000; border: none; padding: 10px 20px; 
+            font-family: 'Chakra Petch'; font-weight: bold; cursor: pointer; 
+            width: 100%; margin-top: 10px; border-radius: 2px;
+            transition: all 0.2s;
+        }
+        .btn:hover { background: #fff; box-shadow: 0 0 15px #00ccff; }
+
+        #warning-box {
+            margin-top: 10px; padding: 8px; background: rgba(255,100,0,0.2);
+            border-left: 3px solid #ff6600; font-family: 'Chakra Petch'; font-size: 0.8rem; color: #ff9900;
+            display: none;
+        }
+
+        .alert-flash { animation: flash 0.5s infinite alternate; color: #ff3300 !important; font-weight: bold; }
+        @keyframes flash { from { opacity: 1; } to { opacity: 0.3; } }
+    </style>
+</head>
+<body>
+
+    <div class="phase-indicator" id="phase-hud">
+        SYSTEM STANDBY<br>
+        <span style="font-size: 0.9rem; color: #aaa;" id="dist-hud">SOL: 0.00 AU</span>
+    </div>
+
+    <div id="ui-wrapper">
+        <div id="ui">
+            <h1>Matter-Soliton Command</h1>
+            <p><strong>TRANSIT PARAMETERS.</strong> Initiating a Lentz positive-matter-density soliton for trans-galactic displacement. The metric utilizes strictly conventional matter-physical configurations to bypass local geodesic constraints.</p>
+            
+            <div class="slider-row">
+                <div class="slider-label"><span>Warp Velocity Factor (γ)</span> <span class="val" id="val-v">1.00 c</span></div>
+                <input type="range" id="velocity" min="0.1" max="10.0" step="0.1" value="1.0">
+            </div>
+            
+            <div class="slider-row">
+                <div class="slider-label"><span>Metric Stability (Matter Density)</span> <span class="val" id="val-m">98.5%</span></div>
+                <input type="range" id="mass" min="50" max="100" step="0.1" value="98.5">
+            </div>
+
+            <div class="telemetry-panel">
+                <div class="telemetry-title">FLIGHT TELEMETRY</div>
+                <div class="telemetry-stats">
+                    <div class="stat-row"><span>Status:</span> <span id="val-status" style="color:#00ff88; font-weight:bold;">IDLE</span></div>
+                    <div class="stat-row"><span>Matter Stress:</span> <span id="val-stress" style="color:#aaa;">NOMINAL</span></div>
+                    <div class="stat-row"><span>Chronometry:</span> <span id="val-time" style="color:#00ccff;">0.00s PROPER</span></div>
+                </div>
+                <div id="warning-box">
+                    WARNING: ATMOSPHERIC PROXIMITY. DE-WARP VORTEX MAY CAUSE PLANETARY SHEAR.
+                </div>
+            </div>
+
+            <button class="btn" id="launch-btn">INITIATE VOYAGE</button>
+        </div>
+    </div>
+
+    <canvas id="glcanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('glcanvas');
+        const gl = canvas.getContext('webgl2');
+
+        if (!gl) { alert('WebGL 2 required'); }
+
+        const vSlider = document.getElementById('velocity');
+        const mSlider = document.getElementById('mass');
+        const launchBtn = document.getElementById('launch-btn');
+        
+        const valV = document.getElementById('val-v');
+        const valM = document.getElementById('val-m');
+        const valStatus = document.getElementById('val-status');
+        const valStress = document.getElementById('val-stress');
+        const valTime = document.getElementById('val-time');
+        const distHud = document.getElementById('dist-hud');
+        const phaseHud = document.getElementById('phase-hud');
+        const warningBox = document.getElementById('warning-box');
+
+        vSlider.oninput = (e) => valV.innerText = parseFloat(e.target.value).toFixed(2) + " c";
+        mSlider.oninput = (e) => valM.innerText = parseFloat(e.target.value).toFixed(1) + "%";
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            gl.viewport(0, 0, canvas.width, canvas.height);
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        const vs = `#version 300 es
+            in vec4 a_pos; out vec2 v_uv;
+            void main() { v_uv = a_pos.xy; gl_Position = a_pos; }
+        `;
+
+        const fs = `#version 300 es
+            precision highp float;
+            in vec2 v_uv; out vec4 fragColor;
+
+            uniform vec2 u_res;
+            uniform float u_time;
+            uniform vec3 u_camPos;
+            uniform float u_warp;      // 0 to 1 intensity
+            uniform float u_progress;  // 0 to 1 (Earth to Andromeda)
+            uniform float u_v;
+            uniform float u_stability;
+
+            // Simple noise
+            float hash(vec3 p) { p = fract(p * vec3(123.34, 456.21, 85.714)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+            
+            // Sphere SDF
+            float sdSphere(vec3 p, float s) { return length(p) - s; }
+
+            // Warp Metric Distortion (Lentz inspired Soliton)
+            vec3 warp(vec3 p, vec3 shipPos) {
+                vec3 p_rel = p - shipPos;
+                float r = length(p_rel);
+                float bubble = 1.0 - smoothstep(1.5, 3.0, r);
+                
+                // Shift coordinates along travel axis (Z) based on matter-physical soliton wave
+                float shift = u_warp * bubble * u_v * 0.5;
+                return p - vec3(0, 0, shift);
+            }
+
+            void main() {
+                vec2 uv = (gl_FragCoord.xy - 0.5 * u_res) / min(u_res.x, u_res.y);
+                
+                vec3 ro = u_camPos;
+                vec3 ta = vec3(0, 0, 0); // Ship center
+                
+                vec3 cw = normalize(ta - ro);
+                vec3 cu = normalize(cross(cw, vec3(0,1,0)));
+                vec3 cv = cross(cu, cw);
+                vec3 rd = normalize(uv.x * cu + uv.y * cv + 1.2 * cw);
+
+                // Simulation coordinates
+                // Earth is at 0,0,-50 (start)
+                // Andromeda is at 0,0, 1000 (conceptual end)
+                float travelDist = 1200.0;
+                vec3 shipPos = vec3(0, 0, mix(-50.0, travelDist, u_progress));
+                vec3 earthPos = vec3(0, 0, -50.0);
+                vec3 andromedaPos = vec3(0, 0, travelDist);
+
+                vec3 p = ro;
+                vec4 col = vec4(0);
+                bool hit = false;
+
+                // Simple raymarching
+                for(int i=0; i<80; i++) {
+                    // Apply metric distortion to the ray position
+                    vec3 distortedP = warp(p, shipPos);
+                    
+                    float dEarth = sdSphere(distortedP - earthPos, 8.0);
+                    float dAndro = sdSphere(distortedP - andromedaPos, 40.0);
+                    float dShip = sdSphere(distortedP - shipPos, 0.8);
+                    
+                    float d = min(dEarth, min(dAndro, dShip));
+                    
+                    if(d < 0.01) {
+                        hit = true;
+                        if(d == dEarth) col = vec4(0.2, 0.5, 1.0, 1.0) * (0.5 + 0.5 * dot(normalize(distortedP - earthPos), normalize(vec3(1,1,1))));
+                        else if(d == dAndro) col = vec4(1.0, 0.8, 0.4, 0.6) * (hash(distortedP*0.1) * 2.0);
+                        else col = vec4(0.8, 0.8, 0.9, 1.0);
+                        break;
+                    }
+                    
+                    if(length(p) > 2000.0) break;
+                    p += rd * max(d * 0.5, 0.1);
+                }
+
+                // Warp bubble visualization (Visualizing the matter-stress)
+                float r_ship = length(p - shipPos);
+                if (r_ship < 4.0) {
+                    float glow = exp(-r_ship * 1.5) * u_warp;
+                    col += vec4(0.0, 1.0, 0.8, 1.0) * glow * (0.8 + 0.2 * sin(u_time * 10.0));
+                }
+
+                // Stars with lensing
+                if(!hit) {
+                    vec3 stars_rd = rd;
+                    // Distort star ray near ship
+                    float lens = smoothstep(6.0, 0.0, length(p - shipPos)) * u_warp;
+                    stars_rd.xy += sin(p.z * 0.1) * lens * 0.1;
+                    
+                    float s = pow(hash(floor(stars_rd * 400.0)), 100.0);
+                    col = vec4(vec3(s), 1.0);
+                }
+
+                // Post Process
+                col.rgb = mix(col.rgb, vec3(0,0,0.1), clamp(u_progress*0.1, 0.0, 0.1));
+                fragColor = vec4(col.rgb, 1.0);
+            }
+        `;
+
+        function buildShader(type, src) {
+            const s = gl.createShader(type);
+            gl.shaderSource(s, src);
+            gl.compileShader(s);
+            if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(s));
+            return s;
+        }
+
+        const prog = gl.createProgram();
+        gl.attachShader(prog, buildShader(gl.VERTEX_SHADER, vs));
+        gl.attachShader(prog, buildShader(gl.FRAGMENT_SHADER, fs));
+        gl.linkProgram(prog);
+
+        const posBuf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]), gl.STATIC_DRAW);
+        const posLoc = gl.getAttribLocation(prog, "a_pos");
+        gl.enableVertexAttribArray(posLoc);
+        gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+
+        const locs = {
+            res: gl.getUniformLocation(prog, "u_res"), 
+            time: gl.getUniformLocation(prog, "u_time"),
+            cam: gl.getUniformLocation(prog, "u_camPos"),
+            warp: gl.getUniformLocation(prog, "u_warp"),
+            progress: gl.getUniformLocation(prog, "u_progress"),
+            v: gl.getUniformLocation(prog, "u_v"),
+            stability: gl.getUniformLocation(prog, "u_stability")
+        };
+
+        let state = "IDLE"; // IDLE, SPOOLING, TRANSIT, DECEL, ARRIVED
+        let progress = 0;
+        let warpIntensity = 0;
+        let launchTime = 0;
+
+        launchBtn.onclick = () => {
+            if(state === "IDLE" || state === "ARRIVED") {
+                state = "SPOOLING";
+                progress = 0;
+                launchTime = Date.now();
+                launchBtn.innerText = "ABORT VOYAGE";
+            } else {
+                state = "IDLE";
+                warpIntensity = 0;
+                progress = 0;
+                launchBtn.innerText = "INITIATE VOYAGE";
+            }
+        };
+
+        function render(now) {
+            gl.useProgram(prog);
+            const time = now * 0.001;
+            
+            // Logic updates
+            const v = parseFloat(vSlider.value);
+            const stab = parseFloat(mSlider.value) / 100;
+
+            if (state === "SPOOLING") {
+                warpIntensity += 0.005;
+                valStatus.innerText = "SPOOLING MATTER-SOLITON";
+                valStatus.style.color = "#ffcc00";
+                if(warpIntensity >= 1.0) state = "TRANSIT";
+            } else if (state === "TRANSIT") {
+                progress += 0.0005 * v;
+                warpIntensity = 1.0;
+                valStatus.innerText = "SUPERLUMINAL TRANSIT";
+                valStatus.style.color = "#00ccff";
+                if(progress > 0.85) state = "DECEL";
+            } else if (state === "DECEL") {
+                progress += 0.0002 * v;
+                warpIntensity -= 0.005;
+                valStatus.innerText = "DECELERATING / VENTING PARTICLES";
+                valStatus.style.color = "#00ff88";
+                if(progress >= 1.0) state = "ARRIVED";
+            } else if (state === "ARRIVED") {
+                warpIntensity = 0;
+                progress = 1.0;
+                valStatus.innerText = "ARRIVED AT ANDROMEDA";
+                valStatus.style.color = "#ffffff";
+                launchBtn.innerText = "RESET MISSION";
+            }
+
+            // HUD Updates
+            const totalDist = 2537000; // Light years to Andromeda
+            const currentDist = (progress * totalDist).toLocaleString(undefined, {maximumFractionDigits: 0});
+            distHud.innerHTML = `DESTINATION: ANDROMEDA<br>PROGRESS: ${currentDist} Ly`;
+            phaseHud.innerHTML = `${state}<br><span style="font-size:0.8rem; color:#888;">MATTER-PHYSICAL STABILITY: ${(stab*100).toFixed(1)}%</span>`;
+            valTime.innerText = `${((Date.now() - launchTime)/1000).toFixed(2)}s PROPER`;
+            
+            // Matter Stress logic
+            const stress = (1.0 - stab) * warpIntensity * 100;
+            valStress.innerText = stress.toFixed(2) + " kPa";
+            valStress.style.color = stress > 10 ? "#ff3300" : "#aaa";
+
+            // Camera calc (Orbiting the ship)
+            let travelDist = 1200.0;
+            let shipZ = mix(-50.0, travelDist, progress);
+            const cx = 15.0 * Math.sin(time * 0.3);
+            const cy = 10.0 * Math.cos(time * 0.2);
+            const cz = shipZ - 30.0;
+            
+            gl.uniform3f(locs.cam, cx, cy, cz);
+            gl.uniform2f(locs.res, canvas.width, canvas.height);
+            gl.uniform1f(locs.time, time);
+            gl.uniform1f(locs.warp, warpIntensity);
+            gl.uniform1f(locs.progress, progress);
+            gl.uniform1f(locs.v, v);
+            gl.uniform1f(locs.stability, stab);
+
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+            requestAnimationFrame(render);
+        }
+
+        function mix(a, b, t) { return a * (1 - t) + b * t; }
+
+        requestAnimationFrame(render);
+    </script>
+</body>
+</html>
