@@ -1,0 +1,1849 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Neural Voxels Infinite • Streaming Terrain Learner</title>
+  <style>
+    :root{
+      --bg:#05070c;
+      --panel:rgba(10,14,22,.72);
+      --panel-2:rgba(14,19,30,.88);
+      --border:rgba(255,255,255,.12);
+      --text:#f4f8ff;
+      --muted:rgba(244,248,255,.72);
+      --accent:#73ffbf;
+      --accent-2:#8ab8ff;
+      --danger:#ff9d9d;
+      --shadow:0 18px 60px rgba(0,0,0,.42);
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:Inter,"Segoe UI",system-ui,sans-serif}
+    body.inventory-open #crosshair, body.inventory-open #status-bar, body.hud-hidden #hud-left,
+    body.hud-hidden #learner-panel, body.hud-hidden #hotbar, body.hud-hidden #status-bar, body.hud-hidden #crosshair, body.hud-hidden #toast {
+      opacity:0; pointer-events:none;
+    }
+    #game{display:block;width:100vw;height:100vh}
+    .panel{
+      position:fixed; z-index:10; background:var(--panel); border:1px solid var(--border);
+      box-shadow:var(--shadow); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+      border-radius:16px;
+    }
+    #loading,#start-screen{
+      position:fixed; inset:0; z-index:50; display:flex; align-items:center; justify-content:center;
+      background:radial-gradient(circle at top, rgba(115,255,191,.12), transparent 34%), linear-gradient(135deg,#09111d,#070b13 58%,#04060b);
+    }
+    #loading-card,#start-card{width:min(760px,92vw); padding:28px 28px 24px}
+    #loading h1,#start-screen h1{font-size:clamp(28px,4.8vw,54px); margin-bottom:8px; letter-spacing:.02em; text-align:center}
+    .sub{font-size:15px; color:var(--muted); text-align:center; line-height:1.6}
+    #progress{width:100%;height:16px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.09);border-radius:999px;overflow:hidden;margin-top:22px}
+    #progress-fill{width:0;height:100%;background:linear-gradient(90deg,var(--accent),#a2ffd9);box-shadow:0 0 24px rgba(115,255,191,.38);transition:width .08s ease}
+    #loading-text,#loss-text{margin-top:14px;text-align:center}
+    #loading-text{font-size:14px;color:var(--muted)}
+    #loss-text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#ffb6b6}
+    #train-bars{height:102px;display:flex;align-items:flex-end;justify-content:center;gap:4px;margin-top:18px}
+    .bar{width:7px;height:8px;border-radius:999px 999px 3px 3px;background:var(--accent);transition:height .08s ease}
+    .eyebrow{
+      display:inline-flex;margin:0 auto 12px;padding:6px 12px;border-radius:999px;border:1px solid rgba(115,255,191,.24);
+      background:rgba(115,255,191,.08);color:#cffff1;font-size:12px;letter-spacing:.14em;text-transform:uppercase
+    }
+    #summary{margin-top:18px;padding:14px 16px;border-radius:14px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);line-height:1.6;color:rgba(255,255,255,.86)}
+    #start-actions{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin-top:24px}
+    button{
+      border:none;border-radius:14px;padding:14px 22px;font-size:16px;font-weight:700;cursor:pointer;transition:transform .14s ease, background .14s ease;
+    }
+    button:hover{transform:translateY(-1px)}
+    #enter-btn{background:linear-gradient(135deg,var(--accent),#46e2aa);color:#04140c;box-shadow:0 10px 28px rgba(115,255,191,.24)}
+    #newworld-btn{background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.16)}
+    #controls{margin-top:22px;display:grid;grid-template-columns:repeat(2,minmax(240px,1fr));gap:10px 18px;font-size:13px;color:var(--muted)}
+    #controls b{color:#e2fff3}
+    #hud-left{top:16px;left:16px;padding:14px 15px;width:260px}
+    #hud-left .title,#learner-panel .title{font-size:11px;text-transform:uppercase;letter-spacing:.18em;color:rgba(255,255,255,.58);margin-bottom:10px}
+    .stat-grid{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:13px;line-height:1.45}
+    .stat-grid .k{color:rgba(255,255,255,.66)}
+    .stat-grid .v{text-align:right;font-weight:600;color:#fff}
+    .small-note{margin-top:12px;font-size:11.5px;line-height:1.5;color:rgba(255,255,255,.62)}
+    #learner-panel{top:16px;right:16px;padding:14px 15px;width:320px}
+    #learner-panel .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;line-height:1.45;color:rgba(255,255,255,.82);background:rgba(255,255,255,.04);padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.07)}
+    #status-bar{
+      left:50%;transform:translateX(-50%);bottom:92px;padding:12px 16px;display:grid;
+      grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;min-width:620px;max-width:min(94vw,980px)
+    }
+    #status-bar .tag{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.16em;color:rgba(255,255,255,.55);margin-bottom:4px}
+    #status-bar .txt{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    #hotbar{
+      position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:12;display:flex;gap:6px;padding:10px;border-radius:16px;
+      background:rgba(5,8,14,.72);border:1px solid rgba(255,255,255,.12);box-shadow:0 14px 40px rgba(0,0,0,.35)
+    }
+    .hslot{
+      width:54px;height:54px;border-radius:12px;border:2px solid rgba(255,255,255,.16);background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(0,0,0,.12));
+      display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer;transition:transform .12s ease,border-color .12s ease,box-shadow .12s ease
+    }
+    .hslot:hover{transform:translateY(-2px)}
+    .hslot.selected{border-color:rgba(255,255,255,.95);box-shadow:0 0 0 1px rgba(255,255,255,.18),0 0 18px rgba(255,255,255,.22)}
+    .preview{width:36px;height:36px;border-radius:8px;position:relative;box-shadow:inset 0 1px 0 rgba(255,255,255,.28),inset 0 -6px 16px rgba(0,0,0,.14)}
+    .preview::after{content:"";position:absolute;inset:0;border-radius:8px;background:linear-gradient(135deg,rgba(255,255,255,.18),transparent 48%,rgba(0,0,0,.12))}
+    .hint,.count{position:absolute;font-size:10px;font-weight:700;text-shadow:0 1px 2px rgba(0,0,0,.9)}
+    .hint{top:4px;left:6px;color:rgba(255,255,255,.76)}
+    .count{right:6px;bottom:4px;color:#fff}
+    #crosshair{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:22px;height:22px;pointer-events:none;z-index:20}
+    #crosshair::before,#crosshair::after{content:"";position:absolute;background:#fff;mix-blend-mode:difference;border-radius:999px}
+    #crosshair::before{width:22px;height:2px;top:10px;left:0}
+    #crosshair::after{width:2px;height:22px;top:0;left:10px}
+    #inventory-overlay{
+      position:fixed;inset:0;z-index:40;display:none;align-items:center;justify-content:center;background:rgba(5,7,12,.72);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)
+    }
+    #inventory-overlay.open{display:flex}
+    #inventory{
+      width:min(760px,92vw);padding:18px;border-radius:18px;background:linear-gradient(180deg,rgba(33,39,54,.98),rgba(18,24,36,.98));
+      border:1px solid rgba(255,255,255,.12);box-shadow:0 28px 70px rgba(0,0,0,.5)
+    }
+    #inventory h2{text-align:center;font-size:22px;margin-bottom:14px}
+    .section h3{font-size:13px;text-transform:uppercase;letter-spacing:.16em;color:rgba(255,255,255,.62);margin-bottom:8px}
+    .grid{display:grid;grid-template-columns:repeat(9,1fr);gap:6px}
+    .slot{
+      height:58px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;position:relative;transition:transform .12s ease,border-color .12s ease
+    }
+    .slot.empty{opacity:.3}
+    .slot:not(.empty){cursor:pointer}
+    .slot:not(.empty):hover{transform:translateY(-2px);border-color:rgba(255,255,255,.3)}
+    .slot.selected{border-color:rgba(255,255,255,.95);box-shadow:0 0 0 1px rgba(255,255,255,.18),0 0 16px rgba(255,255,255,.16)}
+    .icon{width:34px;height:34px;border-radius:8px;position:relative;box-shadow:inset 0 1px 0 rgba(255,255,255,.25), inset 0 -5px 14px rgba(0,0,0,.12)}
+    .icon::after{content:"";position:absolute;inset:0;border-radius:8px;background:linear-gradient(135deg,rgba(255,255,255,.2),transparent 52%,rgba(0,0,0,.16))}
+    .name,.icount{position:absolute;text-shadow:0 1px 2px rgba(0,0,0,.9)}
+    .icount{right:6px;bottom:4px;font-size:11px;font-weight:700}
+    .name{left:50%;bottom:-24px;transform:translateX(-50%);font-size:11px;white-space:nowrap;opacity:0;pointer-events:none;padding:3px 8px;border-radius:999px;background:rgba(8,11,18,.92);border:1px solid rgba(255,255,255,.16)}
+    .slot:hover .name{opacity:1}
+    .divider{height:1px;margin:15px 0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.24),transparent)}
+    #inv-hint{margin-top:16px;text-align:center;font-size:12px;color:rgba(255,255,255,.62)}
+    #toast{
+      position:fixed;top:18px;left:50%;transform:translateX(-50%) translateY(-18px);z-index:100;padding:10px 14px;border-radius:999px;
+      background:rgba(8,14,22,.9);border:1px solid rgba(255,255,255,.14);color:#fff;font-size:13px;opacity:0;pointer-events:none;transition:opacity .18s ease, transform .18s ease
+    }
+    #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+    #tuner{
+      margin-top:12px; display:grid; gap:10px;
+    }
+    .ctrl{display:grid;gap:6px}
+    .ctrl-row{display:flex;justify-content:space-between;gap:12px;font-size:12px;color:var(--muted)}
+    .val{color:#d9fff0;font-weight:700}
+    input[type="range"]{width:100%;accent-color:var(--accent)}
+    #photo-badge{
+      position:fixed;right:16px;bottom:16px;z-index:10;padding:10px 12px;max-width:min(360px,92vw);
+      background:rgba(12,15,24,.76);border:1px solid rgba(255,255,255,.10);border-radius:12px;backdrop-filter:blur(10px);font-size:13px;line-height:1.45;color:var(--muted)
+    }
+    @media (max-width:980px){
+      #controls{grid-template-columns:1fr}
+      #status-bar{min-width:0;width:calc(100vw - 24px);grid-template-columns:repeat(2,minmax(0,1fr));bottom:102px}
+      #hud-left{width:min(92vw,264px)}
+      #learner-panel{width:min(92vw,330px);top:auto;bottom:16px;right:16px}
+      #photo-badge{bottom:132px}
+    }
+  </style>
+</head>
+<body>
+  <div id="loading">
+    <div id="loading-card" class="panel">
+      <h1>🧠 Streaming Terrain Learner</h1>
+      <div class="sub">
+        Infinite chunk streaming, background online learning from multiple procedural teachers,
+        adaptive FPS governance, and ray-baked voxel lighting. Browser sandboxes love being asked to impersonate engines.
+      </div>
+      <div id="progress"><div id="progress-fill"></div></div>
+      <div id="loading-text">Initialising terrain core…</div>
+      <div id="loss-text">Loss: --</div>
+      <div id="train-bars"></div>
+    </div>
+  </div>
+
+  <div id="start-screen" style="display:none">
+    <div id="start-card" class="panel">
+      <div class="eyebrow">Single-file infinite voxel sandbox</div>
+      <h1>🧠 Neural Voxels Infinite</h1>
+      <div class="sub">
+        Streams new chunks around you, learns terrain style in the background, saves modified chunks locally,
+        and uses adaptive quality to stop the browser from melting.
+      </div>
+      <div id="summary">Preparing summary…</div>
+      <div id="start-actions">
+        <button id="enter-btn">Enter World</button>
+        <button id="newworld-btn">Fresh Seed</button>
+      </div>
+      <div id="controls">
+        <div><b>WASD</b> move, <b>Space</b> jump / swim, <b>Shift</b> sprint</div>
+        <div><b>Mouse</b> look, <b>LMB</b> break, <b>RMB</b> place</div>
+        <div><b>E</b> inventory, <b>1-9</b> hotbar, <b>Wheel</b> cycle</div>
+        <div><b>R</b> respawn, <b>F</b> hide HUD, <b>Esc</b> unlock mouse</div>
+        <div><b>World</b> infinite streaming around the player</div>
+        <div><b>Saves</b> settings, player state, modified chunks, learner state</div>
+      </div>
+    </div>
+  </div>
+
+  <canvas id="game"></canvas>
+  <div id="crosshair"></div>
+
+  <div id="inventory-overlay">
+    <div id="inventory">
+      <h2>Inventory</h2>
+      <div class="section">
+        <h3>Building Blocks</h3>
+        <div class="grid" id="inv-blocks"></div>
+      </div>
+      <div class="divider"></div>
+      <div class="section">
+        <h3>Hotbar</h3>
+        <div class="grid" id="inv-hotbar"></div>
+      </div>
+      <div id="inv-hint">Click a block to equip it • Modified chunks and learner state save locally after the page has been opened here once</div>
+    </div>
+  </div>
+
+  <div id="hud-left" class="panel">
+    <div class="title">World telemetry</div>
+    <div class="stat-grid">
+      <div class="k">FPS</div><div class="v" id="fps">0</div>
+      <div class="k">Position</div><div class="v" id="pos">0.0, 0.0, 0.0</div>
+      <div class="k">Biome</div><div class="v" id="biome">--</div>
+      <div class="k">Loaded chunks</div><div class="v" id="loaded-chunks">0</div>
+      <div class="k">Visible blocks</div><div class="v" id="visible-blocks">0</div>
+      <div class="k">Seed</div><div class="v" id="seed">--</div>
+      <div class="k">Save</div><div class="v" id="save-status">No save</div>
+    </div>
+    <div class="small-note">
+      Infinite here means chunk streaming, not magical infinite memory. Only modified chunks and state are persisted locally, which is how reality works when browsers are involved.
+    </div>
+    <div id="tuner">
+      <div class="ctrl">
+        <div class="ctrl-row"><span>Adaptive quality</span><span class="val" id="quality-mode">On</span></div>
+        <input id="quality-toggle" type="range" min="0" max="1" step="1" value="1">
+      </div>
+      <div class="ctrl">
+        <div class="ctrl-row"><span>Base view radius</span><span class="val" id="view-radius-val">4</span></div>
+        <input id="view-radius" type="range" min="2" max="7" step="1" value="4">
+      </div>
+      <div class="ctrl">
+        <div class="ctrl-row"><span>Base render scale</span><span class="val" id="render-scale-val">100%</span></div>
+        <input id="render-scale" type="range" min="50" max="100" step="5" value="100">
+      </div>
+    </div>
+  </div>
+
+  <div id="learner-panel" class="panel">
+    <div class="title">Learner + governor</div>
+    <div class="mono">
+      Terrain core: multi-frequency token mixer<br>
+      Teacher set: simplex + ridged + terraces + valleys<br>
+      Online mode: distil nearby frontier samples<br>
+      FPS agent: tiny bandit adjusts scale / radius / build budget
+    </div>
+    <div class="stat-grid" style="margin-top:12px">
+      <div class="k">Train steps</div><div class="v" id="train-steps">0</div>
+      <div class="k">Recent loss</div><div class="v" id="train-loss">--</div>
+      <div class="k">Model blend</div><div class="v" id="model-blend">--</div>
+      <div class="k">Gov action</div><div class="v" id="gov-action">--</div>
+      <div class="k">Ray lighting</div><div class="v" id="ray-light">AO + sun bake</div>
+      <div class="k">Chunk queue</div><div class="v" id="queue-size">0</div>
+    </div>
+    <div class="small-note">
+      The background learner only changes newly generated terrain. It does not rewrite chunks you already walked through, because surprise geological edits are funny exactly once.
+    </div>
+  </div>
+
+  <div id="status-bar" class="panel">
+    <div><span class="tag">Selected</span><div class="txt" id="selected-name">Grass</div></div>
+    <div><span class="tag">Target</span><div class="txt" id="target-name">None</div></div>
+    <div><span class="tag">Chunk</span><div class="txt" id="chunk-pos">0, 0</div></div>
+    <div><span class="tag">Mode</span><div class="txt" id="move-mode">Grounded</div></div>
+    <div><span class="tag">Quality</span><div class="txt" id="quality-readout">1.00× / r4</div></div>
+    <div><span class="tag">Hint</span><div class="txt" id="hint-text">Break, place, build</div></div>
+  </div>
+
+  <div id="hotbar"></div>
+  <div id="photo-badge">Ray lighting here means baked local sun visibility and ambient occlusion on voxel faces, not full path tracing. I refuse to lie for aesthetic reasons.</div>
+  <div id="toast"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+  (() => {
+    'use strict';
+
+    const SAVE_KEY = 'neural-voxels-infinite-v1';
+    const CHUNK_SIZE = 16;
+    const WORLD_HEIGHT = 40;
+    const SEA_LEVEL = 8;
+    const TARGET_FPS = 55;
+
+    const BLOCKS = {
+      AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, WOOD: 4, LEAVES: 5, SAND: 6, WATER: 7,
+      BRICK: 8, GLASS: 9, SNOW: 10, COBBLE: 11, PLANKS: 12, IRON: 13, GOLD: 14, DIAMOND: 15
+    };
+
+    const BLOCK_COLORS = {
+      [BLOCKS.GRASS]: 0x7cba4d,
+      [BLOCKS.DIRT]: 0x8b7355,
+      [BLOCKS.STONE]: 0x808080,
+      [BLOCKS.WOOD]: 0x8a5b34,
+      [BLOCKS.LEAVES]: 0x2d5a27,
+      [BLOCKS.SAND]: 0xe6d69c,
+      [BLOCKS.WATER]: 0x3399ff,
+      [BLOCKS.BRICK]: 0xb84c3c,
+      [BLOCKS.GLASS]: 0xb7dff0,
+      [BLOCKS.SNOW]: 0xf5f8fc,
+      [BLOCKS.COBBLE]: 0x6a6a6a,
+      [BLOCKS.PLANKS]: 0xbc9862,
+      [BLOCKS.IRON]: 0xd4d4d4,
+      [BLOCKS.GOLD]: 0xffd700,
+      [BLOCKS.DIAMOND]: 0x4ee2ec
+    };
+
+    const BLOCK_NAMES = {
+      [BLOCKS.GRASS]: 'Grass',
+      [BLOCKS.DIRT]: 'Dirt',
+      [BLOCKS.STONE]: 'Stone',
+      [BLOCKS.WOOD]: 'Oak Log',
+      [BLOCKS.LEAVES]: 'Leaves',
+      [BLOCKS.SAND]: 'Sand',
+      [BLOCKS.WATER]: 'Water',
+      [BLOCKS.BRICK]: 'Brick',
+      [BLOCKS.GLASS]: 'Glass',
+      [BLOCKS.SNOW]: 'Snow',
+      [BLOCKS.COBBLE]: 'Cobblestone',
+      [BLOCKS.PLANKS]: 'Planks',
+      [BLOCKS.IRON]: 'Iron Block',
+      [BLOCKS.GOLD]: 'Gold Block',
+      [BLOCKS.DIAMOND]: 'Diamond Block'
+    };
+
+    const BIOMES = {
+      0: { name: 'Plains', surface: BLOCKS.GRASS, treeChance: 0.014 },
+      1: { name: 'Desert', surface: BLOCKS.SAND, treeChance: 0.002 },
+      2: { name: 'Forest', surface: BLOCKS.GRASS, treeChance: 0.048 },
+      3: { name: 'Tundra', surface: BLOCKS.SNOW, treeChance: 0.007 }
+    };
+
+    const ALL_BLOCKS = [BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE, BLOCKS.WOOD, BLOCKS.LEAVES, BLOCKS.SAND, BLOCKS.WATER, BLOCKS.BRICK, BLOCKS.GLASS, BLOCKS.SNOW, BLOCKS.COBBLE, BLOCKS.PLANKS, BLOCKS.IRON, BLOCKS.GOLD, BLOCKS.DIAMOND];
+    const HOTBAR_BLOCKS = [BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE, BLOCKS.WOOD, BLOCKS.LEAVES, BLOCKS.SAND, BLOCKS.SNOW, BLOCKS.BRICK, BLOCKS.GLASS];
+    const PASSABLE = new Set([BLOCKS.AIR, BLOCKS.WATER]);
+    const TRANSPARENT = new Set([BLOCKS.WATER, BLOCKS.GLASS, BLOCKS.LEAVES]);
+    const BAKE_SUN = new THREE.Vector3(0.65, 1, 0.38).normalize();
+
+    const ui = {
+      loading: document.getElementById('loading'),
+      start: document.getElementById('start-screen'),
+      enterBtn: document.getElementById('enter-btn'),
+      newworldBtn: document.getElementById('newworld-btn'),
+      progressFill: document.getElementById('progress-fill'),
+      loadingText: document.getElementById('loading-text'),
+      lossText: document.getElementById('loss-text'),
+      trainBars: document.getElementById('train-bars'),
+      summary: document.getElementById('summary'),
+      invOverlay: document.getElementById('inventory-overlay'),
+      invBlocks: document.getElementById('inv-blocks'),
+      invHotbar: document.getElementById('inv-hotbar'),
+      hotbar: document.getElementById('hotbar'),
+      fps: document.getElementById('fps'),
+      pos: document.getElementById('pos'),
+      biome: document.getElementById('biome'),
+      loadedChunks: document.getElementById('loaded-chunks'),
+      visibleBlocks: document.getElementById('visible-blocks'),
+      seed: document.getElementById('seed'),
+      saveStatus: document.getElementById('save-status'),
+      trainSteps: document.getElementById('train-steps'),
+      trainLoss: document.getElementById('train-loss'),
+      modelBlend: document.getElementById('model-blend'),
+      govAction: document.getElementById('gov-action'),
+      queueSize: document.getElementById('queue-size'),
+      selectedName: document.getElementById('selected-name'),
+      targetName: document.getElementById('target-name'),
+      chunkPos: document.getElementById('chunk-pos'),
+      moveMode: document.getElementById('move-mode'),
+      qualityReadout: document.getElementById('quality-readout'),
+      hintText: document.getElementById('hint-text'),
+      toast: document.getElementById('toast'),
+      qualityToggle: document.getElementById('quality-toggle'),
+      viewRadius: document.getElementById('view-radius'),
+      renderScale: document.getElementById('render-scale'),
+      qualityMode: document.getElementById('quality-mode'),
+      viewRadiusVal: document.getElementById('view-radius-val'),
+      renderScaleVal: document.getElementById('render-scale-val')
+    };
+
+    class SimplexNoise {
+      constructor(seed = Math.random()) {
+        this.p = new Uint8Array(256);
+        this.perm = new Uint8Array(512);
+        const rng = this.mulberry32(seed * 1000000);
+        for (let i = 0; i < 256; i++) this.p[i] = i;
+        for (let i = 255; i > 0; i--) {
+          const j = Math.floor(rng() * (i + 1));
+          [this.p[i], this.p[j]] = [this.p[j], this.p[i]];
+        }
+        for (let i = 0; i < 512; i++) this.perm[i] = this.p[i & 255];
+      }
+      mulberry32(seed) {
+        return () => {
+          let t = seed += 0x6D2B79F5;
+          t = Math.imul(t ^ t >>> 15, t | 1);
+          t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+          return ((t ^ t >>> 14) >>> 0) / 4294967296;
+        };
+      }
+      noise2D(x, y) {
+        const F2 = 0.5 * (Math.sqrt(3) - 1);
+        const G2 = (3 - Math.sqrt(3)) / 6;
+        const s = (x + y) * F2;
+        const i = Math.floor(x + s), j = Math.floor(y + s);
+        const t = (i + j) * G2;
+        const X0 = i - t, Y0 = j - t;
+        const x0 = x - X0, y0 = y - Y0;
+        const i1 = x0 > y0 ? 1 : 0, j1 = x0 > y0 ? 0 : 1;
+        const x1 = x0 - i1 + G2, y1 = y0 - j1 + G2;
+        const x2 = x0 - 1 + 2 * G2, y2 = y0 - 1 + 2 * G2;
+        const ii = i & 255, jj = j & 255;
+        const grad = (hash, a, b) => {
+          const h = hash & 7;
+          const u = h < 4 ? a : b, v = h < 4 ? b : a;
+          return ((h & 1) ? -u : u) + ((h & 2) ? -2 * v : 2 * v);
+        };
+        let n0 = 0, n1 = 0, n2 = 0;
+        let t0 = 0.5 - x0*x0 - y0*y0;
+        if (t0 >= 0) { t0 *= t0; n0 = t0 * t0 * grad(this.perm[ii + this.perm[jj]], x0, y0); }
+        let t1 = 0.5 - x1*x1 - y1*y1;
+        if (t1 >= 0) { t1 *= t1; n1 = t1 * t1 * grad(this.perm[ii + i1 + this.perm[jj + j1]], x1, y1); }
+        let t2 = 0.5 - x2*x2 - y2*y2;
+        if (t2 >= 0) { t2 *= t2; n2 = t2 * t2 * grad(this.perm[ii + 1 + this.perm[jj + 1]], x2, y2); }
+        return 70 * (n0 + n1 + n2);
+      }
+    }
+
+    function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+    function lerp(a, b, t) { return a + (b - a) * t; }
+    function chunkKey(cx, cz) { return `${cx},${cz}`; }
+    function localKey(x, y, z) { return `${x},${y},${z}`; }
+    function fract(v) { return v - Math.floor(v); }
+    function hash2i(x, z, seed = 1337) {
+      let n = x * 374761393 + z * 668265263 + seed * 1442695040888963407;
+      n = (n ^ (n >> 13)) * 1274126177;
+      return ((n ^ (n >> 16)) >>> 0) / 4294967295;
+    }
+    function hexColorMul(hex, mul) {
+      const c = new THREE.Color(hex);
+      c.multiplyScalar(mul);
+      return [c.r, c.g, c.b];
+    }
+
+    class TeacherTerrain {
+      constructor(seed) {
+        this.seed = seed;
+        this.base = new SimplexNoise(seed + 1);
+        this.ridge = new SimplexNoise(seed + 101);
+        this.warp = new SimplexNoise(seed + 1001);
+        this.moist = new SimplexNoise(seed + 77);
+        this.temp = new SimplexNoise(seed + 88);
+        this.detail = new SimplexNoise(seed + 99);
+        this.caves = new SimplexNoise(seed + 123);
+      }
+      sample(x, z) {
+        const wx = x, wz = z;
+        const warpX = this.warp.noise2D(wx * 0.007, wz * 0.007) * 14;
+        const warpZ = this.warp.noise2D(wx * 0.007 + 43, wz * 0.007 - 29) * 14;
+        const nx = wx + warpX, nz = wz + warpZ;
+
+        const base = this.base.noise2D(nx * 0.010, nz * 0.010);
+        const ridge = 1 - Math.abs(this.ridge.noise2D(nx * 0.018, nz * 0.018));
+        const valley = this.base.noise2D(nx * 0.004 - 190, nz * 0.004 + 70);
+        const terraceNoise = this.detail.noise2D(nx * 0.030 + 7, nz * 0.030 - 11);
+        const climate = this.temp.noise2D(wx * 0.0032, z * 0.0032);
+        const moist = this.moist.noise2D(wx * 0.0038 + 50, z * 0.0038 - 50);
+
+        let h = 11 + base * 8 + ridge * 5 - Math.max(0, -valley) * 5;
+        const terraces = Math.round((h + terraceNoise * 1.2) * 0.5) * 2;
+        const terraceMix = clamp((ridge - 0.35) * 1.1, 0, 1);
+        h = lerp(h, terraces, terraceMix * 0.52);
+        h = clamp(h, 4, WORLD_HEIGHT - 5);
+
+        let biome = 0;
+        if (climate > 0.28 && moist < -0.02) biome = 1;
+        else if (moist > 0.22) biome = 2;
+        else if (climate < -0.16) biome = 3;
+
+        return { height: h, biome, climate, moist, ridge };
+      }
+      caveValue(x, y, z) {
+        const a = this.caves.noise2D(x * 0.12 + y * 0.07, z * 0.12 - y * 0.05);
+        const b = this.caves.noise2D(x * 0.19 - y * 0.04 + 41, z * 0.17 + y * 0.06 - 37);
+        return (a + b) * 0.5;
+      }
+    }
+
+    class OnlineTerrainNet {
+      constructor(seed) {
+        this.seed = seed;
+        this.input = 20;
+        this.hidden = 24;
+        this.outputs = 5; // height + 4 biome logits
+        this.lr = 0.0008;
+        this.rng = this.mulberry32(seed);
+        this.W1 = this.rand(this.input, this.hidden, Math.sqrt(2 / this.input));
+        this.b1 = new Float32Array(this.hidden);
+        this.W2 = this.rand(this.hidden, this.outputs, Math.sqrt(2 / this.hidden));
+        this.b2 = new Float32Array(this.outputs);
+        this.trainSteps = 0;
+        this.recentLoss = 0;
+      }
+      mulberry32(seed) {
+        return () => {
+          let t = seed += 0x6D2B79F5;
+          t = Math.imul(t ^ t >>> 15, t | 1);
+          t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+          return ((t ^ t >>> 14) >>> 0) / 4294967296;
+        };
+      }
+      rand(r, c, scale) {
+        const m = [];
+        for (let i = 0; i < r; i++) {
+          m[i] = new Float32Array(c);
+          for (let j = 0; j < c; j++) m[i][j] = (this.rng() * 2 - 1) * scale;
+        }
+        return m;
+      }
+      features(x, z) {
+        const f = new Float32Array(this.input);
+        const freqs = [0.004, 0.009, 0.018, 0.037];
+        let idx = 0;
+        for (const k of freqs) {
+          f[idx++] = Math.sin(x * k);
+          f[idx++] = Math.cos(x * k);
+          f[idx++] = Math.sin(z * k);
+          f[idx++] = Math.cos(z * k);
+        }
+        f[idx++] = Math.sin((x + z) * 0.0031);
+        f[idx++] = Math.cos((x - z) * 0.0037);
+        f[idx++] = Math.sin((x * 0.011 + z * 0.007));
+        f[idx++] = Math.cos((x * 0.006 - z * 0.012));
+        return f;
+      }
+      forward(x, z) {
+        const inp = this.features(x, z);
+        const h = new Float32Array(this.hidden);
+        for (let j = 0; j < this.hidden; j++) {
+          let s = this.b1[j];
+          for (let i = 0; i < this.input; i++) s += inp[i] * this.W1[i][j];
+          h[j] = s > 0 ? s : s * 0.08;
+        }
+        const out = new Float32Array(this.outputs);
+        for (let k = 0; k < this.outputs; k++) {
+          let s = this.b2[k];
+          for (let j = 0; j < this.hidden; j++) s += h[j] * this.W2[j][k];
+          out[k] = s;
+        }
+        return { inp, h, out };
+      }
+      softmax(logits) {
+        const max = Math.max(...logits);
+        const exps = logits.map(v => Math.exp(v - max));
+        const sum = exps.reduce((a, b) => a + b, 0) + 1e-8;
+        return exps.map(v => v / sum);
+      }
+      predict(x, z) {
+        const { out } = this.forward(x, z);
+        const height = 12 + Math.tanh(out[0]) * 9;
+        const probs = this.softmax(Array.from(out.slice(1)));
+        let biome = 0;
+        for (let i = 1; i < 4; i++) if (probs[i] > probs[biome]) biome = i;
+        return { height, biome, probs };
+      }
+      generationBlend() {
+        const lossFactor = clamp(1 - this.recentLoss * 0.05, 0.1, 1);
+        return clamp(0.22 + Math.min(this.trainSteps / 6000, 0.58) * lossFactor, 0.22, 0.8);
+      }
+      trainBatch(samples, teacher) {
+        let totalLoss = 0;
+        for (const [x, z] of samples) {
+          const tgt = teacher.sample(x, z);
+          const { inp, h, out } = this.forward(x, z);
+          const predH = 12 + Math.tanh(out[0]) * 9;
+          const probs = this.softmax(Array.from(out.slice(1)));
+
+          const dh = predH - tgt.height;
+          const lossH = dh * dh;
+          const tBiome = tgt.biome;
+          const lossB = -Math.log(probs[tBiome] + 1e-7);
+          totalLoss += lossH + lossB * 0.55;
+
+          const dOut = new Float32Array(this.outputs);
+          const tanhVal = Math.tanh(out[0]);
+          dOut[0] = 2 * dh * 9 * (1 - tanhVal * tanhVal) * 0.06;
+          for (let i = 0; i < 4; i++) dOut[i + 1] = (probs[i] - (i === tBiome ? 1 : 0)) * 0.08;
+
+          const dHidden = new Float32Array(this.hidden);
+          for (let j = 0; j < this.hidden; j++) {
+            for (let k = 0; k < this.outputs; k++) dHidden[j] += dOut[k] * this.W2[j][k];
+            dHidden[j] *= h[j] > 0 ? 1 : 0.08;
+          }
+
+          for (let j = 0; j < this.hidden; j++) {
+            for (let k = 0; k < this.outputs; k++) this.W2[j][k] -= this.lr * clamp(dOut[k] * h[j], -0.2, 0.2);
+          }
+          for (let k = 0; k < this.outputs; k++) this.b2[k] -= this.lr * clamp(dOut[k], -0.2, 0.2);
+
+          for (let i = 0; i < this.input; i++) {
+            for (let j = 0; j < this.hidden; j++) {
+              this.W1[i][j] -= this.lr * clamp(dHidden[j] * inp[i], -0.2, 0.2);
+            }
+          }
+          for (let j = 0; j < this.hidden; j++) this.b1[j] -= this.lr * clamp(dHidden[j], -0.2, 0.2);
+        }
+        this.trainSteps += samples.length;
+        const batchLoss = totalLoss / samples.length;
+        this.recentLoss = this.recentLoss ? this.recentLoss * 0.92 + batchLoss * 0.08 : batchLoss;
+        return batchLoss;
+      }
+      serialize() {
+        return {
+          W1: this.W1.map(r => Array.from(r)),
+          b1: Array.from(this.b1),
+          W2: this.W2.map(r => Array.from(r)),
+          b2: Array.from(this.b2),
+          trainSteps: this.trainSteps,
+          recentLoss: this.recentLoss
+        };
+      }
+      load(data) {
+        if (!data) return;
+        if (data.W1 && data.W2 && data.b1 && data.b2) {
+          for (let i = 0; i < this.input; i++) if (data.W1[i]) this.W1[i].set(data.W1[i]);
+          this.b1.set(data.b1);
+          for (let i = 0; i < this.hidden; i++) if (data.W2[i]) this.W2[i].set(data.W2[i]);
+          this.b2.set(data.b2);
+          this.trainSteps = data.trainSteps || 0;
+          this.recentLoss = data.recentLoss || 0;
+        }
+      }
+    }
+
+    class PerformanceAgent {
+      constructor() {
+        this.weights = [
+          new Float32Array([0.4, -0.6, -0.5, -0.2, -0.15, -0.1]), // decrease
+          new Float32Array([0.2,  0.1, -0.1,  0.0,  0.1,  0.0]),   // keep
+          new Float32Array([-0.2, 0.55, 0.2, 0.15, 0.2, 0.2])      // increase
+        ];
+        this.lastAction = 1;
+        this.lr = 0.05;
+      }
+      features(fps, target, queueNorm, moving, renderScale, radius) {
+        const err = clamp((fps - target) / target, -1, 1);
+        return new Float32Array([1, err, -queueNorm, moving ? 1 : 0, renderScale, radius / 8]);
+      }
+      choose(features) {
+        let best = 1, bestScore = -Infinity;
+        for (let a = 0; a < 3; a++) {
+          let s = 0;
+          for (let i = 0; i < features.length; i++) s += this.weights[a][i] * features[i];
+          if (s > bestScore) { bestScore = s; best = a; }
+        }
+        this.lastAction = best;
+        return best;
+      }
+      learn(features, reward) {
+        const w = this.weights[this.lastAction];
+        for (let i = 0; i < features.length; i++) w[i] += this.lr * reward * features[i];
+      }
+      serialize() {
+        return {
+          weights: this.weights.map(w => Array.from(w)),
+          lastAction: this.lastAction
+        };
+      }
+      load(data) {
+        if (!data || !data.weights) return;
+        for (let a = 0; a < Math.min(3, data.weights.length); a++) this.weights[a].set(data.weights[a]);
+        this.lastAction = data.lastAction || 1;
+      }
+    }
+
+    const canvas = document.getElementById('game');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(0x87CEEB, 70, 240);
+
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1200);
+    const ambient = new THREE.AmbientLight(0xffffff, 0.56);
+    const hemi = new THREE.HemisphereLight(0x9ed2ff, 0x50402f, 0.45);
+    const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+    sun.position.set(80, 110, 50);
+    scene.add(ambient, hemi, sun);
+
+    const cloudGroup = new THREE.Group();
+    scene.add(cloudGroup);
+
+    const highlight = new THREE.Mesh(new THREE.BoxGeometry(1.02, 1.02, 1.02), new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.5 }));
+    highlight.visible = false;
+    highlight.renderOrder = 10;
+    scene.add(highlight);
+
+    const placePreview = new THREE.Mesh(new THREE.BoxGeometry(1.01, 1.01, 1.01), new THREE.MeshBasicMaterial({ color: 0x7cba4d, transparent: true, opacity: 0.22 }));
+    placePreview.visible = false;
+    placePreview.renderOrder = 9;
+    scene.add(placePreview);
+
+    const state = {
+      seed: 0,
+      teacher: null,
+      learner: null,
+      perfAgent: new PerformanceAgent(),
+      inventory: Object.fromEntries(ALL_BLOCKS.map(b => [b, 64])),
+      selectedBlock: BLOCKS.GRASS,
+      inventoryOpen: false,
+      hudHidden: false,
+      pointerLocked: false,
+      worldReady: false,
+      loadedChunks: new Map(),
+      modifiedChunks: new Map(),
+      chunkQueue: [],
+      dirtyChunks: new Set(),
+      materialCache: new Map(),
+      toastTimer: null,
+      saveTimer: null,
+      fpsEMA: 60,
+      lastFpsUpdate: performance.now(),
+      fpsFrames: 0,
+      visibleBlocks: 0,
+      quality: {
+        adaptive: true,
+        baseViewRadius: 4,
+        baseRenderScale: 1,
+        activeViewRadius: 4,
+        activeRenderScale: 1,
+        buildBudget: 2
+      },
+      timeOfDay: 0.26,
+      yaw: 0.55,
+      pitch: -0.08,
+      lastTarget: null,
+      bars: [],
+      lastGovUpdate: performance.now(),
+      photoNote: ''
+    };
+
+    const player = {
+      position: new THREE.Vector3(0.5, 22, 0.5),
+      velocity: new THREE.Vector3(),
+      onGround: false,
+      radius: 0.32,
+      height: 1.72,
+      speed: 6.0,
+      sprintSpeed: 8.7,
+      jumpForce: 6.4,
+      bob: 0
+    };
+
+    const keys = Object.create(null);
+
+    function showToast(text) {
+      ui.toast.textContent = text;
+      ui.toast.classList.add('show');
+      clearTimeout(state.toastTimer);
+      state.toastTimer = setTimeout(() => ui.toast.classList.remove('show'), 1800);
+    }
+
+    function updateSettingLabels() {
+      ui.qualityMode.textContent = state.quality.adaptive ? 'On' : 'Off';
+      ui.viewRadiusVal.textContent = String(state.quality.baseViewRadius);
+      ui.renderScaleVal.textContent = `${Math.round(state.quality.baseRenderScale * 100)}%`;
+      ui.qualityReadout.textContent = `${state.quality.activeRenderScale.toFixed(2)}× / r${state.quality.activeViewRadius}`;
+    }
+
+    function applyRendererScale() {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2) * state.quality.activeRenderScale;
+      renderer.setPixelRatio(Math.max(0.5, Math.min(2, dpr)));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function updateSaveStatus(text, isErr = false) {
+      ui.saveStatus.textContent = text;
+      ui.saveStatus.style.color = isErr ? '#ffb6b6' : '#e5fff3';
+    }
+
+    function createTrainingBars() {
+      ui.trainBars.innerHTML = '';
+      state.bars = [];
+      for (let i = 0; i < 56; i++) {
+        const bar = document.createElement('div');
+        bar.className = 'bar';
+        ui.trainBars.appendChild(bar);
+        state.bars.push(bar);
+      }
+    }
+
+    function setLoading(progress, text, lossText = null) {
+      ui.progressFill.style.width = `${progress}%`;
+      ui.loadingText.textContent = text;
+      if (lossText !== null) ui.lossText.textContent = lossText;
+    }
+
+    function defaultStateFromSeed(seed) {
+      state.seed = seed;
+      state.teacher = new TeacherTerrain(seed);
+      state.learner = new OnlineTerrainNet(seed);
+      state.perfAgent = new PerformanceAgent();
+      state.inventory = Object.fromEntries(ALL_BLOCKS.map(b => [b, 64]));
+      state.selectedBlock = BLOCKS.GRASS;
+      state.loadedChunks.clear();
+      state.modifiedChunks.clear();
+      state.chunkQueue = [];
+      state.dirtyChunks.clear();
+      state.visibleBlocks = 0;
+      state.worldReady = false;
+      player.position.set(0.5, 22, 0.5);
+      player.velocity.set(0,0,0);
+      state.timeOfDay = 0.26;
+      state.yaw = 0.55;
+      state.pitch = -0.08;
+      ui.seed.textContent = String(seed);
+      createClouds();
+      updateHotbar();
+      updateInventoryCounts();
+      updateSelectedName();
+    }
+
+    function savePayload() {
+      return {
+        version: 1,
+        seed: state.seed,
+        player: {
+          x: player.position.x, y: player.position.y, z: player.position.z,
+          vx: player.velocity.x, vy: player.velocity.y, vz: player.velocity.z,
+          yaw: state.yaw, pitch: state.pitch
+        },
+        inventory: state.inventory,
+        selectedBlock: state.selectedBlock,
+        timeOfDay: state.timeOfDay,
+        modifiedChunks: Array.from(state.modifiedChunks.entries()),
+        learner: state.learner.serialize(),
+        perfAgent: state.perfAgent.serialize(),
+        quality: state.quality,
+        savedAt: Date.now()
+      };
+    }
+
+    function scheduleSave(immediate = false) {
+      if (!state.worldReady) return;
+      clearTimeout(state.saveTimer);
+      if (immediate) return saveWorld();
+      updateSaveStatus('Pending…');
+      state.saveTimer = setTimeout(saveWorld, 900);
+    }
+
+    function saveWorld() {
+      try {
+        const raw = JSON.stringify(savePayload());
+        localStorage.setItem(SAVE_KEY, raw);
+        const stamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        updateSaveStatus(`Saved ${stamp}`);
+      } catch (err) {
+        console.error(err);
+        updateSaveStatus('Save failed', true);
+      }
+    }
+
+    function loadSave() {
+      try {
+        const raw = localStorage.getItem(SAVE_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch (err) {
+        console.error(err);
+        return null;
+      }
+    }
+
+    function createClouds() {
+      while (cloudGroup.children.length) cloudGroup.remove(cloudGroup.children[0]);
+      const geo = new THREE.BoxGeometry(1, 1, 1);
+      const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.82 });
+      for (let i = 0; i < 18; i++) {
+        const g = new THREE.Group();
+        const segments = 3 + Math.floor(hash2i(i, state.seed, 903) * 4);
+        for (let s = 0; s < segments; s++) {
+          const mesh = new THREE.Mesh(geo, mat);
+          mesh.scale.set(
+            2.4 + hash2i(i, s, 904) * 3.2,
+            1 + hash2i(s, i, 905) * 1.2,
+            2.2 + hash2i(i + s, s, 906) * 3.4
+          );
+          mesh.position.set(s * 2.2, hash2i(i, s, 907) * 0.5, hash2i(i, s, 908) * 1.2);
+          g.add(mesh);
+        }
+        g.position.set(hash2i(i, state.seed, 33) * 220 - 110, 25 + hash2i(i, state.seed, 34) * 18, hash2i(i, state.seed, 35) * 220 - 110);
+        g.userData.speed = 1 + hash2i(i, state.seed, 36) * 0.7;
+        cloudGroup.add(g);
+      }
+    }
+
+    function updateClouds(dt) {
+      for (const g of cloudGroup.children) {
+        g.position.x += g.userData.speed * dt;
+        if (g.position.x > player.position.x + 140) g.position.x = player.position.x - 140;
+      }
+    }
+
+    function updateEnvironment(dt) {
+      state.timeOfDay = (state.timeOfDay + dt * 0.008) % 1;
+      const angle = state.timeOfDay * Math.PI * 2 - Math.PI / 2;
+      const sunHeight = Math.sin(angle);
+      sun.position.set(Math.cos(angle) * 95, Math.max(-25, sunHeight * 95), Math.sin(angle) * 70);
+      const daylight = clamp((sunHeight + 0.18) / 1.18, 0, 1);
+      const dusk = clamp(1 - Math.abs(sunHeight) * 1.7, 0, 1);
+
+      ambient.intensity = 0.16 + daylight * 0.58;
+      hemi.intensity = 0.22 + daylight * 0.44;
+      sun.intensity = 0.06 + daylight * 1.0;
+
+      const night = new THREE.Color(0x08121e);
+      const day = new THREE.Color(0x87CEEB);
+      const duskCol = new THREE.Color(0xf4b56a);
+      const sky = night.clone().lerp(day, daylight);
+      sky.lerp(duskCol, dusk * 0.26);
+      renderer.setClearColor(sky);
+      scene.fog.color.copy(sky);
+      scene.fog.near = 70;
+      scene.fog.far = 170 + daylight * 70;
+    }
+
+    function worldToChunkCoords(x, z) {
+      const cx = Math.floor(x / CHUNK_SIZE);
+      const cz = Math.floor(z / CHUNK_SIZE);
+      const lx = ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+      const lz = ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+      return { cx, cz, lx, lz };
+    }
+
+    function getLoadedChunk(cx, cz) {
+      return state.loadedChunks.get(chunkKey(cx, cz));
+    }
+
+    function getBlock(x, y, z) {
+      if (y < 0 || y > WORLD_HEIGHT) return BLOCKS.AIR;
+      const { cx, cz, lx, lz } = worldToChunkCoords(x, z);
+      const chunk = getLoadedChunk(cx, cz);
+      if (!chunk) return BLOCKS.AIR;
+      return chunk.blocks[localKey(lx, y, lz)] || BLOCKS.AIR;
+    }
+
+    function setBlock(x, y, z, type, modified = true) {
+      if (y < 0 || y > WORLD_HEIGHT) return false;
+      const { cx, cz, lx, lz } = worldToChunkCoords(x, z);
+      const ck = chunkKey(cx, cz);
+      const chunk = getLoadedChunk(cx, cz);
+      if (!chunk) return false;
+      const lk = localKey(lx, y, lz);
+      const prev = chunk.blocks[lk] || BLOCKS.AIR;
+      if (prev === type) return false;
+      if (type === BLOCKS.AIR) delete chunk.blocks[lk];
+      else chunk.blocks[lk] = type;
+      chunk.modified = chunk.modified || modified;
+      state.dirtyChunks.add(ck);
+      if (lx === 0) state.dirtyChunks.add(chunkKey(cx - 1, cz));
+      if (lx === CHUNK_SIZE - 1) state.dirtyChunks.add(chunkKey(cx + 1, cz));
+      if (lz === 0) state.dirtyChunks.add(chunkKey(cx, cz - 1));
+      if (lz === CHUNK_SIZE - 1) state.dirtyChunks.add(chunkKey(cx, cz + 1));
+      if (modified) {
+        state.modifiedChunks.set(ck, serializeChunkMods(chunk.blocks));
+      }
+      return true;
+    }
+
+    function serializeChunkMods(blocksObj) {
+      const arr = [];
+      for (const key in blocksObj) {
+        const t = blocksObj[key];
+        if (t !== BLOCKS.AIR) {
+          const [x, y, z] = key.split(',').map(Number);
+          arr.push([x, y, z, t]);
+        }
+      }
+      return arr;
+    }
+
+    function makeChunk(cx, cz) {
+      return {
+        cx, cz,
+        blocks: Object.create(null),
+        group: null,
+        modified: false,
+        generated: false,
+        visibleCount: 0,
+        lastTouched: performance.now()
+      };
+    }
+
+    function applySavedMods(chunk) {
+      const ck = chunkKey(chunk.cx, chunk.cz);
+      const mods = state.modifiedChunks.get(ck);
+      if (!mods) return;
+      for (const [x, y, z, t] of mods) {
+        if (t === BLOCKS.AIR) delete chunk.blocks[localKey(x, y, z)];
+        else chunk.blocks[localKey(x, y, z)] = t;
+      }
+      chunk.modified = true;
+    }
+
+    function undergroundBlock(x, y, z) {
+      const r = hash2i(x * 31 + y * 17, z * 19 + state.seed, 771);
+      if (y < 5 && r < 0.008) return BLOCKS.DIAMOND;
+      if (y < 9 && r < 0.018) return BLOCKS.GOLD;
+      if (y < 14 && r < 0.034) return BLOCKS.IRON;
+      return BLOCKS.STONE;
+    }
+
+    function shouldCarveCave(x, y, z, surfaceY) {
+      if (y < 3 || y > surfaceY - 2) return false;
+      const value = state.teacher.caveValue(x, y, z);
+      const threshold = y < SEA_LEVEL ? 0.34 : 0.42;
+      return value > threshold;
+    }
+
+    function placeTreeInChunk(chunk, lx, groundY, lz, biome) {
+      const wx = chunk.cx * CHUNK_SIZE + lx;
+      const wz = chunk.cz * CHUNK_SIZE + lz;
+      const trunkH = biome === 2 ? 4 + Math.floor(hash2i(wx, wz, 999) * 3) : 4;
+      for (let t = 1; t <= trunkH; t++) {
+        const y = groundY + t;
+        if (y <= WORLD_HEIGHT) chunk.blocks[localKey(lx, y, lz)] = BLOCKS.WOOD;
+      }
+      for (let dy = trunkH - 1; dy <= trunkH + 2; dy++) {
+        const radius = dy === trunkH + 2 ? 1 : 2;
+        for (let ox = -radius; ox <= radius; ox++) {
+          for (let oz = -radius; oz <= radius; oz++) {
+            const dist = Math.abs(ox) + Math.abs(oz) + Math.max(0, dy - trunkH);
+            if (dist > 3) continue;
+            const nx = lx + ox, ny = groundY + dy, nz = lz + oz;
+            if (ny > WORLD_HEIGHT) continue;
+            if (nx >= 0 && nx < CHUNK_SIZE && nz >= 0 && nz < CHUNK_SIZE) {
+              const lk = localKey(nx, ny, nz);
+              if (!chunk.blocks[lk]) chunk.blocks[lk] = BLOCKS.LEAVES;
+            }
+          }
+        }
+      }
+    }
+
+    function generateChunk(cx, cz) {
+      const chunk = makeChunk(cx, cz);
+      const blend = state.learner.generationBlend();
+
+      for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+        for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+          const wx = cx * CHUNK_SIZE + lx;
+          const wz = cz * CHUNK_SIZE + lz;
+          const teacher = state.teacher.sample(wx, wz);
+          const model = state.learner.predict(wx, wz);
+
+          const height = Math.round(lerp(teacher.height, model.height, blend));
+          let biome = teacher.biome;
+          if (blend > 0.42) {
+            biome = model.biome;
+            if (blend < 0.56 && hash2i(wx, wz, 333) < 0.5) biome = teacher.biome;
+          }
+
+          let surface = BIOMES[biome].surface;
+          if (height <= SEA_LEVEL + 1) surface = BLOCKS.SAND;
+
+          for (let y = 0; y <= Math.max(height, SEA_LEVEL); y++) {
+            let block = BLOCKS.AIR;
+            if (y <= height) {
+              if (shouldCarveCave(wx, y, wz, height)) {
+                block = BLOCKS.AIR;
+              } else if (y === height) {
+                block = surface;
+              } else if (y > height - (surface === BLOCKS.SAND ? 4 : 3)) {
+                block = surface === BLOCKS.SNOW ? BLOCKS.DIRT : surface === BLOCKS.SAND ? BLOCKS.SAND : BLOCKS.DIRT;
+              } else {
+                block = undergroundBlock(wx, y, wz);
+              }
+            } else if (y <= SEA_LEVEL) {
+              block = BLOCKS.WATER;
+            }
+            if (block !== BLOCKS.AIR) chunk.blocks[localKey(lx, y, lz)] = block;
+          }
+
+          if (height > SEA_LEVEL + 1 && surface === BLOCKS.GRASS && hash2i(wx, wz, state.seed + 444) < BIOMES[biome].treeChance) {
+            placeTreeInChunk(chunk, lx, height, lz, biome);
+          }
+        }
+      }
+
+      applySavedMods(chunk);
+      chunk.generated = true;
+      return chunk;
+    }
+
+    function raySunOcclusion(worldX, worldY, worldZ, normal) {
+      let shade = 1;
+      const sx = worldX + normal.x * 0.6;
+      const sy = worldY + normal.y * 0.6;
+      const sz = worldZ + normal.z * 0.6;
+      for (let i = 1; i <= 7; i++) {
+        const px = Math.floor(sx + BAKE_SUN.x * i * 1.1);
+        const py = Math.floor(sy + BAKE_SUN.y * i * 1.1);
+        const pz = Math.floor(sz + BAKE_SUN.z * i * 1.1);
+        const bt = getBlock(px, py, pz);
+        if (bt !== BLOCKS.AIR && bt !== BLOCKS.WATER && bt !== BLOCKS.LEAVES) {
+          shade *= 0.68;
+          break;
+        }
+      }
+      return shade;
+    }
+
+    function faceAO(x, y, z, face) {
+      const checks = {
+        top:    [[1,0,0],[-1,0,0],[0,0,1],[0,0,-1]],
+        bottom: [[1,0,0],[-1,0,0],[0,0,1],[0,0,-1]],
+        left:   [[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]],
+        right:  [[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]],
+        front:  [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0]],
+        back:   [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0]]
+      };
+      let occ = 0;
+      for (const [dx, dy, dz] of checks[face]) {
+        const bt = getBlock(x + dx, y + dy, z + dz);
+        if (bt !== BLOCKS.AIR && bt !== BLOCKS.WATER) occ++;
+      }
+      return 1 - occ * 0.08;
+    }
+
+    function addFaceData(store, x, y, z, face, blockType) {
+      const s = 0.5;
+      const data = {
+        top:    { v: [[x-s,y+s,z+s],[x+s,y+s,z+s],[x+s,y+s,z-s],[x-s,y+s,z-s]], n:[0,1,0],  base:1.00 },
+        bottom: { v: [[x-s,y-s,z-s],[x+s,y-s,z-s],[x+s,y-s,z+s],[x-s,y-s,z+s]], n:[0,-1,0], base:0.58 },
+        front:  { v: [[x-s,y-s,z+s],[x+s,y-s,z+s],[x+s,y+s,z+s],[x-s,y+s,z+s]], n:[0,0,1],  base:0.88 },
+        back:   { v: [[x+s,y-s,z-s],[x-s,y-s,z-s],[x-s,y+s,z-s],[x+s,y+s,z-s]], n:[0,0,-1], base:0.80 },
+        right:  { v: [[x+s,y-s,z+s],[x+s,y-s,z-s],[x+s,y+s,z-s],[x+s,y+s,z+s]], n:[1,0,0],  base:0.84 },
+        left:   { v: [[x-s,y-s,z-s],[x-s,y-s,z+s],[x-s,y+s,z+s],[x-s,y+s,z-s]], n:[-1,0,0], base:0.84 }
+      }[face];
+      const normal = new THREE.Vector3(...data.n);
+      const ao = faceAO(x, y, z, face);
+      const sunMul = raySunOcclusion(x, y, z, normal);
+      const dir = Math.max(0, normal.dot(BAKE_SUN)) * 0.22;
+      const bright = data.base * ao * sunMul + dir;
+      const [r,g,b] = hexColorMul(BLOCK_COLORS[blockType], clamp(bright, 0.16, 1.2));
+
+      [0,1,2,0,2,3].forEach(i => {
+        store.positions.push(...data.v[i]);
+        store.normals.push(...data.n);
+        store.colors.push(r,g,b);
+      });
+    }
+
+    function getMaterial(blockType) {
+      if (state.materialCache.has(blockType)) return state.materialCache.get(blockType);
+      const transparent = TRANSPARENT.has(blockType);
+      const mat = new THREE.MeshLambertMaterial({
+        vertexColors: true,
+        transparent,
+        opacity: blockType === BLOCKS.GLASS ? 0.38 : blockType === BLOCKS.WATER ? 0.72 : blockType === BLOCKS.LEAVES ? 0.95 : 1,
+        depthWrite: !(blockType === BLOCKS.GLASS || blockType === BLOCKS.WATER)
+      });
+      state.materialCache.set(blockType, mat);
+      return mat;
+    }
+
+    function rebuildChunkMesh(ck) {
+      const chunk = state.loadedChunks.get(ck);
+      if (!chunk) return;
+      if (chunk.group) scene.remove(chunk.group);
+
+      const buckets = {};
+      let visible = 0;
+
+      for (const key in chunk.blocks) {
+        const [lx, y, lz] = key.split(',').map(Number);
+        const wx = chunk.cx * CHUNK_SIZE + lx;
+        const wz = chunk.cz * CHUNK_SIZE + lz;
+        const bt = chunk.blocks[key];
+        const faces = [];
+        if (getBlock(wx, y + 1, wz) === BLOCKS.AIR) faces.push('top');
+        if (getBlock(wx, y - 1, wz) === BLOCKS.AIR) faces.push('bottom');
+        if (getBlock(wx + 1, y, wz) === BLOCKS.AIR) faces.push('right');
+        if (getBlock(wx - 1, y, wz) === BLOCKS.AIR) faces.push('left');
+        if (getBlock(wx, y, wz + 1) === BLOCKS.AIR) faces.push('front');
+        if (getBlock(wx, y, wz - 1) === BLOCKS.AIR) faces.push('back');
+
+        if (bt === BLOCKS.WATER && getBlock(wx, y + 1, wz) === BLOCKS.WATER) {
+          const idx = faces.indexOf('top');
+          if (idx >= 0) faces.splice(idx, 1);
+        }
+        if (!faces.length) continue;
+
+        if (!buckets[bt]) buckets[bt] = { positions: [], normals: [], colors: [] };
+        for (const face of faces) addFaceData(buckets[bt], wx, y, wz, face, bt);
+        visible++;
+      }
+
+      const group = new THREE.Group();
+      for (const bt in buckets) {
+        const bucket = buckets[bt];
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(bucket.positions, 3));
+        geo.setAttribute('normal', new THREE.Float32BufferAttribute(bucket.normals, 3));
+        geo.setAttribute('color', new THREE.Float32BufferAttribute(bucket.colors, 3));
+        const mesh = new THREE.Mesh(geo, getMaterial(Number(bt)));
+        if (Number(bt) === BLOCKS.WATER || Number(bt) === BLOCKS.GLASS) mesh.renderOrder = 2;
+        group.add(mesh);
+      }
+
+      chunk.group = group;
+      chunk.visibleCount = visible;
+      scene.add(group);
+      state.visibleBlocks += visible;
+    }
+
+    function disposeChunk(chunk) {
+      if (chunk.group) {
+        chunk.group.traverse(obj => { if (obj.geometry) obj.geometry.dispose(); });
+        scene.remove(chunk.group);
+      }
+    }
+
+    function enqueueChunksAroundPlayer() {
+      const pcx = Math.floor(player.position.x / CHUNK_SIZE);
+      const pcz = Math.floor(player.position.z / CHUNK_SIZE);
+      ui.chunkPos.textContent = `${pcx}, ${pcz}`;
+
+      const need = [];
+      const r = state.quality.activeViewRadius;
+      for (let dz = -r; dz <= r; dz++) {
+        for (let dx = -r; dx <= r; dx++) {
+          const cx = pcx + dx, cz = pcz + dz;
+          const ck = chunkKey(cx, cz);
+          if (!state.loadedChunks.has(ck) && !state.chunkQueue.find(q => q.ck === ck)) {
+            need.push({ cx, cz, ck, d: dx*dx + dz*dz });
+          }
+        }
+      }
+      need.sort((a,b) => a.d - b.d);
+      state.chunkQueue.push(...need);
+      ui.queueSize.textContent = String(state.chunkQueue.length);
+    }
+
+    function processChunkQueue(maxPerFrame = 1) {
+      let processed = 0;
+      while (state.chunkQueue.length && processed < maxPerFrame) {
+        const next = state.chunkQueue.shift();
+        const chunk = generateChunk(next.cx, next.cz);
+        state.loadedChunks.set(next.ck, chunk);
+        state.dirtyChunks.add(next.ck);
+        const neighbors = [
+          chunkKey(next.cx - 1, next.cz), chunkKey(next.cx + 1, next.cz),
+          chunkKey(next.cx, next.cz - 1), chunkKey(next.cx, next.cz + 1)
+        ];
+        for (const nk of neighbors) if (state.loadedChunks.has(nk)) state.dirtyChunks.add(nk);
+        processed++;
+      }
+      ui.queueSize.textContent = String(state.chunkQueue.length);
+    }
+
+    function rebuildDirty(maxPerFrame = 1) {
+      let processed = 0;
+      state.visibleBlocks = 0;
+      const allChunks = Array.from(state.loadedChunks.values());
+      for (const ch of allChunks) if (!state.dirtyChunks.has(chunkKey(ch.cx, ch.cz))) state.visibleBlocks += ch.visibleCount;
+
+      while (state.dirtyChunks.size && processed < maxPerFrame) {
+        const ck = state.dirtyChunks.values().next().value;
+        state.dirtyChunks.delete(ck);
+        rebuildChunkMesh(ck);
+        processed++;
+      }
+      ui.visibleBlocks.textContent = state.visibleBlocks.toLocaleString();
+    }
+
+    function unloadFarChunks() {
+      const pcx = Math.floor(player.position.x / CHUNK_SIZE);
+      const pcz = Math.floor(player.position.z / CHUNK_SIZE);
+      const unloadRadius = state.quality.activeViewRadius + 2;
+
+      for (const [ck, chunk] of state.loadedChunks) {
+        const dx = chunk.cx - pcx, dz = chunk.cz - pcz;
+        if (Math.abs(dx) > unloadRadius || Math.abs(dz) > unloadRadius) {
+          disposeChunk(chunk);
+          state.loadedChunks.delete(ck);
+        }
+      }
+      ui.loadedChunks.textContent = String(state.loadedChunks.size);
+    }
+
+    function isInWater() {
+      const x = Math.floor(player.position.x);
+      const y = Math.floor(player.position.y - 0.2);
+      const z = Math.floor(player.position.z);
+      return getBlock(x, y, z) === BLOCKS.WATER || getBlock(x, y - 1, z) === BLOCKS.WATER;
+    }
+
+    function collidesAt(x, y, z) {
+      const minX = Math.floor(x - player.radius), maxX = Math.floor(x + player.radius);
+      const minY = Math.floor(y - player.height), maxY = Math.floor(y + 0.1);
+      const minZ = Math.floor(z - player.radius), maxZ = Math.floor(z + player.radius);
+      for (let bx = minX; bx <= maxX; bx++) {
+        for (let by = minY; by <= maxY; by++) {
+          for (let bz = minZ; bz <= maxZ; bz++) {
+            const bt = getBlock(bx, by, bz);
+            if (!PASSABLE.has(bt)) return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    function syncCamera(bob = 0) {
+      camera.quaternion.setFromEuler(new THREE.Euler(state.pitch, state.yaw, 0, 'YXZ'));
+      camera.position.set(player.position.x, player.position.y + bob, player.position.z);
+    }
+
+    function respawnNearOrigin() {
+      let bestY = 18;
+      for (let y = WORLD_HEIGHT; y >= 0; y--) {
+        const bt = getBlock(0, y, 0);
+        if (bt !== BLOCKS.AIR && bt !== BLOCKS.WATER && bt !== BLOCKS.LEAVES) { bestY = y; break; }
+      }
+      player.position.set(0.5, bestY + player.height + 1, 0.5);
+      player.velocity.set(0,0,0);
+      player.onGround = false;
+      syncCamera();
+    }
+
+    function updatePlayer(dt) {
+      if (!state.worldReady || state.inventoryOpen) return;
+
+      const forward = new THREE.Vector3(Math.sin(state.yaw), 0, -Math.cos(state.yaw)).normalize();
+      const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0,1,0)).normalize();
+      const input = new THREE.Vector3();
+      if (keys['KeyW']) input.add(forward);
+      if (keys['KeyS']) input.sub(forward);
+      if (keys['KeyD']) input.add(right);
+      if (keys['KeyA']) input.sub(right);
+      if (input.lengthSq() > 0) input.normalize();
+
+      const inWater = isInWater();
+      const speed = (keys['ShiftLeft'] && !inWater ? player.sprintSpeed : player.speed) * (inWater ? 0.58 : 1);
+      const step = speed * dt;
+      const move = input.clone().multiplyScalar(step);
+
+      if (move.lengthSq() > 0 && player.onGround) player.bob += dt * (keys['ShiftLeft'] ? 18 : 13);
+      const nextX = player.position.x + move.x, nextZ = player.position.z + move.z;
+      if (!collidesAt(nextX, player.position.y, player.position.z)) player.position.x = nextX;
+      if (!collidesAt(player.position.x, player.position.y, nextZ)) player.position.z = nextZ;
+
+      const gravity = inWater ? 4.5 : 19;
+      player.velocity.y -= gravity * dt;
+      if (keys['Space']) {
+        if (inWater) player.velocity.y += 8 * dt;
+        else if (player.onGround) { player.velocity.y = player.jumpForce; player.onGround = false; }
+      }
+      if (inWater) player.velocity.y = clamp(player.velocity.y, -2.2, 3.1);
+
+      const nextY = player.position.y + player.velocity.y * dt;
+      if (player.velocity.y <= 0) {
+        if (collidesAt(player.position.x, nextY, player.position.z)) {
+          player.position.y = Math.floor(nextY - player.height) + 1 + player.height;
+          player.velocity.y = 0;
+          player.onGround = !inWater;
+        } else {
+          player.position.y = nextY;
+          player.onGround = false;
+        }
+      } else {
+        if (collidesAt(player.position.x, nextY, player.position.z)) player.velocity.y = 0;
+        else player.position.y = nextY;
+      }
+
+      if (player.position.y < -12) {
+        respawnNearOrigin();
+        showToast('Respawned near origin');
+      }
+
+      const moving = input.lengthSq() > 0.001;
+      const bob = moving && player.onGround ? Math.sin(player.bob) * 0.055 : 0;
+      camera.fov = lerp(camera.fov, keys['ShiftLeft'] && moving && !inWater ? 79 : inWater ? 73 : 75, Math.min(1, dt * 8));
+      camera.updateProjectionMatrix();
+      syncCamera(bob);
+
+      ui.pos.textContent = `${player.position.x.toFixed(1)}, ${player.position.y.toFixed(1)}, ${player.position.z.toFixed(1)}`;
+      const teacherInfo = state.teacher.sample(Math.floor(player.position.x), Math.floor(player.position.z));
+      ui.biome.textContent = BIOMES[teacherInfo.biome].name;
+      ui.moveMode.textContent = inWater ? 'Swimming' : keys['ShiftLeft'] && moving ? 'Sprinting' : player.onGround ? 'Grounded' : 'Airborne';
+    }
+
+    function blockIntersectsPlayer(x, y, z) {
+      const blockMinX = x - 0.5, blockMaxX = x + 0.5;
+      const blockMinY = y - 0.5, blockMaxY = y + 0.5;
+      const blockMinZ = z - 0.5, blockMaxZ = z + 0.5;
+      const pMinX = player.position.x - player.radius, pMaxX = player.position.x + player.radius;
+      const pMinY = player.position.y - player.height, pMaxY = player.position.y + 0.15;
+      const pMinZ = player.position.z - player.radius, pMaxZ = player.position.z + player.radius;
+      return blockMaxX > pMinX && blockMinX < pMaxX && blockMaxY > pMinY && blockMinY < pMaxY && blockMaxZ > pMinZ && blockMinZ < pMaxZ;
+    }
+
+    function getTargetBlock() {
+      const dir = new THREE.Vector3();
+      camera.getWorldDirection(dir);
+      const origin = camera.position.clone();
+      let x = Math.floor(origin.x), y = Math.floor(origin.y), z = Math.floor(origin.z);
+      const stepX = dir.x >= 0 ? 1 : -1, stepY = dir.y >= 0 ? 1 : -1, stepZ = dir.z >= 0 ? 1 : -1;
+      const tDeltaX = dir.x !== 0 ? Math.abs(1 / dir.x) : Infinity;
+      const tDeltaY = dir.y !== 0 ? Math.abs(1 / dir.y) : Infinity;
+      const tDeltaZ = dir.z !== 0 ? Math.abs(1 / dir.z) : Infinity;
+      let tMaxX = dir.x !== 0 ? ((stepX > 0 ? x + 1 : x) - origin.x) / dir.x : Infinity;
+      let tMaxY = dir.y !== 0 ? ((stepY > 0 ? y + 1 : y) - origin.y) / dir.y : Infinity;
+      let tMaxZ = dir.z !== 0 ? ((stepZ > 0 ? z + 1 : z) - origin.z) / dir.z : Infinity;
+      let lastX = x, lastY = y, lastZ = z, dist = 0;
+      while (dist < 6) {
+        const bt = getBlock(x, y, z);
+        if (bt !== BLOCKS.AIR) return { hit: { x, y, z, block: bt }, place: { x: lastX, y: lastY, z: lastZ } };
+        lastX = x; lastY = y; lastZ = z;
+        if (tMaxX < tMaxY) {
+          if (tMaxX < tMaxZ) { dist = tMaxX; tMaxX += tDeltaX; x += stepX; }
+          else { dist = tMaxZ; tMaxZ += tDeltaZ; z += stepZ; }
+        } else {
+          if (tMaxY < tMaxZ) { dist = tMaxY; tMaxY += tDeltaY; y += stepY; }
+          else { dist = tMaxZ; tMaxZ += tDeltaZ; z += stepZ; }
+        }
+      }
+      return { hit: null, place: null };
+    }
+
+    function updateTargetPreview(target) {
+      state.lastTarget = target;
+      if (target.hit) {
+        highlight.position.set(target.hit.x, target.hit.y, target.hit.z);
+        highlight.visible = true;
+        ui.targetName.textContent = BLOCK_NAMES[target.hit.block] || 'Block';
+        ui.hintText.textContent = 'LMB break • RMB place';
+      } else {
+        highlight.visible = false;
+        ui.targetName.textContent = 'None';
+        ui.hintText.textContent = 'Explore the frontier';
+      }
+      const canPlace = target.place && target.hit && (state.inventory[state.selectedBlock] || 0) > 0 && !blockIntersectsPlayer(target.place.x, target.place.y, target.place.z);
+      if (canPlace) {
+        placePreview.position.set(target.place.x, target.place.y, target.place.z);
+        placePreview.visible = true;
+      } else placePreview.visible = false;
+    }
+
+    function breakBlock(target) {
+      if (!target?.hit) return;
+      if (setBlock(target.hit.x, target.hit.y, target.hit.z, BLOCKS.AIR, true)) {
+        const bt = target.hit.block;
+        state.inventory[bt] = (state.inventory[bt] || 0) + 1;
+        updateInventoryCounts();
+        scheduleSave();
+      }
+    }
+
+    function placeBlock(target) {
+      if (!target?.place || !target?.hit) return;
+      const { x, y, z } = target.place;
+      if ((state.inventory[state.selectedBlock] || 0) <= 0) return;
+      if (blockIntersectsPlayer(x, y, z)) return;
+      if (setBlock(x, y, z, state.selectedBlock, true)) {
+        state.inventory[state.selectedBlock]--;
+        updateInventoryCounts();
+        scheduleSave();
+      }
+    }
+
+    function updateHotbar() {
+      ui.hotbar.innerHTML = '';
+      HOTBAR_BLOCKS.forEach((bt, i) => {
+        const slot = document.createElement('div');
+        slot.className = 'hslot' + (bt === state.selectedBlock ? ' selected' : '');
+        slot.dataset.block = bt;
+        slot.innerHTML = `<div class="preview" style="background:#${BLOCK_COLORS[bt].toString(16).padStart(6,'0')}"></div><span class="hint">${i + 1}</span><span class="count">${state.inventory[bt] || ''}</span>`;
+        slot.onclick = () => selectBlock(bt);
+        ui.hotbar.appendChild(slot);
+      });
+      updateSelectedName();
+    }
+
+    function updateSelectedName() {
+      ui.selectedName.textContent = BLOCK_NAMES[state.selectedBlock] || 'Unknown';
+      placePreview.material.color.setHex(BLOCK_COLORS[state.selectedBlock]);
+    }
+
+    function selectBlock(bt) {
+      state.selectedBlock = bt;
+      updateHotbar();
+      updateInventorySelection();
+      updateSelectedName();
+    }
+
+    function createInvSlot(bt) {
+      const slot = document.createElement('div');
+      slot.className = 'slot';
+      slot.dataset.block = String(bt);
+      slot.innerHTML = `<div class="icon" style="background:#${BLOCK_COLORS[bt].toString(16).padStart(6,'0')}"></div><span class="icount">${state.inventory[bt] || 0}</span><span class="name">${BLOCK_NAMES[bt]}</span>`;
+      slot.onclick = () => { selectBlock(bt); updateInventorySelection(); };
+      return slot;
+    }
+
+    function setupInventoryUI() {
+      ui.invBlocks.innerHTML = '';
+      ui.invHotbar.innerHTML = '';
+      for (const bt of ALL_BLOCKS) ui.invBlocks.appendChild(createInvSlot(bt));
+      for (let i = 0; i < 18 - ALL_BLOCKS.length; i++) {
+        const empty = document.createElement('div');
+        empty.className = 'slot empty';
+        ui.invBlocks.appendChild(empty);
+      }
+      for (const bt of HOTBAR_BLOCKS) ui.invHotbar.appendChild(createInvSlot(bt));
+      updateInventorySelection();
+      updateInventoryCounts();
+    }
+
+    function updateInventorySelection() {
+      document.querySelectorAll('.slot[data-block]').forEach(slot => {
+        slot.classList.toggle('selected', Number(slot.dataset.block) === state.selectedBlock);
+      });
+    }
+
+    function updateInventoryCounts() {
+      document.querySelectorAll('.slot[data-block]').forEach(slot => {
+        const bt = Number(slot.dataset.block);
+        const el = slot.querySelector('.icount');
+        if (el) el.textContent = state.inventory[bt] || 0;
+      });
+      document.querySelectorAll('#hotbar .hslot').forEach(slot => {
+        const bt = Number(slot.dataset.block);
+        const el = slot.querySelector('.count');
+        if (el) el.textContent = state.inventory[bt] || '';
+      });
+    }
+
+    function toggleInventory(force = null) {
+      state.inventoryOpen = force !== null ? force : !state.inventoryOpen;
+      document.body.classList.toggle('inventory-open', state.inventoryOpen);
+      ui.invOverlay.classList.toggle('open', state.inventoryOpen);
+      if (state.inventoryOpen) document.exitPointerLock();
+      else if (ui.start.style.display === 'none') canvas.requestPointerLock();
+    }
+
+    function toggleHud() {
+      state.hudHidden = !state.hudHidden;
+      document.body.classList.toggle('hud-hidden', state.hudHidden);
+      showToast(state.hudHidden ? 'HUD hidden' : 'HUD shown');
+    }
+
+    function updateSummary(hasSave) {
+      ui.summary.innerHTML = `
+        <strong>${hasSave ? 'Saved world restored.' : 'Fresh seed generated.'}</strong><br>
+        Seed <strong>${state.seed}</strong> • modified chunks <strong>${state.modifiedChunks.size}</strong> • learner steps <strong>${state.learner.trainSteps}</strong><br>
+        Local saves only work after the page has actually been opened here, which is how browsers insist on behaving.
+      `;
+    }
+
+    function initialGenerate() {
+      enqueueChunksAroundPlayer();
+      processChunkQueue(Math.max(1, state.quality.activeViewRadius * state.quality.activeViewRadius));
+      rebuildDirty(Math.max(1, state.quality.activeViewRadius * state.quality.activeViewRadius));
+      respawnNearOrigin();
+    }
+
+    function backgroundTrain(dt) {
+      if (!state.worldReady || !state.learner) return;
+      const steps = clamp(Math.floor(dt * 220), 1, 5);
+      const samples = [];
+      const pcx = Math.floor(player.position.x), pcz = Math.floor(player.position.z);
+      for (let i = 0; i < steps * 6; i++) {
+        const x = pcx + Math.floor((hash2i(i, state.learner.trainSteps + i, 201) * 2 - 1) * 64);
+        const z = pcz + Math.floor((hash2i(i + 41, state.learner.trainSteps + i, 202) * 2 - 1) * 64);
+        samples.push([x, z]);
+      }
+      const loss = state.learner.trainBatch(samples, state.teacher);
+      const idx = Math.floor(state.learner.trainSteps / samples.length) % state.bars.length;
+      const bar = state.bars[idx];
+      if (bar) {
+        bar.style.height = `${clamp(loss * 2.7, 6, 90)}px`;
+        bar.style.background = `hsl(${clamp(135 - loss * 8, 8, 135)},72%,54%)`;
+      }
+      ui.trainSteps.textContent = String(state.learner.trainSteps);
+      ui.trainLoss.textContent = state.learner.recentLoss ? state.learner.recentLoss.toFixed(3) : '--';
+      ui.modelBlend.textContent = `${Math.round(state.learner.generationBlend() * 100)}%`;
+    }
+
+    function updateGovernor(now) {
+      if (!state.quality.adaptive || now - state.lastGovUpdate < 900) return;
+      state.lastGovUpdate = now;
+      const moving = !!(keys['KeyW'] || keys['KeyA'] || keys['KeyS'] || keys['KeyD']);
+      const queueNorm = clamp(state.chunkQueue.length / 28, 0, 1);
+      const features = state.perfAgent.features(state.fpsEMA, TARGET_FPS, queueNorm, moving, state.quality.activeRenderScale, state.quality.activeViewRadius);
+      const action = state.perfAgent.choose(features);
+      let label = 'hold';
+      if (action === 0) {
+        if (state.quality.activeRenderScale > 0.55) state.quality.activeRenderScale = clamp(state.quality.activeRenderScale - 0.05, 0.5, 1);
+        else state.quality.activeViewRadius = clamp(state.quality.activeViewRadius - 1, 2, state.quality.baseViewRadius);
+        state.quality.buildBudget = 1;
+        label = 'decrease';
+      } else if (action === 2) {
+        if (state.fpsEMA > TARGET_FPS + 8 && state.chunkQueue.length < 6) {
+          if (state.quality.activeViewRadius < state.quality.baseViewRadius) state.quality.activeViewRadius++;
+          else state.quality.activeRenderScale = clamp(state.quality.activeRenderScale + 0.05, 0.5, state.quality.baseRenderScale);
+          label = 'increase';
+        }
+        state.quality.buildBudget = 2;
+      } else {
+        state.quality.buildBudget = state.chunkQueue.length > 8 ? 1 : 2;
+      }
+      const reward = -Math.abs(TARGET_FPS - state.fpsEMA) / TARGET_FPS - queueNorm * 0.2;
+      state.perfAgent.learn(features, reward);
+      applyRendererScale();
+      ui.govAction.textContent = label;
+      updateSettingLabels();
+    }
+
+    function fpsTick(now) {
+      state.fpsFrames++;
+      const elapsed = now - state.lastFpsUpdate;
+      if (elapsed >= 500) {
+        const fps = state.fpsFrames * 1000 / elapsed;
+        state.fpsEMA = state.fpsEMA * 0.7 + fps * 0.3;
+        ui.fps.textContent = state.fpsEMA.toFixed(1);
+        state.fpsFrames = 0;
+        state.lastFpsUpdate = now;
+      }
+    }
+
+    function setupEvents() {
+      document.addEventListener('keydown', e => {
+        if (e.repeat && (e.code === 'KeyE' || e.code === 'KeyF' || e.code === 'KeyR')) return;
+        if (e.code === 'KeyE' && state.worldReady) { toggleInventory(); return; }
+        if (e.code === 'KeyF' && state.worldReady && !state.inventoryOpen) { toggleHud(); return; }
+        if (e.code === 'KeyR' && state.worldReady && !state.inventoryOpen) { respawnNearOrigin(); showToast('Respawned near origin'); scheduleSave(); return; }
+        keys[e.code] = true;
+        const num = Number(e.key);
+        if (num >= 1 && num <= 9) selectBlock(HOTBAR_BLOCKS[num - 1]);
+      });
+      document.addEventListener('keyup', e => { keys[e.code] = false; });
+      document.addEventListener('mousemove', e => {
+        if (!state.pointerLocked || state.inventoryOpen || !state.worldReady) return;
+        state.yaw -= e.movementX * 0.0022;
+        state.pitch -= e.movementY * 0.0022;
+        state.pitch = clamp(state.pitch, -Math.PI / 2 + 0.08, Math.PI / 2 - 0.08);
+      });
+      canvas.addEventListener('mousedown', e => {
+        if (!state.pointerLocked || state.inventoryOpen || !state.worldReady) return;
+        const target = getTargetBlock();
+        if (e.button === 0) breakBlock(target);
+        if (e.button === 2) placeBlock(target);
+      });
+      canvas.addEventListener('contextmenu', e => e.preventDefault());
+      canvas.addEventListener('wheel', e => {
+        if (state.inventoryOpen || !state.worldReady) return;
+        e.preventDefault();
+        let idx = HOTBAR_BLOCKS.indexOf(state.selectedBlock);
+        idx = idx === -1 ? 0 : idx;
+        idx = (idx + Math.sign(e.deltaY) + HOTBAR_BLOCKS.length) % HOTBAR_BLOCKS.length;
+        selectBlock(HOTBAR_BLOCKS[idx]);
+      }, { passive: false });
+
+      document.addEventListener('pointerlockchange', () => { state.pointerLocked = document.pointerLockElement === canvas; });
+      canvas.addEventListener('click', () => {
+        if (!state.inventoryOpen && state.worldReady && ui.start.style.display === 'none' && !state.pointerLocked) canvas.requestPointerLock();
+      });
+
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        applyRendererScale();
+      });
+
+      ui.enterBtn.addEventListener('click', () => { ui.start.style.display = 'none'; canvas.requestPointerLock(); });
+      ui.newworldBtn.addEventListener('click', async () => {
+        ui.start.style.display = 'none';
+        ui.loading.style.display = 'flex';
+        localStorage.removeItem(SAVE_KEY);
+        await bootFresh(Math.floor(Date.now() % 1000000));
+        ui.loading.style.display = 'none';
+        ui.start.style.display = 'flex';
+      });
+
+      ui.qualityToggle.addEventListener('input', () => {
+        state.quality.adaptive = ui.qualityToggle.value === '1';
+        if (!state.quality.adaptive) {
+          state.quality.activeRenderScale = state.quality.baseRenderScale;
+          state.quality.activeViewRadius = state.quality.baseViewRadius;
+          applyRendererScale();
+        }
+        updateSettingLabels();
+      });
+      ui.viewRadius.addEventListener('input', () => {
+        state.quality.baseViewRadius = Number(ui.viewRadius.value);
+        if (!state.quality.adaptive) state.quality.activeViewRadius = state.quality.baseViewRadius;
+        updateSettingLabels();
+      });
+      ui.renderScale.addEventListener('input', () => {
+        state.quality.baseRenderScale = Number(ui.renderScale.value) / 100;
+        if (!state.quality.adaptive) {
+          state.quality.activeRenderScale = state.quality.baseRenderScale;
+          applyRendererScale();
+        }
+        updateSettingLabels();
+      });
+
+      window.addEventListener('beforeunload', () => { try { saveWorld(); } catch(_) {} });
+    }
+
+    async function bootFresh(seed) {
+      defaultStateFromSeed(seed);
+      setLoading(4, 'Initialising terrain core…', 'Loss: --');
+      await new Promise(r => setTimeout(r, 50));
+
+      for (let i = 0; i < 12; i++) {
+        const samples = [];
+        for (let s = 0; s < 36; s++) samples.push([Math.floor((hash2i(i, s, 121) * 2 - 1) * 80), Math.floor((hash2i(i + 55, s, 122) * 2 - 1) * 80)]);
+        const loss = state.learner.trainBatch(samples, state.teacher);
+        const bar = state.bars[i % state.bars.length];
+        if (bar) {
+          bar.style.height = `${clamp(loss * 2.8, 6, 88)}px`;
+          bar.style.background = `hsl(${clamp(135 - loss * 8, 8, 135)},72%,54%)`;
+        }
+        setLoading(4 + (i + 1) / 12 * 36, `Warmup distillation ${i + 1}/12`, `Loss: ${loss.toFixed(3)}`);
+        await new Promise(r => setTimeout(r, 0));
+      }
+
+      state.quality.activeViewRadius = state.quality.baseViewRadius;
+      state.quality.activeRenderScale = state.quality.baseRenderScale;
+      applyRendererScale();
+      enqueueChunksAroundPlayer();
+      const total = state.chunkQueue.length;
+      let done = 0;
+      while (state.chunkQueue.length) {
+        processChunkQueue(1);
+        rebuildDirty(1);
+        done++;
+        setLoading(44 + done / total * 56, `Generating initial chunks ${done}/${total}`, `Loss: ${state.learner.recentLoss.toFixed(3)}`);
+        await new Promise(r => setTimeout(r, 0));
+      }
+      respawnNearOrigin();
+      state.worldReady = true;
+      updateSummary(false);
+      scheduleSave(true);
+    }
+
+    async function bootFromSave(save) {
+      defaultStateFromSeed(save.seed || Math.floor(Date.now() % 1000000));
+      if (save.learner) state.learner.load(save.learner);
+      if (save.perfAgent) state.perfAgent.load(save.perfAgent);
+      if (save.inventory) state.inventory = { ...state.inventory, ...save.inventory };
+      if (save.selectedBlock != null) state.selectedBlock = save.selectedBlock;
+      if (save.quality) {
+        state.quality = {
+          ...state.quality,
+          ...save.quality,
+          adaptive: save.quality.adaptive !== false
+        };
+      }
+      state.timeOfDay = typeof save.timeOfDay === 'number' ? save.timeOfDay : 0.26;
+      if (Array.isArray(save.modifiedChunks)) {
+        state.modifiedChunks = new Map(save.modifiedChunks);
+      }
+      updateHotbar();
+      updateInventoryCounts();
+      updateInventorySelection();
+
+      setLoading(8, 'Restoring learner + modified chunks…', `Loss: ${state.learner.recentLoss ? state.learner.recentLoss.toFixed(3) : '--'}`);
+      await new Promise(r => setTimeout(r, 50));
+
+      state.quality.activeViewRadius = state.quality.baseViewRadius;
+      state.quality.activeRenderScale = state.quality.baseRenderScale;
+      applyRendererScale();
+      enqueueChunksAroundPlayer();
+      const total = state.chunkQueue.length;
+      let done = 0;
+      while (state.chunkQueue.length) {
+        processChunkQueue(1);
+        rebuildDirty(1);
+        done++;
+        setLoading(16 + done / total * 84, `Restoring chunks ${done}/${total}`, `Loss: ${state.learner.recentLoss ? state.learner.recentLoss.toFixed(3) : '--'}`);
+        await new Promise(r => setTimeout(r, 0));
+      }
+
+      if (save.player) {
+        player.position.set(save.player.x, save.player.y, save.player.z);
+        player.velocity.set(save.player.vx || 0, save.player.vy || 0, save.player.vz || 0);
+        state.yaw = save.player.yaw || 0.55;
+        state.pitch = save.player.pitch || -0.08;
+      } else {
+        respawnNearOrigin();
+      }
+
+      state.worldReady = true;
+      updateSummary(true);
+      const stamp = save.savedAt ? new Date(save.savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'restored';
+      updateSaveStatus(`Saved ${stamp}`);
+    }
+
+    function animate(now) {
+      requestAnimationFrame(animate);
+      const dt = Math.min((animate.last ? (now - animate.last) : 16) / 1000, 0.05);
+      animate.last = now;
+
+      updateEnvironment(dt);
+      updateClouds(dt);
+      fpsTick(now);
+
+      if (state.worldReady) {
+        updatePlayer(dt);
+        enqueueChunksAroundPlayer();
+        processChunkQueue(Math.max(1, state.quality.buildBudget));
+        rebuildDirty(Math.max(1, state.quality.buildBudget));
+        unloadFarChunks();
+        backgroundTrain(dt);
+        updateGovernor(now);
+
+        const target = getTargetBlock();
+        updateTargetPreview(target);
+
+        ui.loadedChunks.textContent = String(state.loadedChunks.size);
+        ui.queueSize.textContent = String(state.chunkQueue.length);
+        updateSettingLabels();
+      } else {
+        highlight.visible = false;
+        placePreview.visible = false;
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    async function init() {
+      createTrainingBars();
+      setupInventoryUI();
+      updateHotbar();
+      updateSelectedName();
+      updateSettingLabels();
+      setupEvents();
+
+      const save = loadSave();
+      if (save) await bootFromSave(save);
+      else await bootFresh(Math.floor(Date.now() % 1000000));
+
+      ui.loading.style.display = 'none';
+      ui.start.style.display = 'flex';
+      requestAnimationFrame(animate);
+      setInterval(() => { if (state.worldReady) saveWorld(); }, 30000);
+    }
+
+    init();
+  })();
+  </script>
+</body>
+</html>

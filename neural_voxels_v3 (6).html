@@ -1,0 +1,1741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Neural Voxels v3</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --panel: rgba(0, 0, 0, 0.62);
+            --panel-border: rgba(255,255,255,0.12);
+            --accent: #00ff88;
+        }
+        html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: "Segoe UI", system-ui, sans-serif; }
+        #game { width: 100vw; height: 100vh; display: block; cursor: default; }
+        #crosshair { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; z-index: 100; }
+        #crosshair::before, #crosshair::after { content: ""; position: absolute; background: white; mix-blend-mode: difference; border-radius: 2px; }
+        #crosshair::before { width: 18px; height: 2px; left: -9px; top: -1px; }
+        #crosshair::after { width: 2px; height: 18px; left: -1px; top: -9px; }
+        #hotbar { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; padding: 8px; background: rgba(0,0,0,0.64); border: 1px solid var(--panel-border); border-radius: 10px; z-index: 110; backdrop-filter: blur(6px); }
+        .hotbar-slot { width: 54px; height: 54px; border: 2px solid #555; border-radius: 6px; display: flex; align-items: center; justify-content: center; position: relative; cursor: pointer; transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease; background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(0,0,0,0.18)); }
+        .hotbar-slot:hover { transform: translateY(-1px); }
+        .hotbar-slot.selected { border-color: #fff; box-shadow: 0 0 14px rgba(255,255,255,0.45); }
+        .hotbar-slot .block-preview { width: 38px; height: 38px; border-radius: 4px; position: relative; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.35); }
+        .hotbar-slot .block-preview::after { content: ""; position: absolute; inset: 0; border-radius: 4px; background: linear-gradient(135deg, rgba(255,255,255,0.28), transparent 46%, rgba(0,0,0,0.18) 100%); }
+        .hotbar-slot .key-hint { position: absolute; bottom: 2px; right: 5px; font-size: 10px; color: #aaa; }
+        .hotbar-slot .count { position: absolute; bottom: 2px; left: 5px; font-size: 11px; color: #fff; text-shadow: 1px 1px 1px #000; }
+        #info { position: fixed; top: 16px; left: 16px; color: white; font-size: 13px; text-shadow: 1px 1px 2px rgba(0,0,0,0.9); z-index: 100; line-height: 1.55; padding: 12px 14px; background: var(--panel); border: 1px solid var(--panel-border); border-radius: 12px; backdrop-filter: blur(6px); min-width: 235px; }
+        #info .tiny { opacity: 0.78; font-size: 11px; margin-top: 8px; }
+        #nn-info { position: fixed; top: 16px; right: 16px; color: white; font-size: 12px; text-shadow: 1px 1px 2px rgba(0,0,0,0.9); z-index: 100; background: var(--panel); padding: 14px; border: 1px solid var(--panel-border); border-radius: 12px; backdrop-filter: blur(6px); max-width: 320px; line-height: 1.45; }
+        #nn-info h3 { margin-bottom: 8px; color: #7cba4d; font-size: 15px; }
+        #nn-info .arch { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; line-height: 1.45; opacity: 0.88; }
+        #nn-info .training-stats { margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.15); }
+        #nn-info .loss { color: #ff8c8c; }
+        #nn-info .nn-outputs { margin-top: 8px; font-size: 10px; opacity: 0.7; }
+        #inventory-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.76); display: none; align-items: center; justify-content: center; z-index: 500; padding: 16px; }
+        #inventory-overlay.open { display: flex; }
+        #inventory { background: linear-gradient(180deg, #a2a2a2, #878787); border: 4px solid #373737; border-radius: 6px; padding: 16px; box-shadow: 0 0 50px rgba(0,0,0,0.86); max-width: min(92vw, 560px); width: 100%; }
+        #inventory h2 { color: #2e2e2e; font-size: 18px; margin-bottom: 12px; text-align: center; }
+        .inv-section { margin-bottom: 16px; }
+        .inv-section h3 { color: #2f2f2f; font-size: 13px; margin-bottom: 8px; }
+        .inv-grid { display: grid; grid-template-columns: repeat(9, 48px); gap: 4px; justify-content: center; }
+        .inv-slot { width: 48px; height: 48px; background: #8b8b8b; border: 2px solid; border-color: #373737 #fff #fff #373737; display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; transition: transform 0.1s ease; user-select: none; }
+        .inv-slot.empty { cursor: default; opacity: 0.45; }
+        .inv-slot[data-block]:hover { transform: scale(1.05); z-index: 10; }
+        .inv-slot.selected { outline: 2px solid white; outline-offset: 1px; }
+        .inv-slot .block-icon { width: 32px; height: 32px; border-radius: 3px; position: relative; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.25); }
+        .inv-slot .block-icon::after { content: ""; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(255,255,255,0.28), transparent 48%, rgba(0,0,0,0.2) 100%); }
+        .inv-slot .item-count { position: absolute; bottom: 2px; right: 4px; font-size: 12px; font-weight: 700; color: #fff; text-shadow: 1px 1px 1px #000, -1px -1px 1px #000; }
+        .inv-slot .item-name { position: absolute; bottom: -22px; left: 50%; transform: translateX(-50%); background: #1a0a30; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 11px; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.18s ease; z-index: 100; }
+        .inv-slot:hover .item-name { opacity: 1; }
+        .inv-divider { height: 2px; background: linear-gradient(90deg, transparent, #555, transparent); margin: 12px 0; }
+        #inv-hint { text-align: center; color: #3b3b3b; font-size: 12px; margin-top: 12px; }
+        #start-screen { position: fixed; inset: 0; background: radial-gradient(circle at 50% 30%, rgba(0,255,136,0.08), transparent 30%), linear-gradient(135deg, #14142a 0%, #0f2342 55%, #0a1828 100%); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 200; color: white; padding: 18px; text-align: center; }
+        #start-screen h1 { font-size: clamp(34px, 5vw, 52px); text-shadow: 4px 4px 0 #000; margin-bottom: 10px; letter-spacing: 1.6px; }
+        #start-screen .subtitle { font-size: 18px; opacity: 0.92; margin-bottom: 8px; color: #00ff88; }
+        #start-screen .nn-desc { font-size: 14px; opacity: 0.78; margin-bottom: 18px; max-width: 660px; line-height: 1.6; }
+        #start-screen .world-meta { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-bottom: 24px; font-size: 13px; opacity: 0.86; }
+        .meta-pill { padding: 6px 10px; border-radius: 999px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.1); }
+        .button-row { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+        .menu-btn { padding: 15px 34px; font-size: 20px; border: none; color: #000; cursor: pointer; border-radius: 10px; transition: transform 0.16s ease, box-shadow 0.16s ease; font-weight: 700; min-width: 180px; }
+        .menu-btn:hover:not(:disabled) { transform: scale(1.04); box-shadow: 0 0 28px rgba(255,255,255,0.15); }
+        .menu-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+        #start-btn { background: linear-gradient(135deg, #00ff88, #00aa55); }
+        #load-btn { background: linear-gradient(135deg, #d6efff, #8bb6dc); }
+        #regen-btn { background: linear-gradient(135deg, #ffd166, #f0a620); }
+        #controls-info { margin-top: 34px; text-align: center; font-size: 13px; opacity: 0.68; line-height: 1.95; max-width: 700px; }
+        #loading { position: fixed; inset: 0; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 300; color: white; text-align: center; padding: 18px; }
+        #loading.hidden { display: none; }
+        #loading h2 { margin-bottom: 20px; }
+        #progress-bar { width: min(420px, 86vw); height: 20px; background: #222; border-radius: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,0.12); }
+        #progress-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #00ff88, #00aa55); transition: width 0.08s linear; }
+        #loading-text { margin-top: 15px; font-size: 14px; opacity: 0.76; }
+        #loss-display { margin-top: 18px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 15px; color: #ff8c8c; }
+        #training-viz { margin-top: 18px; display: flex; gap: 4px; align-items: flex-end; height: 100px; width: min(440px, 90vw); justify-content: center; }
+        .loss-bar { width: 6px; background: #00ff88; transition: height 0.1s ease, background 0.1s ease; border-radius: 2px 2px 0 0; }
+        #toast { position: fixed; top: 18px; left: 50%; transform: translateX(-50%) translateY(-12px); background: rgba(0,0,0,0.84); color: white; border: 1px solid rgba(255,255,255,0.12); border-radius: 999px; padding: 10px 16px; z-index: 700; opacity: 0; pointer-events: none; transition: opacity 0.2s ease, transform 0.2s ease; backdrop-filter: blur(6px); font-size: 13px; }
+        #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        #break-bar-wrap { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); width: 120px; height: 6px; background: rgba(0,0,0,0.5); border-radius: 3px; overflow: hidden; z-index: 110; opacity: 0; transition: opacity 0.12s; }
+        #break-bar-wrap.active { opacity: 1; }
+        #break-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #ff4444, #ffaa00); transition: width 0.05s linear; border-radius: 3px; }
+        #vignette { position: fixed; inset: 0; pointer-events: none; z-index: 90; background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.35) 100%); }
+        @media (max-width: 720px) {
+            #info, #nn-info { font-size: 11px; max-width: calc(100vw - 24px); min-width: 0; }
+            #nn-info { top: auto; bottom: 100px; right: 12px; }
+            .inv-grid { grid-template-columns: repeat(6, 48px); }
+            #hotbar { gap: 4px; padding: 6px; }
+            .hotbar-slot { width: 46px; height: 46px; }
+        }
+        #agent-hud {
+            position: fixed; bottom: 90px; right: 16px; color: white; font-size: 12px;
+            background: var(--panel); padding: 10px 12px; border: 1px solid var(--panel-border);
+            border-radius: 10px; backdrop-filter: blur(6px); z-index: 100; min-width: 170px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.9); line-height: 1.5;
+        }
+        #agent-hud h4 { color: #ffaa44; font-size: 13px; margin-bottom: 4px; }
+        #agent-hud .agent-action { color: #88ddff; }
+        #agent-hud .agent-brain { font-size: 10px; opacity: 0.7; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <h2>&#x1F9E0; Training Terrain Model v3</h2>
+        <div id="progress-bar"><div id="progress-fill"></div></div>
+        <div id="loading-text">Initializing neural network...</div>
+        <div id="loss-display">Loss: --</div>
+        <div id="training-viz"></div>
+    </div>
+
+    <div id="start-screen">
+        <h1>&#x1F9E0; NEURAL VOXELS v3</h1>
+        <div class="subtitle">Everything is the neural network &mdash; your ally learns continuously</div>
+        <div class="nn-desc">
+            A 3-layer transformer generates the world. A 2-layer transformer brain drives an allied
+            agent that learns from its own behaviour in real-time via experience replay. Weights
+            checkpoint to localStorage &mdash; the agent gets smarter across sessions, accumulating
+            intelligence vectors that persist. Two transformers, one world, continuous learning.
+        </div>
+        <div class="world-meta">
+            <div class="meta-pill">Seed: <span id="start-seed">--</span></div>
+            <div class="meta-pill">World: <span id="start-world-size">--</span></div>
+            <div class="meta-pill">Save slot: <span id="save-status">Empty</span></div>
+        </div>
+        <div class="button-row">
+            <button id="start-btn" class="menu-btn">Enter World</button>
+            <button id="load-btn" class="menu-btn">Load Save</button>
+            <button id="regen-btn" class="menu-btn">New Seed</button>
+        </div>
+        <div id="controls-info">
+            <div>WASD move &bull; SPACE jump &bull; SHIFT sprint &bull; MMB pick block</div>
+            <div>LMB break (hold) &bull; RMB place &bull; E inventory &bull; 1-9 hotbar</div>
+            <div>K save &bull; L load &bull; R regenerate &bull; ESC release mouse</div>
+        </div>
+    </div>
+
+    <canvas id="game"></canvas>
+    <div id="crosshair"></div>
+    <div id="vignette"></div>
+    <div id="break-bar-wrap"><div id="break-bar"></div></div>
+
+    <div id="inventory-overlay">
+        <div id="inventory">
+            <h2>Inventory</h2>
+            <div class="inv-section"><h3>Building Blocks</h3><div class="inv-grid" id="inv-blocks"></div></div>
+            <div class="inv-divider"></div>
+            <div class="inv-section"><h3>Hotbar Picks</h3><div class="inv-grid" id="inv-hotbar"></div></div>
+            <div id="inv-hint">Click a block to select &bull; E to close &bull; MMB copies block</div>
+        </div>
+    </div>
+    <div id="hotbar"></div>
+
+    <div id="info">
+        <div>FPS: <span id="fps">0</span></div>
+        <div>Position: <span id="pos">0, 0, 0</span></div>
+        <div>Biome: <span id="biome">--</span></div>
+        <div>Time: <span id="world-time">--:--</span></div>
+        <div>Selected: <span id="selected-name">Grass</span></div>
+        <div>Blocks: <span id="blocks">0</span></div>
+        <div>Seed: <span id="seed-info">--</span></div>
+        <div class="tiny">K save &bull; L load &bull; R regen &bull; E inventory</div>
+    </div>
+
+    <div id="nn-info">
+        <h3>&#x1F9E0; Terrain Transformer v3</h3>
+        <div class="arch">
+            Input: sin/cos pos_encode(x,z) &rarr; R<sup>48</sup><br/>
+            ─────────────────────────────<br/>
+            Layer 1: MHA(2 heads) &rarr; FFN(96)<br/>
+            Layer 2: MHA(2 heads) &rarr; FFN(96)<br/>
+            Layer 3: MHA(2 heads) &rarr; FFN(96)<br/>
+            ─────────────────────────────<br/>
+            Output heads &times;8:<br/>
+            &nbsp; height &bull; biome &bull; caves<br/>
+            &nbsp; ores &bull; trees &bull; moisture<br/>
+            &nbsp; fog &bull; structures<br/>
+            Params: <span id="param-count">~?K</span><br/>
+            Optimiser: Adam (&beta;1=0.9, &beta;2=0.999)
+        </div>
+        <div class="training-stats">
+            <div>Epochs: <span id="epochs-done">0</span>/<span id="total-epochs">300</span></div>
+            <div class="loss">Loss: <span id="final-loss">--</span></div>
+            <div>Dirty chunks: <span id="dirty-count">0</span></div>
+        </div>
+        <div class="nn-outputs">
+            NN at player: <span id="nn-local">--</span>
+        </div>
+    </div>
+
+    <div id="toast"></div>
+
+    <div id="agent-hud">
+        <h4>&#x1F916; Agent ALLY</h4>
+        <div>State: <span id="agent-state" class="agent-action">Idle</span></div>
+        <div>Dist: <span id="agent-dist">--</span></div>
+        <div>Blocks mined: <span id="agent-mined">0</span></div>
+        <div class="agent-brain">Brain: <span id="agent-brain-info">2L MHA dim=16</span></div>
+        <div class="agent-brain">Exp: <span id="agent-exp">0</span> | Gen: <span id="agent-gen">0</span></div>
+        <div class="agent-brain">Online loss: <span id="agent-loss">--</span></div>
+        <div class="agent-brain">Checkpoint: <span id="agent-ckpt">none</span></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+    "use strict";
+
+    // ═══════════════════════════════════════════════════════════════
+    // AUDIO
+    // ═══════════════════════════════════════════════════════════════
+    const Audio_ = (() => {
+        let ctx = null;
+        function c() { if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)(); if (ctx.state === 'suspended') ctx.resume(); return ctx; }
+        function playBreak(bt) {
+            const x = c(), o = x.createOscillator(), g = x.createGain();
+            const n = x.createBufferSource(), nb = x.createBuffer(1, x.sampleRate * 0.12, x.sampleRate), d = nb.getChannelData(0);
+            for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * 0.3;
+            n.buffer = nb; const ng = x.createGain(); ng.gain.setValueAtTime(0.15, x.currentTime); ng.gain.exponentialRampToValueAtTime(0.001, x.currentTime + 0.12);
+            n.connect(ng).connect(x.destination); n.start(); n.stop(x.currentTime + 0.12);
+            o.frequency.setValueAtTime((bt <= 2 ? 180 : bt <= 6 ? 280 : 400) + Math.random() * 60, x.currentTime);
+            o.frequency.exponentialRampToValueAtTime(80, x.currentTime + 0.1); o.type = 'square';
+            g.gain.setValueAtTime(0.08, x.currentTime); g.gain.exponentialRampToValueAtTime(0.001, x.currentTime + 0.1);
+            o.connect(g).connect(x.destination); o.start(); o.stop(x.currentTime + 0.1);
+        }
+        function playPlace(bt) {
+            const x = c(), o = x.createOscillator(), g = x.createGain();
+            o.frequency.setValueAtTime((bt <= 2 ? 220 : bt <= 6 ? 340 : 480) + Math.random() * 40, x.currentTime); o.type = 'triangle';
+            g.gain.setValueAtTime(0.06, x.currentTime); g.gain.exponentialRampToValueAtTime(0.001, x.currentTime + 0.08);
+            o.connect(g).connect(x.destination); o.start(); o.stop(x.currentTime + 0.08);
+        }
+        function playStep() {
+            const x = c(), n = x.createBufferSource(), b = x.createBuffer(1, x.sampleRate * 0.06, x.sampleRate), d = b.getChannelData(0);
+            for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * 0.08;
+            n.buffer = b; const g = x.createGain(); g.gain.setValueAtTime(0.04, x.currentTime); g.gain.exponentialRampToValueAtTime(0.001, x.currentTime + 0.06);
+            n.connect(g).connect(x.destination); n.start(); n.stop(x.currentTime + 0.06);
+        }
+        return { playBreak, playPlace, playStep };
+    })();
+
+    // ═══════════════════════════════════════════════════════════════
+    // SIMPLEX NOISE (used ONLY for training targets)
+    // ═══════════════════════════════════════════════════════════════
+    class SimplexNoise {
+        constructor(seed) {
+            this.p = new Uint8Array(256); this.perm = new Uint8Array(512);
+            const rng = this.m32(seed * 1000000 + 1337);
+            for (let i = 0; i < 256; i++) this.p[i] = i;
+            for (let i = 255; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [this.p[i], this.p[j]] = [this.p[j], this.p[i]]; }
+            for (let i = 0; i < 512; i++) this.perm[i] = this.p[i & 255];
+        }
+        m32(s) { return () => { let t = s += 0x6D2B79F5; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+        noise2D(x, y) {
+            const F2 = 0.5*(Math.sqrt(3)-1), G2 = (3-Math.sqrt(3))/6;
+            const s=(x+y)*F2, i=Math.floor(x+s), j=Math.floor(y+s), t=(i+j)*G2;
+            const x0=x-(i-t), y0=y-(j-t), i1=x0>y0?1:0, j1=x0>y0?0:1;
+            const x1=x0-i1+G2, y1=y0-j1+G2, x2=x0-1+2*G2, y2=y0-1+2*G2;
+            const ii=i&255, jj=j&255;
+            const gr=(h,gx,gy)=>{const hh=h&7,u=hh<4?gx:gy,v=hh<4?gy:gx;return((hh&1)?-u:u)+((hh&2)?-2*v:2*v);};
+            let n0=0,n1=0,n2=0,t0=0.5-x0*x0-y0*y0;
+            if(t0>=0){t0*=t0;n0=t0*t0*gr(this.perm[ii+this.perm[jj]],x0,y0);}
+            let t1=0.5-x1*x1-y1*y1;if(t1>=0){t1*=t1;n1=t1*t1*gr(this.perm[ii+i1+this.perm[jj+j1]],x1,y1);}
+            let t2=0.5-x2*x2-y2*y2;if(t2>=0){t2*=t2;n2=t2*t2*gr(this.perm[ii+1+this.perm[jj+1]],x2,y2);}
+            return 70*(n0+n1+n2);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // TERRAIN TRANSFORMER v3 — Multi-head attention, Adam, 8 outputs
+    // ═══════════════════════════════════════════════════════════════
+    class TerrainTransformerV3 {
+        constructor(seed = 42) {
+            this.seed = seed;
+            this.dim = 48;          // up from 32
+            this.ffnDim = 96;       // up from 64
+            this.nHeads = 2;
+            this.headDim = this.dim / this.nHeads; // 24
+            this.layers = 3;        // up from 2
+            this.nFreqs = 12;       // sinusoidal encoding frequencies
+            this.inputDim = this.nFreqs * 4; // sin/cos for x and z = 4 per freq
+            this.lr = 0.003;
+            this.beta1 = 0.9;
+            this.beta2 = 0.999;
+            this.eps = 1e-8;
+            this.clipVal = 1.0;
+            this.step = 0;
+            this.rng = this.m32(seed);
+            this.cache = new Map();
+
+            // 8 output heads:
+            // 0: height (scalar)
+            // 1-4: biome (4-class softmax)
+            // 5: cave density (scalar, sigmoid)
+            // 6: ore richness (scalar, sigmoid)
+            // 7: tree density (scalar, sigmoid)
+            // 8: moisture (scalar, sigmoid)
+            // 9: fog density (scalar, sigmoid)
+            // 10: structure probability (scalar, sigmoid)
+            this.outputDim = 11;
+
+            this.initWeights();
+        }
+
+        m32(s) { return () => { let t = s += 0x6D2B79F5; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+
+        initWeights() {
+            const he = fi => Math.sqrt(2 / fi);
+
+            // Input projection: inputDim -> dim
+            this.Winp = this.randMat(this.inputDim, this.dim, he(this.inputDim));
+            this.binp = this.randVec(this.dim);
+
+            // Layers
+            this.L = [];
+            for (let l = 0; l < this.layers; l++) {
+                this.L.push({
+                    // Multi-head attention: Q, K, V projections + output
+                    Wq: this.randMat(this.dim, this.dim, he(this.dim)),
+                    Wk: this.randMat(this.dim, this.dim, he(this.dim)),
+                    Wv: this.randMat(this.dim, this.dim, he(this.dim)),
+                    Wo: this.randMat(this.dim, this.dim, he(this.dim)),
+                    // FFN
+                    W1: this.randMat(this.dim, this.ffnDim, he(this.dim)),
+                    b1: this.randVec(this.ffnDim),
+                    W2: this.randMat(this.ffnDim, this.dim, he(this.ffnDim)),
+                    b2: this.randVec(this.dim),
+                    // Layer norm params (gain + bias)
+                    ln1g: this.onesVec(this.dim),
+                    ln1b: this.randVec(this.dim),
+                    ln2g: this.onesVec(this.dim),
+                    ln2b: this.randVec(this.dim),
+                });
+            }
+
+            // Output head
+            this.Wout = this.randMat(this.dim, this.outputDim, he(this.dim));
+            this.bout = this.randVec(this.outputDim);
+
+            // Count params
+            let p = this.inputDim * this.dim + this.dim; // input proj
+            p += this.layers * (this.dim * this.dim * 4 + this.dim * this.ffnDim * 2 + this.ffnDim + this.dim + this.dim * 4);
+            p += this.dim * this.outputDim + this.outputDim;
+            document.getElementById('param-count').textContent = `${(p / 1000).toFixed(1)}K`;
+        }
+
+        randMat(rows, cols, scale) {
+            const w = [], m = [], v = [];
+            for (let i = 0; i < rows; i++) {
+                w[i] = new Float32Array(cols); m[i] = new Float32Array(cols); v[i] = new Float32Array(cols);
+                for (let j = 0; j < cols; j++) w[i][j] = (this.rng() * 2 - 1) * scale;
+            }
+            return { w, g: w.map(r => new Float32Array(r.length)), m, v };
+        }
+        randVec(n) {
+            const w = new Float32Array(n), g = new Float32Array(n), m = new Float32Array(n), v = new Float32Array(n);
+            for (let i = 0; i < n; i++) w[i] = (this.rng() * 2 - 1) * 0.01;
+            return { w, g, m, v };
+        }
+        onesVec(n) {
+            const w = new Float32Array(n), g = new Float32Array(n), m = new Float32Array(n), v = new Float32Array(n);
+            w.fill(1);
+            return { w, g, m, v };
+        }
+
+        cl(x) { if (!Number.isFinite(x)) return 0; return Math.max(-10, Math.min(10, x)); }
+
+        // Sinusoidal positional encoding
+        encode(x, z) {
+            const enc = new Float32Array(this.inputDim);
+            for (let i = 0; i < this.nFreqs; i++) {
+                const freq = Math.pow(2, i) * 0.01;
+                enc[i * 4] = Math.sin(x * freq);
+                enc[i * 4 + 1] = Math.cos(x * freq);
+                enc[i * 4 + 2] = Math.sin(z * freq);
+                enc[i * 4 + 3] = Math.cos(z * freq);
+            }
+            return enc;
+        }
+
+        matvec(M, v) {
+            const out = new Float32Array(M.w[0].length);
+            for (let j = 0; j < M.w[0].length; j++) {
+                let s = 0;
+                for (let i = 0; i < v.length; i++) s += v[i] * M.w[i][j];
+                out[j] = this.cl(s);
+            }
+            return out;
+        }
+
+        addVec(a, b) { const o = new Float32Array(a.length); for (let i = 0; i < a.length; i++) o[i] = this.cl(a[i] + b.w[i]); return o; }
+
+        gelu(x) { x = this.cl(x); return 0.5 * x * (1 + Math.tanh(0.7978845608 * (x + 0.044715 * x * x * x))); }
+
+        layerNorm(v, gain, bias) {
+            const n = v.length;
+            let mean = 0; for (let i = 0; i < n; i++) mean += v[i]; mean /= n;
+            let var_ = 0; for (let i = 0; i < n; i++) var_ += (v[i] - mean) ** 2; var_ /= n;
+            const std = Math.sqrt(var_ + 1e-5);
+            const out = new Float32Array(n);
+            for (let i = 0; i < n; i++) out[i] = this.cl(((v[i] - mean) / std) * gain.w[i] + bias.w[i]);
+            return out;
+        }
+
+        softmax(arr) {
+            const max = Math.max(...arr);
+            const exp = arr.map(x => Math.exp(this.cl(x - max)));
+            const sum = exp.reduce((a, b) => a + b, 0) + 1e-8;
+            return exp.map(x => x / sum);
+        }
+
+        sigmoid(x) { return 1 / (1 + Math.exp(-this.cl(x))); }
+
+        // Self-attention on a single token (simplified: Q*K^T is just a scalar gate per head)
+        selfAttn(h, layer) {
+            const L = layer;
+            const q = this.matvec(L.Wq, h);
+            const k = this.matvec(L.Wk, h);
+            const v = this.matvec(L.Wv, h);
+
+            // Per-head: compute attention weight as sigmoid(q·k / sqrt(headDim))
+            const attended = new Float32Array(this.dim);
+            for (let head = 0; head < this.nHeads; head++) {
+                const off = head * this.headDim;
+                let dot = 0;
+                for (let i = 0; i < this.headDim; i++) dot += q[off + i] * k[off + i];
+                const attnWeight = this.sigmoid(dot / Math.sqrt(this.headDim));
+                for (let i = 0; i < this.headDim; i++) {
+                    attended[off + i] = v[off + i] * attnWeight;
+                }
+            }
+            return this.matvec(L.Wo, attended);
+        }
+
+        forward(x, z) {
+            const enc = this.encode(x, z);
+
+            // Input projection
+            let h = this.addVec(this.matvec(this.Winp, enc), this.binp);
+
+            // Transformer layers
+            for (let l = 0; l < this.layers; l++) {
+                const L = this.L[l];
+                // Pre-norm attention
+                const hn1 = this.layerNorm(h, L.ln1g, L.ln1b);
+                const attn = this.selfAttn(hn1, L);
+                for (let i = 0; i < this.dim; i++) h[i] = this.cl(h[i] + attn[i] * 0.5);
+
+                // Pre-norm FFN
+                const hn2 = this.layerNorm(h, L.ln2g, L.ln2b);
+                let ff = this.matvec(L.W1, hn2);
+                for (let i = 0; i < this.ffnDim; i++) ff[i] = this.gelu(ff[i] + L.b1.w[i]);
+                let ff2 = this.matvec(L.W2, ff);
+                for (let i = 0; i < this.dim; i++) h[i] = this.cl(h[i] + (ff2[i] + L.b2.w[i]) * 0.45);
+            }
+
+            // Output head
+            let out = this.addVec(this.matvec(this.Wout, h), this.bout);
+            return { h, raw: out };
+        }
+
+        // Decode output vector into game-meaningful values
+        decode(raw) {
+            const height = Math.max(4, Math.min(24, Math.floor(13 + Math.tanh(this.cl(raw[0])) * 10)));
+            const biomeLogits = [raw[1], raw[2], raw[3], raw[4]];
+            const biomeProbs = this.softmax(biomeLogits);
+            let biome = 0; for (let i = 1; i < 4; i++) if (biomeProbs[i] > biomeProbs[biome]) biome = i;
+            const caveDensity = this.sigmoid(raw[5]);    // 0-1, higher = more caves
+            const oreRichness = this.sigmoid(raw[6]);    // 0-1, higher = rarer ores
+            const treeDensity = this.sigmoid(raw[7]);    // 0-1
+            const moisture = this.sigmoid(raw[8]);       // 0-1
+            const fogDensity = this.sigmoid(raw[9]);     // 0-1
+            const structureProb = this.sigmoid(raw[10]); // 0-1
+            return { height, biome, biomeProbs, caveDensity, oreRichness, treeDensity, moisture, fogDensity, structureProb };
+        }
+
+        generate(x, z) {
+            const k = `${Math.floor(x)},${Math.floor(z)}`;
+            if (this.cache.has(k)) return this.cache.get(k);
+            const { raw } = this.forward(x, z);
+            const out = this.decode(raw);
+            this.cache.set(k, out);
+            return out;
+        }
+
+        // Training with Adam optimiser
+        train(samples, simplex, epoch, totalEpochs) {
+            this.step++;
+            let totalLoss = 0;
+
+            // Cosine LR schedule with warmup
+            const warmup = 20;
+            let lr;
+            if (epoch < warmup) lr = this.lr * (epoch + 1) / warmup;
+            else lr = this.lr * 0.5 * (1 + Math.cos(Math.PI * (epoch - warmup) / (totalEpochs - warmup)));
+
+            // Zero gradients
+            const zeroM = M => { for (let i = 0; i < M.g.length; i++) M.g[i].fill(0); };
+            const zeroV = V => { V.g.fill(0); };
+            zeroM(this.Winp); zeroV(this.binp); zeroM(this.Wout); zeroV(this.bout);
+            for (const L of this.L) {
+                zeroM(L.Wq); zeroM(L.Wk); zeroM(L.Wv); zeroM(L.Wo);
+                zeroM(L.W1); zeroV(L.b1); zeroM(L.W2); zeroV(L.b2);
+                zeroV(L.ln1g); zeroV(L.ln1b); zeroV(L.ln2g); zeroV(L.ln2b);
+            }
+
+            for (const [x, z] of samples) {
+                // Compute targets from simplex (ground truth)
+                let tgtH = 13 + simplex.noise2D(x * 0.04, z * 0.04) * 5.5
+                    + simplex.noise2D(x * 0.08 + 30, z * 0.08 - 18) * 2.5;
+                tgtH = Math.max(5, Math.min(22, tgtH));
+
+                const bn = simplex.noise2D(x * 0.025 + 50, z * 0.025 - 20);
+                const moist = simplex.noise2D(x * 0.02 + 120, z * 0.02 + 80);
+                let tgtB = 0;
+                if (bn < -0.28) tgtB = 1;
+                else if (moist > 0.3) tgtB = 2;
+                else if (bn > 0.33) tgtB = 3;
+
+                // Additional target signals
+                const tgtCave = Math.max(0, Math.min(1,
+                    (simplex.noise2D(x * 0.11 + 90, z * 0.11 - 50) + 0.5 * simplex.noise2D(x * 0.065 + 180, z * 0.065 + 210) + 1) / 3
+                ));
+                const tgtOre = Math.max(0, Math.min(1,
+                    (simplex.noise2D(x * 0.18 + 300, z * 0.18 + 120) + 1) / 2
+                ));
+                const tgtTree = Math.max(0, Math.min(1,
+                    (moist > 0.3 ? 0.7 : bn > 0.33 ? 0.1 : bn < -0.28 ? 0.02 : 0.3)
+                ));
+                const tgtMoisture = (moist + 1) / 2;
+                const tgtFog = Math.max(0, Math.min(1,
+                    (simplex.noise2D(x * 0.015 + 500, z * 0.015 - 300) + 1) / 2
+                ));
+                const tgtStruct = Math.max(0, Math.min(1,
+                    simplex.noise2D(x * 0.03 + 700, z * 0.03 + 400) > 0.6 ? 0.8 : 0.05
+                ));
+
+                const { h, raw } = this.forward(x, z);
+                const predH = 13 + Math.tanh(this.cl(raw[0])) * 10;
+                const predB = this.softmax([raw[1], raw[2], raw[3], raw[4]]);
+                const predCave = this.sigmoid(raw[5]);
+                const predOre = this.sigmoid(raw[6]);
+                const predTree = this.sigmoid(raw[7]);
+                const predMoist = this.sigmoid(raw[8]);
+                const predFog = this.sigmoid(raw[9]);
+                const predStruct = this.sigmoid(raw[10]);
+
+                // Losses
+                const lH = (predH - tgtH) ** 2;
+                const lB = -Math.log(predB[tgtB] + 1e-7);
+                const lCave = (predCave - tgtCave) ** 2;
+                const lOre = (predOre - tgtOre) ** 2;
+                const lTree = (predTree - tgtTree) ** 2;
+                const lMoist = (predMoist - tgtMoisture) ** 2;
+                const lFog = (predFog - tgtFog) ** 2;
+                const lStruct = (predStruct - tgtStruct) ** 2;
+
+                totalLoss += lH + lB * 0.5 + (lCave + lOre + lTree + lMoist + lFog + lStruct) * 0.3;
+
+                // Backprop through output head (simplified numerical gradients on output)
+                const dOut = new Float32Array(this.outputDim);
+
+                // dHeight
+                const tanhV = Math.tanh(this.cl(raw[0]));
+                dOut[0] = this.cl(2 * (predH - tgtH) * 10 * (1 - tanhV * tanhV) * 0.06);
+
+                // dBiome
+                for (let i = 0; i < 4; i++)
+                    dOut[1 + i] = this.cl((predB[i] - (i === tgtB ? 1 : 0)) * 0.08);
+
+                // dSigmoid outputs
+                const dsig = (pred, tgt, idx) => {
+                    dOut[idx] = this.cl(2 * (pred - tgt) * pred * (1 - pred) * 0.06);
+                };
+                dsig(predCave, tgtCave, 5);
+                dsig(predOre, tgtOre, 6);
+                dsig(predTree, tgtTree, 7);
+                dsig(predMoist, tgtMoisture, 8);
+                dsig(predFog, tgtFog, 9);
+                dsig(predStruct, tgtStruct, 10);
+
+                // Accumulate gradients on output weights
+                for (let i = 0; i < this.dim; i++) {
+                    for (let j = 0; j < this.outputDim; j++) {
+                        this.Wout.g[i][j] += dOut[j] * h[i];
+                    }
+                }
+                for (let j = 0; j < this.outputDim; j++) this.bout.g[j] += dOut[j];
+
+                // Backprop into h
+                const dh = new Float32Array(this.dim);
+                for (let i = 0; i < this.dim; i++) {
+                    for (let j = 0; j < this.outputDim; j++) {
+                        dh[i] += dOut[j] * this.Wout.w[i][j];
+                    }
+                    dh[i] = this.cl(dh[i] * 0.1);
+                }
+
+                // Simplified gradient on input projection
+                const enc = this.encode(x, z);
+                for (let i = 0; i < this.inputDim; i++) {
+                    for (let j = 0; j < this.dim; j++) {
+                        this.Winp.g[i][j] += this.cl(dh[j] * enc[i] * 0.1);
+                    }
+                }
+                for (let j = 0; j < this.dim; j++) this.binp.g[j] += dh[j] * 0.1;
+            }
+
+            // Adam update
+            const adamMat = (M, lr_) => {
+                for (let i = 0; i < M.w.length; i++) for (let j = 0; j < M.w[i].length; j++) {
+                    const g = this.cl(M.g[i][j] / samples.length, -this.clipVal, this.clipVal);
+                    M.m[i][j] = this.beta1 * M.m[i][j] + (1 - this.beta1) * g;
+                    M.v[i][j] = this.beta2 * M.v[i][j] + (1 - this.beta2) * g * g;
+                    const mhat = M.m[i][j] / (1 - Math.pow(this.beta1, this.step));
+                    const vhat = M.v[i][j] / (1 - Math.pow(this.beta2, this.step));
+                    M.w[i][j] -= lr_ * mhat / (Math.sqrt(vhat) + this.eps);
+                    M.w[i][j] = this.cl(M.w[i][j], -4, 4);
+                }
+            };
+            const adamVec = (V, lr_) => {
+                for (let j = 0; j < V.w.length; j++) {
+                    const g = this.cl(V.g[j] / samples.length, -this.clipVal, this.clipVal);
+                    V.m[j] = this.beta1 * V.m[j] + (1 - this.beta1) * g;
+                    V.v[j] = this.beta2 * V.v[j] + (1 - this.beta2) * g * g;
+                    const mhat = V.m[j] / (1 - Math.pow(this.beta1, this.step));
+                    const vhat = V.v[j] / (1 - Math.pow(this.beta2, this.step));
+                    V.w[j] -= lr_ * mhat / (Math.sqrt(vhat) + this.eps);
+                    V.w[j] = this.cl(V.w[j], -4, 4);
+                }
+            };
+
+            adamMat(this.Winp, lr); adamVec(this.binp, lr);
+            adamMat(this.Wout, lr); adamVec(this.bout, lr);
+            for (const L of this.L) {
+                adamMat(L.Wq, lr); adamMat(L.Wk, lr); adamMat(L.Wv, lr); adamMat(L.Wo, lr);
+                adamMat(L.W1, lr); adamVec(L.b1, lr); adamMat(L.W2, lr); adamVec(L.b2, lr);
+                adamVec(L.ln1g, lr); adamVec(L.ln1b, lr); adamVec(L.ln2g, lr); adamVec(L.ln2b, lr);
+            }
+
+            return totalLoss / samples.length;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // AGENT BRAIN — Small transformer for NPC decision-making
+    // ═══════════════════════════════════════════════════════════════
+    class AgentBrain {
+        constructor(seed=99) {
+            this.dim=16; this.ffnDim=32; this.heads=2; this.headDim=8; this.layers=2;
+            this.inputDim=14; this.outputDim=7;
+            // Outputs: move_x, move_z, jump, action(4): follow/wander/mine/build
+            this.lr=0.005; this.beta1=0.9; this.beta2=0.999; this.eps=1e-8;
+            this.step=0; this.rng=this._m32(seed);
+            this.init();
+        }
+        _m32(s){return()=>{let t=s+=0x6D2B79F5;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;};}
+        _cl(x){if(!Number.isFinite(x))return 0;return Math.max(-8,Math.min(8,x));}
+        _randMat(r,c,sc){const w=[],m=[],v=[];for(let i=0;i<r;i++){w[i]=new Float32Array(c);m[i]=new Float32Array(c);v[i]=new Float32Array(c);for(let j=0;j<c;j++)w[i][j]=(this.rng()*2-1)*sc;}return{w,g:w.map(r=>new Float32Array(r.length)),m,v};}
+        _randVec(n){const w=new Float32Array(n),g=new Float32Array(n),m=new Float32Array(n),v=new Float32Array(n);for(let i=0;i<n;i++)w[i]=(this.rng()*2-1)*0.01;return{w,g,m,v};}
+        init(){
+            const he=f=>Math.sqrt(2/f);
+            this.Winp=this._randMat(this.inputDim,this.dim,he(this.inputDim));
+            this.binp=this._randVec(this.dim);
+            this.L=[];
+            for(let l=0;l<this.layers;l++){
+                this.L.push({
+                    Wq:this._randMat(this.dim,this.dim,he(this.dim)),
+                    Wk:this._randMat(this.dim,this.dim,he(this.dim)),
+                    Wv:this._randMat(this.dim,this.dim,he(this.dim)),
+                    Wo:this._randMat(this.dim,this.dim,he(this.dim)),
+                    W1:this._randMat(this.dim,this.ffnDim,he(this.dim)),
+                    b1:this._randVec(this.ffnDim),
+                    W2:this._randMat(this.ffnDim,this.dim,he(this.ffnDim)),
+                    b2:this._randVec(this.dim)
+                });
+            }
+            this.Wout=this._randMat(this.dim,this.outputDim,he(this.dim));
+            this.bout=this._randVec(this.outputDim);
+            // Count params
+            let p=this.inputDim*this.dim+this.dim;
+            p+=this.layers*(this.dim*this.dim*4+this.dim*this.ffnDim*2+this.ffnDim+this.dim);
+            p+=this.dim*this.outputDim+this.outputDim;
+            document.getElementById("agent-brain-info").textContent=`${this.layers}L MHA dim=${this.dim} ${(p/1000).toFixed(1)}K params`;
+        }
+        _mv(M,v){const o=new Float32Array(M.w[0].length);for(let j=0;j<M.w[0].length;j++){let s=0;for(let i=0;i<v.length;i++)s+=v[i]*M.w[i][j];o[j]=this._cl(s);}return o;}
+        _gelu(x){x=this._cl(x);return 0.5*x*(1+Math.tanh(0.7978845608*(x+0.044715*x*x*x)));}
+        _sig(x){return 1/(1+Math.exp(-this._cl(x)));}
+        _sm(a){const mx=Math.max(...a);const e=a.map(x=>Math.exp(this._cl(x-mx)));const s=e.reduce((a,b)=>a+b,0)+1e-8;return e.map(x=>x/s);}
+        _ln(v){const n=v.length;let mean=0;for(let i=0;i<n;i++)mean+=v[i];mean/=n;let vr=0;for(let i=0;i<n;i++)vr+=(v[i]-mean)**2;vr/=n;const std=Math.sqrt(vr+1e-5);return v.map(x=>this._cl((x-mean)/std));}
+
+        forward(input){
+            // input: Float32Array[14]
+            let h=new Float32Array(this.dim);
+            const proj=this._mv(this.Winp,input);
+            for(let i=0;i<this.dim;i++)h[i]=this._cl(proj[i]+this.binp.w[i]);
+            for(let l=0;l<this.layers;l++){
+                const L=this.L[l];
+                let hn=this._ln(Array.from(h));
+                const q=this._mv(L.Wq,hn),k=this._mv(L.Wk,hn),v=this._mv(L.Wv,hn);
+                const att=new Float32Array(this.dim);
+                for(let hd=0;hd<this.heads;hd++){
+                    const off=hd*this.headDim;let dot=0;
+                    for(let i=0;i<this.headDim;i++)dot+=q[off+i]*k[off+i];
+                    const w=this._sig(dot/Math.sqrt(this.headDim));
+                    for(let i=0;i<this.headDim;i++)att[off+i]=v[off+i]*w;
+                }
+                const ao=this._mv(L.Wo,att);
+                for(let i=0;i<this.dim;i++)h[i]=this._cl(h[i]+ao[i]*0.5);
+                hn=this._ln(Array.from(h));
+                let ff=this._mv(L.W1,hn);
+                for(let i=0;i<this.ffnDim;i++)ff[i]=this._gelu(ff[i]+L.b1.w[i]);
+                const ff2=this._mv(L.W2,ff);
+                for(let i=0;i<this.dim;i++)h[i]=this._cl(h[i]+(ff2[i]+L.b2.w[i])*0.45);
+            }
+            const raw=new Float32Array(this.outputDim);
+            const out=this._mv(this.Wout,h);
+            for(let i=0;i<this.outputDim;i++)raw[i]=this._cl(out[i]+this.bout.w[i]);
+            return {h,raw};
+        }
+
+        decode(raw){
+            const moveX=Math.tanh(raw[0]);
+            const moveZ=Math.tanh(raw[1]);
+            const jump=this._sig(raw[2]);
+            const actionLogits=[raw[3],raw[4],raw[5],raw[6]];
+            const actionProbs=this._sm(actionLogits);
+            let action=0;for(let i=1;i<4;i++)if(actionProbs[i]>actionProbs[action])action=i;
+            return{moveX,moveZ,jump,action,actionProbs};
+        }
+
+        // Train on behavioral cloning from rule-based policy
+        train(samples){
+            this.step++;
+            let totalLoss=0;
+            const zM=M=>{for(let i=0;i<M.g.length;i++)M.g[i].fill(0);};
+            const zV=V=>{V.g.fill(0);};
+            zM(this.Winp);zV(this.binp);zM(this.Wout);zV(this.bout);
+            for(const L of this.L){zM(L.Wq);zM(L.Wk);zM(L.Wv);zM(L.Wo);zM(L.W1);zV(L.b1);zM(L.W2);zV(L.b2);}
+
+            for(const{input,tgtMoveX,tgtMoveZ,tgtJump,tgtAction}of samples){
+                const{h,raw}=this.forward(input);
+                const predMX=Math.tanh(raw[0]),predMZ=Math.tanh(raw[1]);
+                const predJ=this._sig(raw[2]);
+                const predA=this._sm([raw[3],raw[4],raw[5],raw[6]]);
+
+                const lM=(predMX-tgtMoveX)**2+(predMZ-tgtMoveZ)**2;
+                const lJ=(predJ-tgtJump)**2;
+                const lA=-Math.log(predA[tgtAction]+1e-7);
+                totalLoss+=lM+lJ*0.5+lA*0.4;
+
+                // Gradients on output
+                const dOut=new Float32Array(this.outputDim);
+                const tMX=Math.tanh(raw[0]);dOut[0]=this._cl(2*(predMX-tgtMoveX)*(1-tMX*tMX)*0.1);
+                const tMZ=Math.tanh(raw[1]);dOut[1]=this._cl(2*(predMZ-tgtMoveZ)*(1-tMZ*tMZ)*0.1);
+                dOut[2]=this._cl(2*(predJ-tgtJump)*predJ*(1-predJ)*0.08);
+                for(let i=0;i<4;i++)dOut[3+i]=this._cl((predA[i]-(i===tgtAction?1:0))*0.06);
+
+                for(let i=0;i<this.dim;i++)for(let j=0;j<this.outputDim;j++)this.Wout.g[i][j]+=dOut[j]*h[i];
+                for(let j=0;j<this.outputDim;j++)this.bout.g[j]+=dOut[j];
+                const dh=new Float32Array(this.dim);
+                for(let i=0;i<this.dim;i++){for(let j=0;j<this.outputDim;j++)dh[i]+=dOut[j]*this.Wout.w[i][j];dh[i]=this._cl(dh[i]*0.08);}
+                for(let i=0;i<this.inputDim;i++)for(let j=0;j<this.dim;j++)this.Winp.g[i][j]+=this._cl(dh[j]*input[i]*0.08);
+                for(let j=0;j<this.dim;j++)this.binp.g[j]+=dh[j]*0.08;
+            }
+
+            // Adam
+            const lr=0.004/(1+this.step*0.001);
+            const aM=(M)=>{for(let i=0;i<M.w.length;i++)for(let j=0;j<M.w[i].length;j++){const g=this._cl(M.g[i][j]/samples.length);M.m[i][j]=this.beta1*M.m[i][j]+(1-this.beta1)*g;M.v[i][j]=this.beta2*M.v[i][j]+(1-this.beta2)*g*g;const mh=M.m[i][j]/(1-Math.pow(this.beta1,this.step));const vh=M.v[i][j]/(1-Math.pow(this.beta2,this.step));M.w[i][j]-=lr*mh/(Math.sqrt(vh)+this.eps);M.w[i][j]=this._cl(M.w[i][j],-3,3);}};
+            const aV=(V)=>{for(let j=0;j<V.w.length;j++){const g=this._cl(V.g[j]/samples.length);V.m[j]=this.beta1*V.m[j]+(1-this.beta1)*g;V.v[j]=this.beta2*V.v[j]+(1-this.beta2)*g*g;const mh=V.m[j]/(1-Math.pow(this.beta1,this.step));const vh=V.v[j]/(1-Math.pow(this.beta2,this.step));V.w[j]-=lr*mh/(Math.sqrt(vh)+this.eps);V.w[j]=this._cl(V.w[j],-3,3);}};
+            aM(this.Winp);aV(this.binp);aM(this.Wout);aV(this.bout);
+            for(const L of this.L){aM(L.Wq);aM(L.Wk);aM(L.Wv);aM(L.Wo);aM(L.W1);aV(L.b1);aM(L.W2);aV(L.b2);}
+            return totalLoss/samples.length;
+        }
+
+        // Serialize all weights + Adam state to a flat object for localStorage
+        serialize(){
+            const flatMat=M=>{const out=[];for(let i=0;i<M.w.length;i++)out.push(Array.from(M.w[i]),Array.from(M.m[i]),Array.from(M.v[i]));return out;};
+            const flatVec=V=>({w:Array.from(V.w),m:Array.from(V.m),v:Array.from(V.v)});
+            return JSON.stringify({
+                step:this.step,
+                Winp:flatMat(this.Winp),binp:flatVec(this.binp),
+                Wout:flatMat(this.Wout),bout:flatVec(this.bout),
+                layers:this.L.map(L=>({
+                    Wq:flatMat(L.Wq),Wk:flatMat(L.Wk),Wv:flatMat(L.Wv),Wo:flatMat(L.Wo),
+                    W1:flatMat(L.W1),b1:flatVec(L.b1),W2:flatMat(L.W2),b2:flatVec(L.b2)
+                }))
+            });
+        }
+
+        // Restore weights + Adam state from serialized data
+        deserialize(json){
+            try{
+                const d=JSON.parse(json);
+                this.step=d.step||0;
+                const loadMat=(M,data)=>{for(let i=0;i<M.w.length&&i*3<data.length;i++){M.w[i]=new Float32Array(data[i*3]);M.m[i]=new Float32Array(data[i*3+1]);M.v[i]=new Float32Array(data[i*3+2]);}};
+                const loadVec=(V,data)=>{V.w=new Float32Array(data.w);V.m=new Float32Array(data.m);V.v=new Float32Array(data.v);};
+                loadMat(this.Winp,d.Winp);loadVec(this.binp,d.binp);
+                loadMat(this.Wout,d.Wout);loadVec(this.bout,d.bout);
+                for(let l=0;l<this.L.length&&l<d.layers.length;l++){
+                    const dl=d.layers[l],L=this.L[l];
+                    loadMat(L.Wq,dl.Wq);loadMat(L.Wk,dl.Wk);loadMat(L.Wv,dl.Wv);loadMat(L.Wo,dl.Wo);
+                    loadMat(L.W1,dl.W1);loadVec(L.b1,dl.b1);loadMat(L.W2,dl.W2);loadVec(L.b2,dl.b2);
+                }
+                return true;
+            }catch(e){console.error("Agent brain deserialize failed:",e);return false;}
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // AGENT ENTITY + CONTINUOUS LEARNING SYSTEM
+    // ═══════════════════════════════════════════════════════════════
+    const AGENT_ACTIONS=["Follow","Wander","Mine","Build"];
+    const AGENT_BRAIN_KEY="nv_agent_brain_v1";
+    const AGENT_STATS_KEY="nv_agent_stats_v1";
+    const EXP_BUFFER_SIZE=600; // circular experience replay buffer
+    let agentBrain=null;
+    let agentMined=0;
+    let agentGeneration=0;     // how many sessions this brain has survived
+    let agentTotalExp=0;       // lifetime experience count across all sessions
+    let agentOnlineLoss=0;     // running online training loss
+    let expBuffer=[];          // experience replay buffer
+    let expWriteIdx=0;
+    let onlineTrainTimer=0;    // train every N seconds
+    let checkpointTimer=0;     // save checkpoint every N experiences
+    let lastAgentState=null;   // previous state for reward computation
+    const agent={
+        position:new THREE.Vector3(0,0,0),
+        velocity:new THREE.Vector3(),
+        yaw:0,
+        onGround:false,
+        action:0,
+        actionTimer:0,
+        thinkTimer:0,
+        mineTarget:null,
+        buildCooldown:0,
+        group:null,
+        nameSprite:null,
+        actionLabel:null,
+        alive:false
+    };
+
+    function createAgentMesh(){
+        if(agent.group){scene.remove(agent.group);}
+        const g=new THREE.Group();
+        // Body
+        const bodyMat=new THREE.MeshLambertMaterial({color:0xff8844});
+        const body=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.7,0.3),bodyMat);
+        body.position.y=0.75;g.add(body);
+        // Head
+        const headMat=new THREE.MeshLambertMaterial({color:0xffcc88});
+        const head=new THREE.Mesh(new THREE.BoxGeometry(0.4,0.4,0.4),headMat);
+        head.position.y=1.3;g.add(head);
+        // Eyes
+        const eyeMat=new THREE.MeshBasicMaterial({color:0x222222});
+        const eyeL=new THREE.Mesh(new THREE.BoxGeometry(0.08,0.08,0.06),eyeMat);
+        eyeL.position.set(-0.1,1.35,0.2);g.add(eyeL);
+        const eyeR=new THREE.Mesh(new THREE.BoxGeometry(0.08,0.08,0.06),eyeMat);
+        eyeR.position.set(0.1,1.35,0.2);g.add(eyeR);
+        // Arms
+        const armMat=new THREE.MeshLambertMaterial({color:0xff7733});
+        const armL=new THREE.Mesh(new THREE.BoxGeometry(0.2,0.6,0.2),armMat);
+        armL.position.set(-0.35,0.8,0);g.add(armL);
+        const armR=new THREE.Mesh(new THREE.BoxGeometry(0.2,0.6,0.2),armMat);
+        armR.position.set(0.35,0.8,0);g.add(armR);
+        // Legs
+        const legMat=new THREE.MeshLambertMaterial({color:0x4466aa});
+        const legL=new THREE.Mesh(new THREE.BoxGeometry(0.22,0.5,0.22),legMat);
+        legL.position.set(-0.12,0.25,0);g.add(legL);
+        const legR=new THREE.Mesh(new THREE.BoxGeometry(0.22,0.5,0.22),legMat);
+        legR.position.set(0.12,0.25,0);g.add(legR);
+        // Name tag (canvas sprite)
+        const canvas2=document.createElement("canvas");canvas2.width=256;canvas2.height=64;
+        const ctx2=canvas2.getContext("2d");
+        ctx2.fillStyle="rgba(0,0,0,0.6)";ctx2.roundRect(0,8,256,48,12);ctx2.fill();
+        ctx2.fillStyle="#ffaa44";ctx2.font="bold 28px sans-serif";ctx2.textAlign="center";
+        ctx2.fillText("ALLY",128,42);
+        const tex=new THREE.CanvasTexture(canvas2);
+        const spriteMat=new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false});
+        const sprite=new THREE.Sprite(spriteMat);
+        sprite.scale.set(2,0.5,1);sprite.position.y=1.85;
+        g.add(sprite);agent.nameSprite=sprite;
+        // Action label sprite
+        const c3=document.createElement("canvas");c3.width=256;c3.height=48;
+        const ctx3=c3.getContext("2d");
+        const tex2=new THREE.CanvasTexture(c3);
+        const sm2=new THREE.SpriteMaterial({map:tex2,transparent:true,depthTest:false});
+        const sp2=new THREE.Sprite(sm2);
+        sp2.scale.set(1.6,0.4,1);sp2.position.y=2.15;
+        g.add(sp2);agent.actionLabel={sprite:sp2,canvas:c3,ctx:ctx3,texture:tex2};
+
+        agent.group=g;
+        scene.add(g);
+    }
+
+    function updateActionLabel(text,color="#88ddff"){
+        const{canvas:c,ctx,texture:t}=agent.actionLabel;
+        ctx.clearRect(0,0,c.width,c.height);
+        ctx.fillStyle="rgba(0,0,0,0.5)";
+        ctx.roundRect(20,4,216,40,10);ctx.fill();
+        ctx.fillStyle=color;ctx.font="bold 22px sans-serif";ctx.textAlign="center";
+        ctx.fillText(text,128,32);
+        t.needsUpdate=true;
+    }
+
+    // Generate training data from rule-based policy
+    function genAgentTrainingData(rng,count=200){
+        const samples=[];
+        for(let i=0;i<count;i++){
+            // Random scenario
+            const dx=(rng()*2-1)*30, dz=(rng()*2-1)*30;
+            const dist=Math.sqrt(dx*dx+dz*dz);
+            const hN=rng()*4-2, hS=rng()*4-2, hE=rng()*4-2, hW=rng()*4-2;
+            const blockedFwd=rng()>0.7?1:0;
+            const onGround=rng()>0.2?1:0;
+            const timeOfDay=rng();
+            const noise=rng()*2-1;
+
+            const input=new Float32Array([
+                dx/30, dz/30, Math.min(dist/30,1),
+                hN/4, hS/4, hE/4, hW/4,
+                blockedFwd, onGround, timeOfDay,
+                Math.sin(dx*0.1), Math.cos(dz*0.1),
+                noise, rng()*2-1
+            ]);
+
+            // Rule-based policy target
+            let tgtMoveX=0, tgtMoveZ=0, tgtJump=0, tgtAction=0;
+
+            if(dist>15){
+                // Follow player
+                tgtAction=0;
+                tgtMoveX=cl(dx/(dist+0.1),-1,1);
+                tgtMoveZ=cl(dz/(dist+0.1),-1,1);
+                tgtJump=blockedFwd?0.8:0.1;
+            } else if(dist>6){
+                // Follow loosely
+                tgtAction=0;
+                tgtMoveX=cl(dx/(dist+0.1)*0.6,-1,1);
+                tgtMoveZ=cl(dz/(dist+0.1)*0.6,-1,1);
+                tgtJump=blockedFwd?0.7:0.05;
+            } else if(dist<3){
+                // Too close, wander away
+                tgtAction=1;
+                tgtMoveX=cl(-dx/(dist+0.1)*0.4+noise*0.3,-1,1);
+                tgtMoveZ=cl(-dz/(dist+0.1)*0.4+(rng()*2-1)*0.3,-1,1);
+                tgtJump=0.05;
+            } else {
+                // Comfortable range — mine or build
+                if(rng()>0.5){
+                    tgtAction=2; // mine
+                    tgtMoveX=(rng()*2-1)*0.3;
+                    tgtMoveZ=(rng()*2-1)*0.3;
+                    tgtJump=blockedFwd?0.6:0.02;
+                } else {
+                    tgtAction=rng()>0.6?3:1; // build or wander
+                    tgtMoveX=(rng()*2-1)*0.4;
+                    tgtMoveZ=(rng()*2-1)*0.4;
+                    tgtJump=0.02;
+                }
+            }
+
+            samples.push({input,tgtMoveX,tgtMoveZ,tgtJump,tgtAction});
+        }
+        return samples;
+    }
+
+    async function trainAgentBrain(){
+        agentBrain=new AgentBrain(curSeed+7777);
+        expBuffer=[];expWriteIdx=0;onlineTrainTimer=0;checkpointTimer=0;lastAgentState=null;
+
+        // Try loading saved checkpoint
+        const savedBrain=localStorage.getItem(AGENT_BRAIN_KEY);
+        const savedStats=localStorage.getItem(AGENT_STATS_KEY);
+        let loaded=false;
+        if(savedBrain){
+            loaded=agentBrain.deserialize(savedBrain);
+            if(loaded&&savedStats){
+                try{const st=JSON.parse(savedStats);agentGeneration=(st.generation||0)+1;agentTotalExp=st.totalExp||0;agentMined=st.mined||0;}
+                catch(e){agentGeneration=1;agentTotalExp=0;}
+            }
+            if(loaded){
+                document.getElementById("agent-ckpt").textContent=`loaded gen ${agentGeneration}`;
+                document.getElementById("agent-loss").textContent=`resumed (${agentTotalExp} exp)`;
+                toast(`Agent brain restored — gen ${agentGeneration}, ${agentTotalExp} lifetime exp`);
+            }
+        }
+        if(!loaded){
+            agentGeneration=0;agentTotalExp=0;agentMined=0;
+            const trainData=genAgentTrainingData(agentBrain.rng,300);
+            let loss=0;
+            for(let epoch=0;epoch<80;epoch++){
+                const batch=[];
+                for(let i=0;i<40;i++)batch.push(trainData[Math.floor(agentBrain.rng()*trainData.length)]);
+                loss=agentBrain.train(batch);
+                if(epoch%20===0)await tick();
+            }
+            document.getElementById("agent-loss").textContent=loss.toFixed(4);
+            document.getElementById("agent-ckpt").textContent="fresh (bootstrapped)";
+            saveAgentCheckpoint();
+        }
+        document.getElementById("agent-exp").textContent=agentTotalExp;
+        document.getElementById("agent-gen").textContent=agentGeneration;
+    }
+
+    function saveAgentCheckpoint(){
+        if(!agentBrain)return;
+        try{
+            localStorage.setItem(AGENT_BRAIN_KEY,agentBrain.serialize());
+            localStorage.setItem(AGENT_STATS_KEY,JSON.stringify({generation:agentGeneration,totalExp:agentTotalExp,mined:agentMined}));
+            document.getElementById("agent-ckpt").textContent=`saved (${agentTotalExp} exp)`;
+        }catch(e){console.error("Agent checkpoint save failed:",e);}
+    }
+
+    // ─── EXPERIENCE REPLAY + ONLINE LEARNING ────────────────────
+
+    function computeReward(prev,cur,action){
+        let r=0;
+        if(action===0){
+            if(prev.distToPlayer>8)r+=(prev.distToPlayer-cur.distToPlayer)*0.3;
+            if(cur.distToPlayer<3)r-=0.2;
+            if(cur.distToPlayer>=4&&cur.distToPlayer<=12)r+=0.15;
+        }else if(action===1){
+            if(cur.distToPlayer>=4&&cur.distToPlayer<=15)r+=0.1;
+            if(cur.distToPlayer>20)r-=0.3;
+            r+=cur.speed>0.3?0.1:-0.15;
+        }else if(action===2){
+            r+=cur.justMined?0.8:-0.05;
+            if(cur.distToPlayer>18)r-=0.2;
+        }else if(action===3){
+            r+=cur.justBuilt?0.6:-0.05;
+            if(cur.distToPlayer>18)r-=0.2;
+        }
+        if(cur.stuck)r-=0.3;if(cur.fell)r-=0.5;if(cur.onGround)r+=0.02;
+        return cl(r,-1,1);
+    }
+
+    function rewardToSample(input,action,mx,mz,jumped,reward){
+        const reinf=cl(0.5+reward*0.5,0.05,0.95);
+        return{input,tgtMoveX:mx*reinf,tgtMoveZ:mz*reinf,tgtJump:jumped?(reinf>0.4?0.7:0.1):0.05,tgtAction:reward<-0.3?0:action};
+    }
+
+    function addExperience(exp){
+        if(expBuffer.length<EXP_BUFFER_SIZE)expBuffer.push(exp);
+        else expBuffer[expWriteIdx%EXP_BUFFER_SIZE]=exp;
+        expWriteIdx++;agentTotalExp++;
+    }
+
+    function onlineTrainStep(){
+        if(!agentBrain||expBuffer.length<16)return;
+        const batch=[];
+        for(let i=0;i<16;i++)batch.push(expBuffer[Math.floor(Math.random()*expBuffer.length)]);
+        agentOnlineLoss=agentBrain.train(batch);
+        document.getElementById("agent-loss").textContent=agentOnlineLoss.toFixed(4);
+        document.getElementById("agent-exp").textContent=agentTotalExp;
+    }
+
+    function spawnAgent(){
+        const sp=findSpawn();
+        agent.position.set(sp.x+3,sp.y+1,sp.z+3);
+        agent.velocity.set(0,0,0);
+        agent.onGround=false;agent.action=0;agent.actionTimer=0;agent.thinkTimer=0;
+        agent.mineTarget=null;agent.buildCooldown=0;agent.alive=true;
+        createAgentMesh();
+        agent.group.position.copy(agent.position);
+        updateActionLabel("Following","#88ddff");
+    }
+
+    function agentGetInput(){
+        const dx=player.position.x-agent.position.x;
+        const dz=player.position.z-agent.position.z;
+        const dist=Math.sqrt(dx*dx+dz*dz);
+
+        // Sample terrain heights in 4 directions
+        const ax=Math.floor(agent.position.x),az=Math.floor(agent.position.z),ay=Math.floor(agent.position.y);
+        const hN=heightMap[cl(ax,0,WS-1)]?.[cl(az-2,0,WS-1)]||0;
+        const hS=heightMap[cl(ax,0,WS-1)]?.[cl(az+2,0,WS-1)]||0;
+        const hE=heightMap[cl(ax+2,0,WS-1)]?.[cl(az,0,WS-1)]||0;
+        const hW=heightMap[cl(ax-2,0,WS-1)]?.[cl(az,0,WS-1)]||0;
+        const myH=ay;
+
+        // Check if blocked forward
+        const fwdX=Math.floor(agent.position.x+Math.sin(agent.yaw)*1.2);
+        const fwdZ=Math.floor(agent.position.z+Math.cos(agent.yaw)*1.2);
+        const blocked=(!NON_SOLID.has(getBlock(fwdX,ay,fwdZ))||!NON_SOLID.has(getBlock(fwdX,ay+1,fwdZ)))?1:0;
+
+        return new Float32Array([
+            cl(dx/30,-1,1), cl(dz/30,-1,1), Math.min(dist/30,1),
+            cl((hN-myH)/4,-1,1), cl((hS-myH)/4,-1,1),
+            cl((hE-myH)/4,-1,1), cl((hW-myH)/4,-1,1),
+            blocked, agent.onGround?1:0, worldTime,
+            Math.sin(agent.position.x*0.1), Math.cos(agent.position.z*0.1),
+            (Math.sin(performance.now()*0.001)*0.5), (Math.cos(performance.now()*0.0007)*0.5)
+        ]);
+    }
+
+    function agentCollides(x,y,z){
+        const r=0.28,h=1.7;
+        if(x-r<0||z-r<0||x+r>WS||z+r>WS)return true;
+        for(let bx=Math.floor(x-r);bx<=Math.floor(x+r-1e-6);bx++)
+            for(let by=Math.floor(y);by<=Math.floor(y+h-1e-6);by++)
+                for(let bz=Math.floor(z-r);bz<=Math.floor(z+r-1e-6);bz++)
+                    if(!NON_SOLID.has(getBlock(bx,by,bz)))return true;
+        return false;
+    }
+
+    function agentMoveAxis(axis,amount){
+        if(amount===0)return;
+        const step=Math.sign(amount)*0.05;let moved=0;
+        while(Math.abs(moved)<Math.abs(amount)){
+            const d=Math.abs(amount-moved)<0.05?amount-moved:step;
+            const nx=agent.position.x+(axis==="x"?d:0);
+            const ny=agent.position.y+(axis==="y"?d:0);
+            const nz=agent.position.z+(axis==="z"?d:0);
+            if(!agentCollides(nx,ny,nz)){agent.position.set(nx,ny,nz);moved+=d;}
+            else{if(axis==="y"&&d<0)agent.onGround=true;agent.velocity[axis]=0;break;}
+        }
+    }
+
+    function updateAgent(dt){
+        if(!agent.alive||!started)return;
+
+        agent.thinkTimer-=dt;
+        agent.buildCooldown-=dt;
+        onlineTrainTimer-=dt;
+        checkpointTimer-=dt;
+
+        let justMined_=false, justBuilt_=false;
+
+        // NN thinks every 0.2s
+        if(agent.thinkTimer<=0){
+            agent.thinkTimer=0.2;
+
+            const dist=agent.position.distanceTo(player.position);
+            const speed=Math.sqrt(agent.velocity.x**2+agent.velocity.z**2);
+
+            // ── Collect experience from PREVIOUS action ──
+            if(lastAgentState&&agentBrain){
+                const curState={
+                    distToPlayer:dist,speed,
+                    onGround:agent.onGround,
+                    stuck:speed<0.15&&(agent.action===0||agent.action===1),
+                    fell:agent.position.y<-5,
+                    justMined:lastAgentState._justMined||false,
+                    justBuilt:lastAgentState._justBuilt||false
+                };
+                const reward=computeReward(lastAgentState,curState,lastAgentState.action);
+                const sample=rewardToSample(
+                    lastAgentState.input,lastAgentState.action,
+                    lastAgentState.moveX,lastAgentState.moveZ,
+                    lastAgentState.jumped,reward
+                );
+                addExperience(sample);
+            }
+
+            // ── NN inference ──
+            const input=agentGetInput();
+            const{raw}=agentBrain.forward(input);
+            const dec=agentBrain.decode(raw);
+
+            agent.action=dec.action;
+
+            // Movement from NN
+            const spd=3.2;
+            agent.velocity.x=agent.velocity.x*0.5+dec.moveX*spd*0.5;
+            agent.velocity.z=agent.velocity.z*0.5+dec.moveZ*spd*0.5;
+
+            const jumped=dec.jump>0.5&&agent.onGround;
+            if(jumped){agent.velocity.y=6.0;agent.onGround=false;}
+
+            if(Math.abs(agent.velocity.x)>0.1||Math.abs(agent.velocity.z)>0.1)
+                agent.yaw=Math.atan2(agent.velocity.x,agent.velocity.z);
+
+            // Save state for next reward computation
+            lastAgentState={
+                input:new Float32Array(input),
+                distToPlayer:dist,speed,
+                action:dec.action,moveX:dec.moveX,moveZ:dec.moveZ,jumped,
+                onGround:agent.onGround,
+                _justMined:false,_justBuilt:false
+            };
+
+            // HUD
+            const actionName=AGENT_ACTIONS[dec.action];
+            const colors=["#88ddff","#88ff88","#ffaa44","#dd88ff"];
+            updateActionLabel(actionName,colors[dec.action]);
+            document.getElementById("agent-state").textContent=actionName;
+            document.getElementById("agent-state").style.color=colors[dec.action];
+        }
+
+        // Mine action
+        if(agent.action===2&&agent.buildCooldown<=0){
+            const ax=Math.floor(agent.position.x),ay=Math.floor(agent.position.y),az=Math.floor(agent.position.z);
+            for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++){
+                const bx=ax+dx,bz=az+dz;
+                for(let dy=0;dy<=1;dy++){
+                    const by=ay+dy;const bt=getBlock(bx,by,bz);
+                    if(bt!==B.AIR&&bt!==B.WATER&&bt!==B.LEAVES&&bt!==B.WOOD){
+                        if(Math.abs(bx+.5-player.position.x)<1.5&&Math.abs(bz+.5-player.position.z)<1.5&&by>=Math.floor(player.position.y)-1)continue;
+                        spawnParts(bx,by,bz,bt);Audio_.playBreak(bt);
+                        setRT(bx,by,bz,B.AIR);flushDirty();
+                        agentMined++;justMined_=true;
+                        document.getElementById("agent-mined").textContent=agentMined;
+                        agent.buildCooldown=1.2;break;
+                    }
+                }if(agent.buildCooldown>0)break;
+            }if(agent.buildCooldown<=0)agent.buildCooldown=0.5;
+            if(justMined_&&lastAgentState)lastAgentState._justMined=true;
+        }
+
+        // Build action
+        if(agent.action===3&&agent.buildCooldown<=0){
+            const ax=Math.floor(agent.position.x),ay=Math.floor(agent.position.y),az=Math.floor(agent.position.z);
+            for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++){
+                const bx=ax+dx,bz=az+dz,by=ay;
+                if(getBlock(bx,by,bz)===B.AIR&&getBlock(bx,by-1,bz)!==B.AIR){
+                    if(!wouldHitP(bx,by,bz)&&!(bx===ax&&bz===az)){
+                        setRT(bx,by,bz,B.COBBLE);Audio_.playPlace(B.COBBLE);flushDirty();
+                        agent.buildCooldown=2.0;justBuilt_=true;break;
+                    }
+                }if(agent.buildCooldown>0)break;
+            }if(agent.buildCooldown<=0)agent.buildCooldown=0.8;
+            if(justBuilt_&&lastAgentState)lastAgentState._justBuilt=true;
+        }
+
+        // ── ONLINE TRAINING: every 1.5s, train on experience buffer ──
+        if(onlineTrainTimer<=0&&expBuffer.length>=16){
+            onlineTrainTimer=1.5;
+            onlineTrainStep();
+        }
+
+        // ── CHECKPOINT: save every 40 new experiences ──
+        if(checkpointTimer<=0&&agentTotalExp>0&&agentTotalExp%40<5){
+            checkpointTimer=10;
+            saveAgentCheckpoint();
+        }
+
+        // Physics
+        agent.velocity.y-=20*dt;
+        agent.velocity.y=cl(agent.velocity.y,-24,14);
+        agent.onGround=false;
+        agentMoveAxis("x",agent.velocity.x*dt);
+        agentMoveAxis("z",agent.velocity.z*dt);
+        agentMoveAxis("y",agent.velocity.y*dt);
+        if(agent.onGround)agent.velocity.y=0;
+
+        if(agent.position.y<-10){
+            const sp=findSpawn();
+            agent.position.set(sp.x+3,sp.y+1,sp.z+3);
+            agent.velocity.set(0,0,0);
+        }
+
+        // Visual
+        if(agent.group){
+            agent.group.position.copy(agent.position);
+            agent.group.rotation.y=agent.yaw;
+            const walkSpeed=Math.sqrt(agent.velocity.x**2+agent.velocity.z**2);
+            const swing=Math.sin(performance.now()*0.008*walkSpeed)*0.4;
+            const arms=agent.group.children;
+            if(arms[5])arms[5].position.y=0.25+Math.abs(swing)*0.02;
+            if(arms[4])arms[4].position.y=0.25+Math.abs(-swing)*0.02;
+            if(arms[3])arms[3].rotation.x=swing*0.6;
+            if(arms[2])arms[2].rotation.x=-swing*0.6;
+            if(agent.nameSprite)agent.nameSprite.quaternion.copy(camera.quaternion);
+            if(agent.actionLabel?.sprite)agent.actionLabel.sprite.quaternion.copy(camera.quaternion);
+        }
+
+        const dist_=agent.position.distanceTo(player.position);
+        document.getElementById("agent-dist").textContent=dist_.toFixed(1)+"m";
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // GAME CONSTANTS
+    // ═══════════════════════════════════════════════════════════════
+    const B = { AIR:0, GRASS:1, DIRT:2, STONE:3, WOOD:4, LEAVES:5, SAND:6, WATER:7, BRICK:8, GLASS:9, SNOW:10, COBBLE:11, PLANKS:12, IRON:13, GOLD:14, DIAMOND:15 };
+    const BLOCK_COLORS = {
+        [B.GRASS]:{top:0x7cba4d,side:0x8B7355,bottom:0x8B7355},[B.DIRT]:{top:0x8B7355,side:0x8B7355,bottom:0x8B7355},
+        [B.STONE]:{top:0x808080,side:0x808080,bottom:0x808080},[B.WOOD]:{top:0xA0826D,side:0x6B4423,bottom:0xA0826D},
+        [B.LEAVES]:{top:0x2d5a27,side:0x2d5a27,bottom:0x2d5a27},[B.SAND]:{top:0xE6D69C,side:0xE6D69C,bottom:0xE6D69C},
+        [B.WATER]:{top:0x3ca2ff,side:0x2f84d1,bottom:0x2a6fb1},[B.BRICK]:{top:0xB84C3C,side:0xB84C3C,bottom:0xB84C3C},
+        [B.GLASS]:{top:0xCFEFFF,side:0xB0DCE8,bottom:0xA9D3E0},[B.SNOW]:{top:0xFFFAFA,side:0xEAEAEA,bottom:0xD9D9D9},
+        [B.COBBLE]:{top:0x6a6a6a,side:0x6a6a6a,bottom:0x6a6a6a},[B.PLANKS]:{top:0xBC9862,side:0xBC9862,bottom:0xBC9862},
+        [B.IRON]:{top:0xD4D4D4,side:0xC0C0C0,bottom:0xC0C0C0},[B.GOLD]:{top:0xFFD700,side:0xDAA520,bottom:0xDAA520},
+        [B.DIAMOND]:{top:0x4EE2EC,side:0x00CED1,bottom:0x00CED1}
+    };
+    const BLOCK_NAMES = {[B.GRASS]:"Grass",[B.DIRT]:"Dirt",[B.STONE]:"Stone",[B.WOOD]:"Oak Log",[B.LEAVES]:"Leaves",[B.SAND]:"Sand",[B.WATER]:"Water",[B.BRICK]:"Brick",[B.GLASS]:"Glass",[B.SNOW]:"Snow",[B.COBBLE]:"Cobblestone",[B.PLANKS]:"Planks",[B.IRON]:"Iron Block",[B.GOLD]:"Gold Block",[B.DIAMOND]:"Diamond Block"};
+    const BLOCK_HARDNESS = {[B.GRASS]:0.4,[B.DIRT]:0.35,[B.STONE]:1.2,[B.WOOD]:0.8,[B.LEAVES]:0.15,[B.SAND]:0.35,[B.WATER]:99,[B.BRICK]:1.5,[B.GLASS]:0.2,[B.SNOW]:0.25,[B.COBBLE]:1.0,[B.PLANKS]:0.7,[B.IRON]:2.0,[B.GOLD]:1.8,[B.DIAMOND]:2.5};
+    const BIOMES = {0:{name:"Plains",surface:B.GRASS,sub:B.DIRT},1:{name:"Desert",surface:B.SAND,sub:B.SAND},2:{name:"Forest",surface:B.GRASS,sub:B.DIRT},3:{name:"Tundra",surface:B.SNOW,sub:B.DIRT}};
+    const WS = 80, WH = 36, CS = 16, CC = Math.ceil(WS / CS), WL = 10, SAVE_KEY = "nv_save_v4";
+    const HOTBAR = [B.GRASS,B.DIRT,B.STONE,B.WOOD,B.LEAVES,B.SAND,B.SNOW,B.BRICK,B.GLASS];
+    const ALL_B = [B.GRASS,B.DIRT,B.STONE,B.WOOD,B.LEAVES,B.SAND,B.SNOW,B.BRICK,B.GLASS,B.COBBLE,B.PLANKS,B.IRON,B.GOLD,B.DIAMOND,B.WATER];
+    const TRANSPARENT = new Set([B.WATER,B.GLASS]);
+    const NON_SOLID = new Set([B.AIR,B.WATER]);
+
+    let world=Object.create(null), baseWorld=Object.create(null), chunkGroups=Object.create(null);
+    let dirtyChunks=new Set(), matCache=Object.create(null), inv=Object.create(null);
+    let heightMap=Array.from({length:WS},()=>Array(WS).fill(0));
+    let biomeMap=Array.from({length:WS},()=>Array(WS).fill(0));
+    // Store NN outputs per column for runtime use (fog, moisture, etc)
+    let nnMap=Array.from({length:WS},()=>Array(WS).fill(null));
+    let selBlock=B.GRASS, tf=null, invOpen=false, locked=false, started=false;
+    let curSeed=0, blockCount=0, worldTime=0.28, toastT=null, jumpQ=0;
+    let breakProg=0, breakTgt=null, mDown=false;
+    const particles=[]; let stepT=0, curFov=75, tgtFov=75;
+    ALL_B.forEach(b=>{inv[b]=64;});
+
+    const canvas=document.getElementById("game");
+    const ren=new THREE.WebGLRenderer({canvas,antialias:true});
+    ren.setSize(window.innerWidth,window.innerHeight);
+    ren.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+    ren.outputEncoding=THREE.sRGBEncoding; ren.sortObjects=true;
+    const scene=new THREE.Scene(); scene.background=new THREE.Color(0x87CEEB);
+    scene.fog=new THREE.Fog(0x87CEEB,32,120);
+    const camera=new THREE.PerspectiveCamera(75,window.innerWidth/window.innerHeight,0.1,800);
+    const amb=new THREE.AmbientLight(0xffffff,0.58); scene.add(amb);
+    const sun=new THREE.DirectionalLight(0xffffff,0.95); sun.position.set(80,110,55); scene.add(sun);
+
+    // Stars
+    const stGeo=new THREE.BufferGeometry(), stPts=[];
+    for(let i=0;i<900;i++){const t=Math.random()*Math.PI*2,p=Math.acos(1-Math.random()*0.85),r=240+Math.random()*90;stPts.push(Math.sin(p)*Math.cos(t)*r+WS/2,Math.cos(p)*r+60,Math.sin(p)*Math.sin(t)*r+WS/2);}
+    stGeo.setAttribute("position",new THREE.Float32BufferAttribute(stPts,3));
+    const stMat=new THREE.PointsMaterial({size:1.4,transparent:true,opacity:0});
+    scene.add(new THREE.Points(stGeo,stMat));
+    const moonMesh=new THREE.Mesh(new THREE.SphereGeometry(4,16,16),new THREE.MeshBasicMaterial({color:0xeeeedd}));
+    scene.add(moonMesh);
+    const cloudGrp=new THREE.Group(); scene.add(cloudGrp);
+    const partGrp=new THREE.Group(); scene.add(partGrp);
+
+    const brkHL=new THREE.Mesh(new THREE.BoxGeometry(1.02,1.02,1.02),new THREE.MeshBasicMaterial({color:0xffffff,wireframe:true,transparent:true,opacity:0.52}));
+    brkHL.visible=false; scene.add(brkHL);
+    const plGhost=new THREE.Mesh(new THREE.BoxGeometry(1.01,1.01,1.01),new THREE.MeshBasicMaterial({color:0x7cba4d,transparent:true,opacity:0.25,depthWrite:false}));
+    plGhost.visible=false; scene.add(plGhost);
+    const crackMat=new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:0,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-1});
+    const crackMesh=new THREE.Mesh(new THREE.BoxGeometry(1.005,1.005,1.005),crackMat);
+    crackMesh.visible=false; scene.add(crackMesh);
+
+    const player={position:new THREE.Vector3(WS/2+.5,28,WS/2+.5),velocity:new THREE.Vector3(),radius:.32,height:1.8,eyeHeight:1.62,speed:4.6,sprintSpeed:6.8,jumpForce:7.1,onGround:false,coyote:0};
+    const keys={};let yaw=0,pitch=0;
+
+    // ═══════════════════════════════════════════════════════════════
+    // UTILS (condensed)
+    // ═══════════════════════════════════════════════════════════════
+    function sRand(x,z,s=12345){const n=Math.sin(x*12.9898+z*78.233+s)*43758.5453;return n-Math.floor(n);}
+    function rr(a,b){return a+Math.random()*(b-a);}
+    function cl(v,a,b){return Math.max(a,Math.min(b,v));}
+    function gk(x,y,z){return`${x},${y},${z}`;}
+    function getBlock(x,y,z){if(x<0||z<0||x>=WS||z>=WS||y<0||y>=WH)return B.AIR;return world[gk(x,y,z)]||B.AIR;}
+    function getBase(x,y,z){if(x<0||z<0||x>=WS||z>=WS||y<0||y>=WH)return B.AIR;return baseWorld[gk(x,y,z)]||B.AIR;}
+    function setRT(x,y,z,t){if(x<0||z<0||x>=WS||z>=WS||y<0||y>=WH)return;const k=gk(x,y,z),had=world[k]||B.AIR;if(t===B.AIR){if(had!==B.AIR){delete world[k];blockCount--;}}else{if(had===B.AIR)blockCount++;world[k]=t;}if(had!==t)markDB(x,z);}
+    function setGen(x,y,z,t){if(x<0||z<0||x>=WS||z>=WS||y<0||y>=WH||t===B.AIR)return;const k=gk(x,y,z);baseWorld[k]=t;world[k]=t;blockCount++;}
+    function ck(cx,cz){return`${cx},${cz}`;}
+    function markD(cx,cz){if(cx<0||cz<0||cx>=CC||cz>=CC)return;dirtyChunks.add(ck(cx,cz));document.getElementById("dirty-count").textContent=dirtyChunks.size;}
+    function markDB(x,z){const cx=Math.floor(x/CS),cz=Math.floor(z/CS);markD(cx,cz);if(x%CS===0)markD(cx-1,cz);if(z%CS===0)markD(cx,cz-1);if(x%CS===CS-1)markD(cx+1,cz);if(z%CS===CS-1)markD(cx,cz+1);}
+    function toast(m,ms=1800){const t=document.getElementById("toast");t.textContent=m;t.classList.add("show");if(toastT)clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove("show"),ms);}
+    function updSave(){const e=!!localStorage.getItem(SAVE_KEY);document.getElementById("save-status").textContent=e?"Available":"Empty";document.getElementById("load-btn").disabled=!e;}
+    function updHud(){document.getElementById("blocks").textContent=blockCount.toLocaleString();document.getElementById("seed-info").textContent=curSeed;document.getElementById("start-seed").textContent=curSeed;document.getElementById("start-world-size").textContent=`${WS}×${WS}`;document.getElementById("selected-name").textContent=BLOCK_NAMES[selBlock];updSave();}
+    function tick(){return new Promise(r=>requestAnimationFrame(()=>r()));}
+    function setLV(v){document.getElementById("loading").classList.toggle("hidden",!v);}
+    function setLP(p,t=null){document.getElementById("progress-fill").style.width=`${cl(p,0,100)}%`;if(t!==null)document.getElementById("loading-text").textContent=t;}
+
+    // Particles
+    const pGeo=new THREE.BoxGeometry(0.12,0.12,0.12);
+    function spawnParts(x,y,z,bt){const c=BLOCK_COLORS[bt]?.top||0x888888;for(let i=0;i<8;i++){const m=new THREE.MeshBasicMaterial({color:c});const mesh=new THREE.Mesh(pGeo,m);mesh.position.set(x+.5+(Math.random()-.5)*.6,y+.5+(Math.random()-.5)*.6,z+.5+(Math.random()-.5)*.6);partGrp.add(mesh);particles.push({mesh,vx:(Math.random()-.5)*3,vy:Math.random()*4+1,vz:(Math.random()-.5)*3,life:.6+Math.random()*.4});}}
+    function updParts(dt){for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.life-=dt;if(p.life<=0){partGrp.remove(p.mesh);p.mesh.geometry.dispose();p.mesh.material.dispose();particles.splice(i,1);continue;}p.vy-=12*dt;p.mesh.position.x+=p.vx*dt;p.mesh.position.y+=p.vy*dt;p.mesh.position.z+=p.vz*dt;p.mesh.rotation.x+=dt*5;const s=cl(p.life*1.5,.3,1);p.mesh.scale.setScalar(s);p.mesh.material.opacity=Math.min(1,p.life*3);p.mesh.material.transparent=true;}}
+
+    // Inventory/Hotbar
+    function updInvUI(){document.querySelectorAll(".inv-slot[data-block]").forEach(s=>{const bt=+s.dataset.block;const c=s.querySelector(".item-count");if(c)c.textContent=inv[bt]||0;s.classList.toggle("empty",(inv[bt]||0)<=0);s.classList.toggle("selected",bt===selBlock);});}
+    function selB(bt){selBlock=bt;document.getElementById("selected-name").textContent=BLOCK_NAMES[bt];updHB();updInvUI();plGhost.material.color.setHex(BLOCK_COLORS[bt].top);}
+    function mkIS(bt){const s=document.createElement("div");s.className="inv-slot";s.dataset.block=bt;const ic=document.createElement("div");ic.className="block-icon";ic.style.background=`#${BLOCK_COLORS[bt].top.toString(16).padStart(6,"0")}`;const ct=document.createElement("span");ct.className="item-count";ct.textContent=inv[bt]||0;const nm=document.createElement("span");nm.className="item-name";nm.textContent=BLOCK_NAMES[bt];s.append(ic,ct,nm);s.addEventListener("click",()=>{if((inv[bt]||0)<=0)return;selB(bt);});return s;}
+    function setupInv(){const ib=document.getElementById("inv-blocks"),ih=document.getElementById("inv-hotbar");ib.innerHTML="";ih.innerHTML="";ALL_B.forEach(b=>ib.appendChild(mkIS(b)));while(ib.children.length<18){const sp=document.createElement("div");sp.className="inv-slot empty";ib.appendChild(sp);}HOTBAR.forEach(b=>ih.appendChild(mkIS(b)));updInvUI();}
+    function setupHB(){const hb=document.getElementById("hotbar");hb.innerHTML="";HOTBAR.forEach((bt,i)=>{const s=document.createElement("div");s.className="hotbar-slot"+(bt===selBlock?" selected":"");s.innerHTML=`<div class="block-preview" style="background:#${BLOCK_COLORS[bt].top.toString(16).padStart(6,"0")}"></div><span class="key-hint">${i+1}</span><span class="count">${inv[bt]||""}</span>`;s.addEventListener("click",()=>selB(bt));hb.appendChild(s);});}
+    function updHB(){document.querySelectorAll("#hotbar .hotbar-slot").forEach((s,i)=>{const bt=HOTBAR[i];s.classList.toggle("selected",bt===selBlock);const c=s.querySelector(".count");if(c)c.textContent=inv[bt]||"";});updInvUI();}
+    function togInv(f=null){invOpen=f===null?!invOpen:!!f;document.getElementById("inventory-overlay").classList.toggle("open",invOpen);if(invOpen){if(document.pointerLockElement===canvas)document.exitPointerLock();}else if(started)canvas.requestPointerLock();}
+    function updCross(){document.getElementById("crosshair").style.display=(started&&!invOpen)?"block":"none";}
+
+    function addClouds(){cloudGrp.clear();const cm=new THREE.MeshLambertMaterial({color:0xffffff,transparent:true,opacity:.55,depthWrite:false});const cg=new THREE.BoxGeometry(1,1,1);for(let i=0;i<24;i++){const m=new THREE.Mesh(cg,cm);m.scale.set(rr(4,10),rr(.7,1.8),rr(3.5,8.5));m.position.set(rr(0,WS),rr(26,35),rr(0,WS));m.rotation.y=rr(0,Math.PI*2);cloudGrp.add(m);}}
+
+    // ═══════════════════════════════════════════════════════════════
+    // TERRAIN GEN — ALL driven by NN outputs
+    // ═══════════════════════════════════════════════════════════════
+
+    function nnOreBlock(oreRichness, y) {
+        // NN ore richness determines what spawns
+        if (y < 5 && oreRichness > 0.75) return B.DIAMOND;
+        if (y < 8 && oreRichness > 0.65) return B.GOLD;
+        if (y < 14 && oreRichness > 0.5) return B.IRON;
+        if (oreRichness > 0.4) return B.COBBLE;
+        return B.STONE;
+    }
+
+    function nnCaveAt(caveDensity, x, y, z) {
+        // NN cave density modulates a simple hash
+        const hash = Math.sin(x * 0.37 + y * 0.71 + z * 0.53) * 0.5 + 0.5;
+        const hash2 = Math.sin(x * 0.11 - y * 0.23 + z * 0.17 + 100) * 0.5 + 0.5;
+        const combined = (hash + hash2) / 2;
+        // Higher caveDensity = caves appear at lower threshold
+        return combined > (1 - caveDensity * 0.35);
+    }
+
+    function placeTree(x, y, z, biome, treeDensity) {
+        if (biome === 1) return;
+        const trunkH = biome === 2 ? 4 + Math.floor(sRand(x, z, 404) * 3) : 3 + Math.floor(sRand(x, z, 808) * 2);
+        for (let ty = 0; ty < trunkH; ty++) if (y + ty < WH) setGen(x, y + ty, z, B.WOOD);
+        const cb = y + trunkH - 2, ct = y + trunkH + 1;
+        // Crown size influenced by tree density
+        const crownR = treeDensity > 0.6 ? 2 : (treeDensity > 0.3 ? 2 : 1);
+        for (let lx = -crownR; lx <= crownR; lx++) for (let lz = -crownR; lz <= crownR; lz++) for (let ly = cb; ly <= ct; ly++) {
+            if (ly >= WH) continue;
+            const man = Math.abs(lx) + Math.abs(lz);
+            if (man <= (ly === ct ? 1 : crownR + 1)) {
+                if ((lx !== 0 || lz !== 0 || ly >= y + trunkH - 1) && getBase(x + lx, ly, z + lz) === B.AIR)
+                    setGen(x + lx, ly, z + lz, B.LEAVES);
+            }
+        }
+    }
+
+    // NN-driven structure placement: small stone ruins
+    function placeStructure(x, y, z) {
+        // Simple 5x5 stone platform with pillars
+        for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
+            setGen(x + dx, y, z + dz, B.COBBLE);
+        }
+        // 4 corner pillars
+        for (let h = 1; h <= 3; h++) {
+            setGen(x - 2, y + h, z - 2, B.STONE);
+            setGen(x + 2, y + h, z - 2, B.STONE);
+            setGen(x - 2, y + h, z + 2, B.STONE);
+            setGen(x + 2, y + h, z + 2, B.STONE);
+        }
+        // Roof edges
+        for (let dx = -2; dx <= 2; dx++) { setGen(x + dx, y + 4, z - 2, B.COBBLE); setGen(x + dx, y + 4, z + 2, B.COBBLE); }
+        for (let dz = -1; dz <= 1; dz++) { setGen(x - 2, y + 4, z + dz, B.COBBLE); setGen(x + 2, y + 4, z + dz, B.COBBLE); }
+    }
+
+    function findSpawn(){const c=Math.floor(WS/2);for(let r=0;r<Math.floor(WS/2);r++)for(let x=c-r;x<=c+r;x++)for(let z=c-r;z<=c+r;z++){if(x<1||z<1||x>=WS-1||z>=WS-1)continue;if(heightMap[x][z]>WL+1&&biomeMap[x][z]!==1)return{x:x+.5,y:heightMap[x][z]+1,z:z+.5};}return{x:WS/2+.5,y:24,z:WS/2+.5};}
+
+    async function trainAndGenerate(saveData = null) {
+        Object.values(chunkGroups).forEach(disposeChunk);
+        world=Object.create(null);baseWorld=Object.create(null);chunkGroups=Object.create(null);
+        dirtyChunks=new Set();matCache=Object.create(null);
+        heightMap=Array.from({length:WS},()=>Array(WS).fill(0));
+        biomeMap=Array.from({length:WS},()=>Array(WS).fill(0));
+        nnMap=Array.from({length:WS},()=>Array(WS).fill(null));
+        blockCount=0;
+        document.getElementById("dirty-count").textContent="0";
+
+        const viz=document.getElementById("training-viz");viz.innerHTML="";
+        const bars=[];for(let i=0;i<60;i++){const b=document.createElement("div");b.className="loss-bar";b.style.height="4px";viz.appendChild(b);bars.push(b);}
+
+        const simplex=new SimplexNoise(curSeed);
+        const EPOCHS=300, BATCH=48;
+        document.getElementById("total-epochs").textContent=EPOCHS;
+        let emaLoss=0;
+
+        for(let epoch=0;epoch<EPOCHS;epoch++){
+            const samples=[];
+            for(let i=0;i<BATCH;i++)samples.push([Math.floor(tf.rng()*WS),Math.floor(tf.rng()*WS)]);
+            const loss=tf.train(samples,simplex,epoch,EPOCHS);
+            emaLoss=epoch===0?loss:emaLoss*0.88+loss*0.12;
+            const bi=epoch%bars.length;
+            bars[bi].style.height=`${Math.min(84,Math.max(6,emaLoss*2.8))}px`;
+            bars[bi].style.background=`hsl(${Math.max(0,120-emaLoss*8)},72%,52%)`;
+            setLP(((epoch+1)/EPOCHS)*42,`Training epoch ${epoch+1}/${EPOCHS}`);
+            document.getElementById("loss-display").textContent=`Loss: ${emaLoss.toFixed(4)}`;
+            document.getElementById("epochs-done").textContent=String(epoch+1);
+            document.getElementById("final-loss").textContent=emaLoss.toFixed(4);
+            if(epoch%6===0)await tick();
+        }
+
+        tf.cache.clear();
+        let cols=0;const total=WS*WS;
+        const structurePlaced=new Set();
+
+        for(let x=0;x<WS;x++)for(let z=0;z<WS;z++){
+            const nn=tf.generate(x,z);
+            nnMap[x][z]=nn;
+
+            let height=nn.height;
+            let biome=nn.biome;
+
+            // NN moisture overrides biome
+            if(nn.moisture>0.65&&biome!==1)biome=2; // wet = forest
+            if(height<=WL+1&&biome!==1)biome=0;
+            if(height>=19)biome=3;
+
+            const biomeDef=BIOMES[biome];
+            const nearW=height<=WL+1;
+            heightMap[x][z]=height;biomeMap[x][z]=biome;
+
+            for(let y=0;y<=height;y++){
+                let block=B.STONE;
+                if(y===height)block=nearW?B.SAND:biomeDef.surface;
+                else if(y>=height-(biome===1?4:3))block=nearW?B.SAND:biomeDef.sub;
+                else{
+                    // NN cave density
+                    if(y>2&&y<height-2&&nnCaveAt(nn.caveDensity,x,y,z))continue;
+                    // NN ore richness
+                    block=nnOreBlock(nn.oreRichness,y);
+                }
+                setGen(x,y,z,block);
+            }
+            if(height<WL)for(let y=height+1;y<=WL;y++)setGen(x,y,z,B.WATER);
+
+            // NN tree density
+            if(sRand(x,z,curSeed+77)<nn.treeDensity*0.08&&height>WL+1){
+                if(getBase(x,height,z)!==B.SAND&&x>2&&z>2&&x<WS-3&&z<WS-3)
+                    placeTree(x,height+1,z,biome,nn.treeDensity);
+            }
+
+            // NN structure placement
+            if(nn.structureProb>0.7&&height>WL+2&&x>4&&z>4&&x<WS-5&&z<WS-5){
+                const sk=`${Math.floor(x/10)},${Math.floor(z/10)}`;
+                if(!structurePlaced.has(sk)){
+                    structurePlaced.add(sk);
+                    placeStructure(x,height+1,z);
+                }
+            }
+
+            cols++;
+            if(cols%160===0){setLP(42+(cols/total)*36,`Generating terrain... ${(cols/total*100).toFixed(0)}%`);await tick();}
+        }
+
+        if(saveData&&Array.isArray(saveData.mods)){
+            for(let i=0;i<saveData.mods.length;i++){
+                const[x,y,z,t]=saveData.mods[i];const k=gk(x,y,z);const ex=world[k]||B.AIR;
+                if(t===B.AIR){if(ex!==B.AIR){delete world[k];blockCount--;}}else{if(ex===B.AIR)blockCount++;world[k]=t;}
+                if(i%150===0){setLP(78+(i/Math.max(1,saveData.mods.length))*6);await tick();}
+            }
+        }
+
+        await buildAllChunks();
+        if(saveData&&saveData.inventory)ALL_B.forEach(b=>inv[b]=saveData.inventory[b]??inv[b]??0);
+        if(saveData&&typeof saveData.selectedBlock==="number")selBlock=saveData.selectedBlock;
+        worldTime=(saveData&&typeof saveData.worldTime==="number")?saveData.worldTime:0.28;
+        updHB();updInvUI();updHud();
+        if(saveData&&saveData.player){player.position.set(saveData.player.x,saveData.player.y,saveData.player.z);yaw=saveData.player.yaw||0;pitch=saveData.player.pitch||0;}
+        else{const sp=findSpawn();player.position.set(sp.x,sp.y,sp.z);yaw=0;pitch=0;}
+        player.velocity.set(0,0,0);player.onGround=false;player.coyote=0;
+        // Train agent brain
+        setLP(98,"Training agent brain...");await tick();
+        await trainAgentBrain();
+        spawnAgent();
+        syncCam();updEnv(0);updPHud();setLP(100,"World ready");await tick();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // CHUNK MESHING WITH AO
+    // ═══════════════════════════════════════════════════════════════
+    function getMat(bt,fk){const c=BLOCK_COLORS[bt][fk];const tr=TRANSPARENT.has(bt);const op=bt===B.WATER?.72:bt===B.GLASS?.42:1;const k=`${bt}-${fk}-${op}`;if(!matCache[k])matCache[k]=new THREE.MeshLambertMaterial({color:c,transparent:tr,opacity:op,depthWrite:!tr,vertexColors:true});return matCache[k];}
+    function vertAO(s1,s2,c){if(s1&&s2)return 0;return 3-(s1?1:0)-(s2?1:0)-(c?1:0);}
+    function isOp(x,y,z){const b=getBlock(x,y,z);return b!==B.AIR&&!TRANSPARENT.has(b);}
+
+    function calcAO(x,y,z,face){
+        let ao=[3,3,3,3];
+        if(face==="top"){const Y=y+1;ao[0]=vertAO(isOp(x-1,Y,z+1),isOp(x,Y,z+2),isOp(x-1,Y,z+2));ao[1]=vertAO(isOp(x+1,Y,z+1),isOp(x,Y,z+2),isOp(x+1,Y,z+2));ao[2]=vertAO(isOp(x+1,Y,z),isOp(x,Y,z-1),isOp(x+1,Y,z-1));ao[3]=vertAO(isOp(x-1,Y,z),isOp(x,Y,z-1),isOp(x-1,Y,z-1));}
+        else if(face==="bottom"){const Y=y-1;ao[0]=vertAO(isOp(x-1,Y,z),isOp(x,Y,z-1),isOp(x-1,Y,z-1));ao[1]=vertAO(isOp(x+1,Y,z),isOp(x,Y,z-1),isOp(x+1,Y,z-1));ao[2]=vertAO(isOp(x+1,Y,z+1),isOp(x,Y,z+2),isOp(x+1,Y,z+2));ao[3]=vertAO(isOp(x-1,Y,z+1),isOp(x,Y,z+2),isOp(x-1,Y,z+2));}
+        else if(face==="front"){const Z=z+1;ao[0]=vertAO(isOp(x-1,y,Z),isOp(x,y-1,Z),isOp(x-1,y-1,Z));ao[1]=vertAO(isOp(x+1,y,Z),isOp(x,y-1,Z),isOp(x+1,y-1,Z));ao[2]=vertAO(isOp(x+1,y+1,Z),isOp(x,y+1,Z),isOp(x+1,y+1,Z));ao[3]=vertAO(isOp(x-1,y+1,Z),isOp(x,y+1,Z),isOp(x-1,y+1,Z));}
+        else if(face==="back"){const Z=z-1;ao[0]=vertAO(isOp(x+1,y,Z),isOp(x,y-1,Z),isOp(x+1,y-1,Z));ao[1]=vertAO(isOp(x-1,y,Z),isOp(x,y-1,Z),isOp(x-1,y-1,Z));ao[2]=vertAO(isOp(x-1,y+1,Z),isOp(x,y+1,Z),isOp(x-1,y+1,Z));ao[3]=vertAO(isOp(x+1,y+1,Z),isOp(x,y+1,Z),isOp(x+1,y+1,Z));}
+        else if(face==="right"){const X=x+1;ao[0]=vertAO(isOp(X,y,z+1),isOp(X,y-1,z),isOp(X,y-1,z+1));ao[1]=vertAO(isOp(X,y,z-1),isOp(X,y-1,z),isOp(X,y-1,z-1));ao[2]=vertAO(isOp(X,y+1,z-1),isOp(X,y+1,z),isOp(X,y+1,z-1));ao[3]=vertAO(isOp(X,y+1,z+1),isOp(X,y+1,z),isOp(X,y+1,z+1));}
+        else{const X=x-1;ao[0]=vertAO(isOp(X,y,z-1),isOp(X,y-1,z),isOp(X,y-1,z-1));ao[1]=vertAO(isOp(X,y,z+1),isOp(X,y-1,z),isOp(X,y-1,z+1));ao[2]=vertAO(isOp(X,y+1,z+1),isOp(X,y+1,z),isOp(X,y+1,z+1));ao[3]=vertAO(isOp(X,y+1,z-1),isOp(X,y+1,z),isOp(X,y+1,z-1));}
+        return ao;
+    }
+
+    function addFaceAO(pos,nrm,col,x,y,z,face,bc,ao){
+        const F={top:{v:[[x,y+1,z+1],[x+1,y+1,z+1],[x+1,y+1,z],[x,y+1,z]],n:[0,1,0]},bottom:{v:[[x,y,z],[x+1,y,z],[x+1,y,z+1],[x,y,z+1]],n:[0,-1,0]},front:{v:[[x,y,z+1],[x+1,y,z+1],[x+1,y+1,z+1],[x,y+1,z+1]],n:[0,0,1]},back:{v:[[x+1,y,z],[x,y,z],[x,y+1,z],[x+1,y+1,z]],n:[0,0,-1]},right:{v:[[x+1,y,z+1],[x+1,y,z],[x+1,y+1,z],[x+1,y+1,z+1]],n:[1,0,0]},left:{v:[[x,y,z],[x,y,z+1],[x,y+1,z+1],[x,y+1,z]],n:[-1,0,0]}};
+        const f=F[face];const aol=[.38,.58,.78,1.0];const flip=ao[0]+ao[2]<ao[1]+ao[3];
+        const r=((bc>>16)&0xff)/255,g=((bc>>8)&0xff)/255,b=(bc&0xff)/255;
+        const pv=vi=>{pos.push(...f.v[vi]);nrm.push(...f.n);const a=aol[ao[vi]];col.push(r*a,g*a,b*a);};
+        if(flip)[1,2,3,1,3,0].forEach(pv);else[0,1,2,0,2,3].forEach(pv);
+    }
+
+    function disposeChunk(g){if(!g)return;g.traverse(o=>{if(o.geometry)o.geometry.dispose();});scene.remove(g);}
+    function buildChunk(cx,cz){
+        const key=ck(cx,cz);if(chunkGroups[key]){disposeChunk(chunkGroups[key]);delete chunkGroups[key];}
+        const grp=new THREE.Group();const sx=cx*CS,ex=Math.min(sx+CS,WS),sz=cz*CS,ez=Math.min(sz+CS,WS);
+        const oG=Object.create(null),tG=Object.create(null);
+        for(let x=sx;x<ex;x++)for(let z=sz;z<ez;z++)for(let y=0;y<WH;y++){
+            const bt=getBlock(x,y,z);if(bt===B.AIR)continue;
+            const faces=[];
+            if(getBlock(x,y+1,z)===B.AIR||(bt!==B.WATER&&getBlock(x,y+1,z)===B.WATER))faces.push("top");
+            if(getBlock(x,y-1,z)===B.AIR||(bt!==B.WATER&&getBlock(x,y-1,z)===B.WATER))faces.push("bottom");
+            if(getBlock(x+1,y,z)===B.AIR||(bt!==B.WATER&&getBlock(x+1,y,z)===B.WATER))faces.push("right");
+            if(getBlock(x-1,y,z)===B.AIR||(bt!==B.WATER&&getBlock(x-1,y,z)===B.WATER))faces.push("left");
+            if(getBlock(x,y,z+1)===B.AIR||(bt!==B.WATER&&getBlock(x,y,z+1)===B.WATER))faces.push("front");
+            if(getBlock(x,y,z-1)===B.AIR||(bt!==B.WATER&&getBlock(x,y,z-1)===B.WATER))faces.push("back");
+            if(!faces.length)continue;
+            for(const face of faces){
+                const fk=face==="top"?"top":face==="bottom"?"bottom":"side";
+                const st=TRANSPARENT.has(bt)?tG:oG;const gk_=`${bt}-${fk}`;
+                if(!st[gk_])st[gk_]={bt,fk,pos:[],nrm:[],col:[]};
+                addFaceAO(st[gk_].pos,st[gk_].nrm,st[gk_].col,x,y,z,face,BLOCK_COLORS[bt][fk],calcAO(x,y,z,face));
+            }
+        }
+        const addM=(st,tr)=>{for(const k in st){const g=st[k];if(!g.pos.length)continue;const geo=new THREE.BufferGeometry();geo.setAttribute("position",new THREE.Float32BufferAttribute(g.pos,3));geo.setAttribute("normal",new THREE.Float32BufferAttribute(g.nrm,3));geo.setAttribute("color",new THREE.Float32BufferAttribute(g.col,3));const m=new THREE.Mesh(geo,getMat(g.bt,g.fk));m.renderOrder=tr?1:0;grp.add(m);}};
+        addM(oG,false);addM(tG,true);chunkGroups[key]=grp;scene.add(grp);
+    }
+    async function buildAllChunks(){let n=0;const t=CC*CC;for(let cz=0;cz<CC;cz++)for(let cx=0;cx<CC;cx++){buildChunk(cx,cz);n++;if(n%2===0){setLP(84+(n/t)*16,`Meshing... ${n}/${t}`);await tick();}}}
+    function flushDirty(){if(!dirtyChunks.size)return;const ks=Array.from(dirtyChunks);dirtyChunks.clear();document.getElementById("dirty-count").textContent="0";for(const k of ks){const[cx,cz]=k.split(",").map(Number);buildChunk(cx,cz);}}
+
+    // Save/Load
+    function collectDiffs(){const ks=new Set([...Object.keys(baseWorld),...Object.keys(world)]);const m=[];ks.forEach(k=>{const b=baseWorld[k]||B.AIR,c=world[k]||B.AIR;if(b!==c){const[x,y,z]=k.split(",").map(Number);m.push([x,y,z,c]);}});return m;}
+    function saveGame(){try{const d={v:4,seed:curSeed,worldTime,selectedBlock:selBlock,inventory:Object.fromEntries(ALL_B.map(b=>[b,inv[b]||0])),player:{x:player.position.x,y:player.position.y,z:player.position.z,yaw,pitch},mods:collectDiffs()};localStorage.setItem(SAVE_KEY,JSON.stringify(d));updSave();saveAgentCheckpoint();toast(`Saved ${curSeed} + agent brain`);}catch(e){console.error(e);toast("Save failed");}}
+    function readSave(){try{const r=localStorage.getItem(SAVE_KEY);return r?JSON.parse(r):null;}catch{return null;}}
+    async function loadGame(sa=false){const s=readSave();if(!s){toast("No save");return;}await rebuild(s.seed,s,sa,`Loading ${s.seed}...`);toast(`Loaded ${s.seed}`);}
+
+    // Player
+    function syncCam(){camera.position.set(player.position.x,player.position.y+player.eyeHeight,player.position.z);camera.quaternion.setFromEuler(new THREE.Euler(pitch,yaw,0,"YXZ"));}
+    function collAt(x,y,z){const mx=x-player.radius,Mx=x+player.radius,my=y,My=y+player.height,mz=z-player.radius,Mz=z+player.radius;if(mx<0||mz<0||Mx>WS||Mz>WS)return true;for(let bx=Math.floor(mx);bx<=Math.floor(Mx-1e-6);bx++)for(let by=Math.floor(my);by<=Math.floor(My-1e-6);by++)for(let bz=Math.floor(mz);bz<=Math.floor(Mz-1e-6);bz++)if(!NON_SOLID.has(getBlock(bx,by,bz)))return true;return false;}
+    function inWater(x,y,z){for(let bx=Math.floor(x-player.radius);bx<=Math.floor(x+player.radius-1e-6);bx++)for(let by=Math.floor(y+.1);by<=Math.floor(y+player.height-.1-1e-6);by++)for(let bz=Math.floor(z-player.radius);bz<=Math.floor(z+player.radius-1e-6);bz++)if(getBlock(bx,by,bz)===B.WATER)return true;return false;}
+    function moveAx(ax,am){if(am===0)return;const step=Math.sign(am)*0.05;let moved=0;while(Math.abs(moved)<Math.abs(am)){const d=Math.abs(am-moved)<0.05?am-moved:step;const nx=player.position.x+(ax==="x"?d:0),ny=player.position.y+(ax==="y"?d:0),nz=player.position.z+(ax==="z"?d:0);if(!collAt(nx,ny,nz)){player.position.set(nx,ny,nz);moved+=d;}else{if(ax==="y"&&d<0)player.onGround=true;player.velocity[ax]=0;break;}}}
+
+    function updPlayer(dt){
+        if(!started)return;
+        const iw=inWater(player.position.x,player.position.y,player.position.z);
+        const fwd=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw)),rt=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
+        const wish=new THREE.Vector3();
+        if(keys["KeyW"])wish.add(fwd);if(keys["KeyS"])wish.sub(fwd);if(keys["KeyD"])wish.add(rt);if(keys["KeyA"])wish.sub(rt);
+        if(wish.lengthSq()>0)wish.normalize();
+        const spr=keys["ShiftLeft"]&&wish.lengthSq()>0;
+        const ms=(spr?player.sprintSpeed:player.speed)*(iw?.58:1);
+        tgtFov=spr?85:75;curFov+=(tgtFov-curFov)*Math.min(1,dt*8);camera.fov=curFov;camera.updateProjectionMatrix();
+        const lf=Math.min(1,(player.onGround?16:7)*dt);
+        player.velocity.x=THREE.MathUtils.lerp(player.velocity.x,wish.x*ms,lf);
+        player.velocity.z=THREE.MathUtils.lerp(player.velocity.z,wish.z*ms,lf);
+        player.coyote=Math.max(0,player.coyote-dt);jumpQ=Math.max(0,jumpQ-dt);
+        if(jumpQ>0){if(iw){player.velocity.y=4.2;jumpQ=0;}else if(player.onGround||player.coyote>0){player.velocity.y=player.jumpForce;player.onGround=false;player.coyote=0;jumpQ=0;}}
+        player.velocity.y+=(iw?-7.5:-20)*dt;player.velocity.y=cl(player.velocity.y,-24,14);
+        player.onGround=false;moveAx("x",player.velocity.x*dt);moveAx("z",player.velocity.z*dt);moveAx("y",player.velocity.y*dt);
+        if(player.onGround)player.coyote=0.1;
+        if(player.onGround&&wish.lengthSq()>0){stepT+=dt*ms;if(stepT>2.2){Audio_.playStep();stepT=0;}}else stepT=0;
+        if(player.position.y<-20){const sp=findSpawn();player.position.set(sp.x,sp.y+2,sp.z);player.velocity.set(0,0,0);toast("Respawned");}
+        syncCam();updPHud();
+    }
+
+    function updPHud(){
+        document.getElementById("pos").textContent=`${player.position.x.toFixed(1)}, ${(player.position.y+player.eyeHeight).toFixed(1)}, ${player.position.z.toFixed(1)}`;
+        const bx=cl(Math.floor(player.position.x),0,WS-1),bz=cl(Math.floor(player.position.z),0,WS-1);
+        document.getElementById("biome").textContent=BIOMES[biomeMap[bx][bz]].name;
+        document.getElementById("blocks").textContent=blockCount.toLocaleString();
+        // Show NN outputs at player position
+        const nn=nnMap[bx]?.[bz];
+        if(nn){
+            document.getElementById("nn-local").textContent=
+                `h=${nn.height} b=${nn.biome} cave=${nn.caveDensity.toFixed(2)} ore=${nn.oreRichness.toFixed(2)} tree=${nn.treeDensity.toFixed(2)} moist=${nn.moisture.toFixed(2)} fog=${nn.fogDensity.toFixed(2)} struct=${nn.structureProb.toFixed(2)}`;
+        }
+    }
+
+    function wouldHitP(x,y,z){return!(x+1<=player.position.x-player.radius||x>=player.position.x+player.radius||y+1<=player.position.y||y>=player.position.y+player.height||z+1<=player.position.z-player.radius||z>=player.position.z+player.radius);}
+    function intBound(s,ds){if(ds>0)return(Math.floor(s+1)-s)/ds;if(ds<0)return(s-Math.floor(s))/(-ds);return Infinity;}
+    function getTarget(md=6){const dir=new THREE.Vector3();camera.getWorldDirection(dir);const o=camera.position.clone();let x=Math.floor(o.x),y=Math.floor(o.y),z=Math.floor(o.z);const sx=dir.x>0?1:-1,sy=dir.y>0?1:-1,sz=dir.z>0?1:-1;const dx=dir.x?Math.abs(1/dir.x):Infinity,dy=dir.y?Math.abs(1/dir.y):Infinity,dz=dir.z?Math.abs(1/dir.z):Infinity;let mx=intBound(o.x,dir.x),my=intBound(o.y,dir.y),mz=intBound(o.z,dir.z);let last={x,y,z},d=0;while(d<=md){const bt=getBlock(x,y,z);if(bt!==B.AIR)return{hit:{x,y,z},place:{...last},block:bt};last={x,y,z};if(mx<my){if(mx<mz){x+=sx;d=mx;mx+=dx;}else{z+=sz;d=mz;mz+=dz;}}else{if(my<mz){y+=sy;d=my;my+=dy;}else{z+=sz;d=mz;mz+=dz;}}}return{hit:null,place:null,block:B.AIR};}
+
+    // Breaking
+    function updBreak(dt){
+        const bw=document.getElementById("break-bar-wrap"),bf=document.getElementById("break-bar");
+        if(!mDown||!started||invOpen||!locked){breakProg=0;breakTgt=null;bw.classList.remove("active");crackMesh.visible=false;return;}
+        const t=getTarget();if(!t.hit){breakProg=0;breakTgt=null;bw.classList.remove("active");crackMesh.visible=false;return;}
+        const tk=`${t.hit.x},${t.hit.y},${t.hit.z}`;if(breakTgt!==tk){breakProg=0;breakTgt=tk;}
+        const hard=BLOCK_HARDNESS[t.block]||.5;breakProg+=dt;
+        const pct=cl(breakProg/hard,0,1);bw.classList.add("active");bf.style.width=`${pct*100}%`;
+        crackMesh.position.set(t.hit.x+.5,t.hit.y+.5,t.hit.z+.5);crackMesh.visible=true;crackMat.opacity=pct*.45;
+        if(breakProg>=hard){const bt=getBlock(t.hit.x,t.hit.y,t.hit.z);if(bt!==B.AIR){inv[bt]=(inv[bt]||0)+1;spawnParts(t.hit.x,t.hit.y,t.hit.z,bt);Audio_.playBreak(bt);setRT(t.hit.x,t.hit.y,t.hit.z,B.AIR);flushDirty();updHB();updInvUI();}breakProg=0;breakTgt=null;bw.classList.remove("active");crackMesh.visible=false;}
+    }
+
+    function updHL(){if(!started||invOpen||!locked){brkHL.visible=false;plGhost.visible=false;return;}const t=getTarget();if(t.hit){brkHL.position.set(t.hit.x+.5,t.hit.y+.5,t.hit.z+.5);brkHL.visible=true;if(t.place&&!wouldHitP(t.place.x,t.place.y,t.place.z)){plGhost.position.set(t.place.x+.5,t.place.y+.5,t.place.z+.5);plGhost.visible=true;plGhost.material.color.setHex(BLOCK_COLORS[selBlock].top);}else plGhost.visible=false;}else{brkHL.visible=false;plGhost.visible=false;}}
+
+    // Environment — NN fog density affects local fog
+    function getTimeStr(){const m=Math.floor(((worldTime%1+1)%1)*24*60);return`${String(Math.floor(m/60)).padStart(2,"0")}:${String(m%60).padStart(2,"0")}`;}
+    function updEnv(dt){
+        worldTime=(worldTime+dt*0.012)%1;const a=worldTime*Math.PI*2;
+        const day=cl(Math.sin(a-Math.PI/2)*0.55+0.5,0,1);
+        const twi=cl(1-Math.abs(day-0.5)*3.2,0,1);
+        sun.position.set(WS/2+Math.cos(a)*90,18+Math.sin(a)*120,WS/2+Math.sin(a*0.85)*55);
+        sun.intensity=0.08+day*0.95+twi*0.08;amb.intensity=0.12+day*0.52;
+        moonMesh.position.set(WS/2-Math.cos(a)*80,18-Math.sin(a)*100+60,WS/2-Math.sin(a*0.85)*50);
+        moonMesh.visible=day<0.5;
+        const sky=new THREE.Color();sky.setHSL(0.58,0.56,0.08+day*0.44+twi*0.06);
+        scene.background.copy(sky);scene.fog.color.copy(sky);ren.setClearColor(sky);
+        stMat.opacity=cl(1-day*1.35,0,0.88);
+        cloudGrp.children.forEach((c,i)=>{c.position.x+=dt*(0.9+i*0.01);if(c.position.x>WS+15)c.position.x=-15;c.material.opacity=0.25+day*0.38;});
+
+        // NN-driven fog: use local fog density
+        const iw=inWater(player.position.x,player.position.y,player.position.z);
+        const bx=cl(Math.floor(player.position.x),0,WS-1),bz=cl(Math.floor(player.position.z),0,WS-1);
+        const nn=nnMap[bx]?.[bz];
+        const fogMul=nn?nn.fogDensity:0.5;
+        if(iw){scene.fog.near=6;scene.fog.far=28;}
+        else{
+            // fogMul 0=clear, 1=dense
+            scene.fog.near=32-fogMul*18;
+            scene.fog.far=120-fogMul*50;
+        }
+        const vig=document.getElementById("vignette");
+        const vi=iw?0.55:(0.2+(1-day)*0.25+fogMul*0.1);
+        vig.style.background=`radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,${vi}) 100%)`;
+        document.getElementById("world-time").textContent=getTimeStr();
+    }
+
+    // Rebuild
+    async function rebuild(seed,saveData=null,startAfter=false,label="Building world..."){
+        curSeed=seed;tf=new TerrainTransformerV3(seed);tf.cache.clear();
+        updHud();setLV(true);
+        document.getElementById("loading-text").textContent=label;
+        document.getElementById("progress-fill").style.width="0%";
+        document.getElementById("loss-display").textContent="Loss: --";
+        document.getElementById("epochs-done").textContent="0";
+        document.getElementById("final-loss").textContent="--";
+        brkHL.visible=false;plGhost.visible=false;crackMesh.visible=false;
+        invOpen=false;document.getElementById("inventory-overlay").classList.remove("open");
+        document.getElementById("start-screen").style.display="none";
+        if(document.pointerLockElement===canvas)document.exitPointerLock();
+        particles.forEach(p=>{partGrp.remove(p.mesh);p.mesh.geometry.dispose();p.mesh.material.dispose();});particles.length=0;
+        if(agent.group){scene.remove(agent.group);agent.group=null;}agent.alive=false;
+        await trainAndGenerate(saveData);
+        setupHB();setupInv();updHB();updInvUI();updHud();
+        setLV(false);
+        if(startAfter){started=true;updCross();canvas.requestPointerLock();}
+        else{started=false;updCross();document.getElementById("start-screen").style.display="flex";}
+    }
+
+    // Input
+    document.addEventListener("keydown",e=>{keys[e.code]=true;if(e.code==="Space"&&!e.repeat)jumpQ=0.15;if(e.code==="KeyE"&&!e.repeat&&started){togInv();return;}if(e.code==="Escape"&&invOpen){togInv(false);return;}if(e.code==="KeyK"&&!e.repeat&&started){saveGame();return;}if(e.code==="KeyL"&&!e.repeat){loadGame(started);return;}if(e.code==="KeyR"&&!e.repeat){rebuild((Date.now()%1000000)|0,null,started,"New seed...");return;}const n=parseInt(e.key,10);if(n>=1&&n<=9)selB(HOTBAR[n-1]);});
+    document.addEventListener("keyup",e=>{keys[e.code]=false;});
+    let skipMouse=0;
+    document.addEventListener("mousemove",e=>{if(!locked||invOpen||!started)return;if(skipMouse>0){skipMouse--;return;}const mx=cl(e.movementX,-120,120),my=cl(e.movementY,-120,120);yaw-=mx*0.0022;pitch-=my*0.0022;pitch=cl(pitch,-Math.PI/2+0.02,Math.PI/2-0.02);});
+    canvas.addEventListener("mousedown",e=>{if(!started||!locked||invOpen)return;if(e.button===0){mDown=true;return;}const t=getTarget();if(e.button===1&&t.hit){const bt=getBlock(t.hit.x,t.hit.y,t.hit.z);if(bt!==B.AIR&&bt!==B.WATER)selB(bt);}else if(e.button===2&&t.place&&t.hit){if((inv[selBlock]||0)>0&&!wouldHitP(t.place.x,t.place.y,t.place.z)){setRT(t.place.x,t.place.y,t.place.z,selBlock);inv[selBlock]--;Audio_.playPlace(selBlock);flushDirty();updHB();updInvUI();}}});
+    canvas.addEventListener("mouseup",e=>{if(e.button===0)mDown=false;});
+    canvas.addEventListener("contextmenu",e=>e.preventDefault());
+    canvas.addEventListener("click",()=>{if(started&&!invOpen&&!locked)canvas.requestPointerLock();});
+    canvas.addEventListener("wheel",e=>{if(!started||invOpen)return;let idx=HOTBAR.indexOf(selBlock);idx=(idx+Math.sign(e.deltaY)+HOTBAR.length)%HOTBAR.length;selB(HOTBAR[idx]);},{passive:true});
+    document.addEventListener("pointerlockchange",()=>{const wasLocked=locked;locked=document.pointerLockElement===canvas;updCross();if(!locked)mDown=false;if(locked&&!wasLocked)skipMouse=2;});
+    window.addEventListener("resize",()=>{camera.aspect=window.innerWidth/window.innerHeight;camera.updateProjectionMatrix();ren.setSize(window.innerWidth,window.innerHeight);});
+    document.addEventListener("visibilitychange",()=>{if(!document.hidden)skipMouse=3;});
+
+    document.getElementById("start-btn").addEventListener("click",()=>{started=true;document.getElementById("start-screen").style.display="none";updCross();canvas.requestPointerLock();});
+    document.getElementById("load-btn").addEventListener("click",async()=>{await loadGame(true);});
+    document.getElementById("regen-btn").addEventListener("click",async()=>{await rebuild((Date.now()%1000000)|0,null,false,"New seed...");toast("Fresh seed");});
+
+    // Main loop
+    let frames=0,fpsSt=performance.now(),lastF=0;
+    function animate(t){requestAnimationFrame(animate);const dt=cl((t-(lastF||t))/1000,0,0.05);lastF=t;frames++;if(t-fpsSt>=1000){document.getElementById("fps").textContent=String(frames);frames=0;fpsSt=t;}updEnv(dt);if(started&&!invOpen)updPlayer(dt);updBreak(dt);updHL();updParts(dt);updateAgent(dt);ren.render(scene,camera);}
+    async function init(){addClouds();selB(selBlock);setupHB();setupInv();updSave();updHud();updCross();curSeed=(Date.now()%1000000)|0;await rebuild(curSeed,null,false,"Building world...");animate(performance.now());}
+    init();
+    </script>
+</body>
+</html>

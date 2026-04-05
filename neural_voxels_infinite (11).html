@@ -1,0 +1,1674 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Neural Voxels Infinite</title>
+<style>
+:root{
+  --panel: rgba(8,12,20,.7);
+  --border: rgba(255,255,255,.13);
+  --text:#eef6ff;
+  --muted:rgba(238,246,255,.72);
+  --accent:#7fffc3;
+  --danger:#ffb0b0;
+  --shadow:0 20px 60px rgba(0,0,0,.42);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:#02050a;color:var(--text);font-family:Inter,"Segoe UI",system-ui,sans-serif}
+body.inventory-open #crosshair,
+body.inventory-open #status-bar,
+body.hud-hidden #crosshair,
+body.hud-hidden #status-bar,
+body.hud-hidden #hud-left,
+body.hud-hidden #nn-info,
+body.hud-hidden #hotbar,
+body.hud-hidden #toast{opacity:0;pointer-events:none}
+#game{display:block;width:100vw;height:100vh}
+#underwater-overlay{
+  position:fixed;inset:0;pointer-events:none;z-index:50;opacity:0;transition:opacity .2s ease;
+  background:radial-gradient(circle at center,rgba(150,230,255,.10),rgba(18,60,110,.32) 55%,rgba(6,20,40,.48));
+}
+#crosshair{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:22px;height:22px;z-index:120;pointer-events:none;transition:opacity .2s ease}
+#crosshair:before,#crosshair:after{content:"";position:absolute;background:#fff;mix-blend-mode:difference;border-radius:999px}
+#crosshair:before{width:22px;height:2px;left:0;top:10px}
+#crosshair:after{width:2px;height:22px;left:10px;top:0}
+.panel{
+  position:fixed;background:var(--panel);border:1px solid var(--border);border-radius:14px;
+  box-shadow:var(--shadow);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);z-index:110;transition:opacity .2s ease
+}
+#hud-left{top:16px;left:16px;width:270px;padding:14px}
+#hud-left .title,#nn-info .title{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.52);margin-bottom:10px}
+.stat-grid{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:13px;line-height:1.45}
+.stat-grid .k{color:rgba(255,255,255,.63)}
+.stat-grid .v{text-align:right;font-weight:600}
+#hud-left .hint{margin-top:12px;font-size:11.5px;color:rgba(255,255,255,.62);line-height:1.45}
+#nn-info{top:16px;right:16px;width:320px;padding:14px}
+#nn-info .arch{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;line-height:1.45;
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);padding:10px;border-radius:10px;color:rgba(255,255,255,.84)
+}
+#nn-info .stats{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;font-size:12px;margin-top:12px}
+#nn-info .stats .k{color:rgba(255,255,255,.63)}
+#nn-info .stats .v{text-align:right;font-weight:600}
+#nn-info .stats .loss{color:#ffb8b8}
+#status-bar{
+  position:fixed;left:50%;bottom:92px;transform:translateX(-50%);min-width:500px;max-width:min(92vw,860px);
+  display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;padding:12px 16px
+}
+#status-bar .slot .tag{display:block;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.55);margin-bottom:4px}
+#status-bar .slot .text{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#hotbar{
+  position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:115;display:flex;gap:6px;padding:10px;
+  border-radius:16px;background:rgba(5,8,14,.72);border:1px solid rgba(255,255,255,.12);box-shadow:0 14px 40px rgba(0,0,0,.35)
+}
+.hotbar-slot{
+  width:54px;height:54px;border-radius:12px;border:2px solid rgba(255,255,255,.16);position:relative;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(0,0,0,.12));
+  transition:transform .12s ease,border-color .12s ease,box-shadow .12s ease
+}
+.hotbar-slot:hover{transform:translateY(-2px)}
+.hotbar-slot.selected{border-color:rgba(255,255,255,.96);box-shadow:0 0 0 1px rgba(255,255,255,.18),0 0 18px rgba(255,255,255,.22)}
+.hotbar-slot .block-preview{width:36px;height:36px;border-radius:8px;position:relative;box-shadow:inset 0 1px 0 rgba(255,255,255,.24), inset 0 -6px 16px rgba(0,0,0,.18)}
+.hotbar-slot .block-preview:after{content:"";position:absolute;inset:0;border-radius:8px;background:linear-gradient(135deg,rgba(255,255,255,.18),transparent 48%,rgba(0,0,0,.12))}
+.hotbar-slot .key-hint,.hotbar-slot .count{position:absolute;font-size:10px;font-weight:700;text-shadow:0 1px 2px rgba(0,0,0,.95)}
+.hotbar-slot .key-hint{top:4px;left:6px;color:rgba(255,255,255,.76)}
+.hotbar-slot .count{right:6px;bottom:4px}
+#inventory-overlay{
+  position:fixed;inset:0;background:rgba(5,8,14,.76);display:none;align-items:center;justify-content:center;z-index:500;
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)
+}
+#inventory-overlay.open{display:flex}
+#inventory{
+  width:min(740px,92vw);padding:18px;border-radius:18px;background:linear-gradient(180deg,rgba(32,40,56,.98),rgba(18,24,36,.98));
+  border:1px solid rgba(255,255,255,.12);box-shadow:0 28px 70px rgba(0,0,0,.5)
+}
+#inventory h2{text-align:center;font-size:22px;margin-bottom:14px}
+.inv-section h3{font-size:13px;text-transform:uppercase;letter-spacing:.16em;color:rgba(255,255,255,.63);margin-bottom:8px}
+.inv-grid{display:grid;grid-template-columns:repeat(9,1fr);gap:6px}
+.inv-slot{
+  height:58px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);position:relative;display:flex;align-items:center;justify-content:center;
+  transition:transform .12s ease,border-color .12s ease,background .12s ease
+}
+.inv-slot.empty{opacity:.3}
+.inv-slot:not(.empty){cursor:pointer}
+.inv-slot:not(.empty):hover{transform:translateY(-2px);border-color:rgba(255,255,255,.28);background:rgba(255,255,255,.09)}
+.inv-slot.selected{border-color:rgba(255,255,255,.95);box-shadow:0 0 0 1px rgba(255,255,255,.18),0 0 16px rgba(255,255,255,.14)}
+.inv-slot .block-icon{width:34px;height:34px;border-radius:8px;position:relative;box-shadow:inset 0 1px 0 rgba(255,255,255,.24), inset 0 -5px 14px rgba(0,0,0,.15)}
+.inv-slot .block-icon:after{content:"";position:absolute;inset:0;border-radius:8px;background:linear-gradient(135deg,rgba(255,255,255,.2),transparent 52%,rgba(0,0,0,.16))}
+.inv-slot .item-count,.inv-slot .item-name{position:absolute;text-shadow:0 1px 2px rgba(0,0,0,.95)}
+.inv-slot .item-count{right:6px;bottom:4px;font-size:11px;font-weight:700}
+.inv-slot .item-name{left:50%;bottom:-24px;transform:translateX(-50%);font-size:11px;white-space:nowrap;opacity:0;pointer-events:none;padding:3px 8px;border-radius:999px;background:rgba(8,11,18,.92);border:1px solid rgba(255,255,255,.16);transition:opacity .15s ease}
+.inv-slot:hover .item-name{opacity:1}
+.inv-divider{height:1px;margin:15px 0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.24),transparent)}
+#inv-hint{margin-top:16px;text-align:center;font-size:12px;color:rgba(255,255,255,.64)}
+#loading,#start-screen{
+  position:fixed;inset:0;z-index:300;display:flex;align-items:center;justify-content:center
+}
+#loading{background:radial-gradient(circle at top,rgba(0,255,136,.16),transparent 35%),linear-gradient(135deg,#091220 0%,#10192a 45%,#05080f 100%);flex-direction:column}
+#loading-card,#start-card{width:min(720px,92vw);padding:28px 28px 24px}
+#loading h2,#start-screen h1{font-size:clamp(32px,5vw,54px);letter-spacing:.04em;text-align:center;margin-bottom:8px}
+.sub{color:rgba(255,255,255,.76);text-align:center;line-height:1.6;margin-bottom:22px}
+#progress-bar{width:100%;height:16px;border-radius:999px;overflow:hidden;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.08)}
+#progress-fill{width:0%;height:100%;background:linear-gradient(90deg,#00ff88,#6effc5);box-shadow:0 0 18px rgba(0,255,136,.35);transition:width .08s ease}
+#loading-text,#loss-display{text-align:center;margin-top:14px}
+#loss-display{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#ffb8b8}
+#training-viz{margin-top:18px;height:108px;display:flex;align-items:flex-end;justify-content:center;gap:4px}
+.loss-bar{width:7px;border-radius:999px 999px 3px 3px;background:#00ff88;height:6px;transition:height .08s ease,background .08s ease}
+#start-screen{display:none;background:radial-gradient(circle at top,rgba(0,255,136,.14),transparent 34%),linear-gradient(135deg,#0d1726 0%,#101b2f 55%,#060910 100%)}
+#start-card .eyebrow{display:inline-flex;margin:0 auto 14px;padding:6px 12px;border-radius:999px;border:1px solid rgba(0,255,136,.28);background:rgba(0,255,136,.08);color:#bafcd8;font-size:12px;letter-spacing:.14em;text-transform:uppercase}
+#world-summary{margin:18px auto 0;padding:14px 16px;border-radius:14px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);font-size:14px;line-height:1.6;color:rgba(255,255,255,.86)}
+#start-actions{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin-top:24px}
+button{
+  border:none;border-radius:14px;cursor:pointer;font-weight:700;letter-spacing:.02em;transition:transform .14s ease,box-shadow .14s ease,background .14s ease
+}
+button:hover{transform:translateY(-1px)}
+#start-btn{padding:15px 28px;font-size:18px;background:linear-gradient(135deg,#00ff88,#4adfb0);color:#04120a;box-shadow:0 10px 28px rgba(0,255,136,.24)}
+#new-world-btn{padding:15px 24px;font-size:16px;background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.16)}
+#controls-info{margin-top:24px;display:grid;grid-template-columns:repeat(2,minmax(220px,1fr));gap:10px 18px;font-size:13px;color:rgba(255,255,255,.68)}
+#controls-info .key{color:#dcffee;font-weight:700}
+#toast{
+  position:fixed;top:18px;left:50%;transform:translateX(-50%) translateY(-18px);z-index:600;padding:10px 14px;border-radius:999px;
+  background:rgba(8,14,22,.88);border:1px solid rgba(255,255,255,.14);color:#fff;font-size:13px;opacity:0;pointer-events:none;transition:opacity .18s ease,transform .18s ease;box-shadow:0 14px 34px rgba(0,0,0,.3)
+}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+@media(max-width:900px){
+  #status-bar{min-width:0;width:calc(100vw - 28px);grid-template-columns:repeat(2,minmax(0,1fr));bottom:102px}
+  #controls-info{grid-template-columns:1fr}
+  #nn-info{width:min(92vw,320px)}
+  #hud-left{width:min(92vw,270px)}
+}
+</style>
+</head>
+<body>
+<div id="loading">
+  <div id="loading-card" class="panel">
+    <h2>🧠 Streaming Transformer World</h2>
+    <div class="sub">
+      Infinite chunk streaming, continuous online learning, neural lighting distilled from a cheap ray teacher,
+      and an FPS governor that tries not to let your browser die dramatically.
+    </div>
+    <div id="progress-bar"><div id="progress-fill"></div></div>
+    <div id="loading-text">Initializing…</div>
+    <div id="loss-display">Terrain loss: -- • Light loss: --</div>
+    <div id="training-viz"></div>
+  </div>
+</div>
+
+<div id="start-screen">
+  <div id="start-card" class="panel">
+    <div class="eyebrow">Infinite single-file voxel sandbox</div>
+    <h1>🧠 Neural Voxels Infinite</h1>
+    <div class="sub">
+      The world streams forever. A tiny transformer-like terrain model learns in the background from teacher terrain and player signals.
+      A separate neural light proxy learns cheap sun-shadow estimates from a ray-sampled teacher.
+    </div>
+    <div id="world-summary">Preparing summary…</div>
+    <div id="start-actions">
+      <button id="start-btn">Enter World</button>
+      <button id="new-world-btn">Generate Fresh Seed</button>
+    </div>
+    <div id="controls-info">
+      <div><span class="key">WASD</span> move, <span class="key">Space</span> jump / swim, <span class="key">Shift</span> sprint</div>
+      <div><span class="key">Mouse</span> look, <span class="key">LMB</span> break, <span class="key">RMB</span> place</div>
+      <div><span class="key">E</span> inventory, <span class="key">1-9</span> hotbar, <span class="key">Wheel</span> cycle</div>
+      <div><span class="key">R</span> respawn, <span class="key">F</span> hide HUD, local save persists modified chunks</div>
+    </div>
+  </div>
+</div>
+
+<canvas id="game"></canvas>
+<div id="underwater-overlay"></div>
+<div id="crosshair"></div>
+
+<div id="inventory-overlay">
+  <div id="inventory">
+    <h2>Inventory</h2>
+    <div class="inv-section">
+      <h3>Building Blocks</h3>
+      <div class="inv-grid" id="inv-blocks"></div>
+    </div>
+    <div class="inv-divider"></div>
+    <div class="inv-section">
+      <h3>Hotbar</h3>
+      <div class="inv-grid" id="inv-hotbar"></div>
+    </div>
+    <div id="inv-hint">Click a block to equip it • Press E to close • Saves are local to this browser after first load</div>
+  </div>
+</div>
+
+<div id="hud-left" class="panel">
+  <div class="title">World telemetry</div>
+  <div class="stat-grid">
+    <div class="k">FPS</div><div class="v" id="fps">0</div>
+    <div class="k">Position</div><div class="v" id="pos">0,0,0</div>
+    <div class="k">Biome</div><div class="v" id="biome-name">--</div>
+    <div class="k">Chunks</div><div class="v" id="chunk-count">0</div>
+    <div class="k">Dirty</div><div class="v" id="dirty-count">0</div>
+    <div class="k">Seed</div><div class="v" id="seed-value">--</div>
+    <div class="k">Save</div><div class="v" id="save-status">No save</div>
+    <div class="k">Render dist</div><div class="v" id="render-dist">--</div>
+  </div>
+  <div class="hint">Changed chunks are saved locally. Procedural chunks regenerate from the streaming terrain model, so you are not stuffing an infinite planet into localStorage like a lunatic.</div>
+</div>
+
+<div id="nn-info" class="panel">
+  <div class="title">Neural cores</div>
+  <div class="arch">
+    Terrain core: 5-token local attention mixer<br>
+    pos(x,z,neighbors) → embed → attention → FFN → height / biome / cave<br>
+    learns from teacher noise + player bias<br>
+    ─────────────────────────<br>
+    Light core: 7-token local exposure mixer<br>
+    occupancy + normal + sun dir → brightness<br>
+    learns from ray-sampled shadow teacher
+  </div>
+  <div class="stats">
+    <div class="k">Terrain step</div><div class="v" id="terrain-step">0</div>
+    <div class="k">Terrain loss</div><div class="v loss" id="terrain-loss">--</div>
+    <div class="k">Light step</div><div class="v" id="light-step">0</div>
+    <div class="k">Light loss</div><div class="v loss" id="light-loss">--</div>
+    <div class="k">FPS governor</div><div class="v" id="governor-state">--</div>
+    <div class="k">Pixel scale</div><div class="v" id="pixel-scale">--</div>
+  </div>
+</div>
+
+<div id="status-bar" class="panel">
+  <div class="slot"><span class="tag">Selected</span><div class="text" id="selected-name">Grass</div></div>
+  <div class="slot"><span class="tag">Target</span><div class="text" id="target-name">None</div></div>
+  <div class="slot"><span class="tag">Time</span><div class="text" id="world-time">06:00</div></div>
+  <div class="slot"><span class="tag">Mode</span><div class="text" id="movement-mode">Grounded</div></div>
+  <div class="slot"><span class="tag">Chunk</span><div class="text" id="chunk-pos">0,0</div></div>
+  <div class="slot"><span class="tag">Hint</span><div class="text" id="context-hint">Break, place, build</div></div>
+</div>
+
+<div id="hotbar"></div>
+<div id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+'use strict';
+
+class SimplexNoise {
+  constructor(seed = Math.random()) {
+    this.p = new Uint8Array(256);
+    this.perm = new Uint8Array(512);
+    const rng = this.mulberry32(seed * 1000000);
+    for (let i = 0; i < 256; i++) this.p[i] = i;
+    for (let i = 255; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [this.p[i], this.p[j]] = [this.p[j], this.p[i]];
+    }
+    for (let i = 0; i < 512; i++) this.perm[i] = this.p[i & 255];
+  }
+  mulberry32(seed) {
+    return () => {
+      let t = seed += 0x6D2B79F5;
+      t = Math.imul(t ^ t >>> 15, t | 1);
+      t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  noise2D(x, y) {
+    const F2 = 0.5 * (Math.sqrt(3) - 1);
+    const G2 = (3 - Math.sqrt(3)) / 6;
+    const s = (x + y) * F2;
+    const i = Math.floor(x + s), j = Math.floor(y + s);
+    const t = (i + j) * G2;
+    const X0 = i - t, Y0 = j - t;
+    const x0 = x - X0, y0 = y - Y0;
+    const i1 = x0 > y0 ? 1 : 0, j1 = x0 > y0 ? 0 : 1;
+    const x1 = x0 - i1 + G2, y1 = y0 - j1 + G2;
+    const x2 = x0 - 1 + 2 * G2, y2 = y0 - 1 + 2 * G2;
+    const ii = i & 255, jj = j & 255;
+    const grad = (hash, gx, gy) => {
+      const h = hash & 7;
+      const u = h < 4 ? gx : gy;
+      const v = h < 4 ? gy : gx;
+      return ((h & 1) ? -u : u) + ((h & 2) ? -2 * v : 2 * v);
+    };
+    let n0 = 0, n1 = 0, n2 = 0;
+    let t0 = 0.5 - x0 * x0 - y0 * y0;
+    if (t0 >= 0) { t0 *= t0; n0 = t0 * t0 * grad(this.perm[ii + this.perm[jj]], x0, y0); }
+    let t1 = 0.5 - x1 * x1 - y1 * y1;
+    if (t1 >= 0) { t1 *= t1; n1 = t1 * t1 * grad(this.perm[ii + i1 + this.perm[jj + j1]], x1, y1); }
+    let t2 = 0.5 - x2 * x2 - y2 * y2;
+    if (t2 >= 0) { t2 *= t2; n2 = t2 * t2 * grad(this.perm[ii + 1 + this.perm[jj + 1]], x2, y2); }
+    return 70 * (n0 + n1 + n2);
+  }
+}
+
+function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+function clamp01(v) { return clamp(v, 0, 1); }
+function lerp(a,b,t){return a+(b-a)*t;}
+function smoothstep(edge0, edge1, x) {
+  const t = clamp01((x - edge0) / (edge1 - edge0));
+  return t * t * (3 - 2 * t);
+}
+function fract(v) { return v - Math.floor(v); }
+function seededRandom(x, y = 0, z = 0, seed = 1) {
+  const n = Math.sin(x * 12.9898 + y * 53.121 + z * 78.233 + seed * 0.371) * 43758.5453;
+  return n - Math.floor(n);
+}
+
+class TinyTerrainTransformer {
+  constructor(seed = 1) {
+    this.seed = seed;
+    this.dim = 20;
+    this.tokenCount = 5;
+    this.freqs = [0.018, 0.037, 0.081];
+    this.step = 0;
+    this.lastLoss = 0;
+    this.lr = 0.004;
+    this.rng = this.mulberry32(seed);
+    this.init();
+  }
+  mulberry32(seed) {
+    return () => {
+      let t = seed += 0x6D2B79F5;
+      t = Math.imul(t ^ t >>> 15, t | 1);
+      t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  rand(scale = 1) { return (this.rng() * 2 - 1) * scale; }
+  init() {
+    const fCount = this.freqs.length * 4 + 3;
+    this.Wemb = Array.from({ length: fCount }, () => Float32Array.from({ length: this.dim }, () => this.rand(0.22)));
+    this.Wq = Float32Array.from({ length: this.dim }, () => this.rand(0.2));
+    this.Wk = Float32Array.from({ length: this.dim }, () => this.rand(0.2));
+    this.Wv = Float32Array.from({ length: this.dim }, () => this.rand(0.2));
+    this.Wmix = Float32Array.from({ length: this.dim }, () => this.rand(0.2));
+    this.W1 = Array.from({ length: this.dim }, () => Float32Array.from({ length: this.dim }, () => this.rand(0.15)));
+    this.W2 = Array.from({ length: this.dim }, () => Float32Array.from({ length: this.dim }, () => this.rand(0.15)));
+    this.outH = Float32Array.from({ length: this.dim }, () => this.rand(0.12));
+    this.outCave = Float32Array.from({ length: this.dim }, () => this.rand(0.12));
+    this.outBiome = Array.from({ length: 4 }, () => Float32Array.from({ length: this.dim }, () => this.rand(0.12)));
+  }
+  tokenFeatures(x, z, ox, oz, bias = 0) {
+    const px = x + ox;
+    const pz = z + oz;
+    const f = [1, ox, oz + bias];
+    for (const fr of this.freqs) {
+      f.push(Math.sin(px * fr), Math.cos(px * fr), Math.sin(pz * fr), Math.cos(pz * fr));
+    }
+    return f;
+  }
+  embed(features) {
+    const out = new Float32Array(this.dim);
+    for (let i = 0; i < features.length; i++) {
+      const fi = features[i];
+      const row = this.Wemb[i];
+      for (let j = 0; j < this.dim; j++) out[j] += fi * row[j];
+    }
+    for (let j = 0; j < this.dim; j++) out[j] = Math.tanh(out[j]);
+    return out;
+  }
+  dot(a, b) {
+    let s = 0;
+    for (let i = 0; i < a.length; i++) s += a[i] * b[i];
+    return s;
+  }
+  activate(v) {
+    return Math.tanh(v);
+  }
+  forward(x, z, playerBias = 0) {
+    const offsets = [[0,0],[1,0],[-1,0],[0,1],[0,-1]];
+    const tokens = offsets.map(([ox, oz], idx) => this.embed(this.tokenFeatures(x, z, ox, oz, idx === 0 ? playerBias : 0)));
+    const qCenter = this.dot(tokens[0], this.Wq);
+    const scores = [];
+    for (let i = 0; i < this.tokenCount; i++) scores.push(qCenter * this.dot(tokens[i], this.Wk));
+    const m = Math.max(...scores);
+    const exps = scores.map(s => Math.exp(clamp(s - m, -8, 8)));
+    const sum = exps.reduce((a,b)=>a+b,0) + 1e-6;
+    const weights = exps.map(v => v / sum);
+
+    const ctx = new Float32Array(this.dim);
+    for (let i = 0; i < this.tokenCount; i++) {
+      const scale = weights[i];
+      const tok = tokens[i];
+      for (let j = 0; j < this.dim; j++) ctx[j] += tok[j] * this.Wv[j] * scale;
+    }
+
+    const h = new Float32Array(this.dim);
+    for (let j = 0; j < this.dim; j++) h[j] = this.activate(tokens[0][j] + ctx[j] + tokens[0][j] * this.Wmix[j]);
+    const ff = new Float32Array(this.dim);
+    for (let j = 0; j < this.dim; j++) {
+      let s = 0;
+      for (let k = 0; k < this.dim; k++) s += h[k] * this.W1[k][j];
+      ff[j] = this.activate(s);
+    }
+    const h2 = new Float32Array(this.dim);
+    for (let j = 0; j < this.dim; j++) {
+      let s = 0;
+      for (let k = 0; k < this.dim; k++) s += ff[k] * this.W2[k][j];
+      h2[j] = this.activate(h[j] + s);
+    }
+    let rawH = 0, rawCave = 0;
+    for (let j = 0; j < this.dim; j++) {
+      rawH += h2[j] * this.outH[j];
+      rawCave += h2[j] * this.outCave[j];
+    }
+    const biomeLogits = [0,0,0,0];
+    for (let b = 0; b < 4; b++) for (let j = 0; j < this.dim; j++) biomeLogits[b] += h2[j] * this.outBiome[b][j];
+    const maxLog = Math.max(...biomeLogits);
+    const expLog = biomeLogits.map(v => Math.exp(clamp(v - maxLog, -10, 10)));
+    const sumLog = expLog.reduce((a,b)=>a+b,0) + 1e-6;
+    const probs = expLog.map(v => v / sumLog);
+    let biome = 0;
+    for (let i = 1; i < 4; i++) if (probs[i] > probs[biome]) biome = i;
+    return {
+      hidden: h2,
+      height: 14 + Math.tanh(rawH) * 8,
+      cave: Math.tanh(rawCave),
+      biome,
+      probs
+    };
+  }
+  train(samples) {
+    if (!samples.length) return;
+    let loss = 0;
+    for (const s of samples) {
+      const out = this.forward(s.x, s.z, s.bias || 0);
+      const errH = out.height - s.targetHeight;
+      const errC = out.cave - s.targetCave;
+      loss += errH * errH + 0.35 * errC * errC + 0.22 * -Math.log(out.probs[s.targetBiome] + 1e-6);
+      const gradH = clamp(errH * 0.04, -0.08, 0.08);
+      const gradC = clamp(errC * 0.035, -0.08, 0.08);
+      for (let j = 0; j < this.dim; j++) {
+        this.outH[j] -= this.lr * gradH * out.hidden[j];
+        this.outCave[j] -= this.lr * gradC * out.hidden[j];
+        const adapt = (s.bias || 0) * 0.001 * out.hidden[j];
+        this.Wmix[j] = clamp(this.Wmix[j] - adapt, -1.2, 1.2);
+      }
+      for (let b = 0; b < 4; b++) {
+        const db = clamp((out.probs[b] - (b === s.targetBiome ? 1 : 0)) * 0.035, -0.06, 0.06);
+        for (let j = 0; j < this.dim; j++) this.outBiome[b][j] -= this.lr * db * out.hidden[j];
+      }
+    }
+    this.step += samples.length;
+    this.lastLoss = loss / samples.length;
+  }
+  exportState() {
+    return {
+      step: this.step,
+      lastLoss: this.lastLoss,
+      outH: Array.from(this.outH),
+      outCave: Array.from(this.outCave),
+      outBiome: this.outBiome.map(r => Array.from(r)),
+      Wmix: Array.from(this.Wmix)
+    };
+  }
+  importState(state) {
+    if (!state) return;
+    if (state.outH) this.outH.set(state.outH);
+    if (state.outCave) this.outCave.set(state.outCave);
+    if (state.Wmix) this.Wmix.set(state.Wmix);
+    if (state.outBiome) for (let i = 0; i < 4; i++) if (state.outBiome[i]) this.outBiome[i].set(state.outBiome[i]);
+    this.step = state.step || 0;
+    this.lastLoss = state.lastLoss || 0;
+  }
+}
+
+class TinyLightMixer {
+  constructor(seed = 1) {
+    this.seed = seed;
+    this.step = 0;
+    this.lastLoss = 0;
+    this.lr = 0.02;
+    this.w = Float32Array.from({ length: 8 }, (_, i) => Math.sin(seed * 0.1 + i) * 0.2);
+    this.b = 0;
+  }
+  predict(features) {
+    let s = this.b;
+    for (let i = 0; i < this.w.length; i++) s += this.w[i] * features[i];
+    return clamp01(0.5 + 0.5 * Math.tanh(s));
+  }
+  train(samples) {
+    if (!samples.length) return;
+    let loss = 0;
+    for (const s of samples) {
+      const pred = this.predict(s.features);
+      const err = pred - s.target;
+      loss += err * err;
+      const g = clamp(err * 0.8, -0.6, 0.6);
+      for (let i = 0; i < this.w.length; i++) this.w[i] -= this.lr * g * s.features[i];
+      this.b -= this.lr * g;
+    }
+    this.step += samples.length;
+    this.lastLoss = loss / samples.length;
+  }
+  exportState() { return { step: this.step, lastLoss: this.lastLoss, w: Array.from(this.w), b: this.b }; }
+  importState(state) {
+    if (!state) return;
+    if (state.w) this.w.set(state.w);
+    if (typeof state.b === 'number') this.b = state.b;
+    this.step = state.step || 0;
+    this.lastLoss = state.lastLoss || 0;
+  }
+}
+
+const BLOCKS = { AIR:0, GRASS:1, DIRT:2, STONE:3, WOOD:4, LEAVES:5, SAND:6, WATER:7, BRICK:8, GLASS:9, SNOW:10, COBBLE:11, PLANKS:12, IRON:13, GOLD:14, DIAMOND:15 };
+const HOTBAR_BLOCKS = [BLOCKS.GRASS,BLOCKS.DIRT,BLOCKS.STONE,BLOCKS.WOOD,BLOCKS.LEAVES,BLOCKS.SAND,BLOCKS.SNOW,BLOCKS.BRICK,BLOCKS.GLASS];
+const ALL_BLOCKS = [BLOCKS.GRASS,BLOCKS.DIRT,BLOCKS.STONE,BLOCKS.WOOD,BLOCKS.LEAVES,BLOCKS.SAND,BLOCKS.WATER,BLOCKS.BRICK,BLOCKS.GLASS,BLOCKS.SNOW,BLOCKS.COBBLE,BLOCKS.PLANKS,BLOCKS.IRON,BLOCKS.GOLD,BLOCKS.DIAMOND];
+const BLOCK_NAMES = {
+  [BLOCKS.GRASS]:'Grass',[BLOCKS.DIRT]:'Dirt',[BLOCKS.STONE]:'Stone',[BLOCKS.WOOD]:'Oak Log',[BLOCKS.LEAVES]:'Leaves',[BLOCKS.SAND]:'Sand',
+  [BLOCKS.WATER]:'Water',[BLOCKS.BRICK]:'Brick',[BLOCKS.GLASS]:'Glass',[BLOCKS.SNOW]:'Snow',[BLOCKS.COBBLE]:'Cobblestone',[BLOCKS.PLANKS]:'Planks',
+  [BLOCKS.IRON]:'Iron Block',[BLOCKS.GOLD]:'Gold Block',[BLOCKS.DIAMOND]:'Diamond Block'
+};
+const BLOCK_COLORS = {
+  [BLOCKS.GRASS]:{top:0x7cba4d,side:0x79984d,bottom:0x8B7355},
+  [BLOCKS.DIRT]:{top:0x8B7355,side:0x8B7355,bottom:0x8B7355},
+  [BLOCKS.STONE]:{top:0x808080,side:0x808080,bottom:0x808080},
+  [BLOCKS.WOOD]:{top:0xA0826D,side:0x6B4423,bottom:0xA0826D},
+  [BLOCKS.LEAVES]:{top:0x2d5a27,side:0x2d5a27,bottom:0x2d5a27},
+  [BLOCKS.SAND]:{top:0xE6D69C,side:0xE6D69C,bottom:0xE6D69C},
+  [BLOCKS.WATER]:{top:0x3399FF,side:0x2f84d7,bottom:0x2a6fb9},
+  [BLOCKS.BRICK]:{top:0xB84C3C,side:0xB84C3C,bottom:0xB84C3C},
+  [BLOCKS.GLASS]:{top:0xADD8E6,side:0xAAD2DE,bottom:0xAAD2DE},
+  [BLOCKS.SNOW]:{top:0xFFFAFA,side:0xE8E8E8,bottom:0xE8E8E8},
+  [BLOCKS.COBBLE]:{top:0x6a6a6a,side:0x6a6a6a,bottom:0x6a6a6a},
+  [BLOCKS.PLANKS]:{top:0xBC9862,side:0xBC9862,bottom:0xBC9862},
+  [BLOCKS.IRON]:{top:0xD4D4D4,side:0xC2C2C2,bottom:0xB7B7B7},
+  [BLOCKS.GOLD]:{top:0xFFD700,side:0xDAA520,bottom:0xC99500},
+  [BLOCKS.DIAMOND]:{top:0x4EE2EC,side:0x00CED1,bottom:0x00B5C0}
+};
+const BIOMES = {
+  0:{name:'Plains',surface:BLOCKS.GRASS,treeChance:0.012},
+  1:{name:'Desert',surface:BLOCKS.SAND,treeChance:0.002},
+  2:{name:'Forest',surface:BLOCKS.GRASS,treeChance:0.04},
+  3:{name:'Tundra',surface:BLOCKS.SNOW,treeChance:0.006}
+};
+const PASSABLE_BLOCKS = new Set([BLOCKS.AIR,BLOCKS.WATER]);
+const TRANSPARENT_BLOCKS = new Set([BLOCKS.WATER,BLOCKS.GLASS,BLOCKS.LEAVES]);
+
+const SAVE_KEY = 'neural-voxels-infinite-v1';
+const CHUNK_SIZE = 16;
+const WORLD_HEIGHT = 40;
+const SEA_LEVEL = 10;
+const ACTIVE_MARGIN = 1;
+const TERRAIN_CACHE_LIMIT = 8000;
+
+const ui = {
+  loading: document.getElementById('loading'),
+  progressFill: document.getElementById('progress-fill'),
+  loadingText: document.getElementById('loading-text'),
+  lossDisplay: document.getElementById('loss-display'),
+  trainingViz: document.getElementById('training-viz'),
+  startScreen: document.getElementById('start-screen'),
+  startBtn: document.getElementById('start-btn'),
+  newWorldBtn: document.getElementById('new-world-btn'),
+  worldSummary: document.getElementById('world-summary'),
+  fps: document.getElementById('fps'),
+  pos: document.getElementById('pos'),
+  biome: document.getElementById('biome-name'),
+  chunkCount: document.getElementById('chunk-count'),
+  dirtyCount: document.getElementById('dirty-count'),
+  seed: document.getElementById('seed-value'),
+  save: document.getElementById('save-status'),
+  renderDist: document.getElementById('render-dist'),
+  terrainStep: document.getElementById('terrain-step'),
+  terrainLoss: document.getElementById('terrain-loss'),
+  lightStep: document.getElementById('light-step'),
+  lightLoss: document.getElementById('light-loss'),
+  governor: document.getElementById('governor-state'),
+  pixelScale: document.getElementById('pixel-scale'),
+  selected: document.getElementById('selected-name'),
+  target: document.getElementById('target-name'),
+  worldTime: document.getElementById('world-time'),
+  movement: document.getElementById('movement-mode'),
+  chunkPos: document.getElementById('chunk-pos'),
+  hint: document.getElementById('context-hint'),
+  inventoryOverlay: document.getElementById('inventory-overlay'),
+  invBlocks: document.getElementById('inv-blocks'),
+  invHotbar: document.getElementById('inv-hotbar'),
+  hotbar: document.getElementById('hotbar'),
+  toast: document.getElementById('toast'),
+  underwater: document.getElementById('underwater-overlay')
+};
+
+const canvas = document.getElementById('game');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, powerPreference:'high-performance' });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.35));
+renderer.setClearColor(0x87CEEB);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x87CEEB, 60, 170);
+
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1200);
+const ambient = new THREE.AmbientLight(0xffffff, 0.55);
+const hemi = new THREE.HemisphereLight(0x9ed2ff, 0x564633, 0.45);
+const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+sun.position.set(60, 70, 10);
+scene.add(ambient, hemi, sun);
+const cloudGroup = new THREE.Group();
+scene.add(cloudGroup);
+
+const highlight = new THREE.Mesh(
+  new THREE.BoxGeometry(1.02,1.02,1.02),
+  new THREE.MeshBasicMaterial({ color:0xffffff, wireframe:true, transparent:true, opacity:0.5 })
+);
+highlight.visible = false;
+highlight.renderOrder = 12;
+scene.add(highlight);
+
+const placePreview = new THREE.Mesh(
+  new THREE.BoxGeometry(1.01,1.01,1.01),
+  new THREE.MeshBasicMaterial({ color:0x7cba4d, transparent:true, opacity:0.22 })
+);
+placePreview.visible = false;
+placePreview.renderOrder = 11;
+scene.add(placePreview);
+
+let worldSeed = 0;
+let simplex = null;
+let terrainModel = null;
+let lightModel = null;
+let inventory = {};
+let selectedBlock = BLOCKS.GRASS;
+let inventoryOpen = false;
+let hudHidden = false;
+let isLocked = false;
+let worldReady = false;
+let yaw = 0, pitch = 0;
+let timeOfDay = 0.24;
+let toastTimer = null;
+let saveTimer = null;
+let renderDistance = 3;
+let targetPixelRatio = Math.min(window.devicePixelRatio, 1.35);
+
+const keys = Object.create(null);
+const player = {
+  position: new THREE.Vector3(0, 25, 0),
+  velocity: new THREE.Vector3(),
+  onGround: false,
+  radius: 0.32,
+  height: 1.72,
+  speed: 5.8,
+  sprintSpeed: 8.4,
+  jumpForce: 6.4,
+  bob: 0
+};
+
+const columnCache = new Map();
+const columnCacheQueue = [];
+const modifiedChunks = new Map(); // chunkKey -> { blocks: { localKey: type }, signals: { heightBias, biomeBias? } }
+const chunkMeshes = new Map();
+const activeChunks = new Set();
+const dirtyChunks = new Set();
+const chunkMeta = new Map(); // chunkKey -> { builtAt }
+const materialCache = new Map();
+const terrainTrainQueue = [];
+const lightTrainQueue = [];
+let lastTarget = null;
+let totalVisibleChunks = 0;
+
+function defaultInventory() {
+  const inv = {};
+  for (const b of ALL_BLOCKS) inv[b] = 64;
+  return inv;
+}
+
+function updateSaveStatus(text, bad = false) {
+  ui.save.textContent = text;
+  ui.save.style.color = bad ? 'var(--danger)' : '#dfffea';
+}
+function showToast(text) {
+  ui.toast.textContent = text;
+  ui.toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => ui.toast.classList.remove('show'), 1600);
+}
+function setLoadingProgress(p, text) {
+  ui.progressFill.style.width = `${p}%`;
+  ui.loadingText.textContent = text;
+}
+function updateLossDisplay() {
+  ui.lossDisplay.textContent = `Terrain loss: ${terrainModel ? terrainModel.lastLoss.toFixed(4) : '--'} • Light loss: ${lightModel ? lightModel.lastLoss.toFixed(4) : '--'}`;
+  ui.terrainStep.textContent = terrainModel ? String(terrainModel.step) : '0';
+  ui.terrainLoss.textContent = terrainModel ? terrainModel.lastLoss.toFixed(4) : '--';
+  ui.lightStep.textContent = lightModel ? String(lightModel.step) : '0';
+  ui.lightLoss.textContent = lightModel ? lightModel.lastLoss.toFixed(4) : '--';
+}
+function getChunkCoords(x, z) { return [Math.floor(x / CHUNK_SIZE), Math.floor(z / CHUNK_SIZE)]; }
+function getChunkKey(cx, cz) { return `${cx},${cz}`; }
+function parseChunkKey(key){ const [cx, cz] = key.split(',').map(Number); return { cx, cz }; }
+function worldToLocalInChunk(x, z) {
+  const lx = ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+  const lz = ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+  return [lx, lz];
+}
+function modChunkFor(x, z) {
+  const [cx, cz] = getChunkCoords(x, z);
+  const key = getChunkKey(cx, cz);
+  let entry = modifiedChunks.get(key);
+  if (!entry) {
+    entry = { blocks: {}, signal: 0 };
+    modifiedChunks.set(key, entry);
+  }
+  return { entry, key, cx, cz };
+}
+function localBlockKey(x, y, z) {
+  const [lx, lz] = worldToLocalInChunk(x, z);
+  return `${lx},${y},${lz}`;
+}
+function hashOccupancyFeature(arr, normalY, sunY) {
+  const features = new Float32Array(8);
+  for (let i = 0; i < 6; i++) features[i] = arr[i] ? 1 : -1;
+  features[6] = normalY;
+  features[7] = sunY;
+  return features;
+}
+
+function teacherTerrain(x, z) {
+  const cont = simplex.noise2D(x * 0.008, z * 0.008);
+  const ridge = Math.abs(simplex.noise2D(x * 0.021 + 100, z * 0.021 - 70));
+  const detail = simplex.noise2D(x * 0.06 + 37, z * 0.06 - 21);
+  let height = 13 + cont * 9 + (ridge - 0.45) * 4 + detail * 2.2;
+  let biome;
+  if (cont < -0.18) biome = 1;
+  else if (detail > 0.28) biome = 2;
+  else if (simplex.noise2D(x * 0.016 - 50, z * 0.016 + 80) < -0.32) biome = 3;
+  else biome = 0;
+  if (biome === 1 && height < SEA_LEVEL + 1) height -= 1;
+  const cave = simplex.noise2D(x * 0.09 + 13, z * 0.09 - 17);
+  return { height, biome, cave };
+}
+
+function getColumnBias(x, z) {
+  const { entry } = modChunkFor(x, z);
+  return entry.signal || 0;
+}
+
+function getColumnData(x, z) {
+  const key = `${x},${z}`;
+  if (columnCache.has(key)) return columnCache.get(key);
+  const bias = getColumnBias(x, z);
+  const teacher = teacherTerrain(x, z);
+  const out = terrainModel.forward(x, z, bias);
+  let height = Math.round(lerp(teacher.height, out.height + bias * 1.5, 0.72));
+  height = clamp(height, 4, WORLD_HEIGHT - 4);
+  let biome = out.biome;
+  if (height <= SEA_LEVEL + 1 && biome === 0) biome = 1;
+  const data = { height, biome, caveField: out.cave, bias };
+  columnCache.set(key, data);
+  columnCacheQueue.push(key);
+  if (columnCacheQueue.length > TERRAIN_CACHE_LIMIT) {
+    const old = columnCacheQueue.shift();
+    columnCache.delete(old);
+  }
+  return data;
+}
+
+function chunkTreeChance(x, z, biome) {
+  const base = BIOMES[biome].treeChance;
+  return seededRandom(x, 0, z, worldSeed * 1.13) < base;
+}
+function getModification(x, y, z) {
+  const { entry } = modChunkFor(x, z);
+  const lk = localBlockKey(x, y, z);
+  if (Object.prototype.hasOwnProperty.call(entry.blocks, lk)) return entry.blocks[lk];
+  return null;
+}
+function shouldCarveCave(x, y, z, col) {
+  if (y < 4 || y > col.height - 2) return false;
+  const a = simplex.noise2D(x * 0.12 + y * 0.05, z * 0.12 - y * 0.04);
+  const b = simplex.noise2D(x * 0.18 - y * 0.02 + 22, z * 0.18 + y * 0.07 - 19);
+  const c = (a + b + col.caveField) / 3;
+  return c > (y < SEA_LEVEL ? 0.24 : 0.32);
+}
+function undergroundBlockFor(x, y, z) {
+  const ore = seededRandom(x, y, z, worldSeed * 0.17);
+  if (y < 6 && ore < 0.007) return BLOCKS.DIAMOND;
+  if (y < 9 && ore < 0.015) return BLOCKS.GOLD;
+  if (y < 15 && ore < 0.03) return BLOCKS.IRON;
+  return BLOCKS.STONE;
+}
+function isLeafVolume(x, y, z, col) {
+  if (!chunkTreeChance(x - (x % 4), z - (z % 4), col.biome)) return false;
+  const tx = Math.floor(x / 4) * 4 + 1;
+  const tz = Math.floor(z / 4) * 4 + 1;
+  const treeCol = getColumnData(tx, tz);
+  const th = 4 + Math.floor(seededRandom(tx, treeCol.height, tz, 991) * 3);
+  const trunkTop = treeCol.height + th;
+  if (Math.abs(x - tx) > 2 || Math.abs(z - tz) > 2) return false;
+  if (y < trunkTop - 1 || y > trunkTop + 2) return false;
+  const radius = y === trunkTop + 2 ? 1 : 2;
+  return Math.abs(x - tx) + Math.abs(z - tz) <= radius + 1 && !(x === tx && z === tz && y <= trunkTop);
+}
+function isTrunkBlock(x, y, z, col) {
+  if (!chunkTreeChance(x - (x % 4), z - (z % 4), col.biome)) return false;
+  const tx = Math.floor(x / 4) * 4 + 1;
+  const tz = Math.floor(z / 4) * 4 + 1;
+  if (x !== tx || z !== tz) return false;
+  const treeCol = getColumnData(tx, tz);
+  const th = 4 + Math.floor(seededRandom(tx, treeCol.height, tz, 991) * 3);
+  return y > treeCol.height && y <= treeCol.height + th;
+}
+function sampleBaseBlock(x, y, z) {
+  if (y < 0 || y > WORLD_HEIGHT) return BLOCKS.AIR;
+  const col = getColumnData(x, z);
+  const surface = col.height <= SEA_LEVEL + 1 ? BLOCKS.SAND : BIOMES[col.biome].surface;
+  if (y > Math.max(col.height, SEA_LEVEL)) return BLOCKS.AIR;
+  if (y > col.height && y <= SEA_LEVEL) return BLOCKS.WATER;
+  if (isTrunkBlock(x, y, z, col)) return BLOCKS.WOOD;
+  if (isLeafVolume(x, y, z, col) && getModification(x, y, z) === null) return BLOCKS.LEAVES;
+  if (y <= col.height) {
+    if (shouldCarveCave(x, y, z, col)) return BLOCKS.AIR;
+    if (y === col.height) return surface;
+    if (y > col.height - (surface === BLOCKS.SAND ? 4 : 3)) {
+      return surface === BLOCKS.SNOW ? BLOCKS.DIRT : surface === BLOCKS.SAND ? BLOCKS.SAND : BLOCKS.DIRT;
+    }
+    return undergroundBlockFor(x, y, z);
+  }
+  return BLOCKS.AIR;
+}
+function getBlock(x, y, z) {
+  const mod = getModification(x, y, z);
+  if (mod !== null) return mod;
+  return sampleBaseBlock(x, y, z);
+}
+function setModifiedBlock(x, y, z, type) {
+  const { entry, key, cx, cz } = modChunkFor(x, z);
+  entry.blocks[localBlockKey(x, y, z)] = type;
+  markDirtyAround(cx, cz, x, z);
+  scheduleSave();
+}
+function adjustSignal(x, z, delta) {
+  const { entry } = modChunkFor(x, z);
+  entry.signal = clamp((entry.signal || 0) + delta, -2.5, 2.5);
+  const ck = `${x},${z}`;
+  columnCache.delete(ck);
+}
+function clearColumnCacheAround(x, z, radius = 2) {
+  for (let dx = -radius; dx <= radius; dx++) for (let dz = -radius; dz <= radius; dz++) columnCache.delete(`${x+dx},${z+dz}`);
+}
+function markDirtyChunk(cx, cz) { dirtyChunks.add(getChunkKey(cx, cz)); }
+function markDirtyAround(cx, cz, x, z) {
+  markDirtyChunk(cx, cz);
+  const [lx, lz] = worldToLocalInChunk(x, z);
+  if (lx === 0) markDirtyChunk(cx - 1, cz);
+  if (lx === CHUNK_SIZE - 1) markDirtyChunk(cx + 1, cz);
+  if (lz === 0) markDirtyChunk(cx, cz - 1);
+  if (lz === CHUNK_SIZE - 1) markDirtyChunk(cx, cz + 1);
+}
+function insidePlacedBlock(x, y, z) {
+  const minX = x - 0.5, maxX = x + 0.5;
+  const minY = y - 0.5, maxY = y + 0.5;
+  const minZ = z - 0.5, maxZ = z + 0.5;
+  const pMinX = player.position.x - player.radius, pMaxX = player.position.x + player.radius;
+  const pMinY = player.position.y - player.height, pMaxY = player.position.y + 0.15;
+  const pMinZ = player.position.z - player.radius, pMaxZ = player.position.z + player.radius;
+  return maxX > pMinX && minX < pMaxX && maxY > pMinY && minY < pMaxY && maxZ > pMinZ && minZ < pMaxZ;
+}
+function collidesAt(x, y, z) {
+  const minX = Math.floor(x - player.radius), maxX = Math.floor(x + player.radius);
+  const minY = Math.floor(y - player.height), maxY = Math.floor(y + 0.1);
+  const minZ = Math.floor(z - player.radius), maxZ = Math.floor(z + player.radius);
+  for (let bx = minX; bx <= maxX; bx++) {
+    for (let by = minY; by <= maxY; by++) {
+      for (let bz = minZ; bz <= maxZ; bz++) {
+        const bt = getBlock(bx, by, bz);
+        if (!PASSABLE_BLOCKS.has(bt)) return true;
+      }
+    }
+  }
+  return false;
+}
+function isInWater() {
+  const x = Math.floor(player.position.x), y = Math.floor(player.position.y - 0.2), z = Math.floor(player.position.z);
+  return getBlock(x, y, z) === BLOCKS.WATER || getBlock(x, y - 1, z) === BLOCKS.WATER;
+}
+function syncCamera(bob) {
+  camera.quaternion.setFromEuler(new THREE.Euler(pitch, yaw, 0, 'YXZ'));
+  camera.position.set(player.position.x, player.position.y + bob, player.position.z);
+}
+function addFace(target, x, y, z, face, rgb) {
+  const s = 0.5;
+  const faces = {
+    top:    { v:[[x-s,y+s,z+s],[x+s,y+s,z+s],[x+s,y+s,z-s],[x-s,y+s,z-s]], n:[0,1,0] },
+    bottom: { v:[[x-s,y-s,z-s],[x+s,y-s,z-s],[x+s,y-s,z+s],[x-s,y-s,z+s]], n:[0,-1,0] },
+    front:  { v:[[x-s,y-s,z+s],[x+s,y-s,z+s],[x+s,y+s,z+s],[x-s,y+s,z+s]], n:[0,0,1] },
+    back:   { v:[[x+s,y-s,z-s],[x-s,y-s,z-s],[x-s,y+s,z-s],[x+s,y+s,z-s]], n:[0,0,-1] },
+    right:  { v:[[x+s,y-s,z+s],[x+s,y-s,z-s],[x+s,y+s,z-s],[x+s,y+s,z+s]], n:[1,0,0] },
+    left:   { v:[[x-s,y-s,z-s],[x-s,y-s,z+s],[x-s,y+s,z+s],[x-s,y+s,z-s]], n:[-1,0,0] }
+  };
+  const f = faces[face];
+  [0,1,2,0,2,3].forEach(i => {
+    target.positions.push(...f.v[i]);
+    target.normals.push(...f.n);
+    target.colors.push(rgb[0], rgb[1], rgb[2]);
+  });
+}
+function getMaterialKey(blockType, transparent) { return `${blockType}-${transparent ? 't':'o'}`; }
+function getChunkMaterial(blockType) {
+  const transparent = TRANSPARENT_BLOCKS.has(blockType);
+  const key = getMaterialKey(blockType, transparent);
+  if (materialCache.has(key)) return materialCache.get(key);
+  const material = new THREE.MeshLambertMaterial({
+    color: 0xffffff,
+    vertexColors: true,
+    transparent,
+    opacity: blockType === BLOCKS.GLASS ? 0.35 : blockType === BLOCKS.WATER ? 0.72 : blockType === BLOCKS.LEAVES ? 0.96 : 1,
+    depthWrite: !(blockType === BLOCKS.GLASS || blockType === BLOCKS.WATER),
+    side: blockType === BLOCKS.WATER ? THREE.DoubleSide : THREE.FrontSide
+  });
+  materialCache.set(key, material);
+  return material;
+}
+function faceBrightness(x, y, z, normal) {
+  const nx = normal[0], ny = normal[1], nz = normal[2];
+  const nBlock = [
+    getBlock(x + 1, y, z) !== BLOCKS.AIR,
+    getBlock(x - 1, y, z) !== BLOCKS.AIR,
+    getBlock(x, y + 1, z) !== BLOCKS.AIR,
+    getBlock(x, y - 1, z) !== BLOCKS.AIR,
+    getBlock(x, y, z + 1) !== BLOCKS.AIR,
+    getBlock(x, y, z - 1) !== BLOCKS.AIR
+  ];
+  const sunDir = new THREE.Vector3().copy(sun.position).normalize();
+  const features = hashOccupancyFeature(nBlock, ny, sunDir.y);
+  let pred = lightModel.predict(features);
+  const dx = Math.sign(sunDir.x), dy = Math.sign(sunDir.y), dz = Math.sign(sunDir.z);
+  let occ = 0;
+  for (let i = 1; i <= 6; i++) {
+    const bt = getBlock(x + dx * i, y + dy * i, z + dz * i);
+    if (bt !== BLOCKS.AIR && bt !== BLOCKS.LEAVES && bt !== BLOCKS.WATER) { occ = i; break; }
+  }
+  const target = clamp01(0.18 + Math.max(0, nx * sunDir.x + ny * sunDir.y + nz * sunDir.z) * 0.78 - occ * 0.08);
+  lightTrainQueue.push({ features, target });
+  pred = lerp(target, pred, 0.82);
+  const ambient = ny > 0 ? 0.18 : 0.11;
+  return clamp01(ambient + pred * 0.9);
+}
+function rebuildChunk(chunkKey) {
+  const old = chunkMeshes.get(chunkKey);
+  if (old) {
+    scene.remove(old);
+    old.traverse(obj => { if (obj.geometry) obj.geometry.dispose(); });
+    chunkMeshes.delete(chunkKey);
+  }
+  if (!activeChunks.has(chunkKey)) { dirtyChunks.delete(chunkKey); return; }
+  const { cx, cz } = parseChunkKey(chunkKey);
+  const x0 = cx * CHUNK_SIZE, z0 = cz * CHUNK_SIZE;
+
+  const groups = {};
+  const faces = {
+    top:[0,1,0], bottom:[0,-1,0], right:[1,0,0], left:[-1,0,0], front:[0,0,1], back:[0,0,-1]
+  };
+
+  for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+    for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+      const wx = x0 + lx, wz = z0 + lz;
+      const col = getColumnData(wx, wz);
+      const maxY = Math.max(col.height + 8, SEA_LEVEL + 2);
+      for (let y = 0; y <= maxY; y++) {
+        const bt = getBlock(wx, y, wz);
+        if (bt === BLOCKS.AIR) continue;
+        const checkFace = (face, nx, ny, nz) => {
+          const nb = getBlock(wx + nx, y + ny, wz + nz);
+          return nb === BLOCKS.AIR || (bt !== BLOCKS.WATER && nb === BLOCKS.WATER);
+        };
+        const exposed = {
+          top: checkFace('top',0,1,0),
+          bottom: checkFace('bottom',0,-1,0),
+          right: checkFace('right',1,0,0),
+          left: checkFace('left',-1,0,0),
+          front: checkFace('front',0,0,1),
+          back: checkFace('back',0,0,-1)
+        };
+        if (!Object.values(exposed).some(Boolean)) continue;
+        for (const face in exposed) {
+          if (!exposed[face]) continue;
+          const colorKey = face === 'top' ? 'top' : face === 'bottom' ? 'bottom' : 'side';
+          const baseHex = BLOCK_COLORS[bt][colorKey];
+          const c = new THREE.Color(baseHex);
+          const b = faceBrightness(wx, y, wz, faces[face]);
+          const rgb = [c.r * b, c.g * b, c.b * b];
+          const gKey = `${bt}`;
+          if (!groups[gKey]) groups[gKey] = { positions:[], normals:[], colors:[], bt };
+          addFace(groups[gKey], wx, y, wz, face, rgb);
+        }
+      }
+    }
+  }
+
+  const group = new THREE.Group();
+  for (const gKey in groups) {
+    const g = groups[gKey];
+    if (!g.positions.length) continue;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(g.positions, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(g.normals, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(g.colors, 3));
+    const mesh = new THREE.Mesh(geo, getChunkMaterial(g.bt));
+    if (g.bt === BLOCKS.WATER || g.bt === BLOCKS.GLASS) mesh.renderOrder = 2;
+    group.add(mesh);
+  }
+  scene.add(group);
+  chunkMeshes.set(chunkKey, group);
+  dirtyChunks.delete(chunkKey);
+  chunkMeta.set(chunkKey, { builtAt: performance.now() });
+}
+function updateChunkSets() {
+  const [pcx, pcz] = getChunkCoords(Math.floor(player.position.x), Math.floor(player.position.z));
+  ui.chunkPos.textContent = `${pcx},${pcz}`;
+  const needed = new Set();
+  for (let dx = -renderDistance; dx <= renderDistance; dx++) {
+    for (let dz = -renderDistance; dz <= renderDistance; dz++) {
+      const key = getChunkKey(pcx + dx, pcz + dz);
+      needed.add(key);
+      if (!activeChunks.has(key)) {
+        activeChunks.add(key);
+        dirtyChunks.add(key);
+      }
+    }
+  }
+  for (const key of Array.from(activeChunks)) {
+    const { cx, cz } = parseChunkKey(key);
+    if (Math.abs(cx - pcx) > renderDistance + ACTIVE_MARGIN || Math.abs(cz - pcz) > renderDistance + ACTIVE_MARGIN) {
+      activeChunks.delete(key);
+      dirtyChunks.delete(key);
+      const old = chunkMeshes.get(key);
+      if (old) {
+        scene.remove(old);
+        old.traverse(obj => { if (obj.geometry) obj.geometry.dispose(); });
+        chunkMeshes.delete(key);
+      }
+    }
+  }
+  totalVisibleChunks = chunkMeshes.size;
+  ui.chunkCount.textContent = String(totalVisibleChunks);
+  ui.dirtyCount.textContent = String(dirtyChunks.size);
+}
+function flushDirtyChunks(limit = 2) {
+  let built = 0;
+  while (dirtyChunks.size && built < limit) {
+    const key = dirtyChunks.values().next().value;
+    rebuildChunk(key);
+    built++;
+  }
+  ui.chunkCount.textContent = String(chunkMeshes.size);
+  ui.dirtyCount.textContent = String(dirtyChunks.size);
+}
+function pickSpawn() {
+  const x = 0, z = 0;
+  const col = getColumnData(x, z);
+  player.position.set(0.5, col.height + player.height + 2, 0.5);
+  player.velocity.set(0,0,0);
+  pitch = -0.08;
+  yaw = 0.65;
+  syncCamera(0);
+}
+function makeClouds() {
+  while (cloudGroup.children.length) cloudGroup.remove(cloudGroup.children[0]);
+  const box = new THREE.BoxGeometry(1,1,1);
+  const mat = new THREE.MeshLambertMaterial({ color:0xffffff, transparent:true, opacity:0.82 });
+  for (let i = 0; i < 20; i++) {
+    const g = new THREE.Group();
+    const segs = 3 + Math.floor(seededRandom(i, 0, worldSeed, 819) * 4);
+    for (let s = 0; s < segs; s++) {
+      const m = new THREE.Mesh(box, mat);
+      const sx = 2.5 + seededRandom(i, s, worldSeed, 903) * 4;
+      const sy = 1 + seededRandom(s, i, worldSeed, 904) * 1.3;
+      const sz = 2.2 + seededRandom(worldSeed, i, s, 905) * 3.8;
+      m.scale.set(sx, sy, sz);
+      m.position.set(s * 2.4, seededRandom(i, s, worldSeed, 120) * 0.6, seededRandom(i, s, worldSeed, 121) * 1.5);
+      g.add(m);
+    }
+    g.position.set(seededRandom(i, worldSeed, 33, 7) * 180 - 90, 25 + seededRandom(i, worldSeed, 34, 9) * 20, seededRandom(i, worldSeed, 35, 11) * 180 - 90);
+    g.userData.speed = 0.8 + seededRandom(i, worldSeed, 36, 13) * 0.7;
+    cloudGroup.add(g);
+  }
+}
+function updateClouds(dt) {
+  for (const g of cloudGroup.children) {
+    g.position.x += g.userData.speed * dt;
+    if (g.position.x > player.position.x + 100) g.position.x = player.position.x - 100;
+  }
+}
+function updateEnvironment(dt) {
+  timeOfDay = (timeOfDay + dt * 0.008) % 1;
+  const angle = timeOfDay * Math.PI * 2 - Math.PI / 2;
+  const sunHeight = Math.sin(angle);
+  const sunX = Math.cos(angle) * 90;
+  const sunY = Math.max(-18, sunHeight * 85);
+  const sunZ = Math.sin(angle) * 60;
+  sun.position.set(sunX, sunY, sunZ);
+
+  const daylight = clamp01((sunHeight + 0.16) / 1.16);
+  const dusk = clamp01(1 - Math.abs(sunHeight) * 1.7);
+  ambient.intensity = 0.14 + daylight * 0.6;
+  hemi.intensity = 0.2 + daylight * 0.48;
+  sun.intensity = 0.06 + daylight * 0.96;
+
+  const night = new THREE.Color(0x08121e);
+  const day = new THREE.Color(0x87CEEB);
+  const duskColor = new THREE.Color(0xf4b56a);
+  const sky = night.clone().lerp(day, daylight);
+  sky.lerp(duskColor, dusk * 0.28);
+  renderer.setClearColor(sky);
+  scene.fog.color.copy(sky);
+  scene.fog.near = 55;
+  scene.fog.far = 110 + daylight * 65;
+
+  const minutes = Math.floor(((timeOfDay + 0.25) % 1) * 24 * 60);
+  const hh = String(Math.floor(minutes / 60)).padStart(2,'0');
+  const mm = String(minutes % 60).padStart(2,'0');
+  ui.worldTime.textContent = `${hh}:${mm}`;
+}
+function updateInventoryUI() {
+  document.querySelectorAll('.inv-slot[data-block]').forEach(slot => {
+    const bt = Number(slot.dataset.block);
+    const count = slot.querySelector('.item-count');
+    if (count) count.textContent = inventory[bt] || 0;
+    slot.classList.toggle('selected', bt === selectedBlock);
+  });
+  document.querySelectorAll('#hotbar .hotbar-slot').forEach(slot => {
+    const bt = Number(slot.dataset.block);
+    slot.classList.toggle('selected', bt === selectedBlock);
+    const count = slot.querySelector('.count');
+    if (count) count.textContent = inventory[bt] || '';
+  });
+  ui.selected.textContent = BLOCK_NAMES[selectedBlock] || 'Unknown';
+  placePreview.material.color.setHex(BLOCK_COLORS[selectedBlock].top);
+}
+function createInvSlot(bt) {
+  const slot = document.createElement('div');
+  slot.className = 'inv-slot';
+  slot.dataset.block = String(bt);
+  const icon = document.createElement('div');
+  icon.className = 'block-icon';
+  icon.style.background = `#${BLOCK_COLORS[bt].top.toString(16).padStart(6,'0')}`;
+  const count = document.createElement('span');
+  count.className = 'item-count';
+  count.textContent = inventory[bt] || 0;
+  const name = document.createElement('span');
+  name.className = 'item-name';
+  name.textContent = BLOCK_NAMES[bt];
+  slot.append(icon, count, name);
+  slot.addEventListener('click', () => { selectedBlock = bt; updateInventoryUI(); });
+  return slot;
+}
+function setupInventory() {
+  ui.invBlocks.innerHTML = '';
+  ui.invHotbar.innerHTML = '';
+  for (const bt of ALL_BLOCKS) ui.invBlocks.appendChild(createInvSlot(bt));
+  for (let i = 0; i < 18 - ALL_BLOCKS.length; i++) {
+    const e = document.createElement('div'); e.className = 'inv-slot empty'; ui.invBlocks.appendChild(e);
+  }
+  for (const bt of HOTBAR_BLOCKS) ui.invHotbar.appendChild(createInvSlot(bt));
+}
+function setupHotbar() {
+  ui.hotbar.innerHTML = '';
+  HOTBAR_BLOCKS.forEach((bt, i) => {
+    const slot = document.createElement('div');
+    slot.className = 'hotbar-slot';
+    slot.dataset.block = String(bt);
+    slot.innerHTML = `<div class="block-preview" style="background:#${BLOCK_COLORS[bt].top.toString(16).padStart(6,'0')}"></div><span class="key-hint">${i+1}</span><span class="count">${inventory[bt] || ''}</span>`;
+    slot.addEventListener('click', () => { selectedBlock = bt; updateInventoryUI(); });
+    ui.hotbar.appendChild(slot);
+  });
+  updateInventoryUI();
+}
+function toggleInventory(force = null) {
+  inventoryOpen = force !== null ? force : !inventoryOpen;
+  document.body.classList.toggle('inventory-open', inventoryOpen);
+  ui.inventoryOverlay.classList.toggle('open', inventoryOpen);
+  document.getElementById('crosshair').style.opacity = inventoryOpen || !isLocked || hudHidden ? '0' : '1';
+  if (inventoryOpen) document.exitPointerLock();
+  else if (ui.startScreen.style.display === 'none') canvas.requestPointerLock();
+}
+function toggleHud() {
+  hudHidden = !hudHidden;
+  document.body.classList.toggle('hud-hidden', hudHidden);
+  showToast(hudHidden ? 'HUD hidden' : 'HUD shown');
+}
+function getTargetBlock() {
+  const dir = new THREE.Vector3();
+  camera.getWorldDirection(dir);
+  const origin = camera.position.clone();
+  let x = Math.floor(origin.x), y = Math.floor(origin.y), z = Math.floor(origin.z);
+  const stepX = dir.x >= 0 ? 1 : -1;
+  const stepY = dir.y >= 0 ? 1 : -1;
+  const stepZ = dir.z >= 0 ? 1 : -1;
+  const tDeltaX = dir.x !== 0 ? Math.abs(1 / dir.x) : Infinity;
+  const tDeltaY = dir.y !== 0 ? Math.abs(1 / dir.y) : Infinity;
+  const tDeltaZ = dir.z !== 0 ? Math.abs(1 / dir.z) : Infinity;
+  let tMaxX = dir.x !== 0 ? ((stepX > 0 ? x + 1 : x) - origin.x) / dir.x : Infinity;
+  let tMaxY = dir.y !== 0 ? ((stepY > 0 ? y + 1 : y) - origin.y) / dir.y : Infinity;
+  let tMaxZ = dir.z !== 0 ? ((stepZ > 0 ? z + 1 : z) - origin.z) / dir.z : Infinity;
+  let lastX = x, lastY = y, lastZ = z, dist = 0;
+  while (dist < 6) {
+    const bt = getBlock(x, y, z);
+    if (bt !== BLOCKS.AIR) return { hit:{ x, y, z, block:bt }, place:{ x:lastX, y:lastY, z:lastZ } };
+    lastX = x; lastY = y; lastZ = z;
+    if (tMaxX < tMaxY) {
+      if (tMaxX < tMaxZ) { dist = tMaxX; tMaxX += tDeltaX; x += stepX; }
+      else { dist = tMaxZ; tMaxZ += tDeltaZ; z += stepZ; }
+    } else {
+      if (tMaxY < tMaxZ) { dist = tMaxY; tMaxY += tDeltaY; y += stepY; }
+      else { dist = tMaxZ; tMaxZ += tDeltaZ; z += stepZ; }
+    }
+  }
+  return { hit:null, place:null };
+}
+function updateTargetPreview(target) {
+  lastTarget = target;
+  if (target.hit) {
+    highlight.position.set(target.hit.x, target.hit.y, target.hit.z);
+    highlight.visible = true;
+    ui.target.textContent = BLOCK_NAMES[target.hit.block] || 'Block';
+    ui.hint.textContent = 'LMB break • RMB place';
+  } else {
+    highlight.visible = false;
+    ui.target.textContent = 'None';
+    ui.hint.textContent = 'Explore the terrain';
+  }
+  const canPlace = target.place && target.hit && (inventory[selectedBlock] || 0) > 0 && !insidePlacedBlock(target.place.x, target.place.y, target.place.z);
+  if (canPlace) {
+    placePreview.position.set(target.place.x, target.place.y, target.place.z);
+    placePreview.visible = true;
+  } else {
+    placePreview.visible = false;
+  }
+}
+function breakBlock(target) {
+  if (!target?.hit) return;
+  const { x, y, z, block } = target.hit;
+  setModifiedBlock(x, y, z, BLOCKS.AIR);
+  inventory[block] = (inventory[block] || 0) + 1;
+  adjustSignal(x, z, -0.08);
+  clearColumnCacheAround(x, z, 2);
+  terrainTrainQueue.push({
+    x, z, bias: getColumnBias(x, z),
+    targetHeight: teacherTerrain(x, z).height + getColumnBias(x, z) * 1.2,
+    targetBiome: teacherTerrain(x, z).biome,
+    targetCave: teacherTerrain(x, z).cave
+  });
+  updateInventoryUI();
+}
+function placeBlock(target) {
+  if (!target?.place || !target?.hit) return;
+  const { x, y, z } = target.place;
+  if ((inventory[selectedBlock] || 0) <= 0) return;
+  if (insidePlacedBlock(x, y, z)) return;
+  setModifiedBlock(x, y, z, selectedBlock);
+  inventory[selectedBlock]--;
+  adjustSignal(x, z, y > getColumnData(x, z).height ? 0.12 : 0.04);
+  clearColumnCacheAround(x, z, 2);
+  const teacher = teacherTerrain(x, z);
+  terrainTrainQueue.push({
+    x, z, bias: getColumnBias(x, z),
+    targetHeight: teacher.height + getColumnBias(x, z) * 2.0,
+    targetBiome: teacher.biome,
+    targetCave: teacher.cave
+  });
+  updateInventoryUI();
+}
+function scheduleSave(immediate = false) {
+  if (!worldReady) return;
+  clearTimeout(saveTimer);
+  if (immediate) return saveState();
+  updateSaveStatus('Pending…');
+  saveTimer = setTimeout(saveState, 900);
+}
+function exportSave() {
+  const mods = {};
+  for (const [key, entry] of modifiedChunks.entries()) mods[key] = entry;
+  return {
+    version: 1,
+    seed: worldSeed,
+    mods,
+    terrainState: terrainModel.exportState(),
+    lightState: lightModel.exportState(),
+    player: { x: player.position.x, y: player.position.y, z: player.position.z, vx: player.velocity.x, vy: player.velocity.y, vz: player.velocity.z, yaw, pitch },
+    inventory, selectedBlock, timeOfDay, renderDistance, pixelRatio: targetPixelRatio, savedAt: Date.now()
+  };
+}
+function saveState() {
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify(exportSave()));
+    const stamp = new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+    updateSaveStatus(`Saved ${stamp}`);
+  } catch (err) {
+    console.error(err);
+    updateSaveStatus('Save failed', true);
+    showToast('Autosave failed');
+  }
+}
+function loadState() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+}
+async function applyLoadedState(state) {
+  modifiedChunks.clear();
+  columnCache.clear();
+  columnCacheQueue.length = 0;
+  chunkMeshes.forEach(group => { scene.remove(group); group.traverse(obj => { if (obj.geometry) obj.geometry.dispose(); }); });
+  chunkMeshes.clear();
+  activeChunks.clear();
+  dirtyChunks.clear();
+  chunkMeta.clear();
+
+  worldSeed = state.seed ?? Math.floor(Date.now() % 1000000);
+  simplex = new SimplexNoise(worldSeed);
+  terrainModel = new TinyTerrainTransformer(worldSeed);
+  lightModel = new TinyLightMixer(worldSeed + 99);
+  terrainModel.importState(state.terrainState);
+  lightModel.importState(state.lightState);
+  inventory = { ...defaultInventory(), ...(state.inventory || {}) };
+  selectedBlock = state.selectedBlock ?? BLOCKS.GRASS;
+  renderDistance = state.renderDistance ?? 3;
+  targetPixelRatio = state.pixelRatio ?? Math.min(window.devicePixelRatio, 1.35);
+  renderer.setPixelRatio(targetPixelRatio);
+  timeOfDay = typeof state.timeOfDay === 'number' ? state.timeOfDay : 0.24;
+
+  for (const key in state.mods || {}) modifiedChunks.set(key, state.mods[key]);
+
+  setupInventory();
+  setupHotbar();
+  updateInventoryUI();
+  ui.seed.textContent = String(worldSeed);
+  ui.renderDist.textContent = String(renderDistance);
+  ui.pixelScale.textContent = `${(targetPixelRatio * 100 / Math.max(window.devicePixelRatio || 1, 1)).toFixed(0)}%`;
+
+  if (state.player) {
+    player.position.set(state.player.x, state.player.y, state.player.z);
+    player.velocity.set(state.player.vx || 0, state.player.vy || 0, state.player.vz || 0);
+    yaw = state.player.yaw || 0.65;
+    pitch = state.player.pitch || -0.08;
+  } else {
+    pickSpawn();
+  }
+  syncCamera(0);
+  makeClouds();
+
+  for (let i = 0; i < 8; i++) updateChunkSets();
+  while (dirtyChunks.size) { rebuildChunk(dirtyChunks.values().next().value); await new Promise(r => setTimeout(r, 0)); }
+  worldReady = true;
+  updateLossDisplay();
+  updateWorldSummary(true);
+  const savedAt = state.savedAt ? new Date(state.savedAt).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' }) : 'loaded';
+  updateSaveStatus(`Saved ${savedAt}`);
+}
+function updateWorldSummary(restored = false) {
+  ui.worldSummary.innerHTML = `
+    <strong>${restored ? 'Saved world restored.' : 'Fresh world generated.'}</strong><br>
+    Seed <strong>${worldSeed}</strong> • ${modifiedChunks.size.toLocaleString()} modified chunks stored locally • render distance <strong>${renderDistance}</strong><br>
+    Infinite chunks are regenerated from the neural terrain core. Only edits, player state, and learned weights are stored, because stuffing infinity into localStorage remains a bad hobby.
+  `;
+}
+function initTrainingBars() {
+  ui.trainingViz.innerHTML = '';
+  const bars = [];
+  for (let i = 0; i < 60; i++) {
+    const bar = document.createElement('div');
+    bar.className = 'loss-bar';
+    ui.trainingViz.appendChild(bar);
+    bars.push(bar);
+  }
+  return bars;
+}
+async function generateFreshWorld(seed = Math.floor(Date.now() % 1000000)) {
+  worldReady = false;
+  modifiedChunks.clear();
+  columnCache.clear();
+  columnCacheQueue.length = 0;
+  activeChunks.clear();
+  dirtyChunks.clear();
+  chunkMeshes.forEach(group => { scene.remove(group); group.traverse(obj => { if (obj.geometry) obj.geometry.dispose(); }); });
+  chunkMeshes.clear();
+  worldSeed = seed;
+  simplex = new SimplexNoise(worldSeed);
+  terrainModel = new TinyTerrainTransformer(worldSeed);
+  lightModel = new TinyLightMixer(worldSeed + 99);
+  inventory = defaultInventory();
+  selectedBlock = BLOCKS.GRASS;
+  renderDistance = 3;
+  targetPixelRatio = Math.min(window.devicePixelRatio, 1.35);
+  renderer.setPixelRatio(targetPixelRatio);
+  setupInventory();
+  setupHotbar();
+  updateInventoryUI();
+  ui.seed.textContent = String(worldSeed);
+  ui.renderDist.textContent = String(renderDistance);
+  ui.pixelScale.textContent = `${(targetPixelRatio * 100 / Math.max(window.devicePixelRatio || 1, 1)).toFixed(0)}%`;
+  updateSaveStatus('No save yet');
+  const bars = initTrainingBars();
+  setLoadingProgress(5, 'Training neural terrain prior…');
+
+  for (let step = 0; step < 220; step++) {
+    const batch = [];
+    for (let i = 0; i < 24; i++) {
+      const x = Math.floor((terrainModel.rng() * 2 - 1) * 120);
+      const z = Math.floor((terrainModel.rng() * 2 - 1) * 120);
+      const t = teacherTerrain(x, z);
+      batch.push({ x, z, bias:0, targetHeight:t.height, targetBiome:t.biome, targetCave:t.cave });
+    }
+    terrainModel.train(batch);
+    const loss = terrainModel.lastLoss;
+    const bar = bars[step % bars.length];
+    bar.style.height = `${clamp(loss * 8, 6, 90)}px`;
+    bar.style.background = `hsl(${clamp(132 - loss * 18, 6, 132)},72%,54%)`;
+    if (step % 6 === 0) {
+      setLoadingProgress(5 + (step / 220) * 55, `Training step ${step + 1}/220`);
+      updateLossDisplay();
+      await new Promise(r => setTimeout(r, 0));
+    }
+  }
+  pickSpawn();
+  makeClouds();
+  updateChunkSets();
+  setLoadingProgress(64, 'Meshing first chunk ring…');
+  while (dirtyChunks.size) {
+    rebuildChunk(dirtyChunks.values().next().value);
+    if (dirtyChunks.size % 3 === 0) await new Promise(r => setTimeout(r, 0));
+  }
+  worldReady = true;
+  updateLossDisplay();
+  updateWorldSummary(false);
+  scheduleSave(true);
+}
+function updatePlayer(dt) {
+  if (!worldReady || inventoryOpen) return;
+  const forward = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw) * -1).normalize();
+  const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0,1,0)).normalize();
+  const input = new THREE.Vector3();
+  if (keys['KeyW']) input.add(forward);
+  if (keys['KeyS']) input.sub(forward);
+  if (keys['KeyD']) input.add(right);
+  if (keys['KeyA']) input.sub(right);
+  if (input.lengthSq() > 0) input.normalize();
+
+  const inWater = isInWater();
+  const speed = (keys['ShiftLeft'] && !inWater ? player.sprintSpeed : player.speed) * (inWater ? 0.55 : 1);
+  const step = speed * dt;
+  const move = input.clone().multiplyScalar(step);
+  if (move.lengthSq() > 0 && player.onGround) player.bob += dt * (keys['ShiftLeft'] ? 18 : 13);
+
+  const nextX = player.position.x + move.x;
+  const nextZ = player.position.z + move.z;
+  if (!collidesAt(nextX, player.position.y, player.position.z)) player.position.x = nextX;
+  if (!collidesAt(player.position.x, player.position.y, nextZ)) player.position.z = nextZ;
+
+  const gravity = inWater ? 4.5 : 19;
+  player.velocity.y -= gravity * dt;
+  if (keys['Space']) {
+    if (inWater) player.velocity.y += 8 * dt;
+    else if (player.onGround) { player.velocity.y = player.jumpForce; player.onGround = false; }
+  }
+  if (inWater) player.velocity.y = clamp(player.velocity.y, -2.2, 3.1);
+
+  const nextY = player.position.y + player.velocity.y * dt;
+  if (player.velocity.y <= 0) {
+    if (collidesAt(player.position.x, nextY, player.position.z)) {
+      player.position.y = Math.floor(nextY - player.height) + 1 + player.height;
+      player.velocity.y = 0;
+      player.onGround = !inWater;
+    } else {
+      player.position.y = nextY;
+      player.onGround = false;
+    }
+  } else {
+    if (collidesAt(player.position.x, nextY, player.position.z)) player.velocity.y = 0;
+    else { player.position.y = nextY; player.onGround = false; }
+  }
+
+  if (player.position.y < -8) {
+    pickSpawn();
+    showToast('Respawned at spawn');
+    scheduleSave();
+  }
+
+  const moving = input.lengthSq() > 0.001;
+  const bob = moving && player.onGround ? Math.sin(player.bob) * 0.055 : 0;
+  const targetFov = keys['ShiftLeft'] && moving && !inWater ? 79 : inWater ? 73 : 75;
+  camera.fov = lerp(camera.fov, targetFov, Math.min(1, dt * 8));
+  camera.updateProjectionMatrix();
+  syncCamera(bob);
+
+  const wx = Math.floor(player.position.x), wz = Math.floor(player.position.z);
+  ui.pos.textContent = `${player.position.x.toFixed(1)}, ${player.position.y.toFixed(1)}, ${player.position.z.toFixed(1)}`;
+  ui.biome.textContent = BIOMES[getColumnData(wx, wz).biome].name;
+  ui.movement.textContent = inWater ? 'Swimming' : keys['ShiftLeft'] && moving ? 'Sprinting' : player.onGround ? 'Grounded' : 'Airborne';
+  ui.underwater.style.opacity = inWater ? '1' : '0';
+}
+function onlineTrain() {
+  if (!terrainModel || !lightModel) return;
+  if (terrainTrainQueue.length) {
+    const batch = terrainTrainQueue.splice(0, 10);
+    terrainModel.train(batch);
+  } else {
+    const selfBatch = [];
+    const wx = Math.floor(player.position.x), wz = Math.floor(player.position.z);
+    for (let i = 0; i < 4; i++) {
+      const x = wx + Math.floor(seededRandom(i, performance.now() * 0.001, 0, worldSeed) * 30) - 15;
+      const z = wz + Math.floor(seededRandom(i + 77, performance.now() * 0.001, 0, worldSeed) * 30) - 15;
+      const t = teacherTerrain(x, z);
+      selfBatch.push({ x, z, bias:getColumnBias(x,z), targetHeight:t.height + getColumnBias(x,z) * 1.3, targetBiome:t.biome, targetCave:t.cave });
+    }
+    terrainModel.train(selfBatch);
+  }
+  if (lightTrainQueue.length) lightModel.train(lightTrainQueue.splice(0, 16));
+  updateLossDisplay();
+}
+function fpsGovernor(now, state) {
+  state.frames++;
+  const elapsed = now - state.lastStamp;
+  if (elapsed < 900) return;
+  state.fps = state.frames * 1000 / elapsed;
+  state.frames = 0;
+  state.lastStamp = now;
+  ui.fps.textContent = state.fps.toFixed(1);
+
+  let action = 'Stable';
+  if (state.fps < 42) {
+    if (targetPixelRatio > 0.65) {
+      targetPixelRatio = Math.max(0.65, targetPixelRatio - 0.08);
+      renderer.setPixelRatio(targetPixelRatio);
+      action = 'Lowered pixel scale';
+    } else if (renderDistance > 2) {
+      renderDistance--;
+      action = 'Lowered render distance';
+    }
+  } else if (state.fps > 58) {
+    if (renderDistance < 5) {
+      renderDistance++;
+      action = 'Raised render distance';
+    } else if (targetPixelRatio < Math.min(window.devicePixelRatio, 1.35)) {
+      targetPixelRatio = Math.min(Math.min(window.devicePixelRatio, 1.35), targetPixelRatio + 0.05);
+      renderer.setPixelRatio(targetPixelRatio);
+      action = 'Raised pixel scale';
+    }
+  }
+  ui.renderDist.textContent = String(renderDistance);
+  ui.pixelScale.textContent = `${(targetPixelRatio * 100 / Math.max(window.devicePixelRatio || 1, 1)).toFixed(0)}%`;
+  ui.governor.textContent = `${action} @ ${state.fps.toFixed(1)} FPS`;
+}
+function resize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight, false);
+}
+function pickHotbar(deltaY) {
+  let idx = HOTBAR_BLOCKS.indexOf(selectedBlock);
+  if (idx < 0) idx = 0;
+  idx = (idx + Math.sign(deltaY) + HOTBAR_BLOCKS.length) % HOTBAR_BLOCKS.length;
+  selectedBlock = HOTBAR_BLOCKS[idx];
+  updateInventoryUI();
+}
+function onMouseDown(event) {
+  if (!isLocked || inventoryOpen || !worldReady) return;
+  const target = getTargetBlock();
+  if (event.button === 0) breakBlock(target);
+  if (event.button === 2) placeBlock(target);
+}
+function setupEvents() {
+  document.addEventListener('keydown', event => {
+    if (event.repeat && (event.code === 'KeyE' || event.code === 'KeyF' || event.code === 'KeyR')) return;
+    if (event.code === 'KeyE' && worldReady) { toggleInventory(); return; }
+    if (event.code === 'KeyF' && worldReady && !inventoryOpen) { toggleHud(); return; }
+    if (event.code === 'KeyR' && worldReady && !inventoryOpen) { pickSpawn(); showToast('Respawned at spawn'); scheduleSave(); return; }
+    keys[event.code] = true;
+    if (event.code === 'Escape' && inventoryOpen) { toggleInventory(false); return; }
+    const num = Number(event.key);
+    if (num >= 1 && num <= 9) { selectedBlock = HOTBAR_BLOCKS[num - 1]; updateInventoryUI(); }
+  });
+  document.addEventListener('keyup', event => { keys[event.code] = false; });
+  document.addEventListener('mousemove', event => {
+    if (!isLocked || inventoryOpen || !worldReady) return;
+    yaw -= event.movementX * 0.0022;
+    pitch -= event.movementY * 0.0022;
+    pitch = clamp(pitch, -Math.PI / 2 + 0.08, Math.PI / 2 - 0.08);
+  });
+  canvas.addEventListener('mousedown', onMouseDown);
+  canvas.addEventListener('contextmenu', event => event.preventDefault());
+  canvas.addEventListener('wheel', event => {
+    if (inventoryOpen || !worldReady) return;
+    event.preventDefault();
+    pickHotbar(event.deltaY);
+  }, { passive:false });
+  canvas.addEventListener('click', () => {
+    if (!inventoryOpen && worldReady && ui.startScreen.style.display === 'none' && !isLocked) canvas.requestPointerLock();
+  });
+  document.addEventListener('pointerlockchange', () => {
+    isLocked = document.pointerLockElement === canvas;
+    document.getElementById('crosshair').style.opacity = isLocked && !inventoryOpen && !hudHidden ? '1' : '0';
+  });
+  window.addEventListener('resize', resize, { passive:true });
+  window.addEventListener('beforeunload', () => { try { saveState(); } catch(_) {} });
+
+  ui.startBtn.addEventListener('click', () => {
+    ui.startScreen.style.display = 'none';
+    if (!inventoryOpen) canvas.requestPointerLock();
+  });
+  ui.newWorldBtn.addEventListener('click', async () => {
+    ui.startScreen.style.display = 'none';
+    ui.loading.style.display = 'flex';
+    localStorage.removeItem(SAVE_KEY);
+    showToast('Generating fresh seed');
+    await generateFreshWorld(Math.floor(Date.now() % 1000000));
+    ui.loading.style.display = 'none';
+    ui.startScreen.style.display = 'flex';
+  });
+}
+const fpsState = { frames:0, lastStamp:performance.now(), fps:0 };
+const clock = new THREE.Clock();
+function animate(now) {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  updateEnvironment(dt);
+  updateClouds(dt);
+  if (worldReady) {
+    updatePlayer(dt);
+    updateChunkSets();
+    flushDirtyChunks(2);
+    onlineTrain();
+    const target = getTargetBlock();
+    updateTargetPreview(target);
+  }
+  renderer.render(scene, camera);
+  fpsGovernor(now, fpsState);
+}
+async function init() {
+  inventory = defaultInventory();
+  setupInventory();
+  setupHotbar();
+  updateInventoryUI();
+  setupEvents();
+  resize();
+
+  const bars = initTrainingBars();
+  for (let i = 0; i < bars.length; i++) {
+    bars[i].style.height = `${6 + (i % 5) * 8}px`;
+    bars[i].style.background = `hsl(${120 - i},72%,54%)`;
+  }
+
+  const state = loadState();
+  if (state) {
+    setLoadingProgress(20, 'Restoring saved state…');
+    await applyLoadedState(state);
+  } else {
+    await generateFreshWorld();
+  }
+  ui.loading.style.display = 'none';
+  ui.startScreen.style.display = 'flex';
+  animate(performance.now());
+  setInterval(() => { if (worldReady) saveState(); }, 25000);
+}
+init();
+
+})();
+</script>
+</body>
+</html>
