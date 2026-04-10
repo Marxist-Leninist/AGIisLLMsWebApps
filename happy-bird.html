@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LeftWingCapitalist Bird</title>
+<style>
+  * { margin: 0; padding: 0; }
+  body { background: #1a0000; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+  canvas { display: block; cursor: pointer; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script>
+
+var canvas = document.getElementById("game");
+var ctx = canvas.getContext("2d");
+var GW = 288, GH = 512;
+
+function resizeCanvas() {
+  var ww = window.innerWidth, wh = window.innerHeight;
+  var aspect = GW / GH;
+  if (ww / wh > aspect) { canvas.height = wh; canvas.width = Math.floor(wh * aspect); }
+  else { canvas.width = ww; canvas.height = Math.floor(ww / aspect); }
+}
+resizeCanvas();
+window.addEventListener("resize", resizeCanvas);
+
+// Physics defaults
+var settings = {
+  gravity: 0.14,
+  flapPower: -3.8,
+  pipeSpeed: 1.4,
+  pipeGapMin: 120,
+  pipeGapMax: 170,
+  pipeInterval: 130,
+  maxFallSpeed: 6
+};
+var defaults = JSON.parse(JSON.stringify(settings));
+
+var bird, pipes, score, bestScore = 0, gameState, frameCount, vouchers;
+var PIPE_WIDTH = 44;
+var showSettings = false;
+var menuSliders = [];
+var dragging = null;
+var factsScroll = 0;
+var factsMaxScroll = 0;
+
+var facts = [
+  { title: "The Workers Party Wreckage", lines: [
+    "Galloway founded the Workers Party of",
+    "Britain in 2019, promising to fight for",
+    "the working class. Instead he ran it as",
+    "a one-man vanity project, centralising",
+    "all power around himself. Members and",
+    "candidates resigned in droves, citing",
+    "his autocratic, controlling leadership.",
+    "The party became a vehicle for George's",
+    "ego rather than any workers' movement."
+  ]},
+  { title: "Rochdale: Speed-Run Failure", lines: [
+    "Won the Rochdale by-election in Feb 2024",
+    "with a massive majority. Lost the seat",
+    "just FOUR MONTHS later in the general",
+    "election. Possibly the fastest rise-and-",
+    "fall in modern British political history.",
+    "Even his own voters couldn't stand him",
+    "for more than one parliamentary term."
+  ]},
+  { title: "A Graveyard of Parties", lines: [
+    "George doesn't just wreck one party -",
+    "it's a pattern. The Respect Party?",
+    "Founded it, dominated it, destroyed it.",
+    "The Workers Party? Same playbook.",
+    "Every political vehicle Galloway touches",
+    "ends up as a burnt-out wreck on the hard",
+    "shoulder of British politics. He's the",
+    "common denominator in every collapse."
+  ]},
+  { title: "Celebrity Big Brother (2006)", lines: [
+    "While supposedly representing Bradford",
+    "in Parliament, George went on Celebrity",
+    "Big Brother and pretended to be a cat,",
+    "lapping milk from Rula Lenska's hands.",
+    "His constituents were thrilled to see",
+    "their MP on all fours on national TV",
+    "instead of, you know, doing his job.",
+    "Peak Gorgeous George."
+  ]},
+  { title: "Champagne Socialist Lifestyle", lines: [
+    "George talks about workers' rights from",
+    "expensive suits and luxury flats. His",
+    "parliamentary expenses were legendary.",
+    "Talks redistribution, lives like a Tory.",
+    "The walking definition of 'rules for",
+    "thee but not for me'. The workers pay,",
+    "George plays."
+  ]},
+  { title: "The Incoherence Problem", lines: [
+    "The Workers Party tried to combine hard-",
+    "left economics with socially conservative",
+    "positions - pleasing basically nobody.",
+    "Anti-NATO, anti-EU, pro-Brexit, but also",
+    "supposedly socialist? The ideology was",
+    "whatever George felt like saying that",
+    "week. Policy by vibes, not principles."
+  ]},
+  { title: "Serial Seat-Hopper", lines: [
+    "Glasgow Hillhead, Glasgow Kelvin,",
+    "Bethnal Green & Bow, Bradford West,",
+    "Rochdale... George doesn't represent",
+    "communities, he auditions for them.",
+    "Drops each constituency the moment a",
+    "shinier opportunity appears. Loyalty",
+    "is a one-way street with George."
+  ]},
+  { title: "Immigration: Both Sides George", lines: [
+    "George's greatest magic trick: telling",
+    "white working class voters he'll crack",
+    "down on immigration, then popping round",
+    "to Muslim community centres promising",
+    "more open borders. Same day. Sometimes",
+    "the same afternoon. He weaponises every",
+    "group's anxieties and hopes, says the",
+    "exact opposite to each audience, and",
+    "somehow keeps a straight face. The man",
+    "could sell ice to penguins and sand to",
+    "the Sahara - simultaneously."
+  ]},
+  { title: "The Interfaith Grifter", lines: [
+    "George tailors his identity to whatever",
+    "community he's courting for votes. Muslim",
+    "voters? He's practically an imam. Christian",
+    "audience? Born-again believer. Working class",
+    "pub? Salt of the earth. Black tie dinner?",
+    "Man of culture. Scottish when in Glasgow,",
+    "Yorkshire when in Bradford, a Lancastrian",
+    "in Rochdale. The only consistent thing is",
+    "the grift. Every group gets the version of",
+    "George that's most likely to get elected."
+  ]},
+  { title: "The Expenses Grift", lines: [
+    "George claimed tens of thousands in",
+    "parliamentary expenses while barely",
+    "showing up to vote. His attendance",
+    "record was among the worst in the",
+    "Commons. Getting paid to not work -",
+    "the ultimate labour voucher theft.",
+    "This game is basically a documentary."
+  ]}
+];
+
+var greedQuips = [
+  "George pockets another one!",
+  "For the people! (his people)",
+  "Redistributed to George's wallet!",
+  "That's GORGEOUS George to you!",
+  "Another voucher for the Galloway Fund!",
+  "The proletariat won't miss this one...",
+  "George: 'I'm not greedy, I'm thorough'",
+  "Seized from the means of production!",
+  "George takes his parliamentary expenses!",
+  "Workers of the world, pay George!",
+  "From each according to their vouchers...",
+  "George finds another taxpayer treat!",
+  "Champagne socialism intensifies!",
+  "It's not greed, it's wealth liberation!",
+  "George's offshore account grows!",
+  "Another constituency milked dry!",
+  "George: 'I deserve this more than you'",
+  "The cat needs feeding!",
+  "Respect Party? More like Reject Party!",
+  "Workers Party funds: redistributed to George!",
+  "George enters a mosque: 'Allahu Akbar!'",
+  "George exits mosque, enters church: 'Praise the Lord!'",
+  "George at a synagogue: 'Shalom, fellow believers!'",
+  "George at a Sikh temple: 'Always been a fan!'",
+  "George to Muslims: 'I am one of you!'",
+  "George to Christians: 'I follow Christ!'",
+  "George to socialists: 'Comrade!'",
+  "George to Tories: 'I understand business!'",
+  "George to the working class: 'I feel your pain!'",
+  "George to the upper class: 'Pass the champagne!'",
+  "George to Scots: 'Aye, I'm one of youse!'",
+  "George to Bradfordians: 'This is my home!'",
+  "George to Rochdale: 'This is my REAL home!'",
+  "George grifts every postcode equally!",
+  "All religions welcome... George's wallet!",
+  "George's faith changes with the constituency!",
+  "Ethnically flexible, financially consistent!",
+  "George to white workers: 'Too many immigrants!'",
+  "George to Muslim workers: 'We need more immigration!'",
+  "Same day. Different room. Classic George.",
+  "Anti-immigration at 2pm, pro-immigration at 3pm!",
+  "George's immigration policy: whatever you want to hear!",
+  "George tells every crowd they're the REAL British!",
+  "George's CV: Professional Shape-Shifter",
+  "George has more faces than a dice factory!",
+  "George's sat-nav: 'Recalculating... new constituency found'",
+  "George's autobiography: 'The Art of the Grift'",
+  "George wore a kippah, a kufi, AND a cross today!",
+  "George on Monday: 'Abolish the rich!' Tuesday: *buys new suit*",
+  "George's Tinder bio: 'Looking for a safe seat'",
+  "George's loyalty card: 0 stamps, 47 constituencies",
+  "George at a vegan rally then a steakhouse. Same lunch break.",
+  "George told pensioners he'd save the NHS. Then expensed a spa day.",
+  "George's Mirror: 'Who's the most electable of them all?'",
+  "George promised Bradford forever. 'Forever' = 2 years.",
+  "George: 'I'm a man of the people!' *gets into chauffeur-driven car*",
+  "George at a food bank: 'I feel your struggle' *wears Rolex*",
+  "George googling: 'How to seem relatable'",
+  "George's browser history: 'cheap flights to wherever has a by-election'",
+  "George would sell his own moustache for a seat!",
+  "George told the vegans he's vegan and the butchers he loves steak!",
+  "The only union George believes in is the union of George and power!",
+  "George's spirit animal: a chameleon in a fedora",
+  "George's blood type: Opportunist Positive",
+  "George: anti-establishment from his taxpayer-funded office",
+  "George's party trick: agreeing with everyone simultaneously",
+  "George shook hands left AND right. At the same time.",
+  "George's middle name is 'Whichever Way The Wind Blows'",
+  "George at a trade union: 'Solidarity!' *crosses own picket line*",
+  "George's Uber rating: 1 star. Too many detours via mosques AND churches.",
+  "George's political compass: a spinning top",
+  "George once agreed with both sides of a debate. In the same sentence.",
+  "George's diary: 9am Mosque, 10am Church, 11am Gurdwara, 12pm Expenses",
+  "George told students he'd scrap tuition fees. He forgot by Thursday.",
+  "George's ringtone changes depending on who's calling",
+  "George to the landlord: 'I support property rights!' To tenants: 'ABOLISH RENT!'",
+  "George is the only man banned from his own farewell party"
+];
+var deathQuips = [
+  "George crashed harder than his poll numbers!",
+  "Even Labour vouchers can't buy flying lessons!",
+  "George fell like his election chances!",
+  "The cat impression couldn't save him!",
+  "Bradford doesn't claim this one!",
+  "Gravity: the one thing George can't talk his way out of!",
+  "George's expenses claim: DENIED!",
+  "Down goes the Respect Party!",
+  "Not so gorgeous now, George!",
+  "The workers' revolution has been postponed!",
+  "Big Brother evicted George... from the sky!",
+  "George just lost his deposit... and altitude!",
+  "Rochdale rejects George again!",
+  "Another party vehicle totalled!",
+  "George's political career in one flight!",
+  "The Workers Party sends its regards!",
+  "Even the cat has better survival instincts!",
+  "George tried to grift gravity. Gravity won!",
+  "Which religion saves George from this one?",
+  "George's multi-faith coalition can't help now!",
+  "He died as he lived: falling between groups!",
+  "Not even a mosque, church AND synagogue visit helps!",
+  "The ultimate interfaith collapse!",
+  "George's parachute was made of broken promises!",
+  "George fell faster than his Wikipedia edits!",
+  "Even his moustache couldn't cushion that landing!",
+  "George tried to land in a safe seat. No seats here.",
+  "The fedora provided zero aerodynamic advantage!",
+  "George's last words: 'I can explain...'",
+  "George hit the ground like his credibility!",
+  "That landing was smoother than his election speeches!",
+  "George's flight path: same as his career. Downward.",
+  "He zigged when he should have grifted!",
+  "George promised the ground he wouldn't hit it. He lied.",
+  "The pipes were more consistent than George's beliefs!",
+  "George tried to claim the crash on expenses!"
+];
+var lastQuip = "";
+
+// Themed joke groups - plays through a theme before switching
+var jokeThemes = [
+  { name: "religion", jokes: [
+    "George enters a mosque: 'Allahu Akbar!'",
+    "George exits mosque, enters church: 'Praise the Lord!'",
+    "George at a synagogue: 'Shalom, fellow believers!'",
+    "George at a Sikh temple: 'Always been a fan!'",
+    "George to Muslims: 'I am one of you!'",
+    "George to Christians: 'I follow Christ!'",
+    "All religions welcome... George's wallet!",
+    "George's faith changes with the constituency!",
+    "George wore a kippah, a kufi, AND a cross today!",
+    "George's diary: 9am Mosque, 10am Church, 11am Gurdwara, 12pm Expenses",
+    "George's Uber rating: 1 star. Too many detours via mosques AND churches.",
+    "Which religion saves George from this one?",
+    "George's multi-faith coalition can't help now!",
+    "Not even a mosque, church AND synagogue visit helps!",
+    "The ultimate interfaith collapse!"
+  ]},
+  { name: "immigration", jokes: [
+    "George to white workers: 'Too many immigrants!'",
+    "George to Muslim workers: 'We need more immigration!'",
+    "Same day. Different room. Classic George.",
+    "Anti-immigration at 2pm, pro-immigration at 3pm!",
+    "George's immigration policy: whatever you want to hear!",
+    "George tells every crowd they're the REAL British!",
+    "He died as he lived: falling between groups!",
+    "Ethnically flexible, financially consistent!"
+  ]},
+  { name: "constituencies", jokes: [
+    "George to Scots: 'Aye, I'm one of youse!'",
+    "George to Bradfordians: 'This is my home!'",
+    "George to Rochdale: 'This is my REAL home!'",
+    "George promised Bradford forever. 'Forever' = 2 years.",
+    "George's sat-nav: 'Recalculating... new constituency found'",
+    "George's loyalty card: 0 stamps, 47 constituencies",
+    "George's browser history: 'cheap flights to wherever has a by-election'",
+    "George's Tinder bio: 'Looking for a safe seat'",
+    "Another constituency milked dry!",
+    "George grifts every postcode equally!",
+    "Rochdale rejects George again!",
+    "Bradford doesn't claim this one!",
+    "George tried to land in a safe seat. No seats here."
+  ]},
+  { name: "class", jokes: [
+    "George to the working class: 'I feel your pain!'",
+    "George to the upper class: 'Pass the champagne!'",
+    "George to socialists: 'Comrade!'",
+    "George to Tories: 'I understand business!'",
+    "George: 'I'm a man of the people!' *gets into chauffeur-driven car*",
+    "George at a food bank: 'I feel your struggle' *wears Rolex*",
+    "Champagne socialism intensifies!",
+    "George: anti-establishment from his taxpayer-funded office",
+    "George on Monday: 'Abolish the rich!' Tuesday: *buys new suit*",
+    "George at a trade union: 'Solidarity!' *crosses own picket line*",
+    "George to the landlord: 'I support property rights!' To tenants: 'ABOLISH RENT!'",
+    "The only union George believes in is the union of George and power!"
+  ]},
+  { name: "parties", jokes: [
+    "Respect Party? More like Reject Party!",
+    "Workers Party funds: redistributed to George!",
+    "Down goes the Respect Party!",
+    "Another party vehicle totalled!",
+    "The Workers Party sends its regards!",
+    "George's political career in one flight!",
+    "George fell like his election chances!",
+    "George crashed harder than his poll numbers!"
+  ]},
+  { name: "expenses", jokes: [
+    "George takes his parliamentary expenses!",
+    "George finds another taxpayer treat!",
+    "George's offshore account grows!",
+    "George told pensioners he'd save the NHS. Then expensed a spa day.",
+    "George's expenses claim: DENIED!",
+    "It's not greed, it's wealth liberation!",
+    "George tried to claim the crash on expenses!",
+    "Getting paid to not show up - the Galloway special!"
+  ]},
+  { name: "identity", jokes: [
+    "George has more faces than a dice factory!",
+    "George's spirit animal: a chameleon in a fedora",
+    "George's blood type: Opportunist Positive",
+    "George's CV: Professional Shape-Shifter",
+    "George's political compass: a spinning top",
+    "George's middle name is 'Whichever Way The Wind Blows'",
+    "George's party trick: agreeing with everyone simultaneously",
+    "George once agreed with both sides of a debate. In the same sentence.",
+    "George shook hands left AND right. At the same time.",
+    "George's ringtone changes depending on who's calling",
+    "George googling: 'How to seem relatable'",
+    "George told the vegans he's vegan and the butchers he loves steak!",
+    "George at a vegan rally then a steakhouse. Same lunch break."
+  ]},
+  { name: "general", jokes: [
+    "George pockets another one!",
+    "For the people! (his people)",
+    "Redistributed to George's wallet!",
+    "That's GORGEOUS George to you!",
+    "Another voucher for the Galloway Fund!",
+    "The proletariat won't miss this one...",
+    "George: 'I'm not greedy, I'm thorough'",
+    "Seized from the means of production!",
+    "Workers of the world, pay George!",
+    "From each according to their vouchers...",
+    "George: 'I deserve this more than you'",
+    "The cat needs feeding!",
+    "George's autobiography: 'The Art of the Grift'",
+    "George's Mirror: 'Who's the most electable of them all?'",
+    "George would sell his own moustache for a seat!",
+    "George is the only man banned from his own farewell party",
+    "George told students he'd scrap tuition fees. He forgot by Thursday.",
+    "Not so gorgeous now, George!",
+    "The cat impression couldn't save him!",
+    "Big Brother evicted George... from the sky!",
+    "Even his moustache couldn't cushion that landing!",
+    "The fedora provided zero aerodynamic advantage!",
+    "George's last words: 'I can explain...'",
+    "George hit the ground like his credibility!",
+    "George's parachute was made of broken promises!",
+    "George promised the ground he wouldn't hit it. He lied.",
+    "The pipes were more consistent than George's beliefs!",
+    "Even the cat has better survival instincts!"
+  ]}
+];
+
+// Build allJokes by playing through themes in order, shuffling theme order
+// and shuffling jokes within each theme
+function buildJokePlaylist() {
+  var themes = jokeThemes.slice();
+  // Shuffle theme order
+  for (var i = themes.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var t = themes[i]; themes[i] = themes[j]; themes[j] = t;
+  }
+  var result = [];
+  for (var k = 0; k < themes.length; k++) {
+    var jokes = themes[k].jokes.slice();
+    // Shuffle within theme
+    for (var m = jokes.length - 1; m > 0; m--) {
+      var n = Math.floor(Math.random() * (m + 1));
+      var tt = jokes[m]; jokes[m] = jokes[n]; jokes[n] = tt;
+    }
+    for (var p = 0; p < jokes.length; p++) result.push(jokes[p]);
+  }
+  return result;
+}
+
+var allJokes = buildJokePlaylist();
+var jokeIndex = 0;
+var jokeFade = 1;
+var jokeTimer = 0;
+var JOKE_DURATION = 600; // frames to show each joke (~10 seconds)
+var JOKE_FADE = 60; // frames to fade
+
+function reset() {
+  bird = { x: 60, y: GH / 2.5, vy: 0, w: 28, h: 24, flapFrame: 0 };
+  pipes = []; vouchers = []; score = 0; frameCount = 0; gameState = "ready";
+}
+
+function flap() {
+  if (showSettings) return;
+  if (gameState === "mainmenu" || gameState === "facts") return;
+  if (gameState === "ready") { gameState = "playing"; bird.vy = settings.flapPower; bird.flapFrame = 8; return; }
+  if (gameState === "dead") return;
+  bird.vy = settings.flapPower;
+  bird.flapFrame = 8;
+}
+
+// --- Input handling ---
+var clickHandled = false;
+
+canvas.addEventListener("mousedown", function(e) {
+  clickHandled = false;
+  if (showSettings) { handleSettingsClick(e); clickHandled = true; return; }
+
+  var rect = canvas.getBoundingClientRect();
+  var mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  var s = canvas.height / GH;
+
+  // Settings gear check
+  var gx = canvas.width - 28*s, gy = 8*s, gsz = 20*s;
+  var dist = Math.sqrt(Math.pow(mx - (gx + gsz/2), 2) + Math.pow(my - (gy + gsz/2), 2));
+  if (dist < gsz/2 + 6*s && gameState !== "mainmenu" && gameState !== "facts") {
+    showSettings = !showSettings; clickHandled = true; return;
+  }
+
+  if (gameState === "mainmenu") { handleMainMenuClick(mx, my, s); clickHandled = true; return; }
+  if (gameState === "facts") { handleFactsClick(mx, my, s); clickHandled = true; return; }
+  if (gameState === "dead") { handleDeadClick(mx, my, s); clickHandled = true; return; }
+
+  flap();
+});
+canvas.addEventListener("mousemove", function(e) { if (dragging) handleSettingsDrag(e); });
+canvas.addEventListener("mouseup", function() { dragging = null; });
+canvas.addEventListener("wheel", function(e) {
+  if (gameState === "facts") {
+    factsScroll += e.deltaY * 0.5;
+    if (factsScroll < 0) factsScroll = 0;
+    if (factsScroll > factsMaxScroll) factsScroll = factsMaxScroll;
+    e.preventDefault();
+  }
+}, { passive: false });
+
+document.addEventListener("keydown", function(e) {
+  if (e.code === "Space" || e.code === "ArrowUp") { e.preventDefault(); flap(); }
+  if (e.code === "Escape") {
+    if (gameState === "facts") { gameState = "mainmenu"; return; }
+    if (showSettings) { showSettings = false; return; }
+    showSettings = !showSettings;
+  }
+  if (e.code === "Enter" && gameState === "mainmenu") { reset(); }
+});
+
+function handleDeadClick(mx, my, s) {
+  var cy = canvas.height/2;
+  var bh = 230*s, by = cy - bh/2;
+  var bw = canvas.width - 40*s;
+  var btnW = bw * 0.55, btnH = 28*s;
+  var btnX = (canvas.width - btnW)/2;
+  var retryY = by + 100*s;
+  var menuY = by + 138*s;
+
+  if (mx >= btnX && mx <= btnX + btnW) {
+    if (my >= retryY && my <= retryY + btnH) { reset(); return; }
+    if (my >= menuY && my <= menuY + btnH) { gameState = "mainmenu"; return; }
+  }
+}
+
+function spawnPipe() {
+  var gap = settings.pipeGapMin + Math.random() * (settings.pipeGapMax - settings.pipeGapMin);
+  gap = Math.round(gap);
+  var minTop = 45, maxTop = GH - gap - 60;
+  var topH = minTop + Math.random() * (maxTop - minTop);
+  pipes.push({ x: GW + 10, top: topH, bottom: topH + gap, scored: false });
+  vouchers.push({ x: GW + 10 + PIPE_WIDTH / 2, y: topH + gap / 2, collected: false, size: 14 });
+}
+
+function update() {
+  if (gameState !== "playing" || showSettings) return;
+  frameCount++;
+  if (bird.flapFrame > 0) bird.flapFrame--;
+  bird.vy += settings.gravity;
+  if (bird.vy > settings.maxFallSpeed) bird.vy = settings.maxFallSpeed;
+  bird.y += bird.vy;
+  if (frameCount % settings.pipeInterval === 0) spawnPipe();
+
+  for (var i = pipes.length - 1; i >= 0; i--) {
+    pipes[i].x -= settings.pipeSpeed;
+    if (!pipes[i].scored && pipes[i].x + PIPE_WIDTH < bird.x) {
+      pipes[i].scored = true; score++;
+      lastQuip = greedQuips[Math.floor(Math.random() * greedQuips.length)];
+    }
+    if (pipes[i].x + PIPE_WIDTH < -10) pipes.splice(i, 1);
+  }
+  for (var j = vouchers.length - 1; j >= 0; j--) {
+    vouchers[j].x -= settings.pipeSpeed;
+    if (!vouchers[j].collected) {
+      var dx = bird.x + bird.w/2 - vouchers[j].x, dy = bird.y - vouchers[j].y;
+      if (Math.sqrt(dx*dx + dy*dy) < vouchers[j].size + bird.w/3) { vouchers[j].collected = true; }
+    }
+    if (vouchers[j].x < -30) vouchers.splice(j, 1);
+  }
+  if (bird.y - bird.h/2 < 0) { bird.y = bird.h/2; bird.vy = 0; }
+  if (bird.y + bird.h/2 > GH - 16) { bird.y = GH - 16 - bird.h/2; die(); return; }
+  for (var k = 0; k < pipes.length; k++) {
+    var p = pipes[k];
+    if (bird.x + bird.w/2 - 5 > p.x && bird.x - bird.w/2 + 5 < p.x + PIPE_WIDTH) {
+      if (bird.y - bird.h/2 + 5 < p.top || bird.y + bird.h/2 - 5 > p.bottom) { die(); return; }
+    }
+  }
+}
+
+function die() {
+  gameState = "dead";
+  if (score > bestScore) bestScore = score;
+  lastQuip = deathQuips[Math.floor(Math.random() * deathQuips.length)];
+}
+
+// ========== DRAWING ==========
+
+function drawGeorge() {
+  var s = canvas.height / GH;
+  var x = bird.x * s, y = bird.y * s, w = bird.w * s, h = bird.h * s;
+  var targetAngle = bird.vy < 0 ? -25 : Math.min(bird.vy * 8, 70);
+  var angle = targetAngle * Math.PI / 180;
+  ctx.save(); ctx.translate(x, y); ctx.rotate(angle);
+
+  ctx.fillStyle = "#d4956a"; ctx.beginPath();
+  ctx.ellipse(0, 0, w/2 + 4*s, h/2 + 3*s, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#a06840"; ctx.lineWidth = 1.5*s; ctx.stroke();
+
+  ctx.fillStyle = "#2c2c2c"; ctx.beginPath();
+  ctx.ellipse(0, 4*s, w/2 + 2*s, h/2, 0, 0.4, Math.PI - 0.4); ctx.fill();
+
+  ctx.fillStyle = "#cc0000"; ctx.beginPath();
+  ctx.moveTo(-2*s, -2*s); ctx.lineTo(2*s, -2*s); ctx.lineTo(1.5*s, 10*s); ctx.lineTo(0, 12*s); ctx.lineTo(-1.5*s, 10*s);
+  ctx.closePath(); ctx.fill();
+
+  ctx.fillStyle = "#d4956a"; ctx.beginPath(); ctx.arc(0, -13*s, 10*s, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#a06840"; ctx.lineWidth = 1*s; ctx.stroke();
+
+  ctx.fillStyle = "#1a1a1a";
+  ctx.beginPath(); ctx.ellipse(0, -21*s, 15*s, 3.5*s, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillRect(-8*s, -28*s, 16*s, 8*s);
+  ctx.beginPath(); ctx.ellipse(0, -28*s, 8*s, 2.5*s, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#cc0000"; ctx.fillRect(-8*s, -23*s, 16*s, 2*s);
+
+  ctx.fillStyle = "#3a2a1a"; ctx.beginPath();
+  ctx.ellipse(-3.5*s, -8*s, 4.5*s, 1.8*s, 0.15, 0, Math.PI); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(3.5*s, -8*s, 4.5*s, 1.8*s, -0.15, 0, Math.PI); ctx.fill();
+
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath(); ctx.ellipse(-4*s, -15*s, 3.5*s, 4*s, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(4*s, -15*s, 3.5*s, 4*s, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#1a1a1a"; ctx.lineWidth = 0.8*s;
+  ctx.beginPath(); ctx.ellipse(-4*s, -15*s, 3.5*s, 4*s, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(4*s, -15*s, 3.5*s, 4*s, 0, 0, Math.PI * 2); ctx.stroke();
+  // Pound signs instead of pupils
+  ctx.fillStyle = "#006600"; ctx.font = "bold " + Math.round(5.5*s) + "px Arial";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("\u00A3", -4*s, -14.8*s);
+  ctx.fillText("\u00A3", 4*s, -14.8*s);
+
+  ctx.strokeStyle = "#2a1a0a"; ctx.lineWidth = 2*s; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(-7.5*s, -19.5*s); ctx.quadraticCurveTo(-4*s, -22*s, -0.5*s, -19.5*s); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0.5*s, -19.5*s); ctx.quadraticCurveTo(4*s, -22*s, 7.5*s, -19.5*s); ctx.stroke();
+
+  ctx.strokeStyle = "#6B3520"; ctx.lineWidth = 1.2*s;
+  ctx.beginPath(); ctx.arc(1*s, -9*s, 4*s, 0.1, Math.PI - 0.3); ctx.stroke();
+
+  var wingY = bird.flapFrame > 0 ? -4*s : (Math.sin(Date.now() / 100) * 3*s);
+  ctx.fillStyle = "#2c2c2c"; ctx.beginPath();
+  ctx.ellipse(-14*s, 1*s + wingY, 10*s, 5*s, -0.3, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = "#d4956a"; ctx.beginPath();
+  ctx.ellipse(w/2 + 5*s, -1*s, 4*s, 3.5*s, 0.3, 0, Math.PI * 2); ctx.fill();
+  for (var f = -1; f <= 1; f++) {
+    ctx.beginPath(); ctx.ellipse(w/2 + 9*s, (-1 + f * 2.5)*s, 3*s, 1.5*s, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawVoucher(v) {
+  if (v.collected) return;
+  var s = canvas.height / GH;
+  ctx.save(); ctx.translate(v.x * s, v.y * s);
+  var bob = Math.sin(Date.now() / 300 + v.x) * 2 * s;
+  ctx.translate(0, bob);
+  var spin = Math.sin(Date.now() / 400 + v.x * 0.5);
+  ctx.scale(Math.abs(spin) * 0.4 + 0.6, 1);
+  ctx.fillStyle = "#ffd700"; ctx.strokeStyle = "#b8860b"; ctx.lineWidth = 1.5*s;
+  ctx.beginPath();
+  ctx.moveTo(-9*s, -7*s); ctx.lineTo(9*s, -7*s); ctx.quadraticCurveTo(11*s, -7*s, 11*s, -5*s);
+  ctx.lineTo(11*s, 5*s); ctx.quadraticCurveTo(11*s, 7*s, 9*s, 7*s);
+  ctx.lineTo(-9*s, 7*s); ctx.quadraticCurveTo(-11*s, 7*s, -11*s, 5*s);
+  ctx.lineTo(-11*s, -5*s); ctx.quadraticCurveTo(-11*s, -7*s, -9*s, -7*s);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "#cc0000"; ctx.font = "bold " + Math.round(9*s) + "px Arial";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("\u2605", 0, -1*s);
+  ctx.fillStyle = "#8B0000"; ctx.font = "bold " + Math.round(5*s) + "px Arial";
+  ctx.fillText("LV", 0, 5*s);
+  ctx.restore();
+}
+
+function drawPipe(pipe) {
+  var s = canvas.height / GH;
+  var capH = 20*s, capOver = 4*s;
+  var px = pipe.x * s, pt = pipe.top * s, pb = pipe.bottom * s, pw = PIPE_WIDTH * s;
+  ctx.fillStyle = "#6B1010"; ctx.fillRect(px, 0, pw, pt);
+  ctx.fillStyle = "#aa2222"; ctx.fillRect(px + 3*s, 0, pw - 6*s, pt - capH);
+  ctx.fillStyle = "#cc4444"; ctx.fillRect(px + 3*s, 0, 4*s, pt - capH);
+  ctx.fillStyle = "#6B1010"; ctx.fillRect(px - capOver, pt - capH, pw + capOver*2, capH);
+  ctx.fillStyle = "#aa2222"; ctx.fillRect(px - capOver + 2*s, pt - capH + 2*s, pw + capOver*2 - 4*s, capH - 4*s);
+  ctx.fillStyle = "#ffd700"; ctx.font = Math.round(10*s) + "px Arial"; ctx.textAlign = "center";
+  ctx.fillText("\u2605", px + pw/2, pt - capH/2 + 4*s);
+  ctx.fillStyle = "#6B1010"; ctx.fillRect(px, pb, pw, canvas.height - pb);
+  ctx.fillStyle = "#aa2222"; ctx.fillRect(px + 3*s, pb + capH, pw - 6*s, canvas.height - pb - capH);
+  ctx.fillStyle = "#cc4444"; ctx.fillRect(px + 3*s, pb + capH, 4*s, canvas.height - pb - capH);
+  ctx.fillStyle = "#6B1010"; ctx.fillRect(px - capOver, pb, pw + capOver*2, capH);
+  ctx.fillStyle = "#aa2222"; ctx.fillRect(px - capOver + 2*s, pb + 2*s, pw + capOver*2 - 4*s, capH - 4*s);
+  ctx.fillStyle = "#ffd700"; ctx.fillText("\u2605", px + pw/2, pb + capH/2 + 4*s);
+}
+
+var bgScroll = 0;
+
+function drawBackground() {
+  var s = canvas.height / GH;
+  if (gameState === "playing") bgScroll += settings.pipeSpeed * 0.3;
+
+  // Red revolutionary sky
+  var grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  grad.addColorStop(0, "#1a0808");
+  grad.addColorStop(0.15, "#3a1010");
+  grad.addColorStop(0.35, "#7a2020");
+  grad.addColorStop(0.55, "#aa3838");
+  grad.addColorStop(0.72, "#cc7755");
+  grad.addColorStop(0.82, "#88aa44");
+  grad.addColorStop(0.92, "#446622");
+  grad.addColorStop(1, "#223311");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Parallax clouds (slow, dark red wisps)
+  ctx.fillStyle = "rgba(180,40,40,0.08)";
+  for (var c = 0; c < 5; c++) {
+    var cx = ((c * 73 + 20) * s - bgScroll * 0.15 * s) % (canvas.width + 60*s) - 30*s;
+    var cy = (40 + c * 55) * s;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, 40*s, 12*s, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(cx + 20*s, cy - 5*s, 25*s, 9*s, 0.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Distant city skyline (parallax slow)
+  ctx.fillStyle = "rgba(0,0,0,0.08)";
+  var skyX = -bgScroll * 0.1 * s;
+  var skyBase = canvas.height - 130*s;
+  var buildings1 = [30, 55, 40, 70, 35, 60, 45, 65, 38, 50, 72, 42];
+  for (var b = 0; b < buildings1.length; b++) {
+    var bx1 = (skyX + b * 28*s) % (canvas.width + 50*s) - 20*s;
+    ctx.fillRect(bx1, skyBase - buildings1[b]*s, 18*s, buildings1[b]*s + 20*s);
+  }
+
+  // Parliament of Westminster (mid-ground parallax)
+  ctx.fillStyle = "rgba(0,0,0,0.14)";
+  var px = 30*s - bgScroll * 0.25 * s;
+  px = ((px % (canvas.width + 300*s)) + canvas.width + 300*s) % (canvas.width + 300*s) - 150*s;
+  var parlBase = canvas.height - 80*s;
+
+  // Big Ben tower
+  ctx.fillRect(px, parlBase - 120*s, 12*s, 120*s);
+  ctx.fillRect(px - 5*s, parlBase - 134*s, 22*s, 16*s);
+  ctx.beginPath();
+  ctx.moveTo(px + 6*s, parlBase - 155*s);
+  ctx.lineTo(px - 5*s, parlBase - 134*s);
+  ctx.lineTo(px + 17*s, parlBase - 134*s);
+  ctx.fill();
+  // Clock face
+  ctx.fillStyle = "rgba(255,215,0,0.15)";
+  ctx.beginPath(); ctx.arc(px + 6*s, parlBase - 126*s, 5*s, 0, Math.PI * 2); ctx.fill();
+
+  // Main parliament building
+  ctx.fillStyle = "rgba(0,0,0,0.14)";
+  ctx.fillRect(px + 20*s, parlBase - 55*s, 200*s, 55*s);
+  // Windows
+  for (var w = 0; w < 8; w++) {
+    ctx.fillStyle = "rgba(255,200,100,0.06)";
+    ctx.fillRect(px + 28*s + w * 22*s, parlBase - 48*s, 10*s, 14*s);
+  }
+  // Turrets
+  ctx.fillStyle = "rgba(0,0,0,0.14)";
+  for (var tt = 0; tt < 5; tt++) {
+    ctx.fillRect(px + 20*s + tt * 50*s, parlBase - 70*s, 14*s, 18*s);
+    ctx.beginPath();
+    ctx.moveTo(px + 27*s + tt * 50*s, parlBase - 80*s);
+    ctx.lineTo(px + 20*s + tt * 50*s, parlBase - 70*s);
+    ctx.lineTo(px + 34*s + tt * 50*s, parlBase - 70*s);
+    ctx.fill();
+  }
+
+  // Rolling hills (foreground)
+  ctx.fillStyle = "#3a6620";
+  ctx.beginPath();
+  ctx.moveTo(0, canvas.height - 14*s);
+  for (var hx = 0; hx <= canvas.width; hx += 2) {
+    var hillY = canvas.height - 14*s - Math.sin((hx / s + bgScroll * 0.6) * 0.025) * 6*s - Math.sin((hx / s + bgScroll * 0.4) * 0.05) * 3*s;
+    ctx.lineTo(hx, hillY);
+  }
+  ctx.lineTo(canvas.width, canvas.height);
+  ctx.lineTo(0, canvas.height);
+  ctx.fill();
+
+  // Ground with scrolling texture
+  ctx.fillStyle = "#2a1a0a";
+  ctx.fillRect(0, canvas.height - 14*s, canvas.width, 14*s);
+  ctx.fillStyle = "#4a7c3f";
+  ctx.fillRect(0, canvas.height - 16*s, canvas.width, 4*s);
+  // Ground line details
+  ctx.strokeStyle = "rgba(60,100,30,0.4)"; ctx.lineWidth = 1*s;
+  for (var gl = 0; gl < 20; gl++) {
+    var gx = ((gl * 18 - bgScroll * 0.8) * s % canvas.width + canvas.width) % canvas.width;
+    ctx.beginPath();
+    ctx.moveTo(gx, canvas.height - 13*s);
+    ctx.lineTo(gx + 4*s, canvas.height - 15*s);
+    ctx.lineTo(gx + 8*s, canvas.height - 13*s);
+    ctx.stroke();
+  }
+
+  // Hammer & sickle watermark (very subtle, top corner)
+  ctx.fillStyle = "rgba(255,215,0,0.04)";
+  ctx.font = Math.round(60*s) + "px Arial";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("\u2605", canvas.width/2, canvas.height * 0.35);
+}
+
+function drawScore() {
+  var s = canvas.height / GH;
+  ctx.fillStyle = "#ffd700"; ctx.strokeStyle = "#000"; ctx.lineWidth = 3*s;
+  ctx.font = "bold " + Math.round(14*s) + "px Arial"; ctx.textAlign = "left";
+  ctx.strokeText("Vouchers Nicked:", 8*s, 24*s);
+  ctx.fillText("Vouchers Nicked:", 8*s, 24*s);
+  ctx.font = "bold " + Math.round(36*s) + "px Arial"; ctx.textAlign = "center";
+  ctx.strokeText(score, canvas.width / 2, 62*s);
+  ctx.fillText(score, canvas.width / 2, 62*s);
+  if (lastQuip && gameState === "playing") {
+    ctx.font = Math.round(9*s) + "px Arial"; ctx.textAlign = "center";
+    ctx.fillStyle = "rgba(255,215,0,0.8)";
+    ctx.fillText(lastQuip, canvas.width / 2, 78*s);
+  }
+}
+
+function drawSettingsButton() {
+  if (gameState === "mainmenu" || gameState === "facts") return;
+  var s = canvas.height / GH;
+  var bx = canvas.width - 28*s, by = 8*s, bsz = 20*s;
+  ctx.fillStyle = "rgba(0,0,0,0.4)";
+  ctx.beginPath(); ctx.arc(bx + bsz/2, by + bsz/2, bsz/2 + 2*s, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#ffd700"; ctx.font = Math.round(16*s) + "px Arial";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("\u2699", bx + bsz/2, by + bsz/2 + 1*s);
+}
+
+// ========== MAIN MENU ==========
+
+function drawRoundedRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function drawMainMenu() {
+  var s = canvas.height / GH;
+
+  // Dark overlay
+  ctx.fillStyle = "rgba(0,0,0,0.75)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Title panel
+  ctx.fillStyle = "rgba(80,5,5,0.95)";
+  drawRoundedRect(16*s, 30*s, canvas.width - 32*s, 130*s, 10*s);
+  ctx.fill();
+  ctx.strokeStyle = "#ffd700"; ctx.lineWidth = 2.5*s; ctx.stroke();
+
+  // Title
+  ctx.fillStyle = "#ffd700"; ctx.font = "bold " + Math.round(22*s) + "px Arial"; ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("LEFTWING", canvas.width/2, 62*s);
+  ctx.fillText("CAPITALIST", canvas.width/2, 88*s);
+
+  // Subtitle
+  ctx.fillStyle = "#ffcccc"; ctx.font = "italic " + Math.round(10*s) + "px Arial";
+  ctx.fillText("ft. George Galloway", canvas.width/2, 115*s);
+  ctx.fillText("Stealing Labour Vouchers since 2003", canvas.width/2, 132*s);
+
+  // Animated George in the middle
+  var bobY = Math.sin(Date.now() / 400) * 8*s;
+  ctx.save();
+  ctx.translate(canvas.width/2, 210*s + bobY);
+  var ms = 1.8;
+  ctx.scale(ms, ms);
+  // Mini George (reuse body parts)
+  ctx.fillStyle = "#d4956a"; ctx.beginPath(); ctx.ellipse(0, 0, 14*s, 12*s, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = "#2c2c2c"; ctx.beginPath(); ctx.ellipse(0, 3*s, 12*s, 9*s, 0, 0.4, Math.PI-0.4); ctx.fill();
+  ctx.fillStyle = "#cc0000"; ctx.beginPath();
+  ctx.moveTo(-1.5*s,-1*s); ctx.lineTo(1.5*s,-1*s); ctx.lineTo(1*s,6*s); ctx.lineTo(0,7*s); ctx.lineTo(-1*s,6*s); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#d4956a"; ctx.beginPath(); ctx.arc(0, -10*s, 7*s, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = "#1a1a1a";
+  ctx.beginPath(); ctx.ellipse(0, -16*s, 10*s, 2.5*s, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillRect(-5*s, -21*s, 10*s, 6*s);
+  ctx.beginPath(); ctx.ellipse(0, -21*s, 5*s, 1.8*s, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = "#cc0000"; ctx.fillRect(-5*s, -17*s, 10*s, 1.5*s);
+  // Eyes
+  ctx.fillStyle = "#fff";
+  ctx.beginPath(); ctx.arc(-2.5*s, -11*s, 2.5*s, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(2.5*s, -11*s, 2.5*s, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = "#000";
+  ctx.beginPath(); ctx.arc(-2*s, -10.5*s, 1.2*s, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(3*s, -10.5*s, 1.2*s, 0, Math.PI*2); ctx.fill();
+  // Moustache
+  ctx.fillStyle = "#3a2a1a";
+  ctx.beginPath(); ctx.ellipse(-2*s, -6*s, 3*s, 1.2*s, 0.1, 0, Math.PI); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(2*s, -6*s, 3*s, 1.2*s, -0.1, 0, Math.PI); ctx.fill();
+  // Wing
+  var wf = Math.sin(Date.now()/100)*3*s;
+  ctx.fillStyle = "#2c2c2c"; ctx.beginPath(); ctx.ellipse(-10*s, 1*s+wf, 7*s, 4*s, -0.3, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+
+  // PLAY button
+  var btnW = canvas.width * 0.6, btnH = 40*s, btnX = (canvas.width - btnW)/2;
+  var playY = 290*s;
+  ctx.fillStyle = "#8B0000";
+  drawRoundedRect(btnX, playY, btnW, btnH, 8*s); ctx.fill();
+  ctx.strokeStyle = "#ffd700"; ctx.lineWidth = 2*s; ctx.stroke();
+  ctx.fillStyle = "#ffd700"; ctx.font = "bold " + Math.round(18*s) + "px Arial";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("PLAY", canvas.width/2, playY + btnH/2);
+
+  // FACTS button
+  var factsY = 345*s;
+  ctx.fillStyle = "#4a0a0a";
+  drawRoundedRect(btnX, factsY, btnW, btnH, 8*s); ctx.fill();
+  ctx.strokeStyle = "#ffd700"; ctx.lineWidth = 2*s; ctx.stroke();
+  ctx.fillStyle = "#ffd700"; ctx.font = "bold " + Math.round(12*s) + "px Arial";
+  ctx.fillText("FACTS ABOUT GEORGE", canvas.width/2, factsY + btnH/2 - 2*s);
+  ctx.font = Math.round(8*s) + "px Arial"; ctx.fillStyle = "#ff9999";
+  ctx.fillText("(the grim truth)", canvas.width/2, factsY + btnH/2 + 12*s);
+
+  // Best score
+  if (bestScore > 0) {
+    ctx.fillStyle = "#ffd700"; ctx.font = Math.round(10*s) + "px Arial"; ctx.textAlign = "center";
+    ctx.fillText("Best Grift: " + bestScore + " vouchers", canvas.width/2, 400*s);
+  }
+
+  // Joke ticker
+  jokeTimer++;
+  if (jokeTimer >= JOKE_DURATION) { jokeTimer = 0; jokeIndex++;
+    if (jokeIndex >= allJokes.length) { allJokes = buildJokePlaylist(); jokeIndex = 0; } }
+  if (jokeTimer < JOKE_FADE) jokeFade = jokeTimer / JOKE_FADE;
+  else if (jokeTimer > JOKE_DURATION - JOKE_FADE) jokeFade = (JOKE_DURATION - jokeTimer) / JOKE_FADE;
+  else jokeFade = 1;
+
+  // Joke display area
+  var jy = 420*s;
+  ctx.fillStyle = "rgba(60,5,5,0.7)";
+  drawRoundedRect(10*s, jy, canvas.width - 20*s, 50*s, 6*s); ctx.fill();
+  ctx.strokeStyle = "rgba(255,215,0,0.3)"; ctx.lineWidth = 1*s; ctx.stroke();
+
+  ctx.fillStyle = "rgba(255,150,150," + (jokeFade * 0.5).toFixed(2) + ")";
+  ctx.font = "italic " + Math.round(7*s) + "px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  
+
+  ctx.fillStyle = "rgba(255,215,0," + jokeFade.toFixed(2) + ")";
+  ctx.font = Math.round(9*s) + "px Arial";
+  // Word-wrap long jokes
+  var joke = allJokes[jokeIndex];
+  if (ctx.measureText(joke).width > (canvas.width - 40*s)) {
+    var mid = Math.floor(joke.length / 2);
+    var spBefore = joke.lastIndexOf(" ", mid);
+    var spAfter = joke.indexOf(" ", mid);
+    var split = (mid - spBefore < spAfter - mid) ? spBefore : spAfter;
+    if (split > 0) {
+      ctx.fillText(joke.substring(0, split), canvas.width/2, jy + 20*s);
+      ctx.fillText(joke.substring(split + 1), canvas.width/2, jy + 33*s);
+    } else {
+      ctx.fillText(joke, canvas.width/2, jy + 26*s);
+    }
+  } else {
+    ctx.fillText(joke, canvas.width/2, jy + 26*s);
+  }
+
+  // Bottom text
+  ctx.fillStyle = "rgba(255,100,100," + (0.4 + Math.sin(Date.now()/1000) * 0.2).toFixed(2) + ")";
+  ctx.font = "italic " + Math.round(7*s) + "px Arial"; ctx.textAlign = "center";
+  ctx.fillText("No actual Labour vouchers were harmed in the making of this game", canvas.width/2, canvas.height - 12*s);
+}
+
+function handleMainMenuClick(mx, my, s) {
+  var btnW = canvas.width * 0.6, btnX = (canvas.width - btnW)/2, btnH = 40*s;
+  var playY = 290*s, factsY = 345*s;
+
+  if (mx >= btnX && mx <= btnX + btnW) {
+    if (my >= playY && my <= playY + btnH) { reset(); return; }
+    if (my >= factsY && my <= factsY + btnH) { gameState = "facts"; factsScroll = 0; return; }
+  }
+}
+
+// ========== FACTS PAGE ==========
+
+function drawFactsPage() {
+  var s = canvas.height / GH;
+
+  ctx.fillStyle = "rgba(0,0,0,0.85)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Header
+  ctx.fillStyle = "rgba(80,5,5,0.95)";
+  ctx.fillRect(0, 0, canvas.width, 50*s);
+  ctx.strokeStyle = "#ffd700"; ctx.lineWidth = 2*s;
+  ctx.beginPath(); ctx.moveTo(0, 50*s); ctx.lineTo(canvas.width, 50*s); ctx.stroke();
+
+  ctx.fillStyle = "#ffd700"; ctx.font = "bold " + Math.round(14*s) + "px Arial";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("THE GALLOWAY FILES", canvas.width/2, 18*s);
+  ctx.fillStyle = "#ffcccc"; ctx.font = Math.round(8*s) + "px Arial";
+  ctx.fillText("A comprehensive record of political destruction", canvas.width/2, 36*s);
+
+  // Back button
+  ctx.fillStyle = "#8B0000";
+  drawRoundedRect(8*s, 8*s, 40*s, 24*s, 5*s); ctx.fill();
+  ctx.strokeStyle = "#ffd700"; ctx.lineWidth = 1.5*s; ctx.stroke();
+  ctx.fillStyle = "#ffd700"; ctx.font = "bold " + Math.round(10*s) + "px Arial";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("\u2190 BACK", 28*s, 20*s);
+
+  // Scrollable content area
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, 52*s, canvas.width, canvas.height - 52*s);
+  ctx.clip();
+
+  var contentY = 60*s - factsScroll;
+  var lineH = 13*s;
+  var cardPad = 12*s;
+
+  for (var i = 0; i < facts.length; i++) {
+    var fact = facts[i];
+    var cardH = (fact.lines.length + 2) * lineH + cardPad * 2;
+
+    // Card background
+    ctx.fillStyle = i % 2 === 0 ? "rgba(100,10,10,0.7)" : "rgba(60,10,10,0.7)";
+    drawRoundedRect(12*s, contentY, canvas.width - 24*s, cardH, 6*s); ctx.fill();
+    ctx.strokeStyle = "rgba(255,215,0,0.3)"; ctx.lineWidth = 1*s; ctx.stroke();
+
+    // Fact number
+    ctx.fillStyle = "#cc0000"; ctx.font = "bold " + Math.round(8*s) + "px Arial";
+    ctx.textAlign = "left"; ctx.textBaseline = "top";
+    ctx.fillText("FACT #" + (i + 1), 20*s, contentY + cardPad);
+
+    // Title
+    ctx.fillStyle = "#ffd700"; ctx.font = "bold " + Math.round(11*s) + "px Arial";
+    ctx.fillText(fact.title, 20*s, contentY + cardPad + lineH);
+
+    // Lines
+    ctx.fillStyle = "#eeddcc"; ctx.font = Math.round(9*s) + "px Arial";
+    for (var j = 0; j < fact.lines.length; j++) {
+      ctx.fillText(fact.lines[j], 20*s, contentY + cardPad + lineH * (j + 2.2));
+    }
+
+    contentY += cardH + 10*s;
+  }
+
+  // Final joke card
+  ctx.fillStyle = "rgba(139,0,0,0.8)";
+  drawRoundedRect(12*s, contentY, canvas.width - 24*s, 50*s, 6*s); ctx.fill();
+  ctx.strokeStyle = "#ffd700"; ctx.lineWidth = 1.5*s; ctx.stroke();
+  ctx.fillStyle = "#ffd700"; ctx.font = "bold " + Math.round(10*s) + "px Arial";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("\"I'm not a cat, I'm a", canvas.width/2, contentY + 18*s);
+  ctx.fillText("political force\" - George, probably", canvas.width/2, contentY + 35*s);
+
+  factsMaxScroll = Math.max(0, contentY + 70*s - canvas.height + factsScroll);
+
+  ctx.restore();
+
+  // Scroll indicator
+  if (factsMaxScroll > 0) {
+    var scrollRatio = factsScroll / factsMaxScroll;
+    var barH = canvas.height - 54*s;
+    var thumbH = Math.max(20*s, barH * (barH / (barH + factsMaxScroll)));
+    var thumbY = 52*s + scrollRatio * (barH - thumbH);
+    ctx.fillStyle = "rgba(255,215,0,0.3)";
+    ctx.fillRect(canvas.width - 5*s, 52*s, 4*s, barH);
+    ctx.fillStyle = "rgba(255,215,0,0.7)";
+    ctx.fillRect(canvas.width - 5*s, thumbY, 4*s, thumbH);
+  }
+}
+
+function handleFactsClick(mx, my, s) {
+  // Back button
+  if (mx >= 8*s && mx <= 48*s && my >= 8*s && my <= 32*s) {
+    gameState = "mainmenu"; return;
+  }
+}
+
+// ========== SETTINGS MENU ==========
+
+function drawSettingsMenu() {
+  var s = canvas.height / GH;
+  ctx.fillStyle = "rgba(0,0,0,0.7)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  var mx = 20*s, my = 60*s, mw = canvas.width - 40*s, mh = 360*s;
+  ctx.fillStyle = "rgba(80,10,10,0.95)";
+  drawRoundedRect(mx, my, mw, mh, 8*s); ctx.fill();
+  ctx.strokeStyle = "#ffd700"; ctx.lineWidth = 2*s; ctx.stroke();
+  ctx.fillStyle = "#ffd700"; ctx.font = "bold " + Math.round(16*s) + "px Arial"; ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("George's Grift Settings", canvas.width/2, my + 28*s);
+
+  var sliderDefs = [
+    { key: "gravity", label: "Greed (Gravity)", min: 0.05, max: 0.5, step: 0.01 },
+    { key: "flapPower", label: "Flap Power", min: -8, max: -2, step: 0.1, invert: true },
+    { key: "pipeSpeed", label: "Austerity Speed", min: 0.5, max: 4, step: 0.1 },
+    { key: "pipeGapMin", label: "Min Tax Loophole", min: 70, max: 180, step: 5 },
+    { key: "pipeGapMax", label: "Max Tax Loophole", min: 100, max: 220, step: 5 },
+    { key: "maxFallSpeed", label: "Terminal Greed", min: 3, max: 12, step: 0.5 }
+  ];
+  menuSliders = [];
+  var sy = my + 52*s;
+  for (var i = 0; i < sliderDefs.length; i++) {
+    var def = sliderDefs[i];
+    var val = settings[def.key];
+    var displayVal = def.invert ? -val : val;
+    var ratio = (displayVal - def.min) / (def.max - def.min);
+    ctx.fillStyle = "#ffcccc"; ctx.font = Math.round(10*s) + "px Arial"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    ctx.fillText(def.label + ": " + (def.invert ? (-val).toFixed(1) : val.toFixed(2)), mx + 12*s, sy + 14*s);
+    var sx = mx + 12*s, sw = mw - 24*s, sty = sy + 22*s;
+    ctx.fillStyle = "#333"; ctx.fillRect(sx, sty, sw, 6*s);
+    ctx.fillStyle = "#cc0000"; ctx.fillRect(sx, sty, sw * ratio, 6*s);
+    var tx = sx + sw * ratio;
+    ctx.fillStyle = "#ffd700"; ctx.beginPath(); ctx.arc(tx, sty + 3*s, 6*s, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#b8860b"; ctx.lineWidth = 1*s; ctx.stroke();
+    menuSliders.push({ x: sx, y: sty - 6*s, w: sw, h: 18*s, def: def, thumbX: tx });
+    sy += 46*s;
+  }
+  var rbx = canvas.width/2 - 50*s, rby = sy + 8*s, rbw = 100*s, rbh = 26*s;
+  ctx.fillStyle = "#8B0000";
+  drawRoundedRect(rbx, rby, rbw, rbh, 5*s); ctx.fill();
+  ctx.strokeStyle = "#ffd700"; ctx.lineWidth = 1.5*s; ctx.stroke();
+  ctx.fillStyle = "#ffd700"; ctx.font = "bold " + Math.round(11*s) + "px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("Reset to Defaults", canvas.width/2, rby + rbh/2);
+  menuSliders.push({ x: rbx, y: rby, w: rbw, h: rbh, isReset: true });
+  ctx.fillStyle = "#ffd700"; ctx.font = Math.round(9*s) + "px Arial";
+  ctx.fillText("Press ESC to close", canvas.width/2, my + mh - 10*s);
+}
+
+function handleSettingsClick(e) {
+  var rect = canvas.getBoundingClientRect();
+  var mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  for (var i = 0; i < menuSliders.length; i++) {
+    var sl = menuSliders[i];
+    if (mx >= sl.x && mx <= sl.x + sl.w && my >= sl.y && my <= sl.y + sl.h) {
+      if (sl.isReset) { settings = JSON.parse(JSON.stringify(defaults)); return; }
+      dragging = sl; updateSliderValue(sl, mx); return;
+    }
+  }
+  showSettings = false;
+}
+
+function handleSettingsDrag(e) {
+  if (!dragging || dragging.isReset) return;
+  var rect = canvas.getBoundingClientRect();
+  updateSliderValue(dragging, e.clientX - rect.left);
+}
+
+function updateSliderValue(sl, mx) {
+  var ratio = Math.max(0, Math.min(1, (mx - sl.x) / sl.w));
+  var def = sl.def;
+  var val = def.min + ratio * (def.max - def.min);
+  val = Math.round(val / def.step) * def.step;
+  settings[def.key] = def.invert ? -val : val;
+}
+
+// ========== GAME OVERLAYS ==========
+
+function drawGameOverlay(title, subtitle, extra, isDead) {
+  var s = canvas.height / GH;
+  ctx.fillStyle = "rgba(0,0,0,0.55)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "rgba(100,5,5,0.9)";
+  var cy = canvas.height/2;
+  var bh = isDead ? 230*s : 180*s;
+  var bx = 20*s, bw = canvas.width - 40*s, by = cy - bh/2;
+  drawRoundedRect(bx, by, bw, bh, 10*s); ctx.fill();
+  ctx.strokeStyle = "#ffd700"; ctx.lineWidth = 2.5*s; ctx.stroke();
+  ctx.fillStyle = "#ffd700"; ctx.font = "bold " + Math.round(20*s) + "px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(title, canvas.width/2, by + 30*s);
+  ctx.fillStyle = "#fff"; ctx.font = Math.round(11*s) + "px Arial";
+  ctx.fillText(subtitle, canvas.width/2, by + 58*s);
+  if (extra) { ctx.font = Math.round(9*s) + "px Arial"; ctx.fillStyle = "#ffcccc"; ctx.fillText(extra, canvas.width/2, by + 80*s); }
+
+  if (isDead) {
+    // Retry button
+    var btnW = bw * 0.55, btnH = 28*s;
+    var retryX = (canvas.width - btnW)/2, retryY = by + 100*s;
+    ctx.fillStyle = "#8B0000";
+    drawRoundedRect(retryX, retryY, btnW, btnH, 6*s); ctx.fill();
+    ctx.strokeStyle = "#ffd700"; ctx.lineWidth = 1.5*s; ctx.stroke();
+    ctx.fillStyle = "#ffd700"; ctx.font = "bold " + Math.round(13*s) + "px Arial";
+    ctx.fillText("RETRY", canvas.width/2, retryY + btnH/2);
+
+    // Main Menu button
+    var menuY = by + 138*s;
+    ctx.fillStyle = "#4a0a0a";
+    drawRoundedRect(retryX, menuY, btnW, btnH, 6*s); ctx.fill();
+    ctx.strokeStyle = "#ffd700"; ctx.lineWidth = 1.5*s; ctx.stroke();
+    ctx.fillStyle = "#ffd700"; ctx.font = "bold " + Math.round(11*s) + "px Arial";
+    ctx.fillText("MAIN MENU", canvas.width/2, menuY + btnH/2);
+
+    ctx.font = Math.round(9*s) + "px Arial"; ctx.fillStyle = "#ff9999";
+    ctx.fillText("ESC for settings", canvas.width/2, by + bh - 16*s);
+  } else {
+    ctx.font = Math.round(11*s) + "px Arial"; ctx.fillStyle = "#ffd700";
+    ctx.fillText("Click or Space to play", canvas.width/2, by + 110*s);
+    ctx.font = Math.round(9*s) + "px Arial"; ctx.fillStyle = "#ff9999";
+    ctx.fillText("ESC for settings", canvas.width/2, by + 135*s);
+  }
+}
+
+// ========== MAIN DRAW ==========
+
+function draw() {
+  drawBackground();
+
+  if (gameState === "mainmenu") { drawMainMenu(); return; }
+  if (gameState === "facts") { drawFactsPage(); return; }
+
+  for (var i = 0; i < pipes.length; i++) drawPipe(pipes[i]);
+  for (var j = 0; j < vouchers.length; j++) drawVoucher(vouchers[j]);
+  drawGeorge(); drawScore();
+  drawSettingsButton();
+
+  if (gameState === "ready") {
+    drawGameOverlay("LEFTWINGCAPITALIST", "George Galloway steals Labour Vouchers!", "Guide the gorgeous one through the red pipes", false);
+  }
+  if (gameState === "dead") {
+    drawGameOverlay("GEORGE DOWN!", "Vouchers nicked: " + score + "  |  Best grift: " + bestScore, lastQuip, true);
+  }
+  if (showSettings) drawSettingsMenu();
+}
+
+function loop() { update(); draw(); requestAnimationFrame(loop); }
+
+bird = { x: 60, y: GH / 2.5, vy: 0, w: 28, h: 24, flapFrame: 0 };
+pipes = []; vouchers = []; score = 0; frameCount = 0;
+gameState = "mainmenu";
+loop();
+
+</script>
+</body>
+</html>
