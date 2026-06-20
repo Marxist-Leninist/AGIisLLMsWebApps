@@ -55,7 +55,7 @@
   <span class="eq">PV = nRT</span>
 
   <div class="stage">
-    <canvas id="cv" width="300" height="380"></canvas>
+    <canvas id="cv" width="400" height="380"></canvas>
     <div class="readouts">
       <div class="r"><span class="lbl-vol">Volume:</span>      <span class="val"><span id="oV">0</span> L</span></div>
       <div class="r"><span class="lbl-temp">Temperature:</span> <span class="val"><span id="oT">0</span> K</span></div>
@@ -98,8 +98,9 @@
   <p class="note">
     R = 0.082057 L·atm·mol⁻¹·K⁻¹. In <b>Free piston</b> mode you set P, n, T and the gas
     finds its volume (V = nRT/P). In <b>Locked piston</b> mode you set V, n, T and the
-    pressure builds up (P = nRT/V). Particle <i>speed</i> tracks temperature, particle
-    <i>count</i> tracks the amount of gas.<br>
+    pressure builds up (P = nRT/V). <b>Temperature</b> shows up three ways: particle
+    <i>speed</i>, particle <i>colour &amp; glow</i> (cold blue → white-hot), and the
+    <i>thermometer</i> on the right. Particle <i>count</i> tracks the amount of gas.<br>
     Part of the <a href="https://github.com/Marxist-Leninist/AGIisLLMsWebApps">AGI-LLM Web Apps</a> collection.
   </p>
 </div>
@@ -149,6 +150,23 @@ function targetCount(){ return Math.round(state.n * 45); }   // count tracks n
 function speedScale(){ return 0.6 + Math.sqrt(state.T)/14; } // speed tracks sqrt(T)
 const PAL = ['#e07a5f','#f2cc8f','#81b29a','#9aa7b1','#e6b8c2','#8ecae6','#cdb4db','#a7c957'];
 
+// temperature -> colour: cold deep-blue ... room green ... orange ... white-hot
+function tempColor(T){
+  const t = clamp((T-50)/950,0,1);
+  const stops = [
+    [60,120,255],   // 50 K  cold blue
+    [80,200,230],   // cyan
+    [120,210,140],  // ~room green
+    [240,205,80],   // yellow
+    [240,120,50],   // orange
+    [255,240,232]   // 1000 K white-hot
+  ];
+  const x=t*(stops.length-1), i=Math.floor(x), f=x-i;
+  const a=stops[i], b=stops[Math.min(i+1,stops.length-1)];
+  const c=k=>Math.round(a[k]+(b[k]-a[k])*f);
+  return `rgb(${c(0)},${c(1)},${c(2)})`;
+}
+
 function syncParticles(){
   const want = targetCount();
   while(parts.length < want){
@@ -186,14 +204,19 @@ function draw(){
   ctx.fillStyle = '#050505';
   ctx.fillRect(CX, pistonY, CW, BOT-pistonY);
 
-  // particles
+  // particles — colour + glow track temperature (hotter = redder/whiter & brighter)
+  const tc = tempColor(state.T);
+  const glow = 2 + 16*clamp((state.T-50)/950,0,1);
+  ctx.shadowColor = tc;
   for(const p of parts){
     if(p.y < pistonY+ p.r) p.y = pistonY+p.r;
+    ctx.shadowBlur = glow;
     ctx.beginPath();
     ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
-    ctx.fillStyle = p.c;
+    ctx.fillStyle = tc;
     ctx.fill();
   }
+  ctx.shadowBlur = 0;
 
   // cylinder walls
   ctx.strokeStyle = '#cfcfcf';
@@ -213,7 +236,43 @@ function draw(){
   ctx.fillStyle = '#cfcfcf';
   ctx.fillRect(CX+CW/2-26, pistonY-50, 52, 8);                 // handle
 
+  drawThermometer();
   requestAnimationFrame(loop);
+}
+
+// thermometer gauge to the right of the cylinder
+function drawThermometer(){
+  const tx=300, top=40, bot=320, bulbR=14;
+  const t=clamp((state.T-50)/950,0,1);
+  const tc=tempColor(state.T);
+
+  // tube outline
+  ctx.strokeStyle='#999'; ctx.lineWidth=2;
+  ctx.beginPath();
+  ctx.moveTo(tx-7,bot); ctx.lineTo(tx-7,top);
+  ctx.arc(tx,top,7,Math.PI,0);
+  ctx.lineTo(tx+7,bot);
+  ctx.stroke();
+
+  // bulb
+  ctx.beginPath(); ctx.arc(tx,bot+bulbR-3,bulbR,0,Math.PI*2);
+  ctx.fillStyle=tc; ctx.fill(); ctx.stroke();
+
+  // mercury column
+  const fillTop = bot - t*(bot-top);
+  ctx.fillStyle=tc;
+  ctx.fillRect(tx-4, fillTop, 8, (bot-fillTop)+2);
+
+  // ticks + labels
+  ctx.fillStyle='#888'; ctx.font='9px monospace'; ctx.textAlign='left';
+  for(let i=0;i<=4;i++){
+    const ty=bot-(i/4)*(bot-top);
+    ctx.fillRect(tx+9,ty,5,1);
+    ctx.fillText((50+(i/4)*950|0)+'K', tx+17, ty+3);
+  }
+  // live reading
+  ctx.fillStyle=tc; ctx.font='bold 12px monospace'; ctx.textAlign='center';
+  ctx.fillText(Math.round(state.T)+' K', tx, top-12);
 }
 
 function loop(){
