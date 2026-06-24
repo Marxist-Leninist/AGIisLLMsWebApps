@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ideal Gas Law Simulation — PV = nRT</title>
+<style>
+  :root{
+    --gold:#d9b35c;
+    --bg:#000;
+    --panel:#0d0d0f;
+    --line:#222;
+    --txt:#e8e8e8;
+    --vol:#e07a5f;
+    --temp:#e0c35f;
+    --pres:#9aa7b1;
+    --up:#5fd68a;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--txt);
+    font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+  .wrap{max-width:880px;margin:0 auto;padding:18px 16px 60px}
+  h1{font-family:Georgia,"Times New Roman",serif;color:var(--gold);
+    text-align:center;font-size:2.1em;letter-spacing:.5px;margin:.2em 0 .15em}
+  .eq{display:block;width:max-content;margin:0 auto 14px;
+    border:1px solid var(--gold);border-radius:6px;padding:6px 18px;
+    font-family:Georgia,serif;font-style:italic;font-size:1.35em;color:var(--gold)}
+  .stage{display:flex;gap:20px;flex-wrap:wrap;justify-content:center;align-items:flex-start}
+  canvas{background:#000;border:2px solid #555;border-radius:4px;touch-action:none;cursor:ns-resize}
+  .readouts{font-family:"SF Mono",Consolas,monospace;font-size:1.05em;
+    line-height:1.9;min-width:240px}
+  .readouts .r{display:flex;justify-content:space-between;gap:14px}
+  .lbl-vol{color:var(--vol)} .lbl-temp{color:var(--temp)} .lbl-pres{color:var(--pres)}
+  .val{color:#fff}
+  .check{margin-top:10px;font-size:.92em;color:#888}
+  .process{margin:14px auto 0;text-align:center;color:var(--up);font-size:1.05em;min-height:1.4em}
+  .controls{max-width:560px;margin:22px auto 0;background:var(--panel);
+    border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+  .ctl{margin:12px 0}
+  .ctl label{display:flex;justify-content:space-between;font-size:.95em;margin-bottom:5px}
+  .ctl label b{color:#fff}
+  input[type=range]{width:100%;accent-color:var(--gold)}
+  .modes{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-bottom:6px}
+  .modes button{background:#16161a;color:var(--txt);border:1px solid #333;
+    border-radius:20px;padding:7px 14px;cursor:pointer;font-size:.85em}
+  .modes button.active{background:var(--gold);color:#000;border-color:var(--gold);font-weight:600}
+  .hint{color:#777;font-size:.82em;text-align:center;margin-top:8px}
+  .note{color:#666;font-size:.8em;text-align:center;margin-top:26px;line-height:1.6}
+  a{color:var(--gold)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Ideal Gas Law</h1>
+  <span class="eq">PV = nRT</span>
+
+  <div class="stage">
+    <canvas id="cv" width="400" height="380"></canvas>
+    <div class="readouts">
+      <div class="r"><span class="lbl-vol">Volume:</span>      <span class="val"><span id="oV">0</span> L</span></div>
+      <div class="r"><span class="lbl-temp">Temperature:</span> <span class="val"><span id="oT">0</span> K</span></div>
+      <div class="r"><span class="lbl-pres">Pressure:</span>    <span class="val"><span id="oP">0</span> atm</span></div>
+      <div class="r"><span style="color:#bbb">Amount (n):</span> <span class="val"><span id="oN">0</span> mol</span></div>
+      <div class="check">PV = nRT&nbsp; →&nbsp; <span id="oCheck"></span></div>
+      <div class="process" id="proc"></div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="modes" id="modes">
+      <button data-m="free"  class="active">Free piston (set Pressure)</button>
+      <button data-m="fixed">Locked piston (set Volume)</button>
+    </div>
+
+    <div class="ctl">
+      <label>Temperature <b><span id="lT">300</span> K</b></label>
+      <input id="sT" type="range" min="50" max="1000" step="1" value="300">
+    </div>
+
+    <div class="ctl">
+      <label>Amount of gas, n <b><span id="lN">1.00</span> mol</b></label>
+      <input id="sN" type="range" min="0.2" max="3" step="0.05" value="1">
+    </div>
+
+    <div class="ctl" id="ctlP">
+      <label>External Pressure <b><span id="lP">1.00</span> atm</b></label>
+      <input id="sP" type="range" min="0.2" max="10" step="0.05" value="1">
+    </div>
+
+    <div class="ctl" id="ctlV" style="display:none">
+      <label>Volume <b><span id="lV">24.6</span> L</b></label>
+      <input id="sV" type="range" min="2" max="60" step="0.5" value="24.6">
+    </div>
+
+    <div class="hint">Tip: drag the piston up/down on the cylinder to change it directly.</div>
+  </div>
+
+  <p class="note">
+    R = 0.082057 L·atm·mol⁻¹·K⁻¹. In <b>Free piston</b> mode you set P, n, T and the gas
+    finds its volume (V = nRT/P). In <b>Locked piston</b> mode you set V, n, T and the
+    pressure builds up (P = nRT/V). <b>Temperature</b> shows up three ways: particle
+    <i>speed</i>, particle <i>colour &amp; glow</i> (cold blue → white-hot), and the
+    <i>thermometer</i> on the right. Particle <i>count</i> tracks the amount of gas.<br>
+    Part of the <a href="https://github.com/Marxist-Leninist/AGIisLLMsWebApps">AGI-LLM Web Apps</a> collection.
+  </p>
+</div>
+
+<script>
+const R = 0.0820573;            // L·atm·mol⁻¹·K⁻¹
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+
+// Cylinder geometry (px)
+const CX = 40, CW = 220;        // inner left, inner width
+const TOP = 20;                 // top of cylinder interior
+const BOT = 360;                // bottom (sealed) of cylinder interior
+const FULL = BOT - TOP;         // px range the piston can travel
+const V_AT_FULL = 60;           // L when piston is at the very top (max volume)
+const V_AT_MIN  = 2;            // L minimum
+
+let mode = 'free';
+let state = { T:300, n:1, P:1, V:24.6 };
+let prev  = { ...state };
+
+// ----- model: keep V consistent with the active driver -----
+function recompute(){
+  if(mode === 'free'){
+    state.V = (state.n * R * state.T) / state.P;       // V = nRT/P
+    state.V = clamp(state.V, V_AT_MIN, V_AT_FULL);
+    // pressure shown is the external/equilibrium pressure (driver)
+  } else {
+    state.P = (state.n * R * state.T) / state.V;       // P = nRT/V
+  }
+}
+const clamp = (x,a,b)=>Math.max(a,Math.min(b,x));
+
+// volume <-> piston pixel height
+function volToPistonY(V){
+  const frac = (V - V_AT_MIN) / (V_AT_FULL - V_AT_MIN);
+  return BOT - frac * FULL;     // higher volume -> piston nearer TOP
+}
+function pistonYToVol(y){
+  const frac = (BOT - y) / FULL;
+  return clamp(V_AT_MIN + frac*(V_AT_FULL - V_AT_MIN), V_AT_MIN, V_AT_FULL);
+}
+
+// ----- particles -----
+let parts = [];
+function targetCount(){ return Math.round(state.n * 45); }   // count tracks n
+function speedScale(){ return 0.6 + Math.sqrt(state.T)/14; } // speed tracks sqrt(T)
+const PAL = ['#e07a5f','#f2cc8f','#81b29a','#9aa7b1','#e6b8c2','#8ecae6','#cdb4db','#a7c957'];
+
+// temperature -> colour: cold deep-blue ... room green ... orange ... white-hot
+function tempColor(T){
+  const t = clamp((T-50)/950,0,1);
+  const stops = [
+    [60,120,255],   // 50 K  cold blue
+    [80,200,230],   // cyan
+    [120,210,140],  // ~room green
+    [240,205,80],   // yellow
+    [240,120,50],   // orange
+    [255,240,232]   // 1000 K white-hot
+  ];
+  const x=t*(stops.length-1), i=Math.floor(x), f=x-i;
+  const a=stops[i], b=stops[Math.min(i+1,stops.length-1)];
+  const c=k=>Math.round(a[k]+(b[k]-a[k])*f);
+  return `rgb(${c(0)},${c(1)},${c(2)})`;
+}
+
+function syncParticles(){
+  const want = targetCount();
+  while(parts.length < want){
+    parts.push({
+      x: CX + 6 + Math.random()*(CW-12),
+      y: 0, // set below
+      a: Math.random()*Math.PI*2,
+      r: 2.2 + Math.random()*1.6,
+      c: PAL[(Math.random()*PAL.length)|0]
+    });
+  }
+  if(parts.length > want) parts.length = want;
+}
+
+function step(){
+  const pistonY = volToPistonY(state.V);
+  const v = speedScale();
+  for(const p of parts){
+    p.x += Math.cos(p.a)*v;
+    p.y += Math.sin(p.a)*v;
+    if(p.x < CX+p.r){ p.x = CX+p.r; p.a = Math.PI - p.a; }
+    if(p.x > CX+CW-p.r){ p.x = CX+CW-p.r; p.a = Math.PI - p.a; }
+    if(p.y > BOT-p.r){ p.y = BOT-p.r; p.a = -p.a; }
+    if(p.y < pistonY+p.r){ p.y = pistonY+p.r; p.a = -p.a; }
+    // tiny jitter so motion looks gaseous
+    p.a += (Math.random()-0.5)*0.12;
+  }
+}
+
+function draw(){
+  const pistonY = volToPistonY(state.V);
+  ctx.clearRect(0,0,cv.width,cv.height);
+
+  // gas region background
+  ctx.fillStyle = '#050505';
+  ctx.fillRect(CX, pistonY, CW, BOT-pistonY);
+
+  // particles — colour + glow track temperature (hotter = redder/whiter & brighter)
+  const tc = tempColor(state.T);
+  const glow = 2 + 16*clamp((state.T-50)/950,0,1);
+  ctx.shadowColor = tc;
+  for(const p of parts){
+    if(p.y < pistonY+ p.r) p.y = pistonY+p.r;
+    ctx.shadowBlur = glow;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+    ctx.fillStyle = tc;
+    ctx.fill();
+  }
+  ctx.shadowBlur = 0;
+
+  // cylinder walls
+  ctx.strokeStyle = '#cfcfcf';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(CX, TOP);              // left wall
+  ctx.lineTo(CX, BOT);
+  ctx.lineTo(CX+CW, BOT);           // bottom
+  ctx.lineTo(CX+CW, TOP);           // right wall
+  ctx.stroke();
+
+  // piston plate + rod
+  ctx.fillStyle = '#b9b9b9';
+  ctx.fillRect(CX, pistonY-12, CW, 14);
+  ctx.fillStyle = '#888';
+  ctx.fillRect(CX+CW/2-4, Math.max(TOP-2,pistonY-44), 8, 34); // rod
+  ctx.fillStyle = '#cfcfcf';
+  ctx.fillRect(CX+CW/2-26, pistonY-50, 52, 8);                 // handle
+
+  drawThermometer();
+  requestAnimationFrame(loop);
+}
+
+// thermometer gauge to the right of the cylinder
+function drawThermometer(){
+  const tx=300, top=40, bot=320, bulbR=14;
+  const t=clamp((state.T-50)/950,0,1);
+  const tc=tempColor(state.T);
+
+  // tube outline
+  ctx.strokeStyle='#999'; ctx.lineWidth=2;
+  ctx.beginPath();
+  ctx.moveTo(tx-7,bot); ctx.lineTo(tx-7,top);
+  ctx.arc(tx,top,7,Math.PI,0);
+  ctx.lineTo(tx+7,bot);
+  ctx.stroke();
+
+  // bulb
+  ctx.beginPath(); ctx.arc(tx,bot+bulbR-3,bulbR,0,Math.PI*2);
+  ctx.fillStyle=tc; ctx.fill(); ctx.stroke();
+
+  // mercury column
+  const fillTop = bot - t*(bot-top);
+  ctx.fillStyle=tc;
+  ctx.fillRect(tx-4, fillTop, 8, (bot-fillTop)+2);
+
+  // ticks + labels
+  ctx.fillStyle='#888'; ctx.font='9px monospace'; ctx.textAlign='left';
+  for(let i=0;i<=4;i++){
+    const ty=bot-(i/4)*(bot-top);
+    ctx.fillRect(tx+9,ty,5,1);
+    ctx.fillText((50+(i/4)*950|0)+'K', tx+17, ty+3);
+  }
+  // live reading
+  ctx.fillStyle=tc; ctx.font='bold 12px monospace'; ctx.textAlign='center';
+  ctx.fillText(Math.round(state.T)+' K', tx, top-12);
+}
+
+function loop(){
+  syncParticles();
+  step();
+  draw();
+}
+
+// ----- UI binding -----
+const $ = id => document.getElementById(id);
+function updateReadouts(){
+  $('oV').textContent = state.V.toFixed(1);
+  $('oT').textContent = Math.round(state.T);
+  $('oP').textContent = state.P.toFixed(2);
+  $('oN').textContent = state.n.toFixed(2);
+  const lhs = state.P*state.V, rhs = state.n*R*state.T;
+  $('oCheck').textContent = lhs.toFixed(2)+' ≈ '+rhs.toFixed(2)+'  L·atm';
+
+  $('lT').textContent = Math.round(state.T);
+  $('lN').textContent = state.n.toFixed(2);
+  $('lP').textContent = state.P.toFixed(2);
+  $('lV').textContent = state.V.toFixed(1);
+}
+
+function describeProcess(){
+  const d=(a,b)=> b>a*1.002?'↑': b<a*0.998?'↓':'→';
+  const txt = `Volume ${d(prev.V,state.V)}  Temp ${d(prev.T,state.T)}  Pressure ${d(prev.P,state.P)}  n ${d(prev.n,state.n)}`;
+  $('proc').textContent = txt;
+}
+
+function refresh(record){
+  recompute();
+  // keep sliders in sync with state
+  $('sP').value = clamp(state.P,0.2,10);
+  $('sV').value = clamp(state.V,2,60);
+  updateReadouts();
+  if(record){ describeProcess(); prev = {...state}; }
+}
+
+$('sT').addEventListener('input', e=>{ state.T=+e.target.value; refresh(true); });
+$('sN').addEventListener('input', e=>{ state.n=+e.target.value; refresh(true); });
+$('sP').addEventListener('input', e=>{ state.P=+e.target.value; refresh(true); });
+$('sV').addEventListener('input', e=>{ state.V=+e.target.value; refresh(true); });
+
+// mode switch
+document.querySelectorAll('#modes button').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    document.querySelectorAll('#modes button').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    mode = b.dataset.m;
+    $('ctlP').style.display = mode==='free' ? '' : 'none';
+    $('ctlV').style.display = mode==='fixed'? '' : 'none';
+    refresh(true);
+  });
+});
+
+// drag the piston
+let dragging=false;
+function evtY(e){
+  const rect=cv.getBoundingClientRect();
+  const cy=(e.touches?e.touches[0].clientY:e.clientY)-rect.top;
+  return cy * (cv.height/rect.height);
+}
+function startDrag(e){ dragging=true; doDrag(e); }
+function doDrag(e){
+  if(!dragging) return;
+  const y = clamp(evtY(e), TOP, BOT);
+  state.V = pistonYToVol(y);
+  if(mode==='free'){
+    // moving the piston by hand sets a new pressure for the current n,T
+    state.P = (state.n*R*state.T)/state.V;
+  }
+  refresh(true);
+  e.preventDefault();
+}
+function endDrag(){ dragging=false; }
+cv.addEventListener('mousedown',startDrag);
+window.addEventListener('mousemove',doDrag);
+window.addEventListener('mouseup',endDrag);
+cv.addEventListener('touchstart',startDrag,{passive:false});
+cv.addEventListener('touchmove',doDrag,{passive:false});
+cv.addEventListener('touchend',endDrag);
+
+// init
+refresh(false);
+prev = {...state};
+loop();
+</script>
+</body>
+</html>
