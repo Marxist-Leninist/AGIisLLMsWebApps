@@ -1,74 +1,90 @@
 'use strict';
 const $=id=>document.getElementById(id);
+let solver=null,view=null,playing=false,lastFrame=performance.now(),fpsStart=performance.now(),frameCount=0,fps=0,ups=0,lastSteps=0,busy=false;
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
-const state={s:0,playing:!reduced,mode:'approach',speed:1,last:performance.now(),frames:0,fpsLast:performance.now(),fps:0,analogueTime:0};
-let renderer=null;
-try{renderer=new VortexRenderer($('fluid'));}catch(error){console.error('Vortex renderer:',error.message);$('render-error').hidden=false;state.playing=false;$('run-status').textContent='Renderer unavailable';$('snapshot').disabled=true;}
-const superDigits={'-':'⁻','0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹'};
-function sci(v){const e=Math.floor(Math.log10(v)+1e-10);return (v/Math.pow(10,e)).toFixed(2)+' × 10'+String(e).split('').map(c=>superDigits[c]).join('');}
-function metric(v){if(v>=100)return v.toFixed(0);if(v>=10)return v.toFixed(1);if(v>=1)return v.toFixed(2);return v.toFixed(3);}
-function activeButtons(attr,value){document.querySelectorAll('button['+attr+']').forEach(b=>{const on=b.getAttribute(attr)===value;b.classList.toggle('selected',on);b.setAttribute('aria-pressed',String(on));});}
-function toast(text){$('toast').textContent=text;$('toast').hidden=false;clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('toast').hidden=true,3200);}
+let cachedRecord=null;
+function toast(text){$('toast').textContent=text;$('toast').hidden=false;clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('toast').hidden=true,4000);}
+function options(){return{n:Number($('grid').value),length:Number($('length').value),strength:Number($('strength').value),drive:$('drive').value==='1'};}
+function init(auto=!reduced){
+ playing=false;busy=true;$('limit-message').hidden=true;$('run-status').textContent='Initialising GPU';
+ try{if(view)view.dispose();if(solver)solver.dispose();solver=new GasSolver($('fluid'),options());view=new GasView($('fluid'),solver);view.quality=$('quality').value;view.detail=$('texture').value==='1';view.view=Number(document.querySelector('[data-view].selected').dataset.view);view.render(true);$('render-error').hidden=true;
+  playing=auto;cachedRecord=solver.records.at(-1);lastFrame=performance.now();fpsStart=lastFrame;frameCount=0;fps=0;ups=0;lastSteps=0;
+  $('gpu-name').textContent=(solver.software?'SOFTWARE RENDERER DETECTED · ':'Graphics renderer: ')+solver.renderer;
+  if(solver.software){view.quality='light';$('quality').value='light';toast('Software rendering detected here. Select the NVIDIA GPU in your browser for hardware acceleration.');}
+ }catch(error){console.error(error);$('render-error').hidden=false;$('error-text').textContent=error.message;playing=false;solver=null;view=null;}
+ busy=false;update();
+}
+function scientific(x){return Math.abs(x)<1e-12?'0':x.toExponential(1);}
 function update(){
- const analog=state.mode==='analogue',sc=scales(state.s,analog),atEnd=!analog&&state.s>=SMAX-1e-8;
- $('time-label').textContent=analog?'STEADY BURGERS VORTEX':'MODEL TIME · DIMENSIONLESS';
- $('time-value').innerHTML=analog?'Steady<span> / no blowup</span>':sc.t.toFixed(7)+'<span> / 1</span>';
- $('tau-value').textContent=analog?'Not applicable':sci(sc.tau);
- $('radius-value').innerHTML=metric(sc.radius)+'<span>×</span>';$('speed-value').innerHTML=metric(sc.speed)+'<span>×</span>';$('energy-value').innerHTML=metric(sc.energy)+'<span>×</span>';
- $('radius-law').textContent=analog?'Viscous core held fixed':'∝ τ¹ᐟ²';$('speed-law').textContent=analog?'Steady velocity field':'∝ τ⁻⁽¹ᐟ²⁺ʰ⁾';$('energy-law').textContent=analog?'Fixed observation region':'∝ τ¹ᐟ²⁻³ʰ';
- $('metric-note').innerHTML=analog?'Normalised steady-flow reference.<br>No singularity is assigned to this analogue.':'Relative asymptotic scales; reference t = 0.9.<br>Not measurements of a full Navier–Stokes solve.';
- $('limit-message').hidden=!atEnd;
- $('play-label').textContent=atEnd?'Replay':state.playing?'Pause':'Play';$('play').setAttribute('aria-label',atEnd?'Replay simulation':state.playing?'Pause simulation':'Play simulation');
- $('play-icon').innerHTML=state.playing?'<path d="M8 5v14M16 5v14"/>':'<path d="m8 5 10 7-10 7Z"/>';
- $('run-status').textContent=!renderer?'Renderer unavailable':state.playing?'Live in your browser':atEnd?'At display limit':'Paused';
- $('timeline').disabled=analog;$('timeline').value=String(state.s/SMAX*1000);$('timeline').style.setProperty('--progress',state.s/SMAX*100+'%');
- $('timeline-label').textContent=analog?'Steady reference · time-to-singularity disabled':atEnd?'Display limit reached · τ = 10⁻⁷':'Approaching the singular time';
- document.querySelectorAll('[data-seek]').forEach(b=>b.disabled=analog);
- $('mode-label').textContent=analog?'CLOSEST PHYSICAL ANALOGUE':'MANUSCRIPT-GUIDED VISUAL MODEL';
- if(analog){$('phase-title').innerHTML='A strained vortex.<br>A finite, steady core.';$('phase-description').textContent='Stretching and viscosity balance in this steady reference.';$('story-heading').textContent='BURGERS VORTEX';$('story-text').textContent='A laboratory analogue: rotation with inward radial flow and two-sided axial withdrawal. Viscous diffusion balances stretching, keeping its core finite. This is not a laboratory realisation of the singularity.';}
- else{
-  if(state.s<3.2){$('phase-title').innerHTML='Inward spiral.<br>Outward along the axis.';$('phase-description').textContent='Watch the region of intense flow concentrate.';}
-  else if(state.s<8){$('phase-title').innerHTML='Smaller core.<br>Greater speed.';$('phase-description').textContent='The camera follows the shrinking flow region.';}
-  else{$('phase-title').innerHTML='Closer to the limit.<br>Still before t = 1.';$('phase-description').textContent='Increasing speed does not mean increasing total energy.';}
-  if(renderer&&!renderer.follow)$('phase-description').textContent='Fixed world scale: the observation region really is shrinking.';
-  $('story-heading').textContent=state.s>7?'SPEED UP, CORE ENERGY DOWN':'THE MECHANISM';
-  $('story-text').textContent=state.s>7?'The core speed rises while its volume falls even faster, so its energy scale decreases. This is concentration in a smaller region—not a physical explosion or a simulated infinite velocity.':'Fluid spirals inward and is carried away above and below the centre. The intense-flow region shrinks; a material parcel is not being squeezed into a point.';
+ const good=!!solver;['play','step','reset','snapshot','export-csv'].forEach(id=>$(id).disabled=!good||busy);
+ if(!good){$('run-status').textContent='Renderer unavailable';return;}
+ $('step').disabled=!!solver.stopped;
+ const s=solver.stats,t=solver.time*solver.tunit*1e6,end=solver.endTime*solver.tunit*1e6,done=!!solver.stopped;
+ $('time-value').innerHTML=t.toFixed(4)+'<span> µs</span>';$('dt-value').textContent=solver.lastDt?((solver.lastDt*solver.tunit*1e9).toFixed(2)+' ns / step'):'Adaptive CFL';
+ $('mach-value').textContent=s.mach.toFixed(3);$('temp-value').innerHTML=s.Tmin.toFixed(0)+'–'+s.Tmax.toFixed(0)+'<span class="unit">K</span>';
+ $('pressure-value').innerHTML=(s.pMin/1000).toFixed(1)+'<span class="unit">kPa</span>';
+ $('density-value').innerHTML=s.rhoMin.toFixed(2)+'–'+s.rhoMax.toFixed(2)+'<span class="unit">×</span>';
+ $('drive-label').textContent=!solver.drive?'Unforced relaxation':solver.time<1.4?'Finite stirring pulse active':'Stirring off · free evolution';
+ $('scale-label').textContent=(solver.length*8*1e6).toFixed(0)+' µm periodic box · fixed world scale';
+ $('end-time').textContent=end.toFixed(3)+' µs';$('progress').value=Math.min(1,solver.time/solver.endTime);
+ $('step-count').textContent=solver.steps.toLocaleString()+' numerical steps';
+ $('fps').textContent=playing?(fps?fps.toFixed(1)+' fps':'Measuring fps'):'Frame held';
+ $('run-status').textContent=playing?'Solving in your browser':done?'Run paused at limit':'Paused';
+ $('play-label').textContent=done?'Replay':playing?'Pause':'Play';$('play').setAttribute('aria-label',done?'Replay experiment':playing?'Pause simulation':'Play simulation');
+ $('play-icon').innerHTML=playing?'<path d="M8 5v14M16 5v14"/>':'<path d="m8 5 10 7-10 7Z"/>';
+ $('mass-error').textContent=scientific((s.mass-solver.initial.mass)/solver.initial.mass);
+ $('energy-error').textContent=scientific((s.energy-solver.initial.energy-s.work)/solver.initial.energy);
+ $('kn-value').textContent=s.kn.toFixed(4);
+ $('compute-stats').textContent=solver.n+'³ cells · FP32 · '+(playing?ups.toFixed(1)+' updates/s':'updates held')+' · '+solver.retries+' rejected steps';
+ const captions=[view.detail?'Computed tracer envelope · fine texture is illustrative':'Raw computed tracer envelope · not thermal emission','Diagnostic colour: blue below 300 K, amber above · not light emission','Diagnostic colour: blue below initial density, amber above','z = 0 pressure slice · colour relative to initial pressure'];$('field-caption').textContent=captions[view.view];
+ const contrast=Math.max(s.rhoMax-1,1-s.rhoMin);
+ if(solver.time===0){$('phase-title').innerHTML='A vortex that responds<br>to its own pressure.';$('phase-description').textContent='Density and temperature are computed, not prescribed.';}
+ else if(!solver.drive){$('phase-title').innerHTML='Stirring is off.<br>The vortex relaxes.';$('phase-description').textContent='The initial vortex evolves through pressure, inertia and molecular transport.';}
+ else if(solver.time<1.4){$('phase-title').innerHTML='Pressure waves.<br>Changing density.';$('phase-description').textContent='Finite stirring adds momentum and energy. The gas responds.';}
+ else{$('phase-title').innerHTML='Stirring ends.<br>The flow keeps evolving.';$('phase-description').textContent='Pressure, inertia and molecular transport now shape the motion.';}
+ let note='Finite-volume numerical diffusion remains. A finite answer is not proof that the paper’s singularity is regularised.';
+ if(s.kn>.005)note='The resolved-gradient Knudsen estimate is increasing. These grid-scale diagnostics cannot verify molecular-scale behaviour.';
+ if(solver.n===32)note='Coarse 32³ mesh: numerical broadening can dominate small structures. Compare with 64³ or 96³ before interpreting peaks.';
+ if(solver.software)note='This browser reports software rendering. The solver is running on a software backend, not a physical NVIDIA GPU.';
+ $('status-note').textContent=note;$('status-note').classList.toggle('warning',s.kn>.005||solver.n===32||solver.software);
+ $('timeline-label').textContent=done?'Paused at the stated observation/model limit':playing?'Solving actual motion in slow motion':'Paused · step once or resume';
+ $('limit-message').hidden=!done;
+ if(done){let label,title,desc;
+  if(solver.stopped==='window'){label='FINITE OBSERVATION WINDOW COMPLETE';title='The flow was not forced to infinity.';desc='This selected '+end.toFixed(3)+' µs experiment is complete. Gas motion would continue. This is not a proof about the paper’s exact singular solution.';}
+  else if(solver.stopped==='temperature'){label='MATERIAL-MODEL GUARD';title='Outside the chosen 200–600 K window.';desc='The last accepted state is shown. Further evolution exceeds this implementation’s chosen validation window. Material properties and resolution must be reassessed before extending it. Temperature was not clipped.';}
+  else if(solver.stopped==='kinetic'){label='CONTINUUM-MODEL GUARD';title='Molecular-scale effects need attention.';desc='The estimated gradient Knudsen number exceeded 0.02. This is a conservative software guard, not a kinetic calculation or proof of physical breakdown.';}
+  else if(solver.stopped==='pressure'){label='MATERIAL-MODEL GUARD';title='Pressure estimate beyond this model window.';desc='The upper-bound pressure estimate exceeded 1 MPa. The run is paused instead of claiming the simple material model remains validated.';}
+  else{label='NUMERICAL FAILURE';title='The next step was rejected.';desc='Repeated smaller timesteps did not produce a valid positive state. The previous accepted state is shown; this is not evidence of a physical singularity.';}
+  $('limit-label').textContent=label;$('limit-title').textContent=title;$('limit-text').textContent=desc;
  }
- const mag=renderer&&renderer.follow?1/sc.radius:1;
- const zoom=renderer?13.2/renderer.distance:1;
- $('scale-label').textContent=renderer&&renderer.follow?'Core-follow scale ×'+(mag*zoom<10?(mag*zoom).toFixed(1):(mag*zoom).toFixed(0)):'Fixed scale · relative radius '+metric(sc.radius)+'×';
- $('pulses').disabled=analog;$('pulse-chart').style.opacity=analog?'.25':'1';
- $('fps').textContent=!renderer?'GPU unavailable':state.playing?(state.fps>0?(state.fps<10?state.fps.toFixed(1):state.fps.toFixed(0))+' fps':'Measuring fps'):'Frame held';
- $('render-detail').textContent='64³ GPU dye advection · '+(renderer&&renderer.follow?'magnified core':'fixed world scale');
- const phase=renderer?(renderer.time*.10)%1:0,v=pulse(phase);$('pulse-cursor').setAttribute('x1',String(phase*260));$('pulse-cursor').setAttribute('x2',String(phase*260));$('pulse-dot').setAttribute('cx',String(phase*260));$('pulse-dot').setAttribute('cy',String(57-v*50));
+ drawHistory();
 }
-let path='';for(let i=0;i<=150;i++)path+=(i?'L':'M')+(i/150*260).toFixed(2)+','+(57-pulse(i/150)*50).toFixed(2);$('pulse-curve').setAttribute('d',path);
-function restart(){state.s=0;state.analogueTime=0;state.playing=!!renderer;if(renderer){renderer.s=0;renderer.reset();}update();}
-function togglePlay(){if(!renderer)return;state.fpsLast=performance.now();state.frames=0;state.fps=0;if(state.mode==='approach'&&state.s>=SMAX)restart();else{state.playing=!state.playing;update();}}
-$('play').addEventListener('click',togglePlay);$('reset').addEventListener('click',restart);$('replay-limit').addEventListener('click',restart);
-function seek(value){if(state.mode==='analogue')return;state.s=Math.max(0,Math.min(1,value))*SMAX;state.playing=false;if(renderer){renderer.s=state.s;renderer.reset();}update();}
-$('timeline').addEventListener('input',e=>seek(Number(e.target.value)/1000));document.querySelectorAll('[data-seek]').forEach(b=>b.addEventListener('click',()=>seek(Number(b.dataset.seek))));
-// Time and numerical integration pause together; orbiting the frozen volume remains available.
-window.addEventListener('keydown',e=>{if(e.code==='Space'&&!/INPUT|SELECT|BUTTON|TEXTAREA/.test(document.activeElement.tagName)&&!$('sources').open){e.preventDefault();togglePlay();}});
-document.querySelectorAll('[data-camera]').forEach(b=>b.addEventListener('click',()=>{if(renderer){renderer.follow=b.dataset.camera==='follow';renderer.dirty=true;}activeButtons('data-camera',b.dataset.camera);update();}));
-document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>{state.mode=b.dataset.mode;activeButtons('data-mode',state.mode);if(renderer){renderer.analogue=state.mode==='analogue';renderer.reset();}if(state.mode==='approach'&&state.s>=SMAX)state.playing=false;else state.playing=!!renderer;update();}));
-$('pulses').addEventListener('change',e=>{if(renderer){renderer.pulses=e.target.checked;renderer.dirty=true;}});$('playback').addEventListener('change',e=>state.speed=Number(e.target.value));$('quality').addEventListener('change',e=>{if(renderer){renderer.quality=e.target.value;renderer.dirty=true;renderer.resize();}});
-function openNotes(){state.resumeAfterNotes=state.playing;state.playing=false;$('sources').showModal();update();}
-$('sources-open').addEventListener('click',openNotes);$('explain-open').addEventListener('click',openNotes);$('sources-close').addEventListener('click',()=>$('sources').close());$('sources').addEventListener('close',()=>{state.playing=state.resumeAfterNotes&&!!renderer;update();});$('sources').addEventListener('click',e=>{if(e.target===$('sources')){const r=$('sources').getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)$('sources').close();}});
-$('fullscreen').addEventListener('click',async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{toast('Fullscreen is not enabled in this browser.');}});
-$('snapshot').addEventListener('click',()=>{if(!renderer)return;renderer.render(true);const c=document.createElement('canvas');c.width=renderer.canvas.width;c.height=renderer.canvas.height+90;const ctx=c.getContext('2d');ctx.fillStyle='#10171e';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(renderer.canvas,0,0);ctx.fillStyle='#d4e7df';ctx.font='16px sans-serif';ctx.fillText('Navier–Stokes · '+(state.mode==='analogue'?'Burgers reference':'t = '+scales(state.s).t.toFixed(7)),20,c.height-56);ctx.fillStyle='#9baeb9';ctx.font='11px sans-serif';ctx.fillText('Reduced visual model · prescribed flow, not a full Navier–Stokes solution',20,c.height-34);ctx.fillText((renderer.follow?'Core-follow magnification':'Fixed world scale')+' · h = 0.006 (illustrative)',20,c.height-16);c.toBlob(blob=>{if(!blob)return;const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='navier-stokes-view.png';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);toast('View saved with model and time labels.');},'image/png');});
-$('fluid').addEventListener('webglcontextlost',e=>{e.preventDefault();state.playing=false;$('run-status').textContent='Graphics context lost';$('render-error').hidden=false;});
-// Testable diagnostics distinguish evaluated ratios from GPU transport and rendering.
-window.vortex={getState:()=>({...state,scales:scales(state.s,state.mode==='analogue'),renderer:renderer?{frames:renderer.frames,simSteps:renderer.simSteps,float:renderer.float,follow:renderer.follow,grid:64,width:renderer.canvas.width,height:renderer.canvas.height}:null}),seek,scales,velocity,pulse};
-update();let uiLast=0;
-function frame(now){const elapsed=Math.min((now-state.last)/1000,.065);state.last=now;
- if(!document.hidden&&renderer){
-  if(state.playing){const ds=elapsed*SMAX/80*state.speed;if(state.mode==='approach'){const actual=Math.min(ds,SMAX-state.s);state.s+=actual;renderer.s=state.s;renderer.step(actual);if(state.s>=SMAX-1e-10){state.s=SMAX;state.playing=false;}}
-   else{state.analogueTime+=ds;renderer.step(ds);}}
-  const priorFrames=renderer.frames;renderer.render();state.frames+=renderer.frames-priorFrames;
-  if(now-state.fpsLast>1250&&state.frames>0){state.fps=state.frames*1000/(now-state.fpsLast);if(renderer.quality==='auto'&&state.frames>0){if(state.fps<24&&renderer.pixelBudget>125000)renderer.pixelBudget=Math.max(125000,renderer.pixelBudget*.65);else if(state.fps>52&&renderer.pixelBudget<700000)renderer.pixelBudget=Math.min(700000,renderer.pixelBudget*1.07);}state.fpsLast=now;state.frames=0;}
+function drawHistory(){if(!solver)return;const records=solver.records,highest=Math.max(1.5,...records.map(r=>r.mach)),height=48;
+ let path='';records.forEach((r,i)=>{const x=r.t_us/(solver.endTime*solver.tunit*1e6)*270,y=59-r.mach/highest*height;path+=(i?'L':'M')+x.toFixed(2)+','+y.toFixed(2);});$('mach-line').setAttribute('d',path);$('chart-max').textContent=highest.toFixed(1);$('drive-end-line').style.display=solver.drive?'':'none';}
+function toggle(){if(!solver)return;if(solver.stopped){init(true);return;}playing=!playing;fpsStart=performance.now();frameCount=0;lastSteps=solver.steps;update();}
+$('play').addEventListener('click',toggle);$('reset').addEventListener('click',()=>init(true));$('replay').addEventListener('click',()=>init(true));
+$('step').addEventListener('click',()=>{if(!solver||solver.stopped)return;playing=false;solver.step();solver.record();solver.makeOptical();view.dirty=true;view.render();update();});
+['grid','length','strength','drive'].forEach(id=>$(id).addEventListener('change',()=>init(playing)));
+$('texture').addEventListener('change',()=>{if(view){view.detail=$('texture').value==='1';view.dirty=true;}update();});
+$('quality').addEventListener('change',()=>{if(view){view.quality=$('quality').value;view.dirty=true;}});
+document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-view]').forEach(v=>{const on=v===b;v.classList.toggle('selected',on);v.setAttribute('aria-pressed',String(on));});if(view){view.view=Number(b.dataset.view);view.dirty=true;}update();}));
+let resumeNotes=false;function notes(){resumeNotes=playing;playing=false;$('sources').showModal();update();}
+$('sources-open').addEventListener('click',notes);$('explain-open').addEventListener('click',notes);$('sources-close').addEventListener('click',()=>$('sources').close());$('sources').addEventListener('close',()=>{playing=resumeNotes&&!!solver&&!solver.stopped;update();});
+window.addEventListener('keydown',e=>{if(e.code==='Space'&&!/INPUT|BUTTON|SELECT|TEXTAREA/.test(document.activeElement.tagName)&&!$('sources').open){e.preventDefault();toggle();}});
+$('fullscreen').addEventListener('click',async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{toast('Fullscreen is restricted by this browser.');}});
+function saveBlob(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);}
+$('export-csv').addEventListener('click',()=>{if(!solver)return;solver.record();const keys=Object.keys(solver.records.at(-1)).filter(k=>k!=='valid');const meta=['# Physical-air analogue; not the manuscript forcing','# n='+solver.n+', length_m='+solver.length+', strength='+solver.strength+', drive='+solver.drive,'# energy/kinetic/work/dissipation are dimensionless volume integrals; multiply by rho0*c0^2*Lref^3 to obtain joules','# pMin is Pa, T is K, density is rho/rho0; full boundaries and equations in METHODS.md'];let csv=meta.join('\n')+'\n'+keys.join(',')+'\n'+solver.records.map(r=>keys.map(k=>r[k]===undefined?'':r[k]).join(',')).join('\n');saveBlob(new Blob([csv],{type:'text/csv'}),'physical-air-data.csv');toast('Computed data saved, including work and conservation residuals.');});
+$('snapshot').addEventListener('click',()=>{if(!solver||!view)return;view.render(true);const src=$('fluid'),c=document.createElement('canvas');c.width=src.width;c.height=src.height+100;const ctx=c.getContext('2d');ctx.fillStyle='#10171e';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(src,0,0);ctx.fillStyle='#d6e8df';ctx.font='15px sans-serif';ctx.fillText('Compressible air · '+(solver.time*solver.tunit*1e6).toFixed(4)+' µs · '+solver.n+'³',18,c.height-71);ctx.font='11px sans-serif';ctx.fillStyle='#b4c9cf';ctx.fillText('Peak Mach '+solver.stats.mach.toFixed(3)+' · T '+solver.stats.Tmin.toFixed(0)+'–'+solver.stats.Tmax.toFixed(0)+' K',18,c.height-49);ctx.fillText('Finite physical analogue, not the paper’s exact flow. Periodic boundaries.',18,c.height-29);ctx.fillText($('field-caption').textContent,18,c.height-12);c.toBlob(blob=>{if(blob)saveBlob(blob,'physical-air-view.png');});});
+$('fluid').addEventListener('webglcontextlost',e=>{e.preventDefault();playing=false;busy=true;$('run-status').textContent='Graphics context lost';['play','step','reset'].forEach(id=>$(id).disabled=true);$('render-error').hidden=false;$('error-text').textContent='Graphics context lost. Reload to reinitialise; no state is fabricated.';});
+window.gasLab={getState:()=>({playing,stats:solver?solver.stats:null,time:solver?solver.time:null,steps:solver?solver.steps:0,status:solver?solver.stopped:null,gpu:solver?solver.renderer:null,n:solver?solver.n:null,view:view?view.view:null}),get solver(){return solver;},get view(){return view;},pause:()=>{playing=false;update();},runSteps:n=>{playing=false;for(let i=0;i<n;i++){if(!solver.step())break;}solver.record();solver.makeOptical();view.dirty=true;view.render();update();return gasLab.getState();}};
+function frame(now){
+ if(solver&&view&&!busy&&!document.hidden){let before=view.frames;
+  if(playing){const num=Number($('substeps').value);for(let i=0;i<num;i++){if(!solver.step())break;}solver.record();solver.makeOptical();view.dirty=true;if(solver.stopped)playing=false;}
+  view.render();frameCount+=view.frames-before;
+  if(now-fpsStart>1500){fps=frameCount*1000/(now-fpsStart);ups=(solver.steps-lastSteps)*1000/(now-fpsStart);if(view.quality==='adaptive'&&playing){if(fps<20)view.pixelBudget=Math.max(145000,view.pixelBudget*.75);else if(fps>50)view.pixelBudget=Math.min(700000,view.pixelBudget*1.08);}fpsStart=now;frameCount=0;lastSteps=solver.steps;}
+  update();
  }
- if(now-uiLast>100){update();uiLast=now;}
- requestAnimationFrame(frame);
+ lastFrame=now;requestAnimationFrame(frame);
 }
-requestAnimationFrame(frame);
+// A real render/compute loop is started only after floating-point setup succeeds.
+init();requestAnimationFrame(frame);
