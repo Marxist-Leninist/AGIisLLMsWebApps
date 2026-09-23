@@ -1,1415 +1,298 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>General Relativity: Transformer Metric Handover</title>
-    <style>
-        :root{
-            --accent:#00ffd0;
-            --accent2:#67f0ff;
-            --bg:rgba(10,15,20,.88);
-            --border:rgba(0,255,208,.26);
-            --text:#eef6fb;
-            --muted:#9fb0bc;
-            --warn:#ff4f7b;
-            --good:#00ffd0;
-            --gold:#ffd166;
-            --shadow:0 8px 28px rgba(0,0,0,.35),0 0 22px rgba(0,255,208,.08);
-        }
-        *{box-sizing:border-box}
-        html,body{
-            margin:0;
-            width:100%;
-            height:100%;
-            overflow:hidden;
-            background:#000;
-            color:var(--text);
-            font-family:"Segoe UI",Tahoma,Geneva,Verdana,sans-serif;
-        }
-        body{user-select:none}
-        canvas{
-            display:block;
-            width:100vw;
-            height:100vh;
-            cursor:grab;
-            touch-action:none;
-        }
-        canvas:active{cursor:grabbing}
-
-        #fallback{
-            position:absolute;
-            inset:0;
-            display:none;
-            place-items:center;
-            background:radial-gradient(circle at 50% 35%, rgba(0,255,208,.08), transparent 35%), #040708;
-            z-index:50;
-            padding:24px;
-        }
-        #fallback .card{
-            max-width:560px;
-            padding:22px;
-            border-radius:16px;
-            border:1px solid rgba(0,255,208,.24);
-            background:rgba(10,15,20,.9);
-            box-shadow:var(--shadow);
-        }
-        #fallback h2{
-            margin:0 0 8px 0;
-            color:var(--accent);
-            letter-spacing:.06em;
-            text-transform:uppercase;
-            font-size:1.08rem;
-        }
-        #fallback p{
-            margin:0;
-            line-height:1.5;
-            color:#d4dfe6;
-            font-size:.92rem;
-        }
-
-        #ui-wrap{
-            position:absolute;
-            top:14px;
-            left:14px;
-            z-index:20;
-            display:flex;
-            flex-direction:column;
-            align-items:flex-start;
-            max-width:min(450px, calc(100vw - 28px));
-        }
-
-        button{
-            appearance:none;
-            border:none;
-            outline:none;
-            font:inherit;
-        }
-
-        #toggle-btn, .minor-btn{
-            border:1px solid var(--accent);
-            background:rgba(10,15,20,.9);
-            color:var(--accent);
-            padding:8px 14px;
-            border-radius:10px;
-            cursor:pointer;
-            font-weight:700;
-            font-size:.9rem;
-            transition:transform .15s ease, background .15s ease, color .15s ease, box-shadow .15s ease;
-            box-shadow:0 0 14px rgba(0,255,208,.12);
-            backdrop-filter:blur(12px);
-        }
-        #toggle-btn:hover, .minor-btn:hover{
-            background:var(--accent);
-            color:#061014;
-            transform:translateY(-1px);
-        }
-        #toggle-btn{margin-bottom:10px}
-
-        #ui{
-            width:min(450px, calc(100vw - 28px));
-            padding:18px 18px 16px;
-            border-radius:14px;
-            border:1px solid var(--border);
-            background:var(--bg);
-            backdrop-filter:blur(14px);
-            box-shadow:var(--shadow);
-            transition:opacity .22s ease, transform .22s ease;
-            transform-origin:top left;
-        }
-        #ui.hidden{
-            opacity:0;
-            transform:scale(.965);
-            pointer-events:none;
-            position:absolute;
-        }
-
-        h1{
-            margin:0 0 6px 0;
-            font-size:1.08rem;
-            color:var(--accent);
-            letter-spacing:.08em;
-            text-transform:uppercase;
-        }
-        p.desc{
-            margin:0 0 14px 0;
-            color:var(--muted);
-            font-size:.82rem;
-            line-height:1.46;
-        }
-        strong{color:#fff}
-
-        .slider-row{margin-bottom:12px}
-        .slider-label{
-            display:flex;
-            justify-content:space-between;
-            gap:12px;
-            margin-bottom:6px;
-            font-size:.85rem;
-            color:#d4dfe7;
-        }
-        .val{
-            color:var(--accent);
-            font-family:Consolas, Monaco, monospace;
-            white-space:nowrap;
-        }
-
-        input[type="range"]{
-            width:100%;
-            accent-color:var(--accent);
-            cursor:pointer;
-        }
-        input[type="checkbox"]{
-            accent-color:var(--accent);
-            transform:scale(1.12);
-            margin-right:8px;
-            cursor:pointer;
-        }
-        .toggle-row{
-            display:flex;
-            align-items:center;
-            margin-bottom:10px;
-            color:#c8d4dd;
-            font-size:.85rem;
-        }
-
-        .panel{
-            margin-top:14px;
-            padding:14px;
-            border-radius:12px;
-            border:1px solid rgba(0,255,208,.18);
-            background:linear-gradient(180deg, rgba(0,55,45,.28), rgba(0,25,22,.18));
-        }
-        .title-row{
-            display:flex;
-            justify-content:space-between;
-            align-items:center;
-            gap:10px;
-            margin-bottom:10px;
-            font-size:.85rem;
-            font-weight:700;
-            color:var(--accent);
-        }
-        .progress-bar{
-            width:100%;
-            height:8px;
-            margin-bottom:10px;
-            border-radius:999px;
-            overflow:hidden;
-            background:rgba(255,255,255,.08);
-        }
-        .progress-fill{
-            width:0%;
-            height:100%;
-            background:linear-gradient(90deg, var(--accent2), var(--accent));
-            box-shadow:0 0 18px rgba(0,255,208,.35);
-            transition:width .12s linear;
-        }
-
-        .stats{
-            display:grid;
-            gap:6px;
-            font-size:.76rem;
-            color:#a8b5bf;
-            font-family:Consolas, Monaco, monospace;
-        }
-        .stat-row{
-            display:flex;
-            justify-content:space-between;
-            gap:10px;
-        }
-        .warn{color:var(--warn)}
-        .good{color:var(--good)}
-        .gold{color:var(--gold)}
-
-        .button-row{
-            display:flex;
-            gap:8px;
-            margin-top:12px;
-            flex-wrap:wrap;
-        }
-        .minor-btn{
-            padding:7px 12px;
-            font-size:.8rem;
-        }
-
-        .note-row{
-            display:flex;
-            justify-content:space-between;
-            gap:12px;
-            margin-top:10px;
-            color:#90a1ad;
-            font-size:.73rem;
-        }
-
-        @media (max-width:560px){
-            #ui-wrap{
-                top:10px;
-                left:10px;
-                max-width:calc(100vw - 20px);
-            }
-            #ui{
-                width:calc(100vw - 20px);
-                padding:16px;
-            }
-        }
-    </style>
-</head>
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#0b1016"><meta name="robots" content="noindex,nofollow"><meta name="description" content="Live 3D dye advection and volumetric rendering of an explanatory, manuscript-guided concentrating vortex. Includes a Burgers vortex analogue and an annotated singular-time limit."><title>Navier–Stokes · The concentrating vortex</title><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%230b1016'/%3E%3Cellipse cx='32' cy='32' rx='24' ry='9' fill='none' stroke='%237bdec9' stroke-width='3'/%3E%3Cpath d='M32 8v48' stroke='%237bdec9' stroke-width='3'/%3E%3C/svg%3E"><style>:root{color-scheme:dark;--bg:#0b1016;--panel:#10171e;--line:#263039;--muted:#99a6b1;--text:#e8edf0;--accent:#a7e5d5;--gold:#e6ba80}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}button,input,select{font:inherit}button,a,input,select{-webkit-tap-highlight-color:transparent}button{cursor:pointer;color:inherit;border:0;background:transparent}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:4px}button:hover{color:#fff}button:disabled{cursor:default;opacity:.35}button svg,header svg{fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round}header{height:87px;padding:0 32px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line)}.brand{display:flex;align-items:center;gap:15px}.brand>svg{width:35px;height:35px;color:var(--accent)}h1{font-size:19px;line-height:1.25;font-weight:600;letter-spacing:-.35px;margin:0}.brand p{margin:4px 0 0;font-size:12px;color:var(--muted);letter-spacing:.25px}.header-actions{display:flex;align-items:center;gap:22px}.running{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}.running i{width:6px;height:6px;background:#b2e7c9;border-radius:50%;box-shadow:0 0 10px #ace2c030}.quiet{font-size:12px;color:#c6d0d8;border:1px solid #34404b;border-radius:5px;padding:9px 14px;background:#151d24}.icon-button{width:34px;height:34px;display:grid;place-items:center}.icon-button svg{width:19px;height:19px}main{display:grid;grid-template-columns:minmax(0,1fr) 312px;min-height:580px;height:calc(100svh - 229px);max-height:1150px}.viewport{position:relative;overflow:hidden;background:#0a1118;min-height:450px}#fluid{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}#fluid:active{cursor:grabbing}.scene-heading{position:absolute;top:27px;left:32px;pointer-events:none;max-width:320px}.scene-heading>span{font-size:10px;letter-spacing:1.6px;color:#a0b3bc}.scene-heading h2{font-size:clamp(21px,2vw,29px);font-weight:400;line-height:1.27;letter-spacing:-.6px;margin:12px 0 10px;text-shadow:0 2px 22px #000}.scene-heading p{font-size:12px;color:#9eabb4;max-width:260px}.camera-controls{position:absolute;right:22px;top:26px;display:flex;border:1px solid #36424a;border-radius:5px;background:#10171cd9;padding:3px}.camera-controls button{font-size:11px;padding:7px 12px;border-radius:3px;color:#b1bdc6}.camera-controls button.selected{background:#324340;color:#e0f6ee}.scene-footer{position:absolute;bottom:49px;left:32px;right:24px;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#a5b7c0;pointer-events:none;gap:15px}.scale-key{display:flex;align-items:center;gap:10px}.scale-line{display:block;width:40px;height:5px;border:1px solid #94acb5;border-top:0}.render-caption{position:absolute;bottom:17px;left:32px;right:24px;display:flex;justify-content:space-between;font-size:10px;color:#7c8d97;pointer-events:none}.orbit-tip{color:#91a0aa}aside{padding:23px 23px 18px;background:var(--panel);border-left:1px solid var(--line);overflow-y:auto;scrollbar-width:thin;scrollbar-color:#34404a transparent}.view-selector{display:grid;grid-template-columns:1fr 1fr;gap:3px;padding:3px;border:1px solid #313e47;border-radius:5px}.view-selector button{font-size:11px;line-height:1.3;padding:9px 6px;border-radius:3px;color:#aab6bf}.view-selector button.selected{background:#d1e8df;color:#15241e}.time-block{padding:25px 0 17px}.small-label,.section-label{font-size:10px;color:#9babb5;letter-spacing:1.25px;font-weight:500}#time-value{font:300 30px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:-1.7px;margin:6px 0 9px;white-space:nowrap}#time-value>span{font:12px/1 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:0;color:#84949f}.tau-row{display:flex;justify-content:space-between;font-size:10px;color:#9babb5}.tau-row strong{color:#cfd9df;font:400 11px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace}.metrics{border-top:1px solid var(--line);padding-top:4px}.metric{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #202d35}.metric span{font-size:12px;color:#d0d9df}.metric small{display:block;color:#81939f;font-size:10px;line-height:1.6}.metric strong{font:400 23px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:-1px;color:#cce6dc}.metric strong span{font-size:12px;color:#8caaa2;padding-left:3px}.metric-note{font-size:9px;line-height:1.6;color:#8495a0;margin:10px 0 19px}.story p{font-size:11px;line-height:1.75;color:#b2c0c9;margin:8px 0 17px}.pulse-panel{padding:14px 0 10px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.toggle-row{display:flex;align-items:center;justify-content:space-between;position:relative;cursor:pointer;font-size:11px}.toggle-row small{display:block;font-size:9px;color:#81939f;margin-top:3px}.toggle-row input{position:absolute;right:0;opacity:0;width:31px;height:24px}.switch{display:block;width:29px;height:16px;background:#36434b;border-radius:10px;position:relative;pointer-events:none}.switch:after{content:"";position:absolute;top:3px;left:3px;width:10px;height:10px;border-radius:100%;background:#84939b;transition:transform .15s}.toggle-row input:checked+.switch{background:#42675f}.toggle-row input:checked+.switch:after{background:#d2efe5;transform:translateX(13px)}.toggle-row input:focus-visible+.switch{outline:2px solid var(--accent);outline-offset:4px}#pulse-chart{display:block;width:100%;height:49px;margin-top:6px;overflow:visible}#pulse-curve{fill:none;stroke:#b9cfc2;stroke-width:1.5}.chart-baseline{stroke:#34414a;fill:none;stroke-width:1}#pulse-cursor{stroke:#e6ba8070;stroke-width:1}#pulse-dot{fill:var(--gold)}.pulse-labels{display:flex;justify-content:space-between;font-size:8px;color:#81939f}.settings{display:flex;gap:15px;padding:14px 0 13px}.settings label{font-size:9px;color:#8a9ba6;flex:1}.settings select{display:block;width:100%;margin-top:5px;background:#17212a;border:1px solid #34414a;border-radius:4px;color:#d7e1e6;font-size:11px;padding:5px 7px}.snapshot{display:flex;align-items:center;gap:8px;font-size:10px;color:#a6bac3;padding:3px 0}.snapshot svg{width:15px;height:15px}footer{padding:20px 32px 13px;border-top:1px solid var(--line);background:#10171e}.transport{display:flex;gap:17px;align-items:center}.play{height:38px;display:flex;align-items:center;gap:8px;min-width:96px;justify-content:center;border:1px solid #bddbcd;border-radius:4px;background:#c9e5d8;color:#1b3329;font-size:12px;font-weight:500}.play:hover{color:#162c23;background:#e0f0e9}.play svg{width:16px;height:16px;stroke-width:2.4}.reset{width:30px;height:30px;color:#b7c7ce;flex-shrink:0}.reset svg{width:19px;height:19px}.timeline{flex:1;margin-left:9px;min-width:0}.timeline-top{display:flex;justify-content:space-between;color:#b9c8ce;font-size:10px;margin-bottom:9px}.timeline-top span:last-child{color:#7c929f}input[type=range]{appearance:none;display:block;width:100%;height:4px;margin:0;background:linear-gradient(to right,#b9d8c9 var(--progress,0%),#34424c var(--progress,0%));border-radius:2px;cursor:pointer}input[type=range]::-webkit-slider-thumb{appearance:none;width:12px;height:12px;background:#e1eee4;border-radius:50%;border:2px solid #8eafa0;box-shadow:0 0 0 3px #bbd7c015}input[type=range]::-moz-range-thumb{width:9px;height:9px;background:#e1eee4;border-radius:50%;border:2px solid #8eafa0}.tick-labels{display:flex;justify-content:space-between;margin-top:9px;font:9px ui-monospace,SFMono-Regular,Consolas,monospace;color:#8ea0ab}.tick-labels button{padding:0;font:inherit;color:inherit}.tick-labels button:last-child{color:#e4b884}.tick-labels span{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:9px;margin-left:6px;color:#9b8c7a}.footer-note{display:flex;justify-content:space-between;gap:15px;border-top:1px solid #202d35;padding-top:10px;margin-top:17px;color:#8c9fa9;font-size:9px}.footer-note strong{font-weight:500;color:#b6c6cd}.footer-note button{padding:0;color:#b7c9c8;font-size:10px}.footer-note button span{margin-left:7px}.limit-message{position:absolute;left:50%;top:55%;transform:translate(-50%,-50%);width:min(435px,80%);display:flex;gap:21px;background:#121a20ed;border:1px solid #82715977;border-radius:7px;padding:25px;box-shadow:0 20px 75px #0009}.limit-message[hidden]{display:none}.limit-mark{color:#e9c593;font:27px Georgia,serif;white-space:nowrap;padding-top:3px}.limit-message h3{margin:0;font-size:16px;font-weight:500}.limit-message p{font-size:11px;line-height:1.8;color:#aabec8;margin:9px 0 14px}.limit-message button{font-size:11px;color:#ead3b3;text-decoration:underline;text-underline-offset:4px;padding:0}#render-error{position:absolute;inset:28% 12% 20%;z-index:3;padding:30px;background:#131f28;border:1px solid #59616a}#render-error[hidden]{display:none}#render-error h2{font-size:20px}#render-error p{color:#bcc9d1}dialog{color:var(--text);background:#121b23;width:690px;max-width:calc(100% - 32px);max-height:87svh;border:1px solid #3a4c58;border-radius:10px;padding:0;box-shadow:0 35px 140px #000b}dialog::backdrop{background:#050b11b8;backdrop-filter:blur(6px)}.dialog-top{position:sticky;top:0;background:#121b23;display:flex;align-items:flex-start;justify-content:space-between;gap:15px;border-bottom:1px solid #293944;padding:25px 28px 21px;z-index:2}.dialog-top h2{font-size:22px;line-height:1.4;font-weight:400;letter-spacing:-.4px;margin:9px 0 0}.dialog-top button{flex-shrink:0}.dialog-content{padding:5px 28px 28px}.dialog-content h3{font-size:14px;font-weight:500;margin:22px 0 8px;color:#d8ebe2}.dialog-content p{font-size:12px;color:#acbdc8;line-height:1.85}.equations{padding:13px 18px;background:#1c2c33;color:#d8ede3;font:17px/1.9 Georgia,serif;border-radius:4px}.dialog-content a{color:#bbdfd2;text-decoration-color:#658e80;text-underline-offset:3px}#toast{position:fixed;bottom:25px;left:50%;transform:translateX(-50%);z-index:5;background:#28483e;border:1px solid #7baf95;color:#e3f0e9;padding:11px 21px;border-radius:5px;font-size:12px}#toast[hidden]{display:none}@media(min-width:1450px){main{grid-template-columns:minmax(0,1fr) 350px}aside{padding:28px}.story p{font-size:12px}.metric{padding:15px 0}.metric span{font-size:13px}}@media(max-height:850px) and (min-width:851px){header{height:74px}main{height:calc(100svh - 213px);min-height:540px}aside{padding:17px 21px}.time-block{padding:15px 0 13px}.metric{padding:8px 0}.metric-note{margin-bottom:12px}.story p{line-height:1.65;margin-bottom:11px}.pulse-panel{padding:10px 0 8px}.settings{padding:10px 0}.scene-heading h2{font-size:24px}}@media(max-width:1000px){main{grid-template-columns:minmax(0,1fr) 278px}.scene-heading{left:22px;top:70px}.scene-heading h2{font-size:22px}.scene-heading p{font-size:11px}.camera-controls{left:22px;right:auto;top:20px}aside{padding:19px}.scene-footer{left:22px;right:18px}.render-caption{left:22px;right:18px}.orbit-tip{display:none}header{padding:0 22px}.header-actions{gap:13px}.running{display:none}footer{padding-left:22px;padding-right:22px}.footer-note{font-size:8px}}@media(max-width:700px){header{height:73px;padding:0 17px}.brand{gap:10px}.brand>svg{width:28px;height:28px}h1{font-size:17px}.brand p{font-size:10px}.header-actions{gap:7px}.quiet{font-size:10px;padding:7px 9px}.icon-button{width:28px}.header-actions>.icon-button{display:none}main{display:flex;flex-direction:column;height:auto;max-height:none;min-height:0}.viewport{height:59svh;min-height:420px}.scene-heading{top:72px;left:20px}.scene-heading>span{font-size:8px;letter-spacing:1px}.scene-heading h2{font-size:22px;margin-top:10px}.scene-heading p{font-size:10px;max-width:190px}.camera-controls{top:18px;left:19px}.camera-controls button{padding:5px 11px;font-size:10px}.scene-footer{bottom:44px;left:19px;font-size:9px}.render-caption{font-size:8px;left:19px;bottom:15px}aside{overflow:visible;padding:18px 20px;border-left:0;border-top:1px solid var(--line);display:grid;grid-template-columns:1fr 1fr;gap:0 21px}.view-selector{grid-column:1/-1}.time-block{padding:15px 0 12px;grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;align-items:center;column-gap:20px}.small-label{grid-column:1/-1;font-size:9px}#time-value{font-size:27px;margin:6px 0 0}.tau-row{flex-direction:column;align-items:flex-end;gap:3px;margin-top:5px}.metrics{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;padding-top:12px}.metric{display:flex;flex-direction:column;align-items:flex-start;padding:0 0 9px}.metric span{font-size:10px}.metric strong{font-size:22px;margin-top:6px}.metric small{font-size:9px}.metric-note{grid-column:1/-1;font-size:9px;margin:0 0 16px}.metric-note br{display:none}.story{grid-column:1/-1}.story p{font-size:12px;margin-bottom:16px}.pulse-panel{grid-column:1/-1}.toggle-row{font-size:12px}.toggle-row small{font-size:10px}#pulse-chart{height:59px}.pulse-labels{font-size:9px}.settings{grid-column:1/-1;padding:15px 0}.settings label{font-size:10px}.settings select{padding:8px;font-size:12px}.snapshot{font-size:11px;grid-column:1/-1;margin-bottom:5px}footer{padding:18px 20px 15px;position:sticky;bottom:0;z-index:4;box-shadow:0 -12px 35px #080d1225}.transport{gap:8px;flex-wrap:wrap}.play{min-width:77px;height:32px;font-size:11px}.reset{width:27px}.timeline{width:100%;flex-basis:100%;order:-1;margin:0 0 9px}.timeline-top{font-size:9px;gap:6px}.timeline-top span:last-child{font-size:8px}.tick-labels{font-size:8px}.tick-labels span{font-size:8px;margin-left:3px}.footer-note{border:0;margin:-26px 0 0 121px;padding:0;min-height:29px;align-items:center}.footer-note>span{font-size:8px;line-height:1.6;max-width:210px}.footer-note button{display:none}.limit-message{top:60%;padding:18px;gap:14px;width:86%}.limit-mark{font-size:22px}.limit-message h3{font-size:14px}.limit-message p{font-size:10px}.dialog-top{padding:20px}.dialog-top h2{font-size:19px}.dialog-content{padding:0 20px 20px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
+</style></head>
 <body>
-    <div id="fallback">
-        <div class="card">
-            <h2>WebGL2 Required</h2>
-            <p>This demo needs a browser and GPU path with WebGL2 support.</p>
-        </div>
-    </div>
-
-    <div id="ui-wrap">
-        <button id="toggle-btn" type="button">➖ Close Panel</button>
-        <div id="ui">
-            <h1>Physical Spacetime Manifold</h1>
-            <p class="desc">
-                <strong>MATTER DRIVES CURVATURE.</strong>
-                Light follows deterministic null-geodesics. A tiny transformer-style controller protects frame rate,
-                while a smarter token-conditioned learner handles radial GR metric handover.
-            </p>
-
-            <div class="slider-row">
-                <div class="slider-label"><span>Warp Velocity (v)</span><span class="val" id="val-v">0.80 c</span></div>
-                <input type="range" id="velocity" min="0.00" max="2.50" step="0.01" value="0.80">
-            </div>
-
-            <div class="slider-row">
-                <div class="slider-label"><span>Bubble Radius (R)</span><span class="val" id="val-r">2.50</span></div>
-                <input type="range" id="radius" min="1.50" max="4.00" step="0.05" value="2.50">
-            </div>
-
-            <div class="slider-row">
-                <div class="slider-label"><span>Bubble Wall Thickness (σ)</span><span class="val" id="val-t">0.50</span></div>
-                <input type="range" id="thickness" min="0.10" max="1.50" step="0.05" value="0.50">
-            </div>
-
-            <div class="toggle-row">
-                <input type="checkbox" id="show-energy" checked>
-                <label for="show-energy">Show Stress-Matter Tensor (T<sub>μν</sub>)</label>
-            </div>
-
-            <div class="toggle-row">
-                <input type="checkbox" id="show-grid" checked>
-                <label for="show-grid">Show Spacetime Grid</label>
-            </div>
-
-            <div class="panel">
-                <div class="title-row">
-                    <span>Metric Handover</span>
-                    <span id="ai-status" class="warn">TEACHER FORCING</span>
-                </div>
-                <div class="progress-bar"><div class="progress-fill" id="ai-bar"></div></div>
-                <div class="stats">
-                    <div class="stat-row"><span>Control Weight:</span><span id="val-control">0%</span></div>
-                    <div class="stat-row"><span>Metric Loss:</span><span id="val-loss">1.000e+0</span></div>
-                    <div class="stat-row"><span>Residual Power:</span><span id="val-resid">0.000</span></div>
-                </div>
-            </div>
-
-            <div class="panel">
-                <div class="title-row">
-                    <span>Transformer FPS Governor</span>
-                    <span id="fps-status" class="gold">BALANCING</span>
-                </div>
-                <div class="progress-bar"><div class="progress-fill" id="fps-bar"></div></div>
-                <div class="stats">
-                    <div class="stat-row"><span>FPS:</span><span id="val-fps">60</span></div>
-                    <div class="stat-row"><span>Render Scale:</span><span id="val-scale">1.00</span></div>
-                    <div class="stat-row"><span>Ray Steps:</span><span id="val-steps">120</span></div>
-                    <div class="stat-row"><span>Train Iters/Frame:</span><span id="val-train">3</span></div>
-                    <div class="stat-row"><span>Target FPS:</span><span id="val-target">60</span></div>
-                </div>
-            </div>
-
-            <div class="button-row">
-                <button id="reset-ai" class="minor-btn" type="button">Reset Learner</button>
-                <button id="recenter-cam" class="minor-btn" type="button">Recenter Camera</button>
-                <button id="turbo-toggle" class="minor-btn" type="button">Turbo: Off</button>
-            </div>
-
-            <div class="note-row">
-                <span>Drag to orbit</span>
-                <span>Wheel to zoom</span>
-            </div>
-        </div>
-    </div>
-
-    <canvas id="glcanvas" aria-label="Warp metric visualization"></canvas>
-
-    <script>
-    (() => {
-        'use strict';
-
-        const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-        const lerp = (a, b, t) => a + (b - a) * t;
-        const smooth01 = (x) => {
-            x = clamp(x, 0, 1);
-            return x * x * (3 - 2 * x);
-        };
-        const fmtExp = (x) => Number.isFinite(x) ? x.toExponential(3) : 'nan';
-        const TAU = Math.PI * 2;
-
-        const MAX_R = 15.0;
-        const AI_TEX_W = 256;
-        const DPR_CAP_BASE = 1.5;
-
-        const canvas = document.getElementById('glcanvas');
-        const fallback = document.getElementById('fallback');
-        const gl = canvas.getContext('webgl2', {
-            alpha: false,
-            antialias: true,
-            depth: false,
-            stencil: false,
-            powerPreference: 'high-performance',
-            premultipliedAlpha: false,
-            preserveDrawingBuffer: false
-        });
-
-        if (!gl) {
-            fallback.style.display = 'grid';
-            return;
-        }
-
-        const dom = {
-            ui: document.getElementById('ui'),
-            toggleBtn: document.getElementById('toggle-btn'),
-            velocity: document.getElementById('velocity'),
-            radius: document.getElementById('radius'),
-            thickness: document.getElementById('thickness'),
-            showEnergy: document.getElementById('show-energy'),
-            showGrid: document.getElementById('show-grid'),
-            valV: document.getElementById('val-v'),
-            valR: document.getElementById('val-r'),
-            valT: document.getElementById('val-t'),
-            aiStatus: document.getElementById('ai-status'),
-            aiBar: document.getElementById('ai-bar'),
-            valControl: document.getElementById('val-control'),
-            valLoss: document.getElementById('val-loss'),
-            valResid: document.getElementById('val-resid'),
-            fpsStatus: document.getElementById('fps-status'),
-            fpsBar: document.getElementById('fps-bar'),
-            valFps: document.getElementById('val-fps'),
-            valScale: document.getElementById('val-scale'),
-            valSteps: document.getElementById('val-steps'),
-            valTrain: document.getElementById('val-train'),
-            valTarget: document.getElementById('val-target'),
-            resetAI: document.getElementById('reset-ai'),
-            recenterCam: document.getElementById('recenter-cam'),
-            turboToggle: document.getElementById('turbo-toggle')
-        };
-
-        const state = {
-            v: parseFloat(dom.velocity.value),
-            R: parseFloat(dom.radius.value),
-            T: parseFloat(dom.thickness.value),
-            showEnergy: dom.showEnergy.checked,
-            showGrid: dom.showGrid.checked,
-            camTheta: 2.35,
-            camPhi: 0.35,
-            camDist: 5.7,
-            dragging: false,
-            lastPointerX: 0,
-            lastPointerY: 0,
-            uiVisible: true,
-            rafId: 0,
-            turbo: false
-        };
-
-        function syncSliderLabels() {
-            dom.valV.textContent = `${state.v.toFixed(2)} c`;
-            dom.valR.textContent = state.R.toFixed(2);
-            dom.valT.textContent = state.T.toFixed(2);
-        }
-        syncSliderLabels();
-
-        dom.velocity.addEventListener('input', () => {
-            state.v = parseFloat(dom.velocity.value);
-            syncSliderLabels();
-        });
-        dom.radius.addEventListener('input', () => {
-            state.R = parseFloat(dom.radius.value);
-            syncSliderLabels();
-        });
-        dom.thickness.addEventListener('input', () => {
-            state.T = parseFloat(dom.thickness.value);
-            syncSliderLabels();
-        });
-        dom.showEnergy.addEventListener('change', () => state.showEnergy = dom.showEnergy.checked);
-        dom.showGrid.addEventListener('change', () => state.showGrid = dom.showGrid.checked);
-
-        dom.toggleBtn.addEventListener('click', () => {
-            state.uiVisible = !state.uiVisible;
-            dom.ui.classList.toggle('hidden', !state.uiVisible);
-            dom.toggleBtn.textContent = state.uiVisible ? '➖ Close Panel' : '⚙️ Metric Parameters';
-        });
-
-        dom.recenterCam.addEventListener('click', () => {
-            state.camTheta = 2.35;
-            state.camPhi = 0.35;
-            state.camDist = 5.7;
-        });
-
-        dom.turboToggle.addEventListener('click', () => {
-            state.turbo = !state.turbo;
-            dom.turboToggle.textContent = `Turbo: ${state.turbo ? 'On' : 'Off'}`;
-        });
-
-        function exactProfile(r, R, T) {
-            const left = R - T;
-            const right = R + T;
-            if (r <= left) return { f: 1.0, df: 0.0 };
-            if (r >= right) return { f: 0.0, df: 0.0 };
-            const denom = Math.max(2.0 * T, 1e-5);
-            const t = (r - left) / denom;
-            const f = 1.0 - (t * t * (3.0 - 2.0 * t));
-            const df = -(6.0 * t * (1.0 - t)) / denom;
-            return { f, df };
-        }
-
-        class TinyAttentionFPSController {
-            constructor(seqLen = 16, dModel = 8) {
-                this.seqLen = seqLen;
-                this.dModel = dModel;
-                this.history = [];
-                this.targetFPS = 60;
-                this.renderScale = 1.0;
-                this.raySteps = 120;
-                this.trainIters = 3;
-
-                this.Wq = new Float32Array(dModel * dModel);
-                this.Wk = new Float32Array(dModel * dModel);
-                this.Wv = new Float32Array(dModel * dModel);
-                this.Wo = new Float32Array(dModel * dModel);
-                this.head = new Float32Array(dModel * 3);
-
-                let idx = 0;
-                const init = (arr, scale) => {
-                    for (let i = 0; i < arr.length; i++) {
-                        arr[i] = (Math.sin((i + 1) * 1.713 + idx++ * 0.11) * 0.5) * scale;
-                    }
-                };
-                init(this.Wq, 0.6);
-                init(this.Wk, 0.6);
-                init(this.Wv, 0.6);
-                init(this.Wo, 0.6);
-                init(this.head, 0.5);
-
-                this.emaPressure = 0.0;
-            }
-
-            push(frame) {
-                this.history.push(frame);
-                if (this.history.length > this.seqLen) this.history.shift();
-            }
-
-            _embed(frame) {
-                const x = new Float32Array(this.dModel);
-                const fpsNorm = clamp(frame.fps / 60, 0, 2);
-                const dtNorm = clamp(frame.dt / 16.666, 0, 3);
-                const scaleNorm = clamp(frame.scale, 0.5, 1.2);
-                const trainNorm = frame.trainIters / 8;
-                const stepNorm = frame.steps / 160;
-                const motion = clamp(frame.motion, 0, 1);
-                const loss = clamp(Math.log10(frame.loss + 1e-8) + 8, 0, 8) / 8;
-                const vNorm = clamp(frame.v / 2.5, 0, 1);
-
-                const base = [
-                    fpsNorm, dtNorm, scaleNorm, trainNorm,
-                    stepNorm, motion, loss, vNorm
-                ];
-                for (let i = 0; i < this.dModel; i++) x[i] = base[i % base.length];
-                return x;
-            }
-
-            _matVec(M, x, out) {
-                const D = this.dModel;
-                for (let r = 0; r < D; r++) {
-                    let s = 0;
-                    const off = r * D;
-                    for (let c = 0; c < D; c++) s += M[off + c] * x[c];
-                    out[r] = Math.tanh(s);
-                }
-            }
-
-            decide() {
-                if (this.history.length === 0) {
-                    return { pressure: 0, renderScale: this.renderScale, raySteps: this.raySteps, trainIters: this.trainIters };
-                }
-
-                const D = this.dModel;
-                const n = this.history.length;
-                const tokens = new Array(n);
-                const q = new Float32Array(D);
-                const k = new Float32Array(D);
-                const v = new Float32Array(D);
-                const tmp = new Float32Array(D);
-
-                for (let i = 0; i < n; i++) tokens[i] = this._embed(this.history[i]);
-
-                const last = tokens[n - 1];
-                this._matVec(this.Wq, last, q);
-
-                const scores = new Float32Array(n);
-                let maxScore = -1e9;
-
-                for (let i = 0; i < n; i++) {
-                    this._matVec(this.Wk, tokens[i], k);
-                    let s = 0;
-                    for (let j = 0; j < D; j++) s += q[j] * k[j];
-                    s /= Math.sqrt(D);
-                    s += i / n * 0.07;
-                    scores[i] = s;
-                    if (s > maxScore) maxScore = s;
-                }
-
-                let denom = 0;
-                for (let i = 0; i < n; i++) {
-                    scores[i] = Math.exp(scores[i] - maxScore);
-                    denom += scores[i];
-                }
-
-                const ctx = new Float32Array(D);
-                for (let i = 0; i < n; i++) {
-                    const a = scores[i] / Math.max(1e-8, denom);
-                    this._matVec(this.Wv, tokens[i], v);
-                    for (let j = 0; j < D; j++) ctx[j] += a * v[j];
-                }
-
-                this._matVec(this.Wo, ctx, tmp);
-
-                let outScale = 0, outSteps = 0, outTrain = 0;
-                for (let i = 0; i < D; i++) {
-                    outScale += tmp[i] * this.head[i * 3 + 0];
-                    outSteps += tmp[i] * this.head[i * 3 + 1];
-                    outTrain += tmp[i] * this.head[i * 3 + 2];
-                }
-
-                const recent = this.history[n - 1];
-                const fpsErr = (this.targetFPS - recent.fps) / this.targetFPS;
-                const dtErr = (recent.dt - 16.666) / 16.666;
-                const rawPressure = clamp(0.8 * fpsErr + 0.4 * dtErr + 0.1 * outScale, -1, 1);
-                this.emaPressure = lerp(this.emaPressure, rawPressure, 0.18);
-
-                let desiredScale = 1.0 - clamp(this.emaPressure, -0.4, 0.7) * 0.38;
-                let desiredSteps = Math.round(120 - clamp(this.emaPressure, -0.4, 0.8) * 50 - outSteps * 4);
-                let desiredTrain = Math.round(3 - clamp(this.emaPressure, -0.4, 0.8) * 2 - outTrain * 0.25);
-
-                if (recent.fps > this.targetFPS + 8) {
-                    desiredScale += 0.03;
-                    desiredSteps += 4;
-                    desiredTrain += 1;
-                }
-
-                this.renderScale = lerp(this.renderScale, clamp(desiredScale, 0.62, 1.0), 0.12);
-                this.raySteps = Math.round(lerp(this.raySteps, clamp(desiredSteps, 56, 132), 0.15));
-                this.trainIters = Math.round(lerp(this.trainIters, clamp(desiredTrain, 1, 6), 0.18));
-
-                return {
-                    pressure: clamp(this.emaPressure * 0.5 + 0.5, 0, 1),
-                    renderScale: this.renderScale,
-                    raySteps: this.raySteps,
-                    trainIters: this.trainIters
-                };
-            }
-        }
-
-        class SmarterMetricLearner {
-            constructor(nodes = 96, maxR = MAX_R, texWidth = AI_TEX_W) {
-                this.nodes = nodes;
-                this.maxR = maxR;
-                this.texWidth = texWidth;
-
-                this.centers = new Float32Array(nodes);
-                this.baseW = new Float32Array(nodes);
-                this.m = new Float32Array(nodes);
-                this.v = new Float32Array(nodes);
-                this.grad = new Float32Array(nodes);
-
-                this.tokenQ = new Float32Array(8 * 8);
-                this.tokenK = new Float32Array(8 * 8);
-                this.tokenV = new Float32Array(8 * 8);
-                this.tokenO = new Float32Array(8 * 8);
-                this.resHead = new Float32Array(8 * 3);
-
-                this.sigma = (maxR / (nodes - 1)) * 1.4;
-                this.invSigma2 = 1.0 / (this.sigma * this.sigma);
-                this.lr = 0.010;
-                this.beta1 = 0.9;
-                this.beta2 = 0.999;
-                this.eps = 1e-8;
-                this.weightDecay = 2e-5;
-
-                this.loss = 1.0;
-                this.controlWeight = 0.0;
-                this.residualPower = 0.0;
-                this.stepCount = 0;
-                this.targetR = 2.5;
-                this.targetT = 0.5;
-                this.targetV = 0.8;
-                this.targetKey = '';
-                this.textureData = new Float32Array(texWidth * 2);
-
-                for (let i = 0; i < nodes; i++) {
-                    this.centers[i] = (i / (nodes - 1)) * maxR;
-                }
-
-                let seed = 1;
-                const init = (arr, scale) => {
-                    for (let i = 0; i < arr.length; i++) {
-                        arr[i] = Math.sin((i + 1) * 1.717 + seed * 0.131) * scale;
-                        seed++;
-                    }
-                };
-                init(this.tokenQ, 0.28);
-                init(this.tokenK, 0.28);
-                init(this.tokenV, 0.28);
-                init(this.tokenO, 0.28);
-                init(this.resHead, 0.22);
-
-                this.seed(this.targetR, this.targetT, this.targetV);
-            }
-
-            seed(R, T, v = 0.8) {
-                this.targetR = R;
-                this.targetT = T;
-                this.targetV = v;
-                this.targetKey = `${R.toFixed(3)}|${T.toFixed(3)}|${v.toFixed(3)}`;
-                this.loss = 1.0;
-                this.controlWeight = 0.0;
-                this.residualPower = 0.0;
-                this.stepCount = 0;
-
-                for (let i = 0; i < this.nodes; i++) {
-                    this.baseW[i] = exactProfile(this.centers[i], R, T).f;
-                    this.m[i] = 0.0;
-                    this.v[i] = 0.0;
-                    this.grad[i] = 0.0;
-                }
-            }
-
-            retarget(R, T, v) {
-                const key = `${R.toFixed(3)}|${T.toFixed(3)}|${v.toFixed(3)}`;
-                if (key === this.targetKey) return;
-
-                this.targetR = R;
-                this.targetT = T;
-                this.targetV = v;
-                this.targetKey = key;
-                this.loss = Math.max(this.loss, 0.004);
-                this.controlWeight *= 0.6;
-
-                for (let i = 0; i < this.nodes; i++) {
-                    const guided = exactProfile(this.centers[i], R, T).f;
-                    this.baseW[i] = this.baseW[i] * 0.76 + guided * 0.24;
-                    this.m[i] *= 0.4;
-                    this.v[i] *= 0.4;
-                }
-            }
-
-            _token(r, R, T, v) {
-                return new Float32Array([
-                    clamp(r / this.maxR, 0, 1),
-                    clamp(R / 4.0, 0, 1),
-                    clamp(T / 1.5, 0, 1),
-                    clamp(v / 2.5, 0, 1),
-                    Math.sin(r * 0.9),
-                    Math.cos(r * 0.9),
-                    Math.sin((R + T) * 0.8),
-                    1.0
-                ]);
-            }
-
-            _matVec(M, x, out, D = 8) {
-                for (let r = 0; r < D; r++) {
-                    let s = 0;
-                    const off = r * D;
-                    for (let c = 0; c < D; c++) s += M[off + c] * x[c];
-                    out[r] = Math.tanh(s);
-                }
-            }
-
-            residual(r, R, T, v) {
-                const D = 8;
-                const qTok = this._token(r, R, T, v);
-                const memA = this._token(Math.max(0, R - T), R, T, v);
-                const memB = this._token(R, R, T, v);
-                const memC = this._token(Math.min(this.maxR, R + T), R, T, v);
-                const memory = [memA, memB, memC];
-
-                const q = new Float32Array(D);
-                const k = new Float32Array(D);
-                const vv = new Float32Array(D);
-                const tmp = new Float32Array(D);
-                this._matVec(this.tokenQ, qTok, q, D);
-
-                const scores = new Float32Array(memory.length);
-                let maxS = -1e9;
-                for (let i = 0; i < memory.length; i++) {
-                    this._matVec(this.tokenK, memory[i], k, D);
-                    let s = 0;
-                    for (let j = 0; j < D; j++) s += q[j] * k[j];
-                    s /= Math.sqrt(D);
-                    scores[i] = s;
-                    if (s > maxS) maxS = s;
-                }
-
-                let denom = 0;
-                for (let i = 0; i < scores.length; i++) {
-                    scores[i] = Math.exp(scores[i] - maxS);
-                    denom += scores[i];
-                }
-
-                const ctx = new Float32Array(D);
-                for (let i = 0; i < memory.length; i++) {
-                    const a = scores[i] / Math.max(1e-8, denom);
-                    this._matVec(this.tokenV, memory[i], vv, D);
-                    for (let j = 0; j < D; j++) ctx[j] += a * vv[j];
-                }
-
-                this._matVec(this.tokenO, ctx, tmp, D);
-
-                let rf = 0, rdf = 0, gate = 0;
-                for (let i = 0; i < D; i++) {
-                    rf += tmp[i] * this.resHead[i * 3 + 0];
-                    rdf += tmp[i] * this.resHead[i * 3 + 1];
-                    gate += tmp[i] * this.resHead[i * 3 + 2];
-                }
-
-                const g = smooth01(0.5 + 0.5 * Math.tanh(gate));
-                return {
-                    f: rf * 0.06 * g,
-                    df: rdf * 0.45 * g,
-                    gate: g
-                };
-            }
-
-            sampleRadius() {
-                const a = Math.random();
-                let r;
-                if (a < 0.74) {
-                    r = this.targetR + (Math.random() * 2.0 - 1.0) * (this.targetT * 1.6 + 0.18);
-                } else if (a < 0.9) {
-                    r = Math.random() * (this.targetR + this.targetT + 1.0);
-                } else {
-                    r = Math.random() * this.maxR;
-                }
-                return clamp(r, 0.0, this.maxR);
-            }
-
-            eval(r, R = this.targetR, T = this.targetT, v = this.targetV) {
-                const nodes = this.nodes;
-                let sumPhi = 1e-6;
-                let sumDPhi = 0;
-                let num = 0;
-                let dNum = 0;
-
-                for (let i = 0; i < nodes; i++) {
-                    const diff = r - this.centers[i];
-                    const phi = Math.exp(-(diff * diff) * this.invSigma2);
-                    const dphi = -2 * diff * this.invSigma2 * phi;
-                    sumPhi += phi;
-                    sumDPhi += dphi;
-                    num += this.baseW[i] * phi;
-                    dNum += this.baseW[i] * dphi;
-                }
-
-                const invD = 1.0 / sumPhi;
-                let f = num * invD;
-                let df = (dNum * sumPhi - num * sumDPhi) * invD * invD;
-
-                const res = this.residual(r, R, T, v);
-                f += res.f;
-                df += res.df;
-
-                return {
-                    f: clamp(f, -0.15, 1.15),
-                    df: clamp(df, -12.0, 12.0),
-                    gate: res.gate
-                };
-            }
-
-            train(iterations = 1) {
-                const batchSize = 72;
-                const lambdaDf = 6.5;
-
-                for (let iter = 0; iter < iterations; iter++) {
-                    this.grad.fill(0);
-                    let batchLoss = 0;
-                    let gateAccum = 0;
-
-                    for (let b = 0; b < batchSize; b++) {
-                        const r = this.sampleRadius();
-                        const truth = exactProfile(r, this.targetR, this.targetT);
-                        const pred = this.eval(r);
-                        const errF = pred.f - truth.f;
-                        const errDF = pred.df - truth.df;
-                        const wallFocus = 1.0 + 2.8 * Math.exp(-Math.pow((r - this.targetR) / Math.max(0.18, this.targetT * 1.1), 2));
-                        const loss = wallFocus * (errF * errF + lambdaDf * errDF * errDF);
-                        batchLoss += loss;
-                        gateAccum += pred.gate;
-
-                        let sumPhi = 1e-6;
-                        let sumDPhi = 0;
-                        const phiArr = new Float32Array(this.nodes);
-                        const dphiArr = new Float32Array(this.nodes);
-
-                        for (let i = 0; i < this.nodes; i++) {
-                            const diff = r - this.centers[i];
-                            const phi = Math.exp(-(diff * diff) * this.invSigma2);
-                            const dphi = -2 * diff * this.invSigma2 * phi;
-                            phiArr[i] = phi;
-                            dphiArr[i] = dphi;
-                            sumPhi += phi;
-                            sumDPhi += dphi;
-                        }
-
-                        const invD = 1.0 / sumPhi;
-                        const invD2 = invD * invD;
-                        const kF = 2.0 * wallFocus * errF;
-                        const kDF = 2.0 * wallFocus * lambdaDf * errDF;
-
-                        for (let i = 0; i < this.nodes; i++) {
-                            const df_dwi = phiArr[i] * invD;
-                            const ddf_dwi = (dphiArr[i] * sumPhi - phiArr[i] * sumDPhi) * invD2;
-                            this.grad[i] += kF * df_dwi + kDF * ddf_dwi;
-                        }
-                    }
-
-                    this.stepCount++;
-                    const gradScale = 1 / batchSize;
-                    const bias1 = 1 - Math.pow(this.beta1, this.stepCount);
-                    const bias2 = 1 - Math.pow(this.beta2, this.stepCount);
-
-                    for (let i = 0; i < this.nodes; i++) {
-                        const g = this.grad[i] * gradScale + this.weightDecay * this.baseW[i];
-                        const m = this.m[i] = this.beta1 * this.m[i] + (1 - this.beta1) * g;
-                        const v = this.v[i] = this.beta2 * this.v[i] + (1 - this.beta2) * g * g;
-                        const mHat = m / bias1;
-                        const vHat = v / bias2;
-                        this.baseW[i] = clamp(this.baseW[i] - this.lr * mHat / (Math.sqrt(vHat) + this.eps), -0.2, 1.2);
-                    }
-
-                    const instantLoss = batchLoss / batchSize;
-                    this.loss = lerp(this.loss, instantLoss, 0.12);
-                    this.residualPower = lerp(this.residualPower, gateAccum / batchSize, 0.10);
-
-                    const targetControl =
-                        this.loss < 7e-4 ? 1.0 :
-                        this.loss < 2e-3 ? 0.86 :
-                        this.loss < 6e-3 ? 0.58 :
-                        this.loss < 1.7e-2 ? 0.24 : 0.0;
-
-                    this.controlWeight = lerp(this.controlWeight, targetControl, 0.09);
-                }
-            }
-
-            writeTextureData() {
-                for (let p = 0; p < this.texWidth; p++) {
-                    const r = (p / (this.texWidth - 1)) * this.maxR;
-                    const e = this.eval(r, this.targetR, this.targetT, this.targetV);
-                    this.textureData[p * 2 + 0] = e.f;
-                    this.textureData[p * 2 + 1] = e.df;
-                }
-                return this.textureData;
-            }
-        }
-
-        function createShader(glCtx, type, source) {
-            const shader = glCtx.createShader(type);
-            glCtx.shaderSource(shader, source);
-            glCtx.compileShader(shader);
-            if (!glCtx.getShaderParameter(shader, glCtx.COMPILE_STATUS)) {
-                const log = glCtx.getShaderInfoLog(shader) || 'Unknown shader compile failure';
-                glCtx.deleteShader(shader);
-                throw new Error(log);
-            }
-            return shader;
-        }
-
-        function createProgram(glCtx, vsSource, fsSource) {
-            const program = glCtx.createProgram();
-            const vs = createShader(glCtx, glCtx.VERTEX_SHADER, vsSource);
-            const fs = createShader(glCtx, glCtx.FRAGMENT_SHADER, fsSource);
-            glCtx.attachShader(program, vs);
-            glCtx.attachShader(program, fs);
-            glCtx.linkProgram(program);
-            glCtx.deleteShader(vs);
-            glCtx.deleteShader(fs);
-
-            if (!glCtx.getProgramParameter(program, glCtx.LINK_STATUS)) {
-                const log = glCtx.getProgramInfoLog(program) || 'Unknown link failure';
-                glCtx.deleteProgram(program);
-                throw new Error(log);
-            }
-            return program;
-        }
-
-        const vertexShaderSource = `#version 300 es
-            precision highp float;
-            in vec2 a_pos;
-            out vec2 v_uv;
-            void main() {
-                v_uv = a_pos * 0.5 + 0.5;
-                gl_Position = vec4(a_pos, 0.0, 1.0);
-            }
-        `;
-
-        const fragmentShaderSource = `#version 300 es
-            precision highp float;
-
-            in vec2 v_uv;
-            out vec4 fragColor;
-
-            uniform vec2 u_res;
-            uniform float u_time;
-            uniform vec3 u_camPos;
-            uniform float u_v;
-            uniform float u_R;
-            uniform float u_T;
-            uniform float u_aiInfluence;
-            uniform sampler2D u_aiMetric;
-            uniform int u_showEnergy;
-            uniform int u_showGrid;
-            uniform int u_maxSteps;
-
-            const float MAX_R = 15.0;
-            const float TEX_W = 256.0;
-
-            vec2 exactShape(float r, float R, float T) {
-                float left = R - T;
-                float right = R + T;
-                if (r <= left) return vec2(1.0, 0.0);
-                if (r >= right) return vec2(0.0, 0.0);
-                float denom = max(2.0 * T, 1e-4);
-                float t = (r - left) / denom;
-                float f = 1.0 - (t * t * (3.0 - 2.0 * t));
-                float df = -(6.0 * t * (1.0 - t)) / denom;
-                return vec2(f, df);
-            }
-
-            vec2 sampleAIMetric(float r) {
-                float coord = clamp(r / MAX_R, 0.0, 1.0) * (TEX_W - 1.0);
-                int idx = int(floor(coord));
-                float fracPart = coord - float(idx);
-                vec2 a = texelFetch(u_aiMetric, ivec2(clamp(idx, 0, 255), 0), 0).rg;
-                vec2 b = texelFetch(u_aiMetric, ivec2(clamp(idx + 1, 0, 255), 0), 0).rg;
-                return mix(a, b, fracPart);
-            }
-
-            float hash13(vec3 p) {
-                p = fract(p * 0.1031);
-                p += dot(p, p.zyx + 31.32);
-                return fract((p.x + p.y) * p.z);
-            }
-
-            float sdCapsule(vec3 p, vec3 a, vec3 b, float r) {
-                vec3 pa = p - a;
-                vec3 ba = b - a;
-                float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0);
-                return length(pa - ba * h) - r;
-            }
-
-            float sdTorus(vec3 p, vec2 t) {
-                vec2 q = vec2(length(p.xz) - t.x, p.y);
-                return length(q) - t.y;
-            }
-
-            float sdShip(vec3 p) {
-                float hull = sdCapsule(p, vec3(0.0, 0.0, -0.42), vec3(0.0, 0.0, 0.58), 0.18);
-                float bridge = length((p - vec3(0.0, 0.12, 0.12)) * vec3(1.8, 2.2, 1.5)) - 0.11;
-                float ring = sdTorus(p - vec3(0.0, 0.0, -0.05), vec2(0.92, 0.06));
-                float strutA = sdCapsule(p, vec3(0.18, 0.0, 0.12), vec3(0.72, 0.0, -0.08), 0.028);
-                float strutB = sdCapsule(p, vec3(-0.18, 0.0, 0.12), vec3(-0.72, 0.0, -0.08), 0.028);
-                float nacelleA = sdCapsule(p, vec3(0.75, 0.0, -0.32), vec3(0.75, 0.0, 0.30), 0.07);
-                float nacelleB = sdCapsule(p, vec3(-0.75, 0.0, -0.32), vec3(-0.75, 0.0, 0.30), 0.07);
-                return min(min(min(hull, bridge), min(ring, min(strutA, strutB))), min(nacelleA, nacelleB));
-            }
-
-            vec3 calcShipNormal(vec3 p) {
-                vec2 e = vec2(0.003, 0.0);
-                return normalize(vec3(
-                    sdShip(p + e.xyy) - sdShip(p - e.xyy),
-                    sdShip(p + e.yxy) - sdShip(p - e.yxy),
-                    sdShip(p + e.yyx) - sdShip(p - e.yyx)
-                ));
-            }
-
-            float gridLine(float value, float scale, float width) {
-                float cell = abs(fract(value * scale) - 0.5);
-                return smoothstep(width, 0.0, cell);
-            }
-
-            vec3 starfield(vec3 rd, float time, float warp) {
-                vec3 dir = normalize(rd);
-                vec3 col = vec3(0.0);
-
-                for (int i = 0; i < 3; i++) {
-                    float layer = float(i) + 1.0;
-                    vec3 p = floor(dir * (240.0 * layer) + vec3(0.0, 0.0, time * warp * 14.0 * layer));
-                    float n = hash13(p);
-                    float s = smoothstep(0.9952, 1.0, n);
-                    col += vec3(s) * (1.25 / layer);
-                }
-
-                float band = exp(-12.0 * dir.y * dir.y);
-                col += vec3(0.025, 0.05, 0.08) * band;
-
-                float forward = max(dot(dir, vec3(0.0, 0.0, -1.0)), 0.0);
-                float aft = max(dot(dir, vec3(0.0, 0.0, 1.0)), 0.0);
-                col *= 1.0 + forward * warp * 0.22;
-                col += vec3(0.08, 0.22, 0.55) * pow(forward, 6.0) * warp * 0.8;
-                col += vec3(0.58, 0.12, 0.07) * pow(aft, 6.0) * warp * 0.55;
-
-                return col;
-            }
-
-            void main() {
-                vec2 uv = (gl_FragCoord.xy - 0.5 * u_res) / min(u_res.x, u_res.y);
-
-                vec3 ro = u_camPos;
-                vec3 ta = vec3(0.0);
-                vec3 ww = normalize(ta - ro);
-                vec3 up = abs(ww.y) > 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(0.0, 1.0, 0.0);
-                vec3 uu = normalize(cross(ww, up));
-                vec3 vv = normalize(cross(uu, ww));
-
-                vec3 rd = normalize(uv.x * uu + uv.y * vv + 1.55 * ww);
-                vec3 p = ro;
-                vec4 accum = vec4(0.0);
-                bool hitShip = false;
-
-                for (int i = 0; i < 132; i++) {
-                    if (i >= u_maxSteps) break;
-
-                    float r = length(p);
-                    if (r > MAX_R || accum.a > 0.995) break;
-
-                    vec2 exactData = exactShape(r, u_R, u_T);
-                    vec2 aiData = sampleAIMetric(r);
-                    vec2 metric = mix(exactData, aiData, clamp(u_aiInfluence, 0.0, 1.0));
-
-                    float currentF = clamp(metric.x, -0.1, 1.1);
-                    float currentDF = clamp(metric.y, -12.0, 12.0);
-
-                    vec3 gradF = r > 1e-4 ? p * (currentDF / r) : vec3(0.0);
-                    vec3 beta = vec3(0.0, 0.0, u_v * currentF);
-
-                    float dShip = sdShip(p);
-                    float dt = clamp(0.035 + r * 0.09, 0.012, 0.18);
-                    if (dShip < 0.35) dt = min(dt, max(0.008, dShip * 0.45));
-
-                    rd = normalize(rd - gradF * u_v * dt * 0.7);
-                    p += (rd - beta) * dt;
-
-                    if (u_showGrid == 1) {
-                        float gy = abs(p.y);
-                        if (gy < 0.05) {
-                            float gx = gridLine(p.x, 0.5, 0.03);
-                            float gz = gridLine(p.z + u_time * u_v * 1.15, 0.5, 0.03);
-                            float gAlpha = max(gx, gz) * (0.05 - gy) * 11.0 * 0.45;
-                            vec3 gridColor = mix(vec3(0.08, 0.78, 0.36), vec3(0.0, 1.0, 0.84), u_aiInfluence);
-                            accum += vec4(gridColor * gAlpha, gAlpha) * (1.0 - accum.a);
-                        }
-                    }
-
-                    if (u_showEnergy == 1) {
-                        float theta = u_v * gradF.z;
-                        if (abs(theta) > 0.02) {
-                            vec3 glowColor = theta < 0.0 ? vec3(0.0, 0.54, 1.0) : vec3(1.0, 0.16, 0.04);
-                            float shellBoost = smoothstep(u_T * 1.8, 0.0, abs(r - u_R));
-                            float alpha = abs(theta) * dt * (0.12 + 0.38 * shellBoost);
-                            accum += vec4(glowColor * alpha, alpha) * (1.0 - accum.a);
-                        }
-                    }
-
-                    if (dShip < 0.0035) {
-                        hitShip = true;
-                        vec3 n = calcShipNormal(p);
-                        vec3 l = normalize(vec3(2.0, 3.0, -1.0));
-                        float diff = max(dot(n, l), 0.0);
-                        float rim = pow(1.0 - max(dot(n, -rd), 0.0), 3.0);
-                        vec3 shipColor = vec3(0.58, 0.64, 0.72) * (0.18 + 0.82 * diff) + vec3(0.22, 0.42, 0.76) * rim * 0.65;
-                        if (p.z > 0.26 && length(p.xy) < 0.13) {
-                            shipColor += vec3(0.0, 0.84, 1.0) * 2.6;
-                        }
-                        accum += vec4(shipColor * (1.0 - accum.a), 1.0 - accum.a);
-                        break;
-                    }
-                }
-
-                vec3 color = accum.rgb;
-                if (!hitShip && accum.a < 0.995) {
-                    color += starfield(rd, u_time, u_v) * (1.0 - accum.a);
-                }
-
-                float vignette = smoothstep(1.5, 0.25, length(uv));
-                color *= mix(0.72, 1.0, vignette);
-                color = color / (color + vec3(1.0));
-                color = pow(color, vec3(1.0 / 2.2));
-                fragColor = vec4(color, 1.0);
-            }
-        `;
-
-        let program;
-        try {
-            program = createProgram(gl, vertexShaderSource, fragmentShaderSource);
-        } catch (err) {
-            console.error(err);
-            fallback.style.display = 'grid';
-            fallback.querySelector('p').textContent = `Shader compilation failed: ${String(err.message || err)}`;
-            return;
-        }
-
-        const vao = gl.createVertexArray();
-        gl.bindVertexArray(vao);
-
-        const quad = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, quad);
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-            -1.0, -1.0,
-             3.0, -1.0,
-            -1.0,  3.0
-        ]), gl.STATIC_DRAW);
-
-        const posLoc = gl.getAttribLocation(program, 'a_pos');
-        gl.enableVertexAttribArray(posLoc);
-        gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
-        gl.bindVertexArray(null);
-        gl.bindBuffer(gl.ARRAY_BUFFER, null);
-
-        const loc = {
-            res: gl.getUniformLocation(program, 'u_res'),
-            time: gl.getUniformLocation(program, 'u_time'),
-            cam: gl.getUniformLocation(program, 'u_camPos'),
-            v: gl.getUniformLocation(program, 'u_v'),
-            R: gl.getUniformLocation(program, 'u_R'),
-            T: gl.getUniformLocation(program, 'u_T'),
-            aiInfluence: gl.getUniformLocation(program, 'u_aiInfluence'),
-            aiMetric: gl.getUniformLocation(program, 'u_aiMetric'),
-            showEnergy: gl.getUniformLocation(program, 'u_showEnergy'),
-            showGrid: gl.getUniformLocation(program, 'u_showGrid'),
-            maxSteps: gl.getUniformLocation(program, 'u_maxSteps')
-        };
-
-        const aiTexture = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D, aiTexture);
-        gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, AI_TEX_W, 1, 0, gl.RG, gl.FLOAT, null);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        gl.bindTexture(gl.TEXTURE_2D, null);
-
-        const metricLearner = new SmarterMetricLearner(96, MAX_R, AI_TEX_W);
-        const fpsController = new TinyAttentionFPSController(16, 8);
-
-        function updateAITexture() {
-            const texData = metricLearner.writeTextureData();
-            gl.bindTexture(gl.TEXTURE_2D, aiTexture);
-            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, AI_TEX_W, 1, gl.RG, gl.FLOAT, texData);
-        }
-
-        const runtime = {
-            fpsEMA: 60,
-            lastFrameTime: performance.now(),
-            lastHudUpdate: 0,
-            frameMotionEMA: 0,
-            renderScale: 1.0,
-            raySteps: 120,
-            trainIters: 3,
-            targetFPS: 60
-        };
-
-        function resizeCanvas() {
-            const dynScale = runtime.renderScale;
-            const dprCap = state.turbo ? 1.8 : DPR_CAP_BASE;
-            const dpr = Math.min((window.devicePixelRatio || 1) * dynScale, dprCap);
-            const width = Math.max(1, Math.round(window.innerWidth * dpr));
-            const height = Math.max(1, Math.round(window.innerHeight * dpr));
-            if (canvas.width !== width || canvas.height !== height) {
-                canvas.width = width;
-                canvas.height = height;
-                gl.viewport(0, 0, width, height);
-            }
-        }
-
-        window.addEventListener('resize', resizeCanvas);
-        document.addEventListener('visibilitychange', () => {
-            runtime.lastFrameTime = performance.now();
-        });
-
-        canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-
-        canvas.addEventListener('pointerdown', (e) => {
-            if (e.button !== 0 && e.pointerType !== 'touch') return;
-            state.dragging = true;
-            state.lastPointerX = e.clientX;
-            state.lastPointerY = e.clientY;
-            canvas.setPointerCapture(e.pointerId);
-        });
-
-        canvas.addEventListener('pointermove', (e) => {
-            if (!state.dragging) return;
-            const dx = e.clientX - state.lastPointerX;
-            const dy = e.clientY - state.lastPointerY;
-            state.camTheta -= dx * 0.008;
-            state.camPhi = clamp(state.camPhi + dy * 0.008, -1.25, 1.25);
-            state.lastPointerX = e.clientX;
-            state.lastPointerY = e.clientY;
-            runtime.frameMotionEMA = lerp(runtime.frameMotionEMA, clamp((Math.abs(dx) + Math.abs(dy)) / 40, 0, 1), 0.3);
-        });
-
-        const stopDragging = (e) => {
-            if (!state.dragging) return;
-            state.dragging = false;
-            try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
-        };
-        canvas.addEventListener('pointerup', stopDragging);
-        canvas.addEventListener('pointercancel', stopDragging);
-        canvas.addEventListener('pointerleave', stopDragging);
-
-        canvas.addEventListener('wheel', (e) => {
-            e.preventDefault();
-            state.camDist = clamp(state.camDist + e.deltaY * 0.0055, 3.6, 10.5);
-        }, { passive: false });
-
-        canvas.addEventListener('webglcontextlost', (e) => {
-            e.preventDefault();
-            cancelAnimationFrame(state.rafId);
-            fallback.style.display = 'grid';
-            fallback.querySelector('p').textContent = 'WebGL context lost. Reload the page to rebuild the renderer.';
-        });
-
-        dom.resetAI.addEventListener('click', () => {
-            metricLearner.seed(state.R, state.T, state.v);
-            metricLearner.train(18);
-            updateAITexture();
-        });
-
-        gl.clearColor(0, 0, 0, 1);
-        gl.useProgram(program);
-        gl.uniform1i(loc.aiMetric, 0);
-
-        function updateHud(now) {
-            if (now - runtime.lastHudUpdate < 120) return;
-            runtime.lastHudUpdate = now;
-
-            const handPct = Math.round(metricLearner.controlWeight * 100);
-            dom.aiBar.style.width = `${handPct}%`;
-            dom.valControl.textContent = `${handPct}%`;
-            dom.valLoss.textContent = fmtExp(metricLearner.loss);
-            dom.valResid.textContent = metricLearner.residualPower.toFixed(3);
-
-            if (metricLearner.controlWeight > 0.96) {
-                dom.aiStatus.textContent = 'SYNCED';
-                dom.aiStatus.className = 'good';
-            } else if (metricLearner.controlWeight > 0.18) {
-                dom.aiStatus.textContent = 'HANDOVER';
-                dom.aiStatus.className = 'good';
-            } else {
-                dom.aiStatus.textContent = 'TEACHER FORCING';
-                dom.aiStatus.className = 'warn';
-            }
-
-            const pressure = fpsController.emaPressure * 0.5 + 0.5;
-            dom.fpsBar.style.width = `${Math.round(clamp(pressure, 0, 1) * 100)}%`;
-            dom.valFps.textContent = `${Math.round(runtime.fpsEMA)}`;
-            dom.valScale.textContent = runtime.renderScale.toFixed(2);
-            dom.valSteps.textContent = `${runtime.raySteps}`;
-            dom.valTrain.textContent = `${runtime.trainIters}`;
-            dom.valTarget.textContent = `${runtime.targetFPS}`;
-
-            if (runtime.fpsEMA >= runtime.targetFPS - 3) {
-                dom.fpsStatus.textContent = 'STABLE';
-                dom.fpsStatus.className = 'good';
-            } else if (runtime.fpsEMA >= runtime.targetFPS - 10) {
-                dom.fpsStatus.textContent = 'BALANCING';
-                dom.fpsStatus.className = 'gold';
-            } else {
-                dom.fpsStatus.textContent = 'PROTECTING FPS';
-                dom.fpsStatus.className = 'warn';
-            }
-        }
-
-        function render(now) {
-            state.rafId = requestAnimationFrame(render);
-
-            const dtMs = clamp(now - runtime.lastFrameTime, 1.0, 100.0);
-            runtime.lastFrameTime = now;
-            const fps = 1000.0 / dtMs;
-            runtime.fpsEMA = lerp(runtime.fpsEMA, fps, 0.14);
-            runtime.frameMotionEMA = lerp(runtime.frameMotionEMA, 0.0, 0.04);
-
-            runtime.targetFPS = state.turbo ? 75 : 60;
-            fpsController.targetFPS = runtime.targetFPS;
-
-            fpsController.push({
-                fps: runtime.fpsEMA,
-                dt: dtMs,
-                scale: runtime.renderScale,
-                trainIters: runtime.trainIters,
-                steps: runtime.raySteps,
-                motion: runtime.frameMotionEMA,
-                loss: metricLearner.loss,
-                v: state.v
-            });
-
-            const perfDecision = fpsController.decide();
-            runtime.renderScale = perfDecision.renderScale;
-            runtime.raySteps = perfDecision.raySteps;
-            runtime.trainIters = perfDecision.trainIters;
-
-            if (state.turbo) {
-                runtime.renderScale = clamp(runtime.renderScale + 0.06, 0.72, 1.0);
-                runtime.raySteps = clamp(runtime.raySteps + 8, 72, 132);
-                runtime.trainIters = clamp(runtime.trainIters + 1, 1, 6);
-            }
-
-            resizeCanvas();
-
-            metricLearner.retarget(state.R, state.T, state.v);
-            metricLearner.train(runtime.trainIters);
-            updateAITexture();
-            updateHud(now);
-
-            const dist = state.camDist;
-            const cx = dist * Math.cos(state.camPhi) * Math.sin(state.camTheta);
-            const cy = dist * Math.sin(state.camPhi);
-            const cz = dist * Math.cos(state.camPhi) * Math.cos(state.camTheta);
-
-            gl.clear(gl.COLOR_BUFFER_BIT);
-            gl.useProgram(program);
-            gl.bindVertexArray(vao);
-
-            gl.activeTexture(gl.TEXTURE0);
-            gl.bindTexture(gl.TEXTURE_2D, aiTexture);
-
-            gl.uniform2f(loc.res, canvas.width, canvas.height);
-            gl.uniform1f(loc.time, now * 0.001);
-            gl.uniform3f(loc.cam, cx, cy, cz);
-            gl.uniform1f(loc.v, state.v);
-            gl.uniform1f(loc.R, state.R);
-            gl.uniform1f(loc.T, state.T);
-            gl.uniform1f(loc.aiInfluence, metricLearner.controlWeight);
-            gl.uniform1i(loc.showEnergy, state.showEnergy ? 1 : 0);
-            gl.uniform1i(loc.showGrid, state.showGrid ? 1 : 0);
-            gl.uniform1i(loc.maxSteps, runtime.raySteps);
-
-            gl.drawArrays(gl.TRIANGLES, 0, 3);
-            gl.bindVertexArray(null);
-        }
-
-        resizeCanvas();
-        metricLearner.train(24);
-        updateAITexture();
-        state.rafId = requestAnimationFrame(render);
-    })();
-    </script>
-</body>
-</html>
+<header><div class="brand"><svg viewBox="0 0 36 36" aria-hidden="true"><ellipse cx="18" cy="18" rx="15" ry="5"/><ellipse cx="18" cy="18" rx="9" ry="3"/><path d="M18 2v32M14 7l4-5 4 5M14 29l4 5 4-5"/></svg><div><h1>Navier–Stokes</h1><p>The concentrating vortex</p></div></div><div class="header-actions"><span class="running"><i></i><span id="run-status">Starting renderer</span></span><button id="sources-open" class="quiet">Model & sources</button><button id="fullscreen" class="icon-button" aria-label="Enter fullscreen" title="Fullscreen"><svg viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg></button></div></header>
+<main><section class="viewport" aria-label="Interactive three-dimensional vortex">
+<canvas id="fluid" aria-label="Volumetric dye in a prescribed, divergence-free vortex. Drag to orbit; scroll to zoom."></canvas>
+<div id="render-error" role="alert" hidden><h2>WebGL 2 is needed for the live fluid view.</h2><p>Enable hardware acceleration in your browser and reload. The timeline and model explanation remain available.</p></div>
+<div class="scene-heading"><span id="mode-label">MANUSCRIPT-GUIDED VISUAL MODEL</span><h2 id="phase-title">Inward spiral.<br>Outward along the axis.</h2><p id="phase-description">Watch the region of intense flow concentrate.</p></div>
+<div class="camera-controls" aria-label="Camera scale"><button class="selected" data-camera="follow" aria-pressed="true">Follow core</button><button data-camera="world" aria-pressed="false">Fixed scale</button></div>
+<div class="limit-message" id="limit-message" hidden><span class="limit-mark">t → 1</span><div><h3>The analytical limit</h3><p>The view stops at t = 0.9999999. Infinite velocity is a limiting statement, not a frame a finite renderer can calculate.</p><button id="replay-limit">Replay the approach</button></div></div>
+<div class="scene-footer"><div class="scale-key"><span class="scale-line"></span><span id="scale-label">Camera magnification ×1.0</span></div><span class="orbit-tip">Drag to orbit · scroll to zoom</span></div>
+<div class="render-caption"><span id="render-detail">64³ dye grid · volumetric lighting</span><span id="fps">— fps</span></div>
+</section>
+<aside><div class="view-selector" role="group" aria-label="Flow model"><button data-mode="approach" class="selected" aria-pressed="true">Approach to t = 1</button><button data-mode="analogue" aria-pressed="false">Physical analogue</button></div>
+<div class="time-block"><div class="small-label" id="time-label">MODEL TIME · DIMENSIONLESS</div><div id="time-value">0.9000000<span> / 1</span></div><div class="tau-row"><span>Time remaining, τ</span><strong id="tau-value">1.00 × 10⁻¹</strong></div></div>
+<div class="metrics"><div class="metric"><div><span>Core radius</span><small id="radius-law">∝ τ¹ᐟ²</small></div><strong id="radius-value">1.000<span>×</span></strong></div><div class="metric"><div><span>Characteristic speed</span><small id="speed-law">∝ τ⁻⁽¹ᐟ²⁺ʰ⁾</small></div><strong id="speed-value">1.00<span>×</span></strong></div><div class="metric"><div><span>Core energy scale</span><small id="energy-law">∝ τ¹ᐟ²⁻³ʰ</small></div><strong id="energy-value">1.000<span>×</span></strong></div><p class="metric-note" id="metric-note">Relative asymptotic scales; reference t = 0.9.<br>Not measurements of a full Navier–Stokes solve.</p></div>
+<div class="story"><div class="section-label" id="story-heading">THE MECHANISM</div><p id="story-text">Fluid spirals inward and is carried away above and below the centre. The intense-flow region shrinks; a material parcel is not being squeezed into a point.</p></div>
+<div class="pulse-panel"><label class="toggle-row"><span>Annular pulse overlay<small>Two families · illustrative placement</small></span><input id="pulses" type="checkbox" checked><span class="switch"></span></label><svg id="pulse-chart" viewBox="0 0 260 64" role="img" aria-label="Reference pulse grows then decays as viscous damping overtakes amplification"><path class="chart-baseline" d="M0 57H260"/><path id="pulse-curve"/><line id="pulse-cursor" x1="0" x2="0" y1="4" y2="58"/><circle id="pulse-dot" r="3.5"/></svg><div class="pulse-labels"><span>Shear amplification</span><span>Viscous decay</span></div></div>
+<div class="settings"><label>Playback <select id="playback"><option value=".5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label><label>Rendering <select id="quality"><option value="auto" selected>Adaptive</option><option value="high">High</option><option value="low">Light</option></select></label></div>
+<button id="snapshot" class="snapshot"><svg viewBox="0 0 24 24"><path d="M5 7h3l2-3h4l2 3h3a2 2 0 0 1 2 2v10H3V9a2 2 0 0 1 2-2Z"/><circle cx="12" cy="13" r="4"/></svg>Save this view</button>
+</aside></main>
+<footer><div class="transport"><button id="play" class="play" aria-label="Pause simulation"><svg id="play-icon" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg><span id="play-label">Pause</span></button><button id="reset" class="reset" title="Restart from t = 0.9" aria-label="Restart simulation"><svg viewBox="0 0 24 24"><path d="M4 10a8 8 0 1 1 1 7M4 4v6h6"/></svg></button><div class="timeline"><div class="timeline-top"><span id="timeline-label">Approaching the singular time</span><span>Logarithmic time · slows near t = 1</span></div><input type="range" id="timeline" min="0" max="1000" value="0" step="1" aria-label="Approach to singular time"><div class="tick-labels"><button data-seek="0">t = 0.9</button><button data-seek=".333333">0.999</button><button data-seek=".666667">0.99999</button><button data-seek="1">t → 1 <span>analytic limit</span></button></div></div></div><div class="footer-note"><span><strong>Live reduced model</strong> · GPU dye advection in a prescribed flow, not the manuscript’s complete solution.</span><button id="explain-open">What is exact here? <span>↗</span></button></div></footer>
+<dialog id="sources"><div class="dialog-top"><div><span class="section-label">MODEL NOTES</span><h2>What this view does—and does not—show.</h2></div><button id="sources-close" class="icon-button" aria-label="Close model notes"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div><div class="dialog-content"><h3>From your manuscript</h3><p>The inward spiral, two-sided axial outflow and unequal contraction rates follow §2 and Figure 1 (pages 3–4). The two annular pulse families and growth-then-decay mechanism follow §2.2 and Figure 2 (pages 5–6).</p><div class="equations">ℓᵣ ∝ τ¹ᐟ² &nbsp;&nbsp; ℓ𝓏 ∝ τ¹ᐟ²⁻ʰ<br>U ∝ τ⁻¹ᐟ²⁻ʰ &nbsp;&nbsp; E<sub>core</sub> ∝ τ¹ᐟ²⁻³ʰ</div><p>τ = 1 − t. Values are unity-normalised asymptotic ratios relative to t = 0.9, not dimensional measurements. This is a near-event window, not the manuscript’s full evolution from rest. The illustrative choice h = 0.006 obeys the headline range 0 &lt; h &lt; 0.01 but is not a certified choice for every smallness requirement of the construction. Aspect-ratio change is deliberately not exaggerated.</p><h3>What the browser actually computes</h3><p>A 64 × 64 × 64 virtual dye field is transported on the GPU with midpoint backtracing and semi-Lagrangian interpolation. The prescribed axisymmetric surrogate is divergence-free analytically: its radial and axial velocities come from one Stokes streamfunction, with an axisymmetric swirl added. The dye evolves in shrinking similarity coordinates, including the coordinate-drift terms. The shrinking window is an Eulerian observation region, not a shrinking material parcel.</p><p>The viewport uses volumetric absorption, shadowing, warm/cool studio illumination and procedural fine detail. Colour and dye injection reveal motion; they are not water density, measured temperature or pressure. The optical exposure is normalised for visibility. Scrubbing reseeds the virtual dye. Playback is render-paced: it slows on a device that cannot draw frames quickly enough, rather than skipping unresolved steps. The laboratory-style floor is visual staging, not a wall boundary condition.</p><h3>What is not solved here</h3><p>The exact E and U profiles, smooth forcing, heat exterior and infinite residual-correction sequence are not instantiated. No momentum residual or proof-verification result is being reported. The pulse overlay uses the reference envelope (7.12) with illustrative parameters λ₀ = 1, u* = 2, Lₛ = 24; the locations and colours do not reconstruct the complete pulse field or its stress cancellation. Tracer-grid diffusion is numerical/visual, not a measurement of physical viscosity.</p><h3>The closest physical analogue</h3><p>A strained Burgers vortex has inward radial flow, rotation and outward axial stretching. In its steady form, stretching balances viscous diffusion; its core does not collapse to a singularity. The comparison mode evaluates this steady prescribed velocity field, with normalised a = 1.3, ν = a/4, Γ = 10π and core parameter 1. It is neither a finite-energy whole-space flow nor the manuscript’s construction. A laboratory apparatus using two co-rotating disks and axial withdrawal was described by Webster and Young (2015).</p><h3>At the limit</h3><p>The approach stops at τ = 10⁻⁷, before t = 1. The limit overlay identifies the manuscript’s singular time; it does not render infinity or a physical explosion. “Follow core” magnifies the shrinking observation region; “Fixed scale” reveals its actual relative contraction. In analogue mode the singular-time clock is disabled and the steady vortex simply continues.</p><h3>Sources</h3><p><a href="https://openai.com/index/navier-stokes-solution/" target="_blank" rel="noopener noreferrer">OpenAI · On the Navier–Stokes Millennium Prize Problem</a><br>Uploaded paper: <em>Finite Time Blowup for Navier–Stokes</em>, §2, §3.1, (5.27), (7.12).</p><p><a href="https://doi.org/10.1002/lom3.10010" target="_blank" rel="noopener noreferrer">Webster & Young (2015) · Laboratory realisation of a Burgers vortex</a><br><a href="https://doi.org/10.1002/sapm1984702163" target="_blank" rel="noopener noreferrer">Robinson & Saffman (1984) · Stability and structure of stretched vortices</a></p></div></dialog>
+<div id="toast" role="status" hidden></div>
+<script>/* Normalised explanatory model, not an instantiation of the manuscript's E,U profiles. */
+const H = 0.006, TAU0 = 0.1, TAUMIN = 1e-7;
+const SMAX = Math.log(TAU0 / TAUMIN);
+function scales(s, analogue=false) {
+  const q = Math.max(0,Math.min(SMAX,s));
+  return {tau:TAU0*Math.exp(-q), t:1-TAU0*Math.exp(-q),
+    radius:analogue?1:Math.exp(-.5*q), axial:analogue?1:Math.exp(-(.5-H)*q),
+    speed:analogue?1:Math.exp((.5+H)*q), energy:analogue?1:Math.exp(-(.5-3*H)*q),
+    reynolds:analogue?1:Math.exp(H*q)};
+}
+// Axisymmetric physical velocity, in units of the reference radius and time.
+// S = a/2 * (lr^2*lz/tauRatio) * rho^2*(eta+b)*exp(-c*rho^2-d*eta^2).
+// ur = -S_z/r, uz = S_r/r. The swirl is axisymmetric, so div(u)=0 exactly.
+function velocity(x,y,z,s=0,analogue=false){
+  const sc=scales(s,analogue), r=Math.hypot(x,z), rho=r/sc.radius, eta=y/sc.axial;
+  const rr=rho*rho, e=Math.exp(-.16*rr-.08*eta*eta), ratio=Math.exp(-s);
+  let ur,uz,ut;
+  if(analogue){ur=-.65*r;uz=1.3*y;ut=r<1e-9?0:5*(1-Math.exp(-r*r))/r;}
+  else{
+    ur=sc.radius/ratio*(-1.5*rho*(1-.16*eta*(eta+.025))*e);
+    uz=sc.axial/ratio*(3*(eta+.025)*(1-.16*rr)*e);
+    ut=rho<1e-9?0:sc.speed*5*(1-Math.exp(-rr))/rho*Math.exp(-.025*eta*eta);
+  }
+  return r<1e-12?[0,uz,0]:[ur*x/r-ut*z/r,uz,ur*z/r+ut*x/r];
+}
+// Exact elementary integral of the reference envelope (7.12), illustrative lambda0=1,u*=2,Ls=24.
+function pulse(v){
+  const L=24,u=2, y=u*(.5+Math.max(0,Math.min(1,v)));
+  return Math.exp(L/u*(Math.asinh(y)-Math.asinh(u)-((y+y*y*y/3)-(u+u*u*u/3))/Math.pow(1+u*u,1.5)));
+}
+</script><script>'use strict';
+// GPU advection of a passive visual tracer. This is intentionally NOT a Navier–Stokes momentum solver.
+class VortexRenderer {
+ constructor(canvas){
+  this.canvas=canvas;this.gl=canvas.getContext('webgl2',{antialias:false,alpha:false,preserveDrawingBuffer:true,powerPreference:'high-performance'});
+  if(!this.gl)throw new Error('WebGL 2 unavailable');
+  const gl=this.gl;this.float=!!gl.getExtension('EXT_color_buffer_float');
+  this.s=0;this.analogue=false;this.follow=true;this.pulses=true;this.time=0;this.quality='auto';this.pixelBudget=360000;
+  this.yaw=.48;this.pitch=.20;this.distance=13.2;this.frames=0;this.simSteps=0;this.dirty=true;
+  const vs=`#version 300 es
+  precision highp float; out vec2 uv; void main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);uv=p;gl_Position=vec4(p*2.-1.,0,1);}`;
+  const common=`
+  precision highp float;
+  uniform sampler2D field;
+  const float N=64.; const float T=8.; const float W=512.; const float BOX=3.;
+  float hash(vec3 p){p=fract(p*.3183099+vec3(.1,.2,.3));p*=17.;return fract(p.x*p.y*p.z*(p.x+p.y+p.z));}
+  float noise3(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(mix(hash(i),hash(i+vec3(1,0,0)),f.x),mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),f.x),f.y),mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x),mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)),f.x),f.y),f.z);}
+  vec2 atlasUV(vec2 c,float k){return (vec2(mod(k,T),floor(k/T))*N+c+.5)/W;}
+  vec4 sampleField(vec3 p){
+   if(any(greaterThan(abs(p),vec3(BOX))))return vec4(0);
+   vec3 c=clamp((p/(BOX*2.)+.5)*N-.5,vec3(0),vec3(N-1.));
+   float k=floor(c.z);return mix(texture(field,atlasUV(c.xy,k)),texture(field,atlasUV(c.xy,min(k+1.,N-1.))),fract(c.z));
+  }
+  `;
+  const sf=`#version 300 es
+  ${common}
+  uniform float dt,clockTime,concentration,h;uniform bool resetField,analogue;in vec2 uv;out vec4 frag;
+  vec3 flow(vec3 p){
+   float r2=dot(p.xz,p.xz),r=sqrt(r2),sw=5.*(1.-exp(-r2))/max(r2,1e-6);
+   if(analogue)return vec3(-.65*p.x-sw*p.z,1.3*p.y,-.65*p.z+sw*p.x);
+   float e=exp(-.16*r2-.08*p.y*p.y),rad=-1.5*(1.-.16*p.y*(p.y+.025))*e;
+   float axial=3.*(p.y+.025)*(1.-.16*r2)*e;
+   sw*=exp(h*concentration-.025*p.y*p.y);
+   // Coordinate drift is necessary: p is a shrinking observation window, not material coordinates.
+   return vec3((rad+.5)*p.x-sw*p.z,axial+(.5-h)*p.y,(rad+.5)*p.z+sw*p.x);
+  }
+  vec4 seed(vec3 p){
+   float r=length(p.xz),a=atan(p.z,p.x),y=p.y;
+   float structure=.35+.65*noise3(p*9.+vec3(3,9,1));
+   float spiral=pow(.5+.5*sin(6.*a+8.*log(r+.12)+y*4.),7.);
+   float mid=exp(-y*y*30.)*exp(-pow((r-1.25)/.9,2.))*(.20+.7*spiral);
+   float jets=exp(-pow((r-(.19+.018*y*y))/.23,2.))*(.45+.55*pow(.5+.5*sin(3.*a-y*7.),3.))*exp(-.13*y*y);
+   float core=.12*exp(-r*r*7.-y*y*.22);
+   float d=(mid+.9*jets+core)*structure;
+   return vec4(d*(.75+.25*sin(a)),d*(.67-.24*sin(a)),0.,1.);
+  }
+  void main(){
+   vec2 pc=gl_FragCoord.xy-.5;float k=floor(pc.x/N)+T*floor(pc.y/N);
+   vec3 p=(vec3(mod(pc.x,N),mod(pc.y,N),k)+.5)/N*6.-3.;
+   if(resetField){frag=seed(p);return;}
+   vec3 m=p-.5*dt*flow(p), back=p-dt*flow(m);
+   vec4 v=sampleField(back);v.xy*=exp(-dt*.10);
+   float r=length(p.xz),a=atan(p.z,p.x),phase=clockTime*.28;
+   float injection=exp(-pow((r-1.97)/.16,2.)-pow(p.y/.065,2.));
+   float filament=.06+.94*pow(.5+.5*sin(a*9.+phase+noise3(p*11.)*1.6),10.);
+   v.xy+=dt*9.*injection*filament*vec2(.75+.25*cos(a*2.+phase),.65-.25*cos(a*2.+phase));
+   // A tiny continuously seeded near-axis tracer makes axial transport visible.
+   float central=exp(-r*r*11.-pow((p.y+.04)/.10,2.));
+   v.xy+=dt*.45*central;
+   frag=vec4(clamp(v.xy,0.,4.),0.,1.);
+  }`;
+  const rf=`#version 300 es
+  ${common}
+  uniform vec2 resolution;uniform vec3 eye,side,up,forward,volumeScale;
+  uniform float clockTime,concentration,quality,pulseValue;uniform bool pulses,analogue;
+  in vec2 uv;out vec4 frag;
+  vec3 tone(vec3 x){return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.);}
+  vec2 intersectBox(vec3 o,vec3 d){vec3 m=1./d,n=m*o,k=abs(m)*3.;vec3 t1=-n-k,t2=-n+k;return vec2(max(max(t1.x,t1.y),t1.z),min(min(t2.x,t2.y),t2.z));}
+  vec3 room(vec3 ro,vec3 rd){
+   vec3 c=vec3(.004,.008,.013)*(1.+.4*rd.y);
+   float soft=pow(max(0.,dot(rd,normalize(vec3(-.4,.8,-.5)))),18.);
+   c+=vec3(.028,.043,.044)*soft;
+   if(rd.y<-.015){float t=(-3.62-ro.y)/rd.y;if(t>0.){
+    vec3 p=ro+rd*t;float fall=exp(-.036*dot(p.xz,p.xz));
+    float brush=(noise3(vec3(p.x*4.,p.z*110.,0.))-.5)*.003;
+    c=vec3(.017,.025,.030)+brush;
+    float caustic=exp(-pow(p.x/1.6,2.)-pow((p.z+.0)/1.4,2.));
+    c+=vec3(.033,.09,.088)*caustic;
+    float ring=exp(-pow((length(p.xz)-2.65)/.018,2.));
+    c+=ring*vec3(.018,.026,.029)*fall;
+    float panel=exp(-pow((p.x+4.)/.27,2.))*exp(-pow((p.z+1.)/4.,2.));
+    c+=vec3(.085,.068,.042)*panel*fall;
+    c=mix(vec3(.004,.008,.013),c,exp(-.015*t));
+   }}
+   return c;
+  }
+  vec2 density(vec3 p){
+   vec2 d=sampleField(p).xy;
+   float r=length(p.xz),a=atan(p.z,p.x);
+   float th=a-clockTime*3.8/(1.+r*r)-p.y*1.15;
+   vec3 w=vec3(r*cos(th),p.y,r*sin(th));
+   float n=noise3(w*7.5+vec3(0,clockTime*.11,0));
+   float n2=noise3(w*19.5+vec3(7,3,4));
+   float fibres=pow(.5+.5*sin(7.*a+11.*log(r+.15)-clockTime*5./(1.+r*r)+2.*p.y),6.);
+   float detail=smoothstep(.22,.79,.65*n+.35*n2);
+   d*= (.06+2.6*detail*detail)*mix(.55+1.2*fibres,1.,smoothstep(.3,1.8,abs(p.y)));
+   float edge=1.-smoothstep(2.55,3.,max(max(abs(p.x),abs(p.y)),abs(p.z)));
+   return d*edge;
+  }
+  float overlay(vec3 p){
+   float r=length(p.xz),a=atan(p.z,p.x),outv=0.;
+   for(int j=0;j<4;j++){
+    float jf=float(j), y=(jf-1.5)*.86;
+    float phase=fract(clockTime*.10+jf*.27),yref=2.*(.5+phase),amp=exp(12.*(asinh(yref)-asinh(2.)-((yref+yref*yref*yref/3.)-(2.+8./3.))/pow(5.,1.5)));
+    float rad=1.02+jf*.105,ring=exp(-pow((r-rad)/.035,2.)-pow((p.y-y)/.05,2.));
+    float pattern=.40+.60*pow(.5+.5*cos((12.+floor(concentration*.4))*a+clockTime*(j%2==0?1.:-1.)),2.);
+    outv+=ring*amp*pattern;
+   }return outv;
+  }
+  void main(){
+   vec2 xy=(gl_FragCoord.xy-.5*resolution)/resolution.y;
+   vec3 rd=normalize(forward*1.65+side*xy.x+up*xy.y);
+   vec3 col=room(eye,rd),o=eye/volumeScale,d=rd/volumeScale;
+   vec2 hit=intersectBox(o,d);
+   if(hit.y>max(hit.x,0.)){
+    float a=max(0.,hit.x),b=hit.y;
+    float steps=quality;float stepSize=(b-a)/steps;
+    float rayFactor=length(d)*stepSize;
+    float jitter=hash(vec3(gl_FragCoord.xy,1.));
+    float travel=a+stepSize*jitter,trans=1.;vec3 result=vec3(0);
+    vec3 lightDir=normalize(vec3(-.65,.65,.42));
+    for(int i=0;i<144;i++){
+     if(float(i)>=steps||trans<.012)break;
+     vec3 p=o+d*travel;vec2 dyes=density(p);float den=(dyes.x+dyes.y)*.60;
+     if(den>.002){
+      float shadow=0.;shadow+=(sampleField(p+lightDir*.16).x+sampleField(p+lightDir*.16).y)*.15;
+      shadow+=(sampleField(p+lightDir*.43).x+sampleField(p+lightDir*.43).y)*.18;
+      float illumination=exp(-shadow*2.8);
+      float viewAngle=pow(max(0.,dot(rd,-lightDir)),5.);
+      vec3 tint=mix(vec3(.33,.56,.57),vec3(.66,.76,.71),clamp(den*1.5,0.,1.));
+      float warmth=smoothstep(-1.,2.,p.y)*.40;
+      vec3 lighting=vec3(.19,.29,.36)+illumination*mix(vec3(.72,.94,1.12),vec3(1.45,1.04,.60),warmth);
+      lighting+=viewAngle*vec3(.40,.55,.53)*illumination;
+      float alpha=1.-exp(-den*rayFactor*1.7);
+      result+=trans*alpha*tint*lighting;trans*=1.-alpha;
+     }
+     if(pulses&&!analogue){float wave=overlay(p);float alpha=1.-exp(-wave*rayFactor*.60);result+=trans*alpha*vec3(.67,.43,.19);trans*=1.-alpha;}
+     travel+=stepSize;
+    }
+    col=result+col*trans;
+   }
+   // A quiet photographic vignette and fine sensor grain; no fake emissive explosion.
+   float vignette=1.-.24*dot(xy,xy);col*=max(.55,vignette);
+   col=pow(tone(col*1.18),vec3(1./2.2));
+   col+=(hash(vec3(gl_FragCoord.xy,clockTime*.03))-.5)/430.;
+   frag=vec4(col,1);
+  }`;
+  this.sim=this.program(vs,sf);this.renderProgram=this.program(vs,rf);
+  this.vao=gl.createVertexArray();gl.bindVertexArray(this.vao);
+  this.fields=[this.makeTarget(),this.makeTarget()];this.current=0;this.resize();this.reset();this.bindEvents();
+ }
+ program(vs,fs){const g=this.gl;function shader(t,s){const sh=g.createShader(t);g.shaderSource(sh,s);g.compileShader(sh);if(!g.getShaderParameter(sh,g.COMPILE_STATUS)){const e=g.getShaderInfoLog(sh);g.deleteShader(sh);throw Error(e);}return sh;}
+  const v=shader(g.VERTEX_SHADER,vs),f=shader(g.FRAGMENT_SHADER,fs),p=g.createProgram();g.attachShader(p,v);g.attachShader(p,f);g.linkProgram(p);g.deleteShader(v);g.deleteShader(f);if(!g.getProgramParameter(p,g.LINK_STATUS))throw Error(g.getProgramInfoLog(p));return{p,loc:{}};
+ }
+ uni(pr,n,type,value){const g=this.gl;let l=pr.loc[n];if(l===undefined)l=pr.loc[n]=g.getUniformLocation(pr.p,n);if(l===null)return;if(type==='1f')g.uniform1f(l,value);else if(type==='1i')g.uniform1i(l,value);else if(type==='2f')g.uniform2fv(l,value);else if(type==='3f')g.uniform3fv(l,value);}
+ makeTarget(){const g=this.gl,t=g.createTexture();g.bindTexture(g.TEXTURE_2D,t);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MIN_FILTER,g.LINEAR);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MAG_FILTER,g.LINEAR);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_S,g.CLAMP_TO_EDGE);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_T,g.CLAMP_TO_EDGE);g.texImage2D(g.TEXTURE_2D,0,this.float?g.RGBA16F:g.RGBA8,512,512,0,g.RGBA,this.float?g.HALF_FLOAT:g.UNSIGNED_BYTE,null);const f=g.createFramebuffer();g.bindFramebuffer(g.FRAMEBUFFER,f);g.framebufferTexture2D(g.FRAMEBUFFER,g.COLOR_ATTACHMENT0,g.TEXTURE_2D,t,0);if(g.checkFramebufferStatus(g.FRAMEBUFFER)!==g.FRAMEBUFFER_COMPLETE)throw Error('Dye framebuffer is not supported');g.bindFramebuffer(g.FRAMEBUFFER,null);return{t,f};}
+ reset(){this.time=0;this.advect(0,true);this.render();}
+ advect(dt,reset=false){const g=this.gl,p=this.sim;g.useProgram(p.p);g.bindVertexArray(this.vao);g.bindFramebuffer(g.FRAMEBUFFER,this.fields[1-this.current].f);g.viewport(0,0,512,512);g.activeTexture(g.TEXTURE0);g.bindTexture(g.TEXTURE_2D,this.fields[this.current].t);this.uni(p,'field','1i',0);this.uni(p,'dt','1f',dt);this.uni(p,'clockTime','1f',this.time);this.uni(p,'concentration','1f',this.s);this.uni(p,'h','1f',H);this.uni(p,'resetField','1i',reset?1:0);this.uni(p,'analogue','1i',this.analogue?1:0);g.drawArrays(g.TRIANGLES,0,3);this.current=1-this.current;this.simSteps++;this.dirty=true;}
+ resize(){const r=this.canvas.getBoundingClientRect();const budget=this.quality==='high'?980000:this.quality==='low'?185000:this.pixelBudget;const scale=Math.min(window.devicePixelRatio||1,1.5,Math.sqrt(budget/Math.max(1,r.width*r.height)));const w=Math.max(1,Math.round(r.width*scale)),h=Math.max(1,Math.round(r.height*scale));if(this.canvas.width!==w||this.canvas.height!==h){this.canvas.width=w;this.canvas.height=h;this.dirty=true;}}
+ bindEvents(){let drag=false,prev=[0,0];this.canvas.addEventListener('pointerdown',e=>{drag=true;prev=[e.clientX,e.clientY];this.canvas.setPointerCapture(e.pointerId);this.dirty=true;});this.canvas.addEventListener('pointermove',e=>{if(!drag)return;this.yaw-=(e.clientX-prev[0])*.005;this.pitch=Math.max(-.7,Math.min(.9,this.pitch+(e.clientY-prev[1])*.004));prev=[e.clientX,e.clientY];this.dirty=true;});const end=()=>drag=false;this.canvas.addEventListener('pointerup',end);this.canvas.addEventListener('pointercancel',end);this.canvas.addEventListener('wheel',e=>{e.preventDefault();this.distance=Math.max(6.4,Math.min(17,this.distance*Math.exp(e.deltaY*.00065)));this.dirty=true;},{passive:false});new ResizeObserver(()=>this.resize()).observe(this.canvas);}
+ render(force=false){this.resize();if(!force&&!this.dirty)return;this.dirty=false;const g=this.gl,p=this.renderProgram,cp=Math.cos(this.pitch),sp=Math.sin(this.pitch),sy=Math.sin(this.yaw),cy=Math.cos(this.yaw);const eye=[sy*cp*this.distance,sp*this.distance,cy*cp*this.distance],forward=[-sy*cp,-sp,-cy*cp],side=[cy,0,-sy],up=[-sy*sp,cp,-cy*sp];
+  const sc=scales(this.s,this.analogue),rad=this.follow?1:sc.radius,ax=this.follow?sc.axial/sc.radius:sc.axial;
+  g.bindFramebuffer(g.FRAMEBUFFER,null);g.viewport(0,0,this.canvas.width,this.canvas.height);g.useProgram(p.p);g.bindVertexArray(this.vao);g.activeTexture(g.TEXTURE0);g.bindTexture(g.TEXTURE_2D,this.fields[this.current].t);
+  const u=(n,t,v)=>this.uni(p,n,t,v);u('field','1i',0);u('resolution','2f',[this.canvas.width,this.canvas.height]);u('eye','3f',eye);u('side','3f',side);u('up','3f',up);u('forward','3f',forward);u('volumeScale','3f',[rad*.88,ax*1.05,rad*.88]);u('clockTime','1f',this.time);u('concentration','1f',this.s);u('quality','1f',this.quality==='high'?128:this.quality==='low'?56:80);u('pulses','1i',this.pulses?1:0);u('analogue','1i',this.analogue?1:0);g.drawArrays(g.TRIANGLES,0,3);this.frames++;
+ }
+ step(dt){this.time+=dt;this.advect(dt);}
+}
+</script><script>'use strict';
+const $=id=>document.getElementById(id);
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const state={s:0,playing:!reduced,mode:'approach',speed:1,last:performance.now(),frames:0,fpsLast:performance.now(),fps:0,analogueTime:0};
+let renderer=null;
+try{renderer=new VortexRenderer($('fluid'));}catch(error){console.error('Vortex renderer:',error.message);$('render-error').hidden=false;state.playing=false;$('run-status').textContent='Renderer unavailable';$('snapshot').disabled=true;}
+const superDigits={'-':'⁻','0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹'};
+function sci(v){const e=Math.floor(Math.log10(v)+1e-10);return (v/Math.pow(10,e)).toFixed(2)+' × 10'+String(e).split('').map(c=>superDigits[c]).join('');}
+function metric(v){if(v>=100)return v.toFixed(0);if(v>=10)return v.toFixed(1);if(v>=1)return v.toFixed(2);return v.toFixed(3);}
+function activeButtons(attr,value){document.querySelectorAll('button['+attr+']').forEach(b=>{const on=b.getAttribute(attr)===value;b.classList.toggle('selected',on);b.setAttribute('aria-pressed',String(on));});}
+function toast(text){$('toast').textContent=text;$('toast').hidden=false;clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('toast').hidden=true,3200);}
+function update(){
+ const analog=state.mode==='analogue',sc=scales(state.s,analog),atEnd=!analog&&state.s>=SMAX-1e-8;
+ $('time-label').textContent=analog?'STEADY BURGERS VORTEX':'MODEL TIME · DIMENSIONLESS';
+ $('time-value').innerHTML=analog?'Steady<span> / no blowup</span>':sc.t.toFixed(7)+'<span> / 1</span>';
+ $('tau-value').textContent=analog?'Not applicable':sci(sc.tau);
+ $('radius-value').innerHTML=metric(sc.radius)+'<span>×</span>';$('speed-value').innerHTML=metric(sc.speed)+'<span>×</span>';$('energy-value').innerHTML=metric(sc.energy)+'<span>×</span>';
+ $('radius-law').textContent=analog?'Viscous core held fixed':'∝ τ¹ᐟ²';$('speed-law').textContent=analog?'Steady velocity field':'∝ τ⁻⁽¹ᐟ²⁺ʰ⁾';$('energy-law').textContent=analog?'Fixed observation region':'∝ τ¹ᐟ²⁻³ʰ';
+ $('metric-note').innerHTML=analog?'Normalised steady-flow reference.<br>No singularity is assigned to this analogue.':'Relative asymptotic scales; reference t = 0.9.<br>Not measurements of a full Navier–Stokes solve.';
+ $('limit-message').hidden=!atEnd;
+ $('play-label').textContent=atEnd?'Replay':state.playing?'Pause':'Play';$('play').setAttribute('aria-label',atEnd?'Replay simulation':state.playing?'Pause simulation':'Play simulation');
+ $('play-icon').innerHTML=state.playing?'<path d="M8 5v14M16 5v14"/>':'<path d="m8 5 10 7-10 7Z"/>';
+ $('run-status').textContent=!renderer?'Renderer unavailable':state.playing?'Live in your browser':atEnd?'At display limit':'Paused';
+ $('timeline').disabled=analog;$('timeline').value=String(state.s/SMAX*1000);$('timeline').style.setProperty('--progress',state.s/SMAX*100+'%');
+ $('timeline-label').textContent=analog?'Steady reference · time-to-singularity disabled':atEnd?'Display limit reached · τ = 10⁻⁷':'Approaching the singular time';
+ document.querySelectorAll('[data-seek]').forEach(b=>b.disabled=analog);
+ $('mode-label').textContent=analog?'CLOSEST PHYSICAL ANALOGUE':'MANUSCRIPT-GUIDED VISUAL MODEL';
+ if(analog){$('phase-title').innerHTML='A strained vortex.<br>A finite, steady core.';$('phase-description').textContent='Stretching and viscosity balance in this steady reference.';$('story-heading').textContent='BURGERS VORTEX';$('story-text').textContent='A laboratory analogue: rotation with inward radial flow and two-sided axial withdrawal. Viscous diffusion balances stretching, keeping its core finite. This is not a laboratory realisation of the singularity.';}
+ else{
+  if(state.s<3.2){$('phase-title').innerHTML='Inward spiral.<br>Outward along the axis.';$('phase-description').textContent='Watch the region of intense flow concentrate.';}
+  else if(state.s<8){$('phase-title').innerHTML='Smaller core.<br>Greater speed.';$('phase-description').textContent='The camera follows the shrinking flow region.';}
+  else{$('phase-title').innerHTML='Closer to the limit.<br>Still before t = 1.';$('phase-description').textContent='Increasing speed does not mean increasing total energy.';}
+  if(renderer&&!renderer.follow)$('phase-description').textContent='Fixed world scale: the observation region really is shrinking.';
+  $('story-heading').textContent=state.s>7?'SPEED UP, CORE ENERGY DOWN':'THE MECHANISM';
+  $('story-text').textContent=state.s>7?'The core speed rises while its volume falls even faster, so its energy scale decreases. This is concentration in a smaller region—not a physical explosion or a simulated infinite velocity.':'Fluid spirals inward and is carried away above and below the centre. The intense-flow region shrinks; a material parcel is not being squeezed into a point.';
+ }
+ const mag=renderer&&renderer.follow?1/sc.radius:1;
+ const zoom=renderer?13.2/renderer.distance:1;
+ $('scale-label').textContent=renderer&&renderer.follow?'Core-follow scale ×'+(mag*zoom<10?(mag*zoom).toFixed(1):(mag*zoom).toFixed(0)):'Fixed scale · relative radius '+metric(sc.radius)+'×';
+ $('pulses').disabled=analog;$('pulse-chart').style.opacity=analog?'.25':'1';
+ $('fps').textContent=!renderer?'GPU unavailable':state.playing?(state.fps>0?(state.fps<10?state.fps.toFixed(1):state.fps.toFixed(0))+' fps':'Measuring fps'):'Frame held';
+ $('render-detail').textContent='64³ GPU dye advection · '+(renderer&&renderer.follow?'magnified core':'fixed world scale');
+ const phase=renderer?(renderer.time*.10)%1:0,v=pulse(phase);$('pulse-cursor').setAttribute('x1',String(phase*260));$('pulse-cursor').setAttribute('x2',String(phase*260));$('pulse-dot').setAttribute('cx',String(phase*260));$('pulse-dot').setAttribute('cy',String(57-v*50));
+}
+let path='';for(let i=0;i<=150;i++)path+=(i?'L':'M')+(i/150*260).toFixed(2)+','+(57-pulse(i/150)*50).toFixed(2);$('pulse-curve').setAttribute('d',path);
+function restart(){state.s=0;state.analogueTime=0;state.playing=!!renderer;if(renderer){renderer.s=0;renderer.reset();}update();}
+function togglePlay(){if(!renderer)return;state.fpsLast=performance.now();state.frames=0;state.fps=0;if(state.mode==='approach'&&state.s>=SMAX)restart();else{state.playing=!state.playing;update();}}
+$('play').addEventListener('click',togglePlay);$('reset').addEventListener('click',restart);$('replay-limit').addEventListener('click',restart);
+function seek(value){if(state.mode==='analogue')return;state.s=Math.max(0,Math.min(1,value))*SMAX;state.playing=false;if(renderer){renderer.s=state.s;renderer.reset();}update();}
+$('timeline').addEventListener('input',e=>seek(Number(e.target.value)/1000));document.querySelectorAll('[data-seek]').forEach(b=>b.addEventListener('click',()=>seek(Number(b.dataset.seek))));
+// Time and numerical integration pause together; orbiting the frozen volume remains available.
+window.addEventListener('keydown',e=>{if(e.code==='Space'&&!/INPUT|SELECT|BUTTON|TEXTAREA/.test(document.activeElement.tagName)&&!$('sources').open){e.preventDefault();togglePlay();}});
+document.querySelectorAll('[data-camera]').forEach(b=>b.addEventListener('click',()=>{if(renderer){renderer.follow=b.dataset.camera==='follow';renderer.dirty=true;}activeButtons('data-camera',b.dataset.camera);update();}));
+document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>{state.mode=b.dataset.mode;activeButtons('data-mode',state.mode);if(renderer){renderer.analogue=state.mode==='analogue';renderer.reset();}if(state.mode==='approach'&&state.s>=SMAX)state.playing=false;else state.playing=!!renderer;update();}));
+$('pulses').addEventListener('change',e=>{if(renderer){renderer.pulses=e.target.checked;renderer.dirty=true;}});$('playback').addEventListener('change',e=>state.speed=Number(e.target.value));$('quality').addEventListener('change',e=>{if(renderer){renderer.quality=e.target.value;renderer.dirty=true;renderer.resize();}});
+function openNotes(){state.resumeAfterNotes=state.playing;state.playing=false;$('sources').showModal();update();}
+$('sources-open').addEventListener('click',openNotes);$('explain-open').addEventListener('click',openNotes);$('sources-close').addEventListener('click',()=>$('sources').close());$('sources').addEventListener('close',()=>{state.playing=state.resumeAfterNotes&&!!renderer;update();});$('sources').addEventListener('click',e=>{if(e.target===$('sources')){const r=$('sources').getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)$('sources').close();}});
+$('fullscreen').addEventListener('click',async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{toast('Fullscreen is not enabled in this browser.');}});
+$('snapshot').addEventListener('click',()=>{if(!renderer)return;renderer.render(true);const c=document.createElement('canvas');c.width=renderer.canvas.width;c.height=renderer.canvas.height+90;const ctx=c.getContext('2d');ctx.fillStyle='#10171e';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(renderer.canvas,0,0);ctx.fillStyle='#d4e7df';ctx.font='16px sans-serif';ctx.fillText('Navier–Stokes · '+(state.mode==='analogue'?'Burgers reference':'t = '+scales(state.s).t.toFixed(7)),20,c.height-56);ctx.fillStyle='#9baeb9';ctx.font='11px sans-serif';ctx.fillText('Reduced visual model · prescribed flow, not a full Navier–Stokes solution',20,c.height-34);ctx.fillText((renderer.follow?'Core-follow magnification':'Fixed world scale')+' · h = 0.006 (illustrative)',20,c.height-16);c.toBlob(blob=>{if(!blob)return;const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='navier-stokes-view.png';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);toast('View saved with model and time labels.');},'image/png');});
+$('fluid').addEventListener('webglcontextlost',e=>{e.preventDefault();state.playing=false;$('run-status').textContent='Graphics context lost';$('render-error').hidden=false;});
+// Testable diagnostics distinguish evaluated ratios from GPU transport and rendering.
+window.vortex={getState:()=>({...state,scales:scales(state.s,state.mode==='analogue'),renderer:renderer?{frames:renderer.frames,simSteps:renderer.simSteps,float:renderer.float,follow:renderer.follow,grid:64,width:renderer.canvas.width,height:renderer.canvas.height}:null}),seek,scales,velocity,pulse};
+update();let uiLast=0;
+function frame(now){const elapsed=Math.min((now-state.last)/1000,.065);state.last=now;
+ if(!document.hidden&&renderer){
+  if(state.playing){const ds=elapsed*SMAX/80*state.speed;if(state.mode==='approach'){const actual=Math.min(ds,SMAX-state.s);state.s+=actual;renderer.s=state.s;renderer.step(actual);if(state.s>=SMAX-1e-10){state.s=SMAX;state.playing=false;}}
+   else{state.analogueTime+=ds;renderer.step(ds);}}
+  const priorFrames=renderer.frames;renderer.render();state.frames+=renderer.frames-priorFrames;
+  if(now-state.fpsLast>1250&&state.frames>0){state.fps=state.frames*1000/(now-state.fpsLast);if(renderer.quality==='auto'&&state.frames>0){if(state.fps<24&&renderer.pixelBudget>125000)renderer.pixelBudget=Math.max(125000,renderer.pixelBudget*.65);else if(state.fps>52&&renderer.pixelBudget<700000)renderer.pixelBudget=Math.min(700000,renderer.pixelBudget*1.07);}state.fpsLast=now;state.frames=0;}
+ }
+ if(now-uiLast>100){update();uiLast=now;}
+ requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body></html>

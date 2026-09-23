@@ -1,0 +1,884 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Finite-time blowup for Navier–Stokes — live collapsing vortex core</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html,body{margin:0;height:100%;background:#000;color:#e8e6e1;font-family:"Segoe UI",system-ui,sans-serif;overflow:hidden}
+  #gl{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:grab}
+  #gl:active{cursor:grabbing}
+  .panel{position:fixed;background:rgba(8,10,14,.62);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:12px 14px;font-size:12.5px;line-height:1.35}
+  #hud{left:14px;top:14px;width:360px}
+  #hud h1{font-size:14px;margin:0 0 4px;font-weight:600;letter-spacing:.2px}
+  #hud .sub{color:#a9a49a;font-size:11.5px;margin-bottom:10px}
+  .big{font-family:Consolas,"Cascadia Mono",monospace;font-size:26px;line-height:1.05;margin:4px 0 2px}
+  .big small{font-size:12px;color:#a9a49a;margin-left:6px}
+  .grid{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-family:Consolas,"Cascadia Mono",monospace;font-size:12px;margin-top:8px}
+  .grid .k{color:#9a958c}
+  .grid .v{text-align:right;white-space:nowrap}
+  .bar{position:relative;height:9px;background:rgba(255,255,255,.08);border-radius:5px;margin:8px 0 3px;overflow:visible}
+  .bar .fill{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#4f8ecf,#ffb347,#ff5c3a);border-radius:5px}
+  .bar .mark{position:absolute;right:0;top:-4px;width:2px;height:17px;background:#ff5c3a}
+  .lab{display:flex;justify-content:space-between;font-size:10.5px;color:#a9a49a}
+  #phase{margin-top:8px;font-size:12px;color:#d8d2c6;min-height:34px}
+  #phase b{color:#ffcf8a}
+  #event{margin-top:6px;font-size:13px;font-weight:600;color:#ff8a65;min-height:18px}
+  #ctrl{right:14px;top:14px;width:290px}
+  #ctrl h2{font-size:12px;margin:0 0 8px;text-transform:uppercase;letter-spacing:1px;color:#a9a49a}
+  .row{display:grid;grid-template-columns:118px 1fr 44px;align-items:center;gap:8px;margin:5px 0}
+  .row label{color:#cfc9bd}
+  .row input[type=range]{width:100%}
+  .row .val{font-family:Consolas,monospace;text-align:right;color:#ffcf8a}
+  .btns{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+  button,select{background:rgba(255,255,255,.08);color:#e8e6e1;border:1px solid rgba(255,255,255,.14);border-radius:6px;padding:5px 9px;font-size:12px;cursor:pointer}
+  button:hover{background:rgba(255,255,255,.16)}
+  select{width:100%}
+  .chk{display:flex;gap:14px;margin-top:8px;font-size:12px}
+  #about{left:50%;top:50%;transform:translate(-50%,-50%);width:min(760px,92vw);max-height:86vh;overflow:auto;display:none;font-size:13px;line-height:1.5}
+  #about h2{margin:0 0 8px;font-size:16px}
+  #about h3{margin:14px 0 4px;font-size:13.5px;color:#ffcf8a}
+  #about code{background:rgba(255,255,255,.08);padding:1px 4px;border-radius:3px;font-size:12px}
+  #about .close{position:absolute;right:10px;top:8px}
+  #scale{left:14px;bottom:14px;font-family:Consolas,monospace;font-size:11.5px;color:#cfc9bd}
+  #scale .rule{height:2px;background:#e8e6e1;margin:6px 0 2px;position:relative}
+  #scale .rule:before,#scale .rule:after{content:"";position:absolute;top:-4px;width:2px;height:10px;background:#e8e6e1}
+  #scale .rule:before{left:0}#scale .rule:after{right:0}
+  #fps{right:14px;bottom:14px;font-family:Consolas,monospace;font-size:11.5px;color:#a9a49a}
+  #hint{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);font-size:11.5px;color:#8f8a80}
+  #err{position:fixed;inset:0;display:none;place-items:center;background:#1a0d0d;color:#ffb4a2;padding:30px;font-size:15px;white-space:pre-wrap}
+  .hidden{display:none !important}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="err"></div>
+
+<div id="hud" class="panel">
+  <h1>Finite-time blowup for Navier–Stokes</h1>
+  <div class="sub">Live Lagrangian view of the collapsing vortex core of Theorem 1.1 (ν = 1 units). Zero initial velocity, smooth compact force, bounded energy — unbounded speed at t = 1.</div>
+  <div class="big"><span id="tval">t = 0.0000</span><small>τ = 1 − t</small></div>
+  <div class="big" style="font-size:16px;color:#ffcf8a"><span id="tauval">τ = 1.000e+0</span></div>
+  <div class="bar"><div class="fill" id="tfill" style="width:0%"></div><div class="mark" title="singular time t = 1"></div></div>
+  <div class="lab"><span>t = 0 (rest)</span><span>singularity t = 1</span></div>
+  <div class="grid">
+    <span class="k">core radius ℓr ≍ τ^½</span><span class="v" id="lr"></span>
+    <span class="k">core height ℓz ≍ τ^(½−h)</span><span class="v" id="lz"></span>
+    <span class="k">peak swirl |uθ| ≍ τ^(−½−h)</span><span class="v" id="umax"></span>
+    <span class="k">angular Reynolds Reθ ≍ τ^(−h)</span><span class="v" id="re"></span>
+    <span class="k">core kinetic energy ∝ τ^(½−3h)</span><span class="v" id="ke"></span>
+    <span class="k">pulse slot (v = ln 1/τ)</span><span class="v" id="slot"></span>
+    <span class="k">view frame half-width</span><span class="v" id="frame"></span>
+  </div>
+  <div class="bar" style="margin-top:10px"><div class="fill" id="ufill" style="width:0%;background:linear-gradient(90deg,#3a7bd5,#ffffff)"></div></div>
+  <div class="lab"><span>|u|max = 1</span><span>10²</span><span>10⁴</span><span>∞</span></div>
+  <div id="phase"></div>
+  <div id="event"></div>
+</div>
+
+<div id="ctrl" class="panel">
+  <h2>Simulation</h2>
+  <div class="row"><label>time warp</label><input id="warp" type="range" min="-2" max="3" step="0.05" value="0"><span class="val" id="warpv">1.0×</span></div>
+  <div class="row"><label>frame zoom γ</label><input id="gamma" type="range" min="0" max="1" step="0.05" value="0.8"><span class="val" id="gammav">0.80</span></div>
+  <div class="row"><label>swirl gain E₀</label><input id="e0" type="range" min="2" max="40" step="1" value="12"><span class="val" id="e0v">12</span></div>
+  <div class="row"><label>meridional U₀</label><input id="u0" type="range" min="0" max="8" step="0.25" value="3"><span class="val" id="u0v">3.0</span></div>
+  <div class="row"><label>pulse amplitude</label><input id="pamp" type="range" min="0" max="1" step="0.05" value="0.3"><span class="val" id="pampv">0.30</span></div>
+  <div class="row"><label>stop at τ</label><select id="taumin"><option value="1e-4">1e-4 (short)</option><option value="1e-6" selected>1e-6</option><option value="1e-8">1e-8 (long)</option></select><span></span></div>
+  <h2 style="margin-top:12px">Rendering</h2>
+  <div class="row"><label>volume / tracers</label><select id="quality"><option value="low">Low (96³, 1M)</option><option value="med" selected>Medium (128³, 2M)</option><option value="high">High (160³, 2M)</option><option value="photo">Photo (192³, 4M)</option></select><span></span></div>
+  <div class="row"><label>FPS regulator</label><select id="regmode"><option value="on" selected>transformer (online)</option><option value="off">off (preset)</option></select><span></span></div>
+  <div class="row"><label>FPS target</label><select id="regtarget"><option value="display" selected>display max</option><option value="120">120</option><option value="60">60</option><option value="30">30</option></select><span></span></div>
+  <div class="row"><label>cloud density</label><input id="cloud" type="range" min="0" max="30" step="0.5" value="6"><span class="val" id="cloudv">6.0</span></div>
+  <div class="row"><label>dust density</label><input id="dust" type="range" min="0" max="10" step="0.25" value="2"><span class="val" id="dustv">2.0</span></div>
+  <div class="row"><label>exposure</label><input id="expo" type="range" min="0.3" max="3" step="0.05" value="1.1"><span class="val" id="expov">1.10</span></div>
+  <div class="chk"><label><input id="orbit" type="checkbox" checked> auto-orbit</label><label><input id="loop" type="checkbox" checked> loop</label><label><input id="showui" type="checkbox" checked> HUD</label></div>
+  <div class="btns"><button id="pause">Pause</button><button id="restart">Restart</button><button id="aboutbtn">About / physics</button></div>
+</div>
+
+<div id="scale" class="panel"><div id="scaletxt"></div><div class="rule" style="width:120px"></div><div id="scalelen"></div></div>
+<div id="fps" class="panel"></div>
+<div id="hint">drag to orbit · wheel to zoom · space pause · R restart · H hide UI</div>
+
+<div id="about" class="panel">
+  <button class="close" id="aboutclose">✕</button>
+  <h2>What you are looking at</h2>
+  <p>A live GPU simulation of the singular flow constructed in <i>Finite time blowup for Navier–Stokes</i> (the PDF). The paper builds, for every viscosity, a smooth forced solution that starts from rest and whose velocity becomes unbounded at the origin at <code>t = 1</code> while its kinetic energy stays bounded (Theorem 1.1). This page reproduces the geometry, scaling laws and physical mechanism of its Section 2, and shows <b>when</b> the blowup happens on the timeline.</p>
+
+  <h3>What is exact, what is schematic</h3>
+  <ul>
+    <li><b>Exact from the paper:</b> similarity coordinates <code>τ = q(1−η²)</code>, <code>z = q^D η</code>, <code>X = r²/2q</code> with <code>A = ½+h</code>, <code>D = ½−h</code>, <code>0&lt;h&lt;1/100</code>; scalings <code>uθ, uz = q^(−A)·profile</code>, <code>ℓr ≍ τ^½</code>, <code>ℓz ≍ τ^(½−h)</code>, <code>Reθ ≍ τ^(−h)</code>, core energy <code>≍ τ^(½−3h)</code>; the exterior <code>E ~ c∞ X^(−½−h)</code> (a nearly potential vortex); pulse amplitude <code>A_wave ≍ q^(−½−h/2)</code> and wavelength <code>ℓ_wave ≍ q^(½+h/2)</code>, zero angular mean, transverse to the wavevector, growing then decaying in each slot of logarithmic time <code>v = ln(1/τ)</code>, radial wavelength shortened by the shear; compact-support cutoff at fixed physical radius.</li>
+    <li><b>Schematic:</b> the profile shapes <code>E(X,η)</code>, <code>U(X,η)</code> are solutions of the paper's profile equations and are not closed-form; here they are replaced by smooth analytic stand-ins with the same axis regularity, decay and symmetry (Gaussian-core swirl; a Stokes streamfunction <code>ψ = q^D·U₀·X e^(−X)(η+b)(1−η²)²</code> giving inflow at the dividing layer, axial outflow on both sides, and the small upward bias <code>b</code> the paper uses). The swirl gain <code>E₀</code> is a visual amplitude, like the exaggeration in the paper's Figure 1.</li>
+    <li><b>Real dynamics on the GPU:</b> 1–4 million tracer particles are integrated (RK2) through this divergence-free field every frame and splatted into a volume that is ray-marched with single scattering, sun shadowing, sky ambient and a stormy sky. Nothing is pre-baked.</li>
+  </ul>
+
+  <h3>Closest existing physical phenomenon</h3>
+  <p>An <b>intensifying stretched vortex</b> — the Burgers vortex of turbulence theory, seen in nature as a tornado / waterspout funnel and in the lab as a bathtub vortex with axial outflow. Radial inflow conserves angular momentum <code>r·uθ</code>, so the swirl spins up as the core contracts; axial outflow removes the incoming mass so the collapse can continue; viscosity carries angular momentum back outward and the balance fixes the self-similar profile. The oscillatory pulses at the edge of the core are <b>centrifugal (Rayleigh-type) instability waves</b> feeding on the shear, the same mechanism as the spiral bands and suction vortices at the rim of a tornado core. The condensation funnel rendered here is the tornado analogue: it marks the low-pressure, high-speed core (drawn on the similarity variable <code>X</code>), and its hourglass shape is the level set <code>X = const</code>, i.e. <code>r² ≈ 2X(τ+z²)</code>, whose waist pinches to a point as <code>τ→0</code>.</p>
+
+  <h3>Transformer FPS regulator</h3>
+  <p>Frame rate is held as high as the display allows by a small transformer that runs and trains in the page: every frame becomes a token (measured frame time, render resolution, ray steps, shadow steps, pixel count, volume size, tracer count, vsync-pinned flag); two attention blocks (d=24, 32-token history) read the sequence plus a query token carrying a candidate render level and predict that level's frame time. It learns online with Adam from the frame times actually measured (censored loss when the frame is pinned at the refresh interval), and every 8 frames the controller picks the highest-quality level whose predicted cost fits the frame budget, with a hard step-down guard and gentle upward probing when pinned at vsync. The volume size and tracer count are fixed by the preset; resolution, ray steps and shadow steps float.</p>
+
+  <h3>Reading the display</h3>
+  <p>The view frame co-moves with the collapse: it shrinks like <code>τ^(γ/2)</code> (γ slider; γ=0 is the lab frame, γ=1 the fully self-similar frame). Wall-clock time is warped so the apparent motion stays watchable; the physical remaining time τ and the frame's physical half-width are shown live. Speeds in the core climb as <code>τ^(−½−h)</code>; the run stops at the chosen τ, marks the blowup at <code>t = 1</code>, and loops.</p>
+</div>
+
+<script>
+(function(){
+'use strict';
+const $ = id => document.getElementById(id);
+const canvas = $('gl');
+const gl = canvas.getContext('webgl2', {antialias:false, alpha:false, depth:false, stencil:false, powerPreference:'high-performance', preserveDrawingBuffer:false});
+function fatal(msg){ const e=$('err'); e.style.display='grid'; e.textContent=msg; throw new Error(msg); }
+if(!gl) fatal('WebGL2 is not available in this browser.');
+if(!gl.getExtension('EXT_color_buffer_float')) fatal('EXT_color_buffer_float is required (float render targets).');
+gl.getExtension('OES_texture_float_linear');
+const GPU_NAME = (()=>{ const d = gl.getExtension('WEBGL_debug_renderer_info'); const s = d ? gl.getParameter(d.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+  const m = /\((?:[^,]+),\s*([^(]+?)\s*(?:\(0x|Direct3D|,)/.exec(s); return (m ? m[1] : s).trim(); })();
+
+// ---------------------------------------------------------------- GLSL
+const QUAD_VS = `#version 300 es
+void main(){ vec2 p = vec2(float((gl_VertexID<<1)&2), float(gl_VertexID&2)); gl_Position = vec4(p*2.0-1.0, 0.0, 1.0); }`;
+
+// Shared physics: the paper's similarity coordinates and the velocity field (ν = 1 units).
+const PHYS = `
+uniform float uH, uE0, uU0, uBias, uPulseAmp, uPulseTilt, uSlotLen, uGamma, uL, uRcut, uLam0;
+const float PI = 3.141592653589793;
+
+// q(z,τ): solve q - z^2 q^{2h} = τ  (Newton; f is convex increasing)
+float qSolve(float z, float tau){
+  float z2 = z*z; float q = tau + z2;
+  for(int i=0;i<4;i++){
+    float q2h = pow(q, 2.0*uH);
+    float f = q - z2*q2h - tau;
+    float fp = 1.0 - 2.0*uH*z2*q2h/q;
+    q = max(q - f/fp, tau);
+  }
+  return q;
+}
+// Stokes streamfunction ψ = q^D Ψ(X,η), Ψ = U0 X e^{-X} (η+b)(1-η²)²  → u_r = -(1/r)∂zψ, u_z = (1/r)∂rψ
+float psiFn(float r, float z, float tau){
+  float q = qSolve(z, tau);
+  float X = r*r/(2.0*q);
+  float eta = clamp(z*pow(q, -(0.5-uH)), -1.0, 1.0);
+  float w = 1.0 - eta*eta;
+  return pow(q, 0.5-uH) * uU0 * X*exp(-X) * (eta+uBias)*w*w;
+}
+// pulse envelope in a slot of logarithmic time v = ln(1/τ): grows (shear) then decays (viscosity)
+float slotP(float tau, out float slot, out float s){
+  float v = -log(tau)/uSlotLen; slot = floor(v); s = v - slot;
+  return 17.5*pow(s,3.0)*pow(1.0-s,1.5);
+}
+float hash1(float k){ return fract(sin(k*12.9898+78.233)*43758.5453); }
+// vector potentials of the two pulse families: (φ1 cos, φ1 sin, φ2 cos, φ2 sin)
+vec4 pulsePot(float r, float th, float z, float tau){
+  float q = qSolve(z, tau);
+  float X = r*r/(2.0*q);
+  float eta = z*pow(q, -(0.5-uH));
+  float slot, s; float P = slotP(tau, slot, s);
+  float lw = uLam0*pow(q, 0.5+0.5*uH);                 // ℓ_wave ≍ q^{1/2+h/2}
+  float kr = 2.0*PI/lw*(1.0+uPulseTilt*s);             // shear shortens the radial wavelength
+  float rp = sqrt(2.0*q*2.5);                          // annulus centre X_p = 2.5
+  float envX = exp(-pow((X-2.5)/0.9, 2.0));
+  float e1 = envX*(exp(-pow((eta-0.35)/0.12,2.0)) + exp(-pow((eta+0.35)/0.12,2.0)));
+  float e2 = envX*(exp(-pow(eta/0.12,2.0)) + exp(-pow((eta-0.7)/0.12,2.0)) + exp(-pow((eta+0.7)/0.12,2.0)));
+  float ph1 = 6.2831853*hash1(slot), ph2 = 6.2831853*hash1(slot+17.0);
+  float a = uPulseAmp*0.64*uE0*uLam0/(2.0*PI);         // → |δu| ≍ q^{-1/2-h/2}, ratio uPulseAmp to the local swirl
+  float A1 = 5.0*th + kr*(r-rp) + ph1, A2 = 3.0*th + kr*(r-rp) + ph2;
+  return a*P*vec4(e1*cos(A1), e1*sin(A1), e2*cos(A2), e2*sin(A2));
+}
+// physical velocity (Cartesian) at x, remaining time τ
+vec3 velPhys(vec3 x, float tau){
+  float r = length(x.xy); float rr = max(r, 1e-7);
+  vec2 er = (r > 1e-7) ? x.xy/rr : vec2(1.0,0.0); vec2 et = vec2(-er.y, er.x);
+  float z = x.z; float th = atan(x.y, x.x);
+  float q = qSolve(z, tau);
+  float X = r*r/(2.0*q);
+  float A = 0.5+uH;
+  // azimuthal profile: smooth at axis, E ~ sqrt(2) X^{-1/2-h} outside (exterior nearly potential vortex)
+  float ut = pow(q, -A) * uE0 * sqrt(2.0*X) * pow(1.0+X, -1.0-uH);
+  // meridional flow from the streamfunction (central differences → discretely divergence-free)
+  float d = 0.03*sqrt(q);
+  float dpz = (psiFn(r, z+d, tau) - psiFn(r, z-d, tau))/(2.0*d);
+  float dpr = (psiFn(r+d, z, tau) - psiFn(abs(r-d), z, tau))/(2.0*d);
+  float ur = -dpz/rr, uz = dpr/rr;
+  // pulses: w = curl(φ1 e_z) + curl(φ2 e_θ)
+  if(uPulseAmp > 0.0 && X > 0.4 && X < 7.0){
+    float dp = 0.02*sqrt(q);
+    vec4 p0 = pulsePot(r, th, z, tau);
+    vec4 pr1 = pulsePot(r+dp, th, z, tau), pr0 = pulsePot(max(r-dp,0.0), th, z, tau);
+    vec4 pz1 = pulsePot(r, th, z+dp, tau), pz0 = pulsePot(r, th, z-dp, tau);
+    float d1r = (pr1.x-pr0.x)/(2.0*dp);
+    float d1th = -5.0*p0.y;
+    float d2z = (pz1.z-pz0.z)/(2.0*dp);
+    float d2rr = ((r+dp)*pr1.z - (r-dp)*pr0.z)/(2.0*dp);
+    ur += d1th/rr - d2z;
+    ut += -d1r;
+    uz += d2rr/rr;
+  }
+  float cut = 1.0 - smoothstep(0.7*uRcut, uRcut, length(x));  // compact support K
+  return cut*vec3(ur*er + ut*et, uz);
+}
+// velocity in the co-moving zoom frame ξ = x/(S L), S = τ^{γ/2}
+vec3 frameVel(vec3 xi, float tau){
+  float SL = pow(tau, 0.5*uGamma)*uL;
+  return velPhys(xi*SL, tau)/SL + (0.5*uGamma/tau)*xi;
+}
+`;
+
+const PART_FS = `#version 300 es
+precision highp float; precision highp int;
+` + PHYS + `
+uniform sampler2D uPart;
+uniform int uPartW, uDustCount;
+uniform float uTau, uDt, uReset;
+uniform uint uFrame;
+out vec4 o;
+uint hashU(uint x){ x ^= x>>16u; x *= 0x7feb352du; x ^= x>>15u; x *= 0x846ca68bu; x ^= x>>16u; return x; }
+float rnd(inout uint s){ s = hashU(s); return float(s)/4294967296.0; }
+float vnoise(vec3 p){ // cheap value noise for humidity patches
+  vec3 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+  float n = 0.0;
+  for(int k=0;k<8;k++){ vec3 c = vec3(float(k&1), float((k>>1)&1), float((k>>2)&1));
+    uint h = hashU(uint(i.x+c.x+1000.0)*73856093u ^ uint(i.y+c.y+1000.0)*19349663u ^ uint(i.z+c.z+1000.0)*83492791u);
+    float v = float(h)/4294967296.0; vec3 w = mix(1.0-f, f, c); n += v*w.x*w.y*w.z; }
+  return n;
+}
+vec4 spawnDust(inout uint s, float tau, bool initial){
+  // dust is entrained in the inflow layer around the dividing plane, patchy in angle and radius
+  float u = rnd(s); float X = initial ? 1.0 + 9.0*u*u : 1.5 + 5.0*u*u;
+  float eta = (rnd(s)*2.0-1.0)*0.5*(rnd(s)*0.6+0.4), th = 6.2831853*rnd(s);
+  float q = tau/(1.0-eta*eta);
+  float r = sqrt(2.0*q*X), z = pow(q, 0.5-uH)*eta;
+  float SL = pow(tau, 0.5*uGamma)*uL;
+  vec3 xi = vec3(r*cos(th), r*sin(th), z)/SL;
+  float clump = vnoise(vec3(th*1.5, X*0.8, eta*3.0) + 5.0);
+  float bright = smoothstep(0.3, 0.75, clump)*(0.4 + 0.6*rnd(s));
+  return vec4(xi, bright);                       // .w: humidity slot holds dust brightness
+}
+vec4 spawnVapor(inout uint s){
+  vec3 xi = vec3(rnd(s), rnd(s), rnd(s))*2.0-1.0;
+  float hum = vnoise(xi*3.0 + 11.0)*0.55 + vnoise(xi*7.0 + 3.0)*0.3 + vnoise(xi*15.0 + 7.0)*0.15;
+  hum = smoothstep(0.28, 0.85, hum);
+  return vec4(xi, hum);
+}
+void main(){
+  ivec2 ij = ivec2(gl_FragCoord.xy);
+  int id = ij.y*uPartW + ij.x;
+  bool dust = id < uDustCount;
+  vec4 p = texelFetch(uPart, ij, 0);
+  uint seed = uint(id)*2654435761u ^ (uFrame*40503u + 12345u);
+  float frames = floor(p.w); float hum = fract(p.w)*2.0;
+  vec3 xi = p.xyz;
+  bool respawn = uReset > 0.5;
+  if(!respawn){
+    // RK2 midpoint in frame coordinates (τ decreases along the step)
+    vec3 v1 = frameVel(xi, uTau);
+    vec3 xm = xi + 0.5*uDt*v1;
+    vec3 v2 = frameVel(xm, max(uTau - 0.5*uDt, 1e-9));
+    xi += uDt*v2;
+    frames = min(frames + 1.0, 100000.0);
+    if(any(greaterThan(abs(xi), vec3(1.0)))) respawn = true;
+    if(dust && frames > 2400.0 + 1800.0*rnd(seed)) respawn = true;
+    if(any(isnan(xi))) respawn = true;
+  }
+  if(respawn){
+    vec4 sp = dust ? spawnDust(seed, uTau, uReset > 0.5) : spawnVapor(seed);
+    xi = sp.xyz; hum = sp.w;
+    frames = (uReset > 0.5) ? floor(rnd(seed)*600.0) : 0.0;   // stagger ages on a reset
+  }
+  o = vec4(xi, frames + 0.5*clamp(hum, 0.0, 0.999));
+}`;
+
+const SPLAT_VS = `#version 300 es
+precision highp float; precision highp int;
+uniform sampler2D uPart;
+uniform int uPartW, uDustCount;
+uniform float uN, uTilesX; uniform vec2 uAtlasSize; uniform float uPointSize;
+out float vW; out float vDust;
+void main(){
+  int id = gl_VertexID;
+  ivec2 ij = ivec2(id % uPartW, id / uPartW);
+  vec4 p = texelFetch(uPart, ij, 0);
+  float frames = floor(p.w); float hum = fract(p.w)*2.0;
+  vec3 g = (p.xyz*0.5+0.5)*uN;
+  g.xy = clamp(g.xy, 1.0, uN-1.0);
+  float zf = g.z - 0.5; float k0 = floor(zf); float f = zf - k0;
+  float k = (gl_InstanceID == 0) ? k0 : k0 + 1.0;
+  float wz = (gl_InstanceID == 0) ? 1.0 - f : f;
+  if(k < 0.0 || k > uN - 1.0 || any(greaterThan(abs(p.xyz), vec3(1.0)))){ gl_Position = vec4(3.0,3.0,3.0,1.0); gl_PointSize = 1.0; vW = 0.0; vDust = 0.0; return; }
+  vec2 tile = vec2(mod(k, uTilesX), floor(k/uTilesX));
+  vec2 px = tile*uN + g.xy;
+  gl_Position = vec4(px/uAtlasSize*2.0-1.0, 0.0, 1.0);
+  gl_PointSize = uPointSize;
+  float fade = smoothstep(0.0, 70.0, frames);
+  vDust = (id < uDustCount) ? 1.0 : 0.0;
+  vW = wz*fade*hum;
+}`;
+const SPLAT_FS = `#version 300 es
+precision highp float;
+in float vW; in float vDust; uniform float uNormDust, uNormVap;
+out vec4 o;
+void main(){
+  vec2 d = gl_PointCoord - 0.5; float w = max(0.0, 1.0 - 2.0*length(d)); w = w*w*(3.0-2.0*w);
+  float v = vW*w;
+  o = vec4(v*vDust*uNormDust, v*(1.0-vDust)*uNormVap, 0.0, 0.0);
+}`;
+
+const RAY_FS = `#version 300 es
+precision highp float; precision highp sampler2D;
+uniform sampler2D uAtlas;
+uniform float uN, uTilesX, uResX, uResY; uniform vec2 uAtlasSize;
+uniform vec3 uCamPos; uniform mat3 uCamRot; uniform float uTanFov, uAspect;
+const float PI = 3.141592653589793;
+uniform float uTau, uH, uGamma, uL, uXcl, uCloudGain, uDustGain, uTime, uFlash, uHourglass;
+uniform int uSteps, uShadowSteps; uniform vec3 uSunDir; uniform uint uFrame;
+out vec4 o;
+
+float hash12(vec2 p){ vec3 p3 = fract(vec3(p.xyx)*0.1031); p3 += dot(p3, p3.yzx+33.33); return fract((p3.x+p3.y)*p3.z); }
+float vnoise2(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
+  float a=hash12(i), b=hash12(i+vec2(1,0)), c=hash12(i+vec2(0,1)), d=hash12(i+vec2(1,1));
+  return mix(mix(a,b,f.x), mix(c,d,f.x), f.y); }
+float fbm(vec2 p){ float v=0.0, a=0.5; for(int i=0;i<5;i++){ v+=a*vnoise2(p); p=p*2.03+vec2(1.7,9.2); a*=0.5; } return v; }
+
+vec2 sampleAtlas(vec3 xi){
+  vec3 g = (xi*0.5+0.5)*uN;
+  g.xy = clamp(g.xy, 0.5, uN-0.5);
+  float zf = clamp(g.z-0.5, 0.0, uN-1.0);
+  float k0 = floor(zf); float f = zf-k0; float k1 = min(k0+1.0, uN-1.0);
+  vec2 t0 = vec2(mod(k0,uTilesX), floor(k0/uTilesX)), t1 = vec2(mod(k1,uTilesX), floor(k1/uTilesX));
+  vec2 a = texture(uAtlas, (t0*uN+g.xy)/uAtlasSize).rg;
+  vec2 b = texture(uAtlas, (t1*uN+g.xy)/uAtlasSize).rg;
+  return mix(a,b,f);
+}
+float qApprox(float z, float tau){ float z2=z*z; float q = tau+z2; q = tau + z2*pow(q, 2.0*uH); return q; }
+// media: (cloud extinction, dust extinction)
+vec2 media(vec3 xi){
+  vec2 d = sampleAtlas(xi);
+  float SL = pow(uTau, 0.5*uGamma)*uL;
+  vec3 x = xi*SL;
+  float q = qApprox(x.z, uTau);
+  float X = dot(x.xy,x.xy)/(2.0*q);
+  float core = exp(-(X*X)/(uXcl*uXcl)) * pow(uTau/q, uHourglass);
+  float cloud = d.g*core*uCloudGain;
+  float dust = uDustGain*d.r/(1.0 + 0.25*d.r);
+  return vec2(cloud, dust);
+}
+vec3 sky(vec3 d){
+  float h = clamp(d.z, -1.0, 1.0);
+  vec3 zen = vec3(0.035,0.045,0.07), hor = vec3(0.26,0.22,0.19), low = vec3(0.05,0.045,0.045);
+  vec3 c = h > 0.0 ? mix(hor, zen, pow(h, 0.35)) : mix(hor, low, pow(-h, 0.35));
+  if(h > 0.01){ vec2 uv = d.xy/(h+0.12)*1.3; float n = fbm(uv + vec2(uTime*0.012, 0.0)); c *= 0.55 + 0.9*n*n; }
+  else { vec2 uv = d.xy/(0.12-h)*2.0; float n = fbm(uv*0.7); c *= 0.8 + 0.4*n; }
+  float s = max(dot(d, uSunDir), 0.0);
+  c += vec3(1.0,0.66,0.40)*(pow(s,900.0)*4.0 + pow(s,32.0)*0.5 + pow(s,4.0)*0.10);
+  return c;
+}
+bool boxHit(vec3 ro, vec3 rd, out float t0, out float t1){
+  vec3 inv = 1.0/rd; vec3 ta = (-1.0-ro)*inv, tb = (1.0-ro)*inv;
+  vec3 tmin = min(ta,tb), tmax = max(ta,tb);
+  t0 = max(max(tmin.x,tmin.y),tmin.z); t1 = min(min(tmax.x,tmax.y),tmax.z);
+  t0 = max(t0, 0.0); return t1 > t0;
+}
+float hg(float c, float g){ float g2=g*g; return (1.0-g2)/(4.0*PI*pow(1.0+g2-2.0*g*c, 1.5)); }
+float shadowT(vec3 p){
+  float ext = 0.0, st = 0.07;
+  for(int i=0;i<12;i++){ if(i>=uShadowSteps) break;
+    p += uSunDir*st; if(any(greaterThan(abs(p), vec3(1.0)))) break;
+    vec2 m = media(p); ext += (m.x+m.y)*st; st *= 1.6; }
+  return exp(-ext*1.3);
+}
+void main(){
+  vec2 res = vec2(uResX, uResY);
+  vec2 ndc = (gl_FragCoord.xy/res)*2.0-1.0;
+  vec3 rd = normalize(uCamRot*vec3(ndc.x*uTanFov*uAspect, ndc.y*uTanFov, 1.0));
+  vec3 ro = uCamPos;
+  vec3 bg = sky(rd);
+  float t0, t1;
+  vec3 col = vec3(0.0); float T = 1.0;
+  float jitter = hash12(gl_FragCoord.xy + float(uFrame%64u)*vec2(17.13, 3.71));
+  if(boxHit(ro, rd, t0, t1)){
+    float ds = (t1-t0)/float(uSteps);
+    float t = t0 + ds*jitter;
+    float cosSun = dot(rd, uSunDir);
+    float phC = mix(hg(cosSun, 0.72), hg(cosSun, -0.25), 0.35)*4.0*PI;  // normalised dual-lobe
+    float phD = mix(hg(cosSun, 0.55), hg(cosSun, -0.1), 0.4)*4.0*PI;
+    vec3 sunCol = vec3(1.0,0.80,0.60)*2.8;
+    vec3 skyTop = vec3(0.14,0.17,0.24), skyBot = vec3(0.10,0.09,0.085);
+    for(int i=0;i<400;i++){ if(i>=uSteps) break;
+      vec3 p = ro + rd*t;
+      vec2 m = media(p);
+      float sig = m.x + m.y;
+      if(sig > 1e-4){
+        vec3 alb = (m.x*vec3(0.92,0.92,0.93) + m.y*vec3(0.46,0.36,0.26))/sig;
+        float ph = (m.x*phC + m.y*phD)/sig;
+        float Tl = shadowT(p);
+        vec2 mu = media(p + vec3(0.0,0.0,0.12));
+        float ambOcc = exp(-(mu.x + mu.y)*0.4);
+        // Beer-powder: dense interiors go dark, thin edges stay bright
+        float powder = 1.0 - 0.6*exp(-sig*0.35);
+        vec3 amb = mix(skyBot, skyTop, 0.5+0.5*p.z)*ambOcc*0.8 + vec3(0.5,0.4,0.3)*0.12*ambOcc;
+        vec3 light = (sunCol*Tl*ph + amb)*powder;
+        float a = 1.0 - exp(-sig*ds);
+        col += T*a*alb*light;
+        T *= 1.0 - a;
+      }
+      // blowup flash emission at the origin
+      if(uFlash > 0.0){ float g = exp(-dot(p,p)/0.006); col += T*uFlash*g*vec3(1.0,0.75,0.5)*ds*30.0; }
+      if(T < 0.01) break;
+      t += ds;
+    }
+  }
+  col += T*bg;
+  o = vec4(col, 1.0);
+}`;
+
+const POST_FS = `#version 300 es
+precision highp float;
+uniform sampler2D uHdr; uniform float uExposure, uTime; uniform vec2 uRes;
+out vec4 o;
+vec3 aces(vec3 x){ const float a=2.51,b=0.03,c=2.43,d=0.59,e=0.14; return clamp((x*(a*x+b))/(x*(c*x+d)+e),0.0,1.0); }
+float hash12(vec2 p){ vec3 p3 = fract(vec3(p.xyx)*0.1031); p3 += dot(p3, p3.yzx+33.33); return fract((p3.x+p3.y)*p3.z); }
+void main(){
+  vec2 uv = gl_FragCoord.xy/uRes;
+  vec3 c = texture(uHdr, uv).rgb*uExposure;
+  vec2 q = uv*2.0-1.0; c *= 1.0 - 0.16*dot(q,q)*dot(q,q);
+  c = aces(c);
+  c += (hash12(gl_FragCoord.xy + uTime*60.0) - 0.5)*0.012;
+  o = vec4(pow(max(c,0.0), vec3(1.0/2.2)), 1.0);
+}`;
+
+// ---------------------------------------------------------------- GL helpers
+function compile(type, src){
+  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)){
+    const log = gl.getShaderInfoLog(s);
+    const lines = src.split('\n').map((l,i)=>String(i+1).padStart(4)+': '+l).join('\n');
+    fatal('Shader compile error:\n'+log+'\n\n'+lines.slice(0, 4000));
+  }
+  return s;
+}
+function program(vs, fs){
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl.VERTEX_SHADER, vs)); gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if(!gl.getProgramParameter(p, gl.LINK_STATUS)) fatal('Program link error: '+gl.getProgramInfoLog(p));
+  const u = {}; const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for(let i=0;i<n;i++){ const info = gl.getActiveUniform(p, i); u[info.name] = gl.getUniformLocation(p, info.name); }
+  return {p, u};
+}
+function tex2d(w, h, internal, format, type, filter){
+  const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texStorage2D(gl.TEXTURE_2D, 1, internal, w, h);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return {t, w, h};
+}
+function fbo(texObj){
+  const f = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texObj.t, 0);
+  const st = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+  if(st !== gl.FRAMEBUFFER_COMPLETE) fatal('Framebuffer incomplete: 0x'+st.toString(16));
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  return f;
+}
+const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+const progPart = program(QUAD_VS, PART_FS);
+const progSplat = program(SPLAT_VS, SPLAT_FS);
+const progRay = program(QUAD_VS, RAY_FS);
+const progPost = program(QUAD_VS, POST_FS);
+
+// ---------------------------------------------------------------- state
+const QUALITY = {
+  low:  {N:96,  PW:1024, PH:1024, steps:64,  shadow:3, res:0.45, pt:3.0},
+  med:  {N:128, PW:2048, PH:1024, steps:96,  shadow:4, res:0.55, pt:2.6},
+  high: {N:160, PW:2048, PH:1024, steps:128, shadow:6, res:0.75, pt:2.6},
+  photo:{N:192, PW:2048, PH:2048, steps:192, shadow:8, res:1.0,  pt:2.6},
+};
+const P = {
+  h:0.01, gamma:0.8, tauMin:1e-6, duration:90, warp:1, E0:12, U0:3, bias:0.15, pulseAmp:0.3, pulseTilt:3.0, slotLen:1.0,
+  L:6.0, Rcut:5.2, lam0:0.35, Xcl:1.6, hourglass:0.8, cloudGain:6, dustGain:2, exposure:1.1, dustFrac:0.2,
+  autoOrbit:true, loop:true,
+};
+const S = { tau:1, running:true, blowup:false, blowupT:0, frame:0, last:performance.now(), fpsAcc:0, fpsN:0, fps:0, reset:true,
+  az:0.9, el:0.16, dist:3.3, time:0, flash:0 };
+let R = null; // GPU resources for the current quality
+let qualityKey = 'med';
+
+function setupResources(key){
+  const Q = QUALITY[key]; qualityKey = key;
+  if(R){ for(const t of [R.partA, R.partB, R.atlas, R.hdr]) gl.deleteTexture(t.t); for(const f of [R.fA, R.fB, R.fAtlas, R.fHdr]) gl.deleteFramebuffer(f); }
+  const tilesX = 16, tilesY = Math.ceil(Q.N/tilesX);
+  const AW = tilesX*Q.N, AH = tilesY*Q.N;
+  const partA = tex2d(Q.PW, Q.PH, gl.RGBA32F, gl.RGBA, gl.FLOAT, gl.NEAREST);
+  const partB = tex2d(Q.PW, Q.PH, gl.RGBA32F, gl.RGBA, gl.FLOAT, gl.NEAREST);
+  const atlas = tex2d(AW, AH, gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT, gl.LINEAR);
+  R = {Q, N:Q.N, tilesX, AW, AH, partA, partB, fA:fbo(partA), fB:fbo(partB), atlas, fAtlas:fbo(atlas), hdr:null, fHdr:null, RW:0, RH:0,
+       count:Q.PW*Q.PH, dustCount:Math.floor(Q.PW*Q.PH*P.dustFrac)};
+  ensureHdr();
+  S.reset = true;
+}
+// current render settings: the transformer regulator overrides the preset's res/steps/shadow when enabled
+function renderSettings(){ return REG.enabled ? REG.LADDER[REG.level] : {res:R.Q.res, steps:R.Q.steps, shadow:R.Q.shadow}; }
+function ensureHdr(){
+  const rs = renderSettings();
+  const RW = Math.max(64, Math.round(canvas.width*rs.res)), RH = Math.max(64, Math.round(canvas.height*rs.res));
+  if(R.hdr && R.RW === RW && R.RH === RH) return;
+  if(R.hdr){ gl.deleteTexture(R.hdr.t); gl.deleteFramebuffer(R.fHdr); }
+  R.RW = RW; R.RH = RH;
+  R.hdr = tex2d(RW, RH, gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT, gl.LINEAR); R.fHdr = fbo(R.hdr);
+}
+function resize(){
+  const dpr = Math.min(window.devicePixelRatio||1, 1.5);
+  const w = Math.round(innerWidth*dpr), h = Math.round(innerHeight*dpr);
+  if(canvas.width!==w || canvas.height!==h){ canvas.width=w; canvas.height=h; if(R) ensureHdr(); }
+}
+addEventListener('resize', resize);
+
+function restart(){ S.tau = 1; S.blowup = false; S.flash = 0; S.reset = true; S.running = true; $('pause').textContent = 'Pause'; $('event').textContent=''; }
+
+// time warp: dτ/dwall = -κ τ^β, β = ½ + h + γ/2 keeps the apparent core motion steady in the zoom frame
+function kappa(){
+  const beta = 0.5 + P.h + 0.5*P.gamma, e = 1 - beta;
+  if(Math.abs(e) < 1e-3) return Math.log(1/P.tauMin)/P.duration;
+  return (1 - Math.pow(P.tauMin, e))/(e*P.duration);
+}
+
+// ---------------------------------------------------------------- physics uniforms
+function setPhys(u){
+  gl.uniform1f(u.uH, P.h); gl.uniform1f(u.uE0, P.E0); gl.uniform1f(u.uU0, P.U0); gl.uniform1f(u.uBias, P.bias);
+  gl.uniform1f(u.uPulseAmp, P.pulseAmp); gl.uniform1f(u.uPulseTilt, P.pulseTilt); gl.uniform1f(u.uSlotLen, P.slotLen);
+  gl.uniform1f(u.uGamma, P.gamma); gl.uniform1f(u.uL, P.L); gl.uniform1f(u.uRcut, P.Rcut); gl.uniform1f(u.uLam0, P.lam0);
+}
+const sunDir = (()=>{ const el=0.20, az=2.4; return [Math.cos(el)*Math.sin(az), Math.cos(el)*Math.cos(az), Math.sin(el)]; })();
+
+// ================================================================ Transformer FPS regulator
+// A small causal-free transformer (2 blocks, d=24, single head) reads the last 32 frames as tokens
+// [frame time, render settings, load features] plus a query token holding candidate settings, and
+// predicts the log frame time that candidate would cost. It is trained online (Adam) on the frame
+// times actually measured, with a censored loss when the frame is pinned at the display refresh.
+// Every few frames the controller picks the highest-quality ladder level whose predicted cost fits
+// the frame budget, so the FPS stays as high as the display allows.
+const AG = (()=>{           // minimal reverse-mode autograd on dense Float32 matrices
+  let tape = null;
+  const tensor = (r,c,d)=>({r,c,d:d||new Float32Array(r*c),g:null,back:null});
+  const rec = (t,back)=>{ t.back = back; if(tape) tape.push(t); return t; };
+  const grad = t=>{ if(!t.g) t.g = new Float32Array(t.d.length); return t.g; };
+  function param(r,c,scale){ const t = tensor(r,c); for(let i=0;i<t.d.length;i++) t.d[i]=(Math.random()*2-1)*scale; t.m=new Float32Array(r*c); t.v=new Float32Array(r*c); t.isParam=true; return t; }
+  function matmul(A,B){
+    const C = tensor(A.r,B.c); const {r:m,c:k}=A, n=B.c;
+    for(let i=0;i<m;i++) for(let p=0;p<k;p++){ const a=A.d[i*k+p]; if(a===0) continue; for(let j=0;j<n;j++) C.d[i*n+j]+=a*B.d[p*n+j]; }
+    return rec(C, ()=>{ const gC=C.g; if(!gC) return; const gA=grad(A), gB=grad(B);
+      for(let i=0;i<m;i++) for(let p=0;p<k;p++){ let s=0; const a=A.d[i*k+p]; for(let j=0;j<n;j++){ const g=gC[i*n+j]; s+=g*B.d[p*n+j]; gB[p*n+j]+=a*g; } gA[i*k+p]+=s; } });
+  }
+  function addRow(A,b){ const C=tensor(A.r,A.c); for(let i=0;i<A.r;i++) for(let j=0;j<A.c;j++) C.d[i*A.c+j]=A.d[i*A.c+j]+b.d[j];
+    return rec(C, ()=>{ if(!C.g) return; const gA=grad(A), gb=grad(b); for(let i=0;i<A.r;i++) for(let j=0;j<A.c;j++){ gA[i*A.c+j]+=C.g[i*A.c+j]; gb[j]+=C.g[i*A.c+j]; } }); }
+  function add(A,B){ const C=tensor(A.r,A.c); for(let i=0;i<C.d.length;i++) C.d[i]=A.d[i]+B.d[i];
+    return rec(C, ()=>{ if(!C.g) return; const gA=grad(A), gB=grad(B); for(let i=0;i<C.d.length;i++){ gA[i]+=C.g[i]; gB[i]+=C.g[i]; } }); }
+  function addPos(A,Pos){ const C=tensor(A.r,A.c); for(let i=0;i<C.d.length;i++) C.d[i]=A.d[i]+Pos.d[i];
+    return rec(C, ()=>{ if(!C.g) return; const gA=grad(A), gP=grad(Pos); for(let i=0;i<C.d.length;i++){ gA[i]+=C.g[i]; gP[i]+=C.g[i]; } }); }
+  function scale(A,s){ const C=tensor(A.r,A.c); for(let i=0;i<C.d.length;i++) C.d[i]=A.d[i]*s;
+    return rec(C, ()=>{ if(!C.g) return; const gA=grad(A); for(let i=0;i<C.d.length;i++) gA[i]+=C.g[i]*s; }); }
+  function transpose(A){ const C=tensor(A.c,A.r); for(let i=0;i<A.r;i++) for(let j=0;j<A.c;j++) C.d[j*A.r+i]=A.d[i*A.c+j];
+    return rec(C, ()=>{ if(!C.g) return; const gA=grad(A); for(let i=0;i<A.r;i++) for(let j=0;j<A.c;j++) gA[i*A.c+j]+=C.g[j*A.r+i]; }); }
+  function layernorm(A,g,b){ const C=tensor(A.r,A.c); const n=A.c; const xh=new Float32Array(A.d.length), inv=new Float32Array(A.r);
+    for(let i=0;i<A.r;i++){ let mu=0; for(let j=0;j<n;j++) mu+=A.d[i*n+j]; mu/=n; let v=0; for(let j=0;j<n;j++){ const t=A.d[i*n+j]-mu; v+=t*t; } v/=n; const iv=1/Math.sqrt(v+1e-5); inv[i]=iv;
+      for(let j=0;j<n;j++){ const x=(A.d[i*n+j]-mu)*iv; xh[i*n+j]=x; C.d[i*n+j]=g.d[j]*x+b.d[j]; } }
+    return rec(C, ()=>{ if(!C.g) return; const gA=grad(A), gg=grad(g), gb=grad(b);
+      for(let i=0;i<A.r;i++){ let m1=0,m2=0; for(let j=0;j<n;j++){ const dy=C.g[i*n+j]; gg[j]+=dy*xh[i*n+j]; gb[j]+=dy; const dxh=dy*g.d[j]; m1+=dxh; m2+=dxh*xh[i*n+j]; } m1/=n; m2/=n;
+        for(let j=0;j<n;j++){ const dxh=C.g[i*n+j]*g.d[j]; gA[i*n+j]+=inv[i]*(dxh-m1-xh[i*n+j]*m2); } } }); }
+  function gelu(A){ const C=tensor(A.r,A.c); const k=0.7978845608;
+    for(let i=0;i<C.d.length;i++){ const x=A.d[i]; C.d[i]=0.5*x*(1+Math.tanh(k*(x+0.044715*x*x*x))); }
+    return rec(C, ()=>{ if(!C.g) return; const gA=grad(A); for(let i=0;i<C.d.length;i++){ const x=A.d[i]; const t=Math.tanh(k*(x+0.044715*x*x*x)); gA[i]+=C.g[i]*(0.5*(1+t)+0.5*x*(1-t*t)*k*(1+3*0.044715*x*x)); } }); }
+  function softmaxRows(A){ const C=tensor(A.r,A.c); const n=A.c;
+    for(let i=0;i<A.r;i++){ let mx=-1e30; for(let j=0;j<n;j++) mx=Math.max(mx,A.d[i*n+j]); let s=0; for(let j=0;j<n;j++){ const e=Math.exp(A.d[i*n+j]-mx); C.d[i*n+j]=e; s+=e; } for(let j=0;j<n;j++) C.d[i*n+j]/=s; }
+    return rec(C, ()=>{ if(!C.g) return; const gA=grad(A); for(let i=0;i<A.r;i++){ let dot=0; for(let j=0;j<n;j++) dot+=C.g[i*n+j]*C.d[i*n+j]; for(let j=0;j<n;j++) gA[i*n+j]+=C.d[i*n+j]*(C.g[i*n+j]-dot); } }); }
+  function lastRow(A){ const C=tensor(1,A.c); const off=(A.r-1)*A.c; for(let j=0;j<A.c;j++) C.d[j]=A.d[off+j];
+    return rec(C, ()=>{ if(!C.g) return; const gA=grad(A); for(let j=0;j<A.c;j++) gA[off+j]+=C.g[j]; }); }
+  function run(fn){ tape=[]; const out=fn(); const t=tape; tape=null; return {out, backward(){ for(let i=t.length-1;i>=0;i--) if(t[i].g) t[i].back(); }}; }
+  function adam(params, lr, step){ const b1=0.9,b2=0.999; const c1=1-Math.pow(b1,step), c2=1-Math.pow(b2,step);
+    for(const p of params){ if(!p.g) continue; for(let i=0;i<p.d.length;i++){ let g=p.g[i]; if(g>5) g=5; else if(g<-5) g=-5; p.m[i]=b1*p.m[i]+(1-b1)*g; p.v[i]=b2*p.v[i]+(1-b2)*g*g; p.d[i]-=lr*(p.m[i]/c1)/(Math.sqrt(p.v[i]/c2)+1e-8); } p.g=null; } }
+  return {tensor,param,matmul,addRow,add,addPos,scale,transpose,layernorm,gelu,softmaxRows,lastRow,run,adam};
+})();
+
+const REG = (()=>{
+  const SEQ = 32, F = 9, D = 24, FF = 48, NBLK = 2;
+  const LADDER = [ // render levels sorted by quality: (internal resolution scale, ray steps, shadow steps)
+    {res:0.30,steps:40,shadow:2},{res:0.35,steps:48,shadow:2},{res:0.40,steps:56,shadow:3},{res:0.45,steps:64,shadow:3},
+    {res:0.50,steps:72,shadow:3},{res:0.55,steps:84,shadow:4},{res:0.60,steps:96,shadow:4},{res:0.68,steps:108,shadow:5},
+    {res:0.75,steps:120,shadow:5},{res:0.85,steps:144,shadow:6},{res:0.92,steps:168,shadow:7},{res:1.00,steps:192,shadow:8} ];
+  const M = { We:AG.param(F,D,0.3), be:AG.param(1,D,0.01), Pos:AG.param(SEQ+1,D,0.05), blocks:[], Wh:AG.param(D,1,0.2), bh:AG.param(1,1,0.01) };
+  for(let b=0;b<NBLK;b++) M.blocks.push({ g1:AG.param(1,D,0), b1:AG.param(1,D,0), Wq:AG.param(D,D,0.2), Wk:AG.param(D,D,0.2), Wv:AG.param(D,D,0.2), Wo:AG.param(D,D,0.2),
+    g2:AG.param(1,D,0), b2:AG.param(1,D,0), W1:AG.param(D,FF,0.2), c1:AG.param(1,FF,0.01), W2:AG.param(FF,D,0.2), c2:AG.param(1,D,0.01) });
+  for(const b of M.blocks){ b.g1.d.fill(1); b.g2.d.fill(1); }
+  const params = [M.We,M.be,M.Pos,M.Wh,M.bh]; for(const b of M.blocks) params.push(b.g1,b.b1,b.Wq,b.Wk,b.Wv,b.Wo,b.g2,b.b2,b.W1,b.c1,b.W2,b.c2);
+  function forward(X){ // X: tensor [L,F] → tensor [1,1]
+    let H = AG.addPos(AG.addRow(AG.matmul(X, M.We), M.be), M.Pos);
+    for(const b of M.blocks){
+      const Hn = AG.layernorm(H, b.g1, b.b1);
+      const Q = AG.matmul(Hn,b.Wq), K = AG.matmul(Hn,b.Wk), V = AG.matmul(Hn,b.Wv);
+      const A = AG.softmaxRows(AG.scale(AG.matmul(Q, AG.transpose(K)), 1/Math.sqrt(D)));
+      H = AG.add(H, AG.matmul(AG.matmul(A,V), b.Wo));
+      const Hn2 = AG.layernorm(H, b.g2, b.b2);
+      H = AG.add(H, AG.addRow(AG.matmul(AG.gelu(AG.addRow(AG.matmul(Hn2,b.W1), b.c1)), b.W2), b.c2));
+    }
+    return AG.addRow(AG.matmul(AG.lastRow(H), M.Wh), M.bh);
+  }
+  // ---- data
+  const REF_MS = 16.7;
+  const ftFeat = ms => Math.log(Math.max(ms, 0.5)/REF_MS);
+  const ring = []; // per frame: {f: Float32Array(F) with ft at [0], ms, capped}
+  const RING_MAX = 4096;
+  function featRow(ms, s, capped){
+    const pix = canvas.width*canvas.height*s.res*s.res/2e6;
+    const f = new Float32Array(F);
+    f[0] = ms == null ? 0 : ftFeat(ms); f[1] = ms == null ? 1 : 0;  // value, "unknown" mask
+    f[2] = s.res; f[3] = s.steps/200; f[4] = s.shadow/12; f[5] = pix; f[6] = R ? R.N/192 : 0.5;
+    f[7] = R ? R.count/4e6 : 0.5; f[8] = capped ? 1 : 0;
+    return f;
+  }
+  function buildX(endIdx, query){ // sequence = ring[endIdx-SEQ .. endIdx-1] + query row
+    const X = AG.tensor(SEQ+1, F);
+    for(let i=0;i<SEQ;i++){ const row = ring[endIdx-SEQ+i]; X.d.set(row.f, i*F); }
+    X.d.set(query, SEQ*F); return X;
+  }
+  const st = { enabled:true, level:5, refreshMs:16.7, budgetMs:15.5, targetMode:'display', step:0, loss:0.5, trust:0, lastDecide:0, pending:null,
+               minDeltas:[], pred:null, explore:0, over:0, samples:0, ladderPred:[] };
+  function trainOn(endIdx){
+    const row = ring[endIdx];
+    const q = featRow(null, row.s, false);
+    const X = buildX(endIdx, q);
+    const y = row.f[0];
+    const r = AG.run(()=>forward(X));
+    const p = r.out.d[0];
+    let err = p - y;
+    if(row.capped && p < y) err = 0;               // censored: the real cost is ≤ the refresh interval
+    r.out.g = new Float32Array([2*err]);
+    r.backward(); st.step++;
+    AG.adam(params, 2e-3, st.step);
+    return err*err;
+  }
+  function predictMs(level){
+    const s = LADDER[level]; const X = buildX(ring.length, featRow(null, s, false));
+    const p = forward(X).d[0]; return REF_MS*Math.exp(p);
+  }
+  function applyLevel(l){ l = Math.max(0, Math.min(LADDER.length-1, l)); if(l !== st.level){ st.level = l; ensureHdr(); } }
+  // called once per frame with the raw rAF delta (ms) of the frame that was rendered with settings `s`
+  function observe(ms, s){
+    if(!st.enabled || ms <= 0 || ms > 250) return;
+    // display refresh estimate: robust low quantile of frame deltas
+    st.minDeltas.push(ms); if(st.minDeltas.length > 240) st.minDeltas.shift();
+    if(st.minDeltas.length >= 30){ const a = st.minDeltas.slice().sort((x,y)=>x-y); st.refreshMs = Math.max(4, a[Math.floor(a.length*0.08)]); }
+    if(st.targetMode === 'display') st.budgetMs = st.refreshMs*0.94; else st.budgetMs = 1000/parseFloat(st.targetMode)*0.94;
+    const capped = Math.abs(ms - st.refreshMs) < 0.12*st.refreshMs;
+    ring.push({f: featRow(ms, s, capped), ms, s, capped}); if(ring.length > RING_MAX) ring.shift();
+    st.samples++;
+    if(ring.length > SEQ+1){
+      let l = trainOn(ring.length-1);                                   // newest sample
+      const j = SEQ + Math.floor(Math.random()*(ring.length-1-SEQ));    // replay
+      l = 0.5*(l + trainOn(j));
+      st.loss = 0.97*st.loss + 0.03*l;
+      st.trust = Math.max(0, Math.min(1, (0.25 - st.loss)/0.2)) * Math.min(1, st.samples/300);
+    }
+  }
+  function decide(frame){
+    if(!st.enabled || frame - st.lastDecide < 8 || ring.length < 12) return;
+    st.lastDecide = frame;
+    const recent = ring.slice(-8); const avg = recent.reduce((a,r)=>a+r.ms,0)/recent.length;
+    const cappedFrac = recent.filter(r=>r.capped).length/recent.length;
+    // hard guards (always active)
+    if(avg > st.budgetMs*1.12){ st.over++; if(st.over >= 1){ applyLevel(st.level-1); st.over=0; st.explore = frame; return; } } else st.over = 0;
+    if(ring.length > SEQ+1 && st.trust > 0.3){
+      // transformer choice: highest level predicted to fit the budget
+      let best = 0; st.ladderPred = [];
+      for(let l=0;l<LADDER.length;l++){ const pm = predictMs(l); st.ladderPred.push(pm); if(pm <= st.budgetMs) best = l; }
+      st.pred = st.ladderPred[best];
+      // never jump more than 2 levels at once; at the vsync cap the true cost is censored, so probe upward gently
+      let target = Math.max(st.level-2, Math.min(st.level+2, best));
+      if(cappedFrac > 0.75 && target <= st.level && frame - st.explore > 180){ target = st.level+1; st.explore = frame; }
+      applyLevel(target);
+    } else {
+      // warm-up heuristic while the model learns: step down when over budget, probe up when comfortably under or pinned at refresh
+      if(avg < st.budgetMs*0.7 || (cappedFrac > 0.75 && frame - st.explore > 120)){ applyLevel(st.level+1); st.explore = frame; }
+    }
+  }
+  return {st, LADDER, observe, decide, get enabled(){ return st.enabled; }, set enabled(v){ st.enabled = v; ensureHdr(); }, get level(){ return st.level; }, setLevel:applyLevel, predictMs, params};
+})();
+resize(); setupResources('med');
+
+// ---------------------------------------------------------------- frame
+function frame(now){
+  requestAnimationFrame(frame);
+  const rawMs = now - S.last;
+  let dwall = Math.max(0, Math.min(rawMs/1000, 1/30)); S.last = now;
+  // transformer FPS regulator: learn from the frame just presented, then choose this frame's render level
+  if(S.prevSettings) REG.observe(rawMs, S.prevSettings);
+  REG.decide(S.frame);
+  ensureHdr();
+  const RS = renderSettings(); S.prevSettings = RS;
+  S.fpsAcc += dwall; S.fpsN++; if(S.fpsAcc > 0.5){ S.fps = S.fpsN/S.fpsAcc; S.fpsAcc=0; S.fpsN=0; }
+  S.time += dwall;
+  if(P.autoOrbit && !S.drag) S.az += dwall*0.06;
+
+  // ---- advance physical time
+  let dt = 0;
+  if(S.running && !S.blowup){
+    const beta = 0.5 + P.h + 0.5*P.gamma;
+    dt = kappa()*Math.pow(S.tau, beta)*dwall*P.warp;
+    if(S.tau - dt <= P.tauMin){ dt = S.tau - P.tauMin; S.blowup = true; S.blowupT = 0; S.flash = 1; }
+  } else if(S.blowup){
+    S.blowupT += dwall; S.flash = Math.max(0, 1 - S.blowupT*0.8);
+    if(S.blowupT > 6 && P.loop) restart();
+  }
+  const tauNext = Math.max(S.tau - dt, P.tauMin);
+
+  // ---- particles
+  gl.disable(gl.BLEND);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, R.fB); gl.viewport(0,0,R.Q.PW,R.Q.PH);
+  gl.useProgram(progPart.p); const up = progPart.u; setPhys(up);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, R.partA.t); gl.uniform1i(up.uPart, 0);
+  gl.uniform1i(up.uPartW, R.Q.PW); gl.uniform1i(up.uDustCount, R.dustCount);
+  gl.uniform1f(up.uTau, S.tau); gl.uniform1f(up.uDt, S.running && !S.blowup ? dt : 0.0);
+  gl.uniform1f(up.uReset, S.reset ? 1 : 0); gl.uniform1ui(up.uFrame, S.frame>>>0);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  [R.partA, R.partB] = [R.partB, R.partA]; [R.fA, R.fB] = [R.fB, R.fA];
+  S.reset = false;
+  S.tau = tauNext;
+
+  // ---- splat particles into the density atlas
+  gl.bindFramebuffer(gl.FRAMEBUFFER, R.fAtlas); gl.viewport(0,0,R.AW,R.AH);
+  gl.clearColor(0,0,0,0); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+  gl.useProgram(progSplat.p); const us = progSplat.u;
+  gl.bindTexture(gl.TEXTURE_2D, R.partA.t); gl.uniform1i(us.uPart, 0);
+  gl.uniform1i(us.uPartW, R.Q.PW); gl.uniform1i(us.uDustCount, R.dustCount);
+  gl.uniform1f(us.uN, R.N); gl.uniform1f(us.uTilesX, R.tilesX); gl.uniform2f(us.uAtlasSize, R.AW, R.AH);
+  gl.uniform1f(us.uPointSize, R.Q.pt);
+  const vox = R.N*R.N*R.N;
+  gl.uniform1f(us.uNormDust, vox/(R.dustCount)*0.02); gl.uniform1f(us.uNormVap, vox/(R.count-R.dustCount)*1.6);
+  gl.drawArraysInstanced(gl.POINTS, 0, R.count, 2);
+  gl.disable(gl.BLEND);
+
+  // ---- ray march
+  gl.bindFramebuffer(gl.FRAMEBUFFER, R.fHdr); gl.viewport(0,0,R.RW,R.RH);
+  gl.useProgram(progRay.p); const ur = progRay.u;
+  gl.bindTexture(gl.TEXTURE_2D, R.atlas.t); gl.uniform1i(ur.uAtlas, 0);
+  gl.uniform1f(ur.uN, R.N); gl.uniform1f(ur.uTilesX, R.tilesX); gl.uniform2f(ur.uAtlasSize, R.AW, R.AH);
+  gl.uniform1f(ur.uResX, R.RW); gl.uniform1f(ur.uResY, R.RH);
+  const ce = Math.cos(S.el), se = Math.sin(S.el);
+  const cam = [S.dist*ce*Math.sin(S.az), S.dist*ce*Math.cos(S.az), S.dist*se];
+  const f = norm([-cam[0], -cam[1], -cam[2]]); const rgt = norm(cross(f, [0,0,1])); const upv = cross(rgt, f);
+  gl.uniform3fv(ur.uCamPos, cam);
+  gl.uniformMatrix3fv(ur.uCamRot, false, [rgt[0],rgt[1],rgt[2], upv[0],upv[1],upv[2], f[0],f[1],f[2]]);
+  gl.uniform1f(ur.uTanFov, Math.tan(0.5*40*Math.PI/180)); gl.uniform1f(ur.uAspect, R.RW/R.RH);
+  gl.uniform1f(ur.uTau, S.tau); gl.uniform1f(ur.uH, P.h); gl.uniform1f(ur.uGamma, P.gamma); gl.uniform1f(ur.uL, P.L);
+  gl.uniform1f(ur.uXcl, P.Xcl); gl.uniform1f(ur.uCloudGain, P.cloudGain); gl.uniform1f(ur.uDustGain, P.dustGain);
+  gl.uniform1f(ur.uTime, S.time); gl.uniform1f(ur.uFlash, S.flash); gl.uniform1f(ur.uHourglass, P.hourglass);
+  gl.uniform1i(ur.uSteps, RS.steps); gl.uniform1i(ur.uShadowSteps, RS.shadow); gl.uniform3fv(ur.uSunDir, sunDir);
+  gl.uniform1ui(ur.uFrame, S.frame>>>0);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  // ---- post
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0,0,canvas.width,canvas.height);
+  gl.useProgram(progPost.p); const uo = progPost.u;
+  gl.bindTexture(gl.TEXTURE_2D, R.hdr.t); gl.uniform1i(uo.uHdr, 0);
+  gl.uniform1f(uo.uExposure, P.exposure); gl.uniform1f(uo.uTime, S.time); gl.uniform2f(uo.uRes, canvas.width, canvas.height);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  S.frame++;
+  if(S.frame % 6 === 0) hud();
+}
+function norm(v){ const l=Math.hypot(v[0],v[1],v[2])||1; return [v[0]/l,v[1]/l,v[2]/l]; }
+function cross(a,b){ return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
+
+// ---------------------------------------------------------------- HUD
+const fmt = (x, d=3) => x.toExponential(d);
+function hud(){
+  const tau = S.tau, t = 1 - tau, A = 0.5+P.h, D = 0.5-P.h;
+  const lr = Math.sqrt(2*tau), lz = 0.8*Math.pow(tau, D);
+  const umax = 0.707*P.E0*Math.pow(tau, -A);
+  const re = P.E0*Math.pow(tau, -P.h);
+  const ke = Math.pow(tau, 0.5-3*P.h);
+  const v = Math.log(1/tau)/P.slotLen, slot = Math.floor(v), s = v - slot;
+  const SL = Math.pow(tau, 0.5*P.gamma)*P.L;
+  $('tval').textContent = 't = ' + (S.blowup ? '1 −' : t.toFixed(t>0.9999? 8 : 6));
+  $('tauval').textContent = 'τ = ' + fmt(tau, 3);
+  $('tfill').style.width = (100*Math.min(1, Math.log(1/Math.max(tau,P.tauMin))/Math.log(1/P.tauMin))).toFixed(2)+'%';
+  $('lr').textContent = fmt(lr,2);
+  $('lz').textContent = fmt(lz,2) + '  (ℓz/ℓr = ' + (lz/lr).toFixed(2)+')';
+  $('umax').textContent = fmt(umax,2);
+  $('re').textContent = re.toFixed(2);
+  $('ke').textContent = ke.toExponential(2) + ' ×E₀';
+  $('slot').textContent = '#' + slot + '  ' + (s<0.667?'growing':'decaying') + ' (' + (100*s).toFixed(0) + '%)';
+  $('frame').textContent = fmt(SL,2) + '  (×' + (SL/P.L).toExponential(1) + ')';
+  $('ufill').style.width = (100*Math.min(1, Math.log10(Math.max(umax,1))/4.4)).toFixed(1)+'%';
+  let ph;
+  if(S.blowup){
+    ph = '<b>t = 1 reached.</b> Every speed scale in the core has diverged while the total kinetic energy stayed bounded (core energy → 0). The force f that drove this stayed smooth and compactly supported: Theorem 1.1, alternative (C) of the Millennium problem statement.';
+    $('event').textContent = 'BLOWUP — sup|u(t)| → ∞ at x = 0, t = 1';
+  } else if(tau > 0.5){
+    ph = 'Spin-up begins: fluid spirals inward at the dividing layer z≈0 and leaves axially on both sides. Angular momentum r·uθ carried inward makes the swirl grow; the core is still O(1) in size.';
+  } else if(tau > 1e-2){
+    ph = 'Self-similar collapse: the core contracts like τ^½ while the swirl grows like τ^(−½−h). At the edge of the core, <b>pulse family '+(slot%2?'2 (radial–axial)':'1 (radial–azimuthal)')+'</b> is '+(s<0.667?'being amplified by the shear':'being damped by viscosity as its radial wavelength shortens')+'; its mean momentum flux supplies the force the background is missing.';
+  } else {
+    ph = 'Final approach: the core is now a shrinking slender column, Reθ still climbing as τ^(−h). Each e-fold of remaining time τ brings another pulse slot at a finer scale — infinitely many before t = 1.';
+  }
+  $('phase').innerHTML = ph;
+  if(!S.blowup) $('event').textContent = tau < 1e-3 ? 'approaching singularity…' : '';
+  $('scaletxt').textContent = 'frame half-width (physical, ν=1 units)';
+  $('scalelen').textContent = fmt(SL,3) + '   →   1/20 of it: ' + fmt(SL/20,3);
+  const RS = renderSettings(), rs = REG.st;
+  let reg = '';
+  if(REG.enabled){
+    reg = ' · regulator L'+REG.level+'/'+(REG.LADDER.length-1)+' budget '+rs.budgetMs.toFixed(1)+'ms'
+        + (rs.pred ? ' pred '+rs.pred.toFixed(1)+'ms' : '') + ' · loss '+rs.loss.toFixed(3)+' trust '+(100*rs.trust).toFixed(0)+'%'
+        + (rs.trust > 0.3 ? '' : ' (learning)');
+  }
+  $('fps').textContent = S.fps.toFixed(0)+' fps · '+R.N+'³ voxels · '+(R.count/1e6).toFixed(1)+'M tracers · '+R.RW+'×'+R.RH+' rays · '+RS.steps+'/'+RS.shadow+' steps'+reg+' · '+GPU_NAME;
+}
+
+// ---------------------------------------------------------------- UI
+function bind(id, key, fmtf, transform, onchange){
+  const el = $(id), vl = $(id+'v');
+  const upd = ()=>{ const raw = parseFloat(el.value); const val = transform ? transform(raw) : raw; P[key] = val; if(vl) vl.textContent = fmtf(val); if(onchange) onchange(); };
+  el.addEventListener('input', upd); upd();
+}
+bind('warp','warp', v=>v.toFixed(1)+'×', v=>Math.pow(2,v));
+bind('gamma','gamma', v=>v.toFixed(2), null, ()=>restart());
+bind('e0','E0', v=>v.toFixed(0));
+bind('u0','U0', v=>v.toFixed(1));
+bind('pamp','pulseAmp', v=>v.toFixed(2));
+bind('cloud','cloudGain', v=>v.toFixed(1));
+bind('dust','dustGain', v=>v.toFixed(2));
+bind('expo','exposure', v=>v.toFixed(2));
+$('taumin').addEventListener('change', e=>{ P.tauMin = parseFloat(e.target.value); restart(); });
+$('quality').addEventListener('change', e=>{ setupResources(e.target.value); restart(); });
+$('regmode').addEventListener('change', e=>{ REG.enabled = e.target.value === 'on'; });
+$('regtarget').addEventListener('change', e=>{ REG.st.targetMode = e.target.value; });
+$('orbit').addEventListener('change', e=>P.autoOrbit = e.target.checked);
+$('loop').addEventListener('change', e=>P.loop = e.target.checked);
+$('showui').addEventListener('change', e=>{ for(const id of ['hud','ctrl','scale','fps','hint']) $(id).classList.toggle('hidden', !e.target.checked); });
+$('pause').addEventListener('click', ()=>{ S.running = !S.running; $('pause').textContent = S.running ? 'Pause' : 'Resume'; });
+$('restart').addEventListener('click', restart);
+$('aboutbtn').addEventListener('click', ()=>$('about').style.display='block');
+$('aboutclose').addEventListener('click', ()=>$('about').style.display='none');
+addEventListener('keydown', e=>{
+  if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT') return;
+  if(e.code==='Space'){ e.preventDefault(); $('pause').click(); }
+  else if(e.key==='r'||e.key==='R') restart();
+  else if(e.key==='h'||e.key==='H'){ $('showui').checked = !$('showui').checked; $('showui').dispatchEvent(new Event('change')); }
+  else if(e.key==='Escape') $('about').style.display='none';
+});
+let drag = null;
+canvas.addEventListener('pointerdown', e=>{ drag = {x:e.clientX, y:e.clientY}; S.drag = true; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointermove', e=>{ if(!drag) return; S.az += (e.clientX-drag.x)*0.005; S.el = Math.max(-1.3, Math.min(1.3, S.el + (e.clientY-drag.y)*0.005)); drag = {x:e.clientX, y:e.clientY}; });
+canvas.addEventListener('pointerup', ()=>{ drag = null; S.drag = false; });
+canvas.addEventListener('wheel', e=>{ e.preventDefault(); S.dist = Math.max(1.4, Math.min(8, S.dist*Math.exp(e.deltaY*0.001))); }, {passive:false});
+
+window.NS = {S, P, gl, renderer: GPU_NAME};
+// report the GPU actually used (only when served locally; silently ignored otherwise)
+if(location.protocol.startsWith('http')) fetch('/gpu?r='+encodeURIComponent(GPU_NAME)).catch(()=>{});
+S.last = performance.now();
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
