@@ -7,7 +7,7 @@ const ui={};
   "modelStatus","runStatus","spaceCanvas","waterfall","history","distanceLabel","lightTimeLabel",
   "cn0","rxPower","capacity","ber","classicLock","classicDrift","classicReward","classicEMA",
   "neuralLock","neuralDrift","neuralReward","neuralEMA","entropy","rlSteps","benchNN","benchClassic",
-  "benchCleanNN","benchCleanClassic","benchVerdict","distance","dish","elements","temp","bandwidth",
+  "benchCleanNN","benchCleanClassic","benchVerdict","apClassical","apNeural","apSaving","apDetectClean","apDetectRfi","apRedesign","apFrequencyNote","distance","dish","elements","temp","bandwidth",
   "rfi","lr","oDistance","oDish","oElements","oTemp","oBw","oRfi","oLr","runBtn","domainBtn",
   "resetBtn","online","eqAperture","massRatio","coherentTime","rtt","ebn0","shannon","rxMode","txMode",
   "modeCopy","packetBits","packetState"
@@ -212,6 +212,19 @@ function setMode(mode){
     :"Synthetic loopback sends a generic training frame through the reciprocal link and rewards the policy when the simulated receiver obtains a stable frame/CRC lock. No spacecraft command encoder is present.";
 }
 
+function showAperture(a){
+  const f=a.fixed_50_50_whole_receiver;
+  const d=a.detector;
+  const h=a.hypothetical_waveform_redesign;
+  ui.apClassical.textContent=f.classical.equivalent_dish_m.toFixed(2)+" m";
+  ui.apNeural.textContent=f.neural.equivalent_dish_m.toFixed(2)+" m";
+  ui.apSaving.textContent=f.diameter_saving_percent.toFixed(1)+"%";
+  ui.apDetectClean.textContent=d.robust_classical.clean_cn0_dbhz.toFixed(2)+" / "+d.mixed_split_transformer_reference_50pct.clean_cn0_dbhz_interpolated.toFixed(2)+" dB-Hz";
+  ui.apDetectRfi.textContent=d.robust_classical.rfi_cn0_dbhz.toFixed(2)+" / "+d.mixed_split_transformer_reference_50pct.rfi_cn0_dbhz_interpolated.toFixed(2)+" dB-Hz";
+  ui.apRedesign.textContent=h.neural_measured.equivalent_dish_m.toFixed(2)+" m neural";
+  ui.apFrequencyNote.textContent="Detector rows show classical / transformer. Aperture benchmark uses 0.26 AU, 120 K and 6 dBi. Pioneer 6 carrier frequency and onboard modulation split are fixed; the "+Math.round(h.neural_measured.carrier_fraction*100)+"% carrier result is a hypothetical radio-design study.";
+}
+
 function showBench(payload){
   const b=payload.benchmark;
   if(!b)return;
@@ -234,6 +247,11 @@ async function init(){
   try{
     state.policy=await RFTransformerPolicy.load("trained_weights.json");
     showBench(state.policy.payload);
+    try{
+      const ar=await fetch("aperture_benchmark.json",{cache:"no-store"});
+      if(!ar.ok)throw new Error("aperture benchmark HTTP "+ar.status);
+      showAperture(await ar.json());
+    }catch(e){console.warn(e);ui.apFrequencyNote.textContent="aperture_benchmark.json unavailable";}
     tick();
   }catch(e){
     console.error(e);ui.modelStatus.className="pill amber";ui.modelStatus.innerHTML="<i></i> model load failed";

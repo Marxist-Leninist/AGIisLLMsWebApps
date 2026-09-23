@@ -104,3 +104,17 @@ The first trained checkpoint was rejected because the classical pipeline still w
 The learned receiver does **not** beat thermal noise or Shannon capacity. Its gain comes from using structure that the blind classical comparator does not exploit and from adapting its search policy under non-Gaussian interference. In pure idealized AWGN with a perfectly specified signal, a matched filter remains the appropriate optimum reference.
 
 The simulation therefore demonstrates a realistic boundary: ML can improve estimation and interference rejection when there is exploitable signal/channel structure, but it cannot manufacture information that never reached the antenna.
+
+## Minimum-aperture receiver benchmark (23 September 2026)
+
+A separate receive-side experiment asks a different question from the live 9-way drift controller: how much ground aperture is required to reach a fixed detection/decoding target?
+
+Scenario: 0.26 AU, 8 W spacecraft transmitter, 6 dBi spacecraft antenna gain, 120 K receiver system temperature and 8 bit/s telemetry. These assumptions are deliberately kept separate from the page's historical-sandbox antenna-gain default. The benchmark never models or emits spacecraft commands.
+
+Detection target is Pd >= 0.9 at Pfa = 1e-3. The improved detector is a 111,809-parameter, 3-layer transformer trained on mixed clean/bursty-RFI channels over C/N0 from -2 to 24 dB-Hz. A held-out fixed-split run measured 12.15 dB-Hz clean and 13.05 dB-Hz with burst RFI. For a fairer classical comparison, the final comparator is not the original naive drift-grid detector: it uses STFT power divided by a per-frame median noise floor, a 17-slope de-drift track search and time-domain winsorisation. The winsor quantile (35%) was selected on a separate validation seed, then frozen. Held out, that robust classical detector measured 11.50 dB-Hz clean and 12.70 dB-Hz with RFI. Thus detector-only performance is close: classical is better in clean noise, while the mixed-split transformer is slightly better in the tested structured-RFI regime.
+
+The larger whole-radio difference comes from coding. At BER = 1e-3, measured Hamming(7,4) requires 6.737 dB Eb/N0 while the learned (7,4) encoder plus transformer decoder requires 4.661 dB, recovering 2.076 dB. Under the 50/50 synthetic carrier/data reference waveform, both complete receivers are decoder-limited: robust-classical + Hamming requires 18.778 dB-Hz total C/N0 (13.15 m equivalent dish), while transformer + learned code requires 16.702 dB-Hz (10.35 m). That is a 21.3% reduction in equivalent dish diameter under these assumptions.
+
+A second study trains the transformer across carrier/data power splits. With the search constrained to at least 10% carrier power, its best measured whole-receiver point is 14.149 dB-Hz, or 7.71 m equivalent aperture. A carrier-track analytical co-design using the robust classical detector and measured Hamming requirement gives about 10.1 m clean and 10.4 m under RFI. This section is explicitly hypothetical radio design. Pioneer 6's center frequency and onboard modulation/power split are fixed by spacecraft hardware, so they are not operational controls for a receive-only Pioneer experiment.
+
+None of these learned methods changes the Shannon limit. They reduce implementation/coding loss relative to the same physical channel.
