@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deterministic Path-Sum Raytracer</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+        }
+        canvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+        }
+        #overlay {
+            pointer-events: none;
+        }
+        #ui-container {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(10, 15, 20, 0.85);
+            padding: 20px;
+            border: 1px solid #00ffcc;
+            border-radius: 8px;
+            max-width: 420px;
+            box-shadow: 0 4px 15px rgba(0, 255, 204, 0.2);
+            backdrop-filter: blur(5px);
+            pointer-events: none;
+            z-index: 2;
+        }
+        .interactive {
+            pointer-events: auto;
+        }
+        h1 {
+            font-size: 1.3rem;
+            margin: 0 0 10px 0;
+            color: #00ffcc;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        p {
+            font-size: 0.85rem;
+            color: #aaa;
+            line-height: 1.5;
+            margin-bottom: 15px;
+        }
+        strong {
+            color: #fff;
+        }
+        .control-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: flex;
+            align-items: center;
+            font-size: 0.9rem;
+            cursor: pointer;
+            margin-bottom: 5px;
+        }
+        input[type=range] {
+            width: 100%;
+            accent-color: #00ffcc;
+            cursor: pointer;
+        }
+        input[type=checkbox] {
+            margin-right: 10px;
+            accent-color: #00ffcc;
+            cursor: pointer;
+        }
+        select, button {
+            background: #0d1a1f;
+            color: #e0e0e0;
+            border: 1px solid #00ffcc;
+            border-radius: 4px;
+            padding: 5px 8px;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+        select {
+            width: 100%;
+        }
+        .row {
+            display: flex;
+            gap: 8px;
+        }
+        .highlight {
+            color: #ff3366;
+            font-weight: bold;
+        }
+        .paths {
+            color: #ffd166;
+        }
+        #status {
+            font-size: 0.78rem;
+            color: #7fdcc8;
+            font-family: Consolas, 'Courier New', monospace;
+            line-height: 1.4;
+        }
+        #ui-container.collapsed p {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="glcanvas"></canvas>
+    <canvas id="overlay"></canvas>
+
+    <div id="ui-container">
+        <h1>Deterministic Path-Sum Raytracer</h1>
+        <p><strong>PROBABILITY DOESN'T EXIST (pilot-wave view):</strong> nothing in this engine is random. Standard renderers estimate light with random Monte Carlo samples. This one evaluates Feynman's sum over every point of the mirror with evenly spaced, deterministic samples, and refines it until it has converged.</p>
+        <p><strong>QED:</strong> the picture is the one-photon amplitude for light polarised out of the screen. In 2D that amplitude obeys the wave equation exactly, with Green's function (i/4)&thinsp;H<sub>0</sub><sup>(1)</sup>(kr), and a perfect mirror holds it at zero on its surface. The reflection is the sum over mirror points (physical-optics approximation: one bounce, perfect conductor). Where neighbouring paths have the same length they reinforce: that is where the classical &ldquo;ray&rdquo; comes from.</p>
+        <p><strong class="paths">Pilot-wave paths</strong> (de Broglie&ndash;Bohm): each photon path is fixed by where it starts and follows the energy flow of its field (the Poynting vector). Paths never cross and steer around dark fringes. Averaged single-photon trajectories like these were measured in a 2011 two-slit experiment (Kocsis et al., <em>Science</em>).</p>
+        <p>Move the mouse to move the light source; click to pin or release it. Put it on the <span class="highlight">red focus</span> to watch a beam form.</p>
+
+        <div class="interactive">
+            <div class="control-group">
+                <label for="shape">Mirror</label>
+                <select id="shape">
+                    <option value="0">Parabola: one focus, perfect beam</option>
+                    <option value="1">Circle: spherical aberration, caustic</option>
+                    <option value="2">Ellipse: focus to focus</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label>Wavelength (&lambda;): <span id="wl-val" style="margin-left:auto;">0.035</span></label>
+                <input type="range" id="wavelength" min="0.005" max="0.15" step="0.005" value="0.035">
+            </div>
+            <div class="control-group">
+                <label><input type="checkbox" id="show-phase" checked> Visualise phase (colour)</label>
+                <label><input type="checkbox" id="hide-direct"> Hide direct field (show reflection only)</label>
+                <label><input type="checkbox" id="show-paths" checked> <span class="paths">Show pilot-wave paths</span></label>
+                <label>Paths: <span id="np-val" style="margin-left:auto;">48</span></label>
+                <input type="range" id="npaths" min="12" max="120" step="4" value="48">
+            </div>
+            <div class="control-group row">
+                <button id="to-focus">Source &rarr; focus</button>
+                <button id="collapse">Hide text</button>
+            </div>
+        </div>
+        <div id="status"></div>
+    </div>
+
+    <script>
+        'use strict';
+        const canvas = document.getElementById('glcanvas');
+        const overlay = document.getElementById('overlay');
+        const octx = overlay.getContext('2d');
+        const statusEl = document.getElementById('status');
+        const gl = canvas.getContext('webgl2', { antialias: false });
+
+        if (!gl) {
+            statusEl.textContent = 'WebGL 2 is not supported by this browser.';
+            throw new Error('WebGL 2 not supported');
+        }
+        // Rendering into float textures lets the field be accumulated once and reused.
+        let floatRT = !!gl.getExtension('EXT_color_buffer_float');
+
+        const TAU = 2 * Math.PI;
+        const SAMPLES_PER_FRAME = 512;  // mirror samples added per pixel per frame (same cost as the original)
+        const MAX_CHUNKS = 16;          // up to 8192 mirror samples per converged image
+        const SAMPLE_TEX_W = 1024;
+        const EXPOSURE_DISTANCE = 0.25;  // the direct field is shown with intensity 1 at this distance
+
+        // Bessel functions J0, Y0, J1, Y1 (Numerical Recipes rational approximations; same as the GLSL).
+        function besselJ0(x) {
+            const ax = Math.abs(x);
+            if (ax < 8) {
+                const y = x * x;
+                return (57568490574.0 + y * (-13362590354.0 + y * (651619640.7 + y * (-11214424.18 + y * (77392.33017 + y * (-184.9052456))))))
+                     / (57568490411.0 + y * (1029532985.0 + y * (9494680.718 + y * (59272.64853 + y * (267.8532712 + y)))));
+            }
+            const z = 8 / ax, y = z * z, xx = ax - 0.785398164;
+            const p = 1 + y * (-0.1098628627e-2 + y * (0.2734510407e-4 + y * (-0.2073370639e-5 + y * 0.2093887211e-6)));
+            const q = -0.1562499995e-1 + y * (0.1430488765e-3 + y * (-0.6911147651e-5 + y * (0.7621095161e-6 - y * 0.934935152e-7)));
+            return Math.sqrt(0.636619772 / ax) * (Math.cos(xx) * p - z * Math.sin(xx) * q);
+        }
+        function besselY0(x) {
+            if (x < 8) {
+                const y = x * x;
+                return (-2957821389.0 + y * (7062834065.0 + y * (-512359803.6 + y * (10879881.29 + y * (-86327.92757 + y * 228.4622733)))))
+                     / (40076544269.0 + y * (745249964.8 + y * (7189466.438 + y * (47447.26470 + y * (226.1030244 + y)))))
+                     + 0.636619772 * besselJ0(x) * Math.log(x);
+            }
+            const z = 8 / x, y = z * z, xx = x - 0.785398164;
+            const p = 1 + y * (-0.1098628627e-2 + y * (0.2734510407e-4 + y * (-0.2073370639e-5 + y * 0.2093887211e-6)));
+            const q = -0.1562499995e-1 + y * (0.1430488765e-3 + y * (-0.6911147651e-5 + y * (0.7621095161e-6 - y * 0.934945152e-7)));
+            return Math.sqrt(0.636619772 / x) * (Math.sin(xx) * p + z * Math.cos(xx) * q);
+        }
+        function besselJ1(x) {
+            const ax = Math.abs(x);
+            if (ax < 8) {
+                const y = x * x;
+                return x * (72362614232.0 + y * (-7895059235.0 + y * (242396853.1 + y * (-2972611.439 + y * (15704.48260 + y * (-30.16036606))))))
+                     / (144725228442.0 + y * (2300535178.0 + y * (18583304.74 + y * (99447.43394 + y * (376.9991397 + y)))));
+            }
+            const z = 8 / ax, y = z * z, xx = ax - 2.356194491;
+            const p = 1 + y * (0.183105e-2 + y * (-0.3516396496e-4 + y * (0.2457520174e-5 + y * (-0.240337019e-6))));
+            const q = 0.04687499995 + y * (-0.2002690873e-3 + y * (0.8449199096e-5 + y * (-0.88228987e-6 + y * 0.105787412e-6)));
+            const r = Math.sqrt(0.636619772 / ax) * (Math.cos(xx) * p - z * Math.sin(xx) * q);
+            return x < 0 ? -r : r;
+        }
+        function besselY1(x) {
+            if (x < 8) {
+                const y = x * x;
+                return x * (-0.4900604943e13 + y * (0.1275274390e13 + y * (-0.5153438139e11 + y * (0.7349264551e9 + y * (-0.4237922726e7 + y * 0.8511937935e4)))))
+                     / (0.2499580570e14 + y * (0.4244419664e12 + y * (0.3733650367e10 + y * (0.2245904002e8 + y * (0.1020426050e6 + y * (0.3549632885e3 + y))))))
+                     + 0.636619772 * (besselJ1(x) * Math.log(x) - 1 / x);
+            }
+            const z = 8 / x, y = z * z, xx = x - 2.356194491;
+            const p = 1 + y * (0.183105e-2 + y * (-0.3516396496e-4 + y * (0.2457520174e-5 + y * (-0.240337019e-6))));
+            const q = 0.04687499995 + y * (-0.2002690873e-3 + y * (0.8449199096e-5 + y * (-0.88228987e-6 + y * 0.105787412e-6)));
+            return Math.sqrt(0.636619772 / x) * (Math.sin(xx) * p + z * Math.cos(xx) * q);
+        }
+
+        // Mirror shapes. The GLSL in mirrorF/mirrorDF below must match f/fp here.
+        const SHAPES = [
+            {   // y = 1.5 x^2 - 0.3, focus at 1/(4a) above the vertex
+                f: x => 1.5 * x * x - 0.3,
+                fp: x => 3 * x,
+                foci: [[0, -0.3 + 1 / 6]]
+            },
+            {   // circle of radius 1.25 centred at (0, 0.95); paraxial focus at R/2 above the vertex
+                f: x => 0.95 - Math.sqrt(1.5625 - x * x),
+                fp: x => x / Math.sqrt(1.5625 - x * x),
+                foci: [[0, 0.325]]
+            },
+            {   // ellipse, semi-axes 1.1 (x) and 0.75 (y), centred at (0, 0.35); foci at (+-sqrt(A^2-B^2), 0.35)
+                f: x => 0.35 - 0.75 * Math.sqrt(Math.max(0, 1 - x * x / 1.21)),
+                fp: x => 0.75 * x / (1.21 * Math.sqrt(Math.max(1e-6, 1 - x * x / 1.21))),
+                // Right-hand focus first: the light starts there, clear of the text panel.
+                foci: [[Math.sqrt(1.21 - 0.5625), 0.35], [-Math.sqrt(1.21 - 0.5625), 0.35]]
+            }
+        ];
+
+        // --- Shaders ---
+
+        const vertexShaderSource = `#version 300 es
+            void main() {
+                // One oversized triangle covers the whole viewport.
+                vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+                gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+            }
+        `;
+
+        const commonGLSL = `
+            #define PI 3.14159265359
+            #define TAU 6.28318530718
+            uniform int u_shape;
+
+            float mirrorF(float x) {
+                if (u_shape == 1) return 0.95 - sqrt(max(0.0, 1.5625 - x * x));
+                if (u_shape == 2) return 0.35 - 0.75 * sqrt(max(0.0, 1.0 - x * x / 1.21));
+                return 1.5 * x * x - 0.3;
+            }
+
+            float mirrorDF(float x) {
+                if (u_shape == 1) return x / sqrt(max(1e-6, 1.5625 - x * x));
+                if (u_shape == 2) return 0.75 * x / (1.21 * sqrt(max(1e-6, 1.0 - x * x / 1.21)));
+                return 3.0 * x;
+            }
+
+            // The reflecting (concave) side of the mirror. This region is convex, so
+            // straight paths between two points inside it never cross the mirror.
+            bool insideDish(vec2 p) {
+                return abs(p.x) <= 1.0 && p.y > mirrorF(p.x);
+            }
+
+            // Is the straight path a -> b blocked by the mirror? The back of the mirror absorbs.
+            bool segBlocked(vec2 a, vec2 b) {
+                bool ia = insideDish(a);
+                bool ib = insideDish(b);
+                if (ia && ib) return false;
+                if (ia != ib) return true;
+                for (int i = 1; i < 32; i++) {
+                    if (insideDish(mix(a, b, float(i) / 32.0))) return true;
+                }
+                return false;
+            }
+
+            // Complex exponentiation: e^(i*phase)
+            vec2 c_exp(float phase) {
+                return vec2(cos(phase), sin(phase));
+            }
+
+            vec2 c_mul(vec2 a, vec2 b) {
+                return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
+            }
+
+            // (J0(x), Y0(x)) for x > 0, Numerical Recipes rational approximations
+            vec2 bessel0(float x) {
+                if (x < 8.0) {
+                    float y = x * x;
+                    float j = (57568490574.0 + y * (-13362590354.0 + y * (651619640.7 + y * (-11214424.18 + y * (77392.33017 + y * (-184.9052456))))))
+                            / (57568490411.0 + y * (1029532985.0 + y * (9494680.718 + y * (59272.64853 + y * (267.8532712 + y)))));
+                    float yv = (-2957821389.0 + y * (7062834065.0 + y * (-512359803.6 + y * (10879881.29 + y * (-86327.92757 + y * 228.4622733)))))
+                             / (40076544269.0 + y * (745249964.8 + y * (7189466.438 + y * (47447.26470 + y * (226.1030244 + y)))))
+                             + 0.636619772 * j * log(x);
+                    return vec2(j, yv);
+                }
+                float z = 8.0 / x;
+                float y = z * z;
+                float xx = mod(x - 0.785398164, TAU);
+                float p = 1.0 + y * (-0.1098628627e-2 + y * (0.2734510407e-4 + y * (-0.2073370639e-5 + y * 0.2093887211e-6)));
+                float q = -0.1562499995e-1 + y * (0.1430488765e-3 + y * (-0.6911147651e-5 + y * (0.7621095161e-6 - y * 0.934935152e-7)));
+                float c = cos(xx);
+                float s = sin(xx);
+                return sqrt(0.636619772 / x) * vec2(c * p - z * s * q, s * p + z * c * q);
+            }
+
+            // Outgoing 2D Green's function of the wave equation: G = (i/4) H0(1)(k d)
+            vec2 green(float kd) {
+                vec2 h = bessel0(kd);
+                return 0.25 * vec2(-h.y, h.x);
+            }
+        `;
+
+        // Adds one interleaved chunk of mirror samples to the running reflected-field sum.
+        const accumulateShaderSource = `#version 300 es
+            precision highp float;
+            precision highp int;
+            precision highp sampler2D;
+            ${commonGLSL}
+            uniform sampler2D u_prev;     // running sum (RGBA32F)
+            uniform sampler2D u_samples;  // per mirror sample: x, y, complex weight (re, im) of the source leg
+            uniform vec2 u_resolution;
+            uniform float u_k;
+            uniform float u_min_d2;
+            uniform int u_offset;
+            uniform int u_stride;
+            uniform int u_count;
+            uniform int u_src_inside;
+            out vec4 fragColor;
+
+            void main() {
+                ivec2 ip = ivec2(gl_FragCoord.xy);
+                vec2 acc = texelFetch(u_prev, ip, 0).xy;
+                vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution) / min(u_resolution.x, u_resolution.y);
+                if (u_src_inside == 1 && insideDish(uv)) {
+                    for (int j = 0; j < u_count; j++) {
+                        int i = u_offset + j * u_stride;
+                        vec4 s = texelFetch(u_samples, ivec2(i % ${SAMPLE_TEX_W}, i / ${SAMPLE_TEX_W}), 0);
+                        float d2 = max(length(uv - s.xy), u_min_d2);  // mirror point -> pixel
+                        acc += c_mul(s.zw, green(u_k * d2));
+                    }
+                }
+                fragColor = vec4(acc, 0.0, 1.0);
+            }
+        `;
+
+        // u_mode 0: draw the picture. u_mode 1: write the complete field (two pixels per texel) for read-back.
+        const fragmentShaderSource = `#version 300 es
+            precision highp float;
+            precision highp int;
+            precision highp sampler2D;
+            ${commonGLSL}
+            uniform sampler2D u_acc;
+            uniform sampler2D u_samples;
+            uniform vec2 u_resolution;
+            uniform vec2 u_src;
+            uniform float u_k;
+            uniform float u_min_d2;
+            uniform float u_exposure;
+            uniform float u_norm;
+            uniform float u_time_phase;
+            uniform int u_mode;
+            uniform int u_live;
+            uniform int u_live_count;
+            uniform int u_live_stride;
+            uniform int u_src_inside;
+            uniform int u_hide_direct;
+            uniform int u_show_phase;
+            uniform int u_pinned;
+            uniform vec4 u_foci;
+            uniform int u_n_foci;
+            out vec4 fragColor;
+
+            // Maps complex phase (angle) to Hue, and amplitude squared to Brightness
+            vec3 phaseToColor(float phase, float intensity) {
+                float hue = phase / (2.0 * PI) + 0.5;
+                // Non-linear tone mapping to handle bright constructive interference spots
+                float lum = 1.0 - exp(-intensity * 1.5);
+
+                // HSL to RGB conversion
+                vec3 c = vec3(hue, 1.0, lum);
+                vec3 rgb = clamp(abs(mod(c.x * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
+                return c.z + c.y * (rgb - 0.5) * (1.0 - abs(2.0 * c.z - 1.0));
+            }
+
+            vec2 pixelToUV(vec2 fragCoord) {
+                return (fragCoord - 0.5 * u_resolution) / min(u_resolution.x, u_resolution.y);
+            }
+
+            vec2 reflectedField(ivec2 ip, vec2 uv) {
+                if (u_live == 0) return texelFetch(u_acc, ip, 0).xy * u_norm;
+                // Fallback without float render targets: a coarse sum every frame.
+                vec2 acc = vec2(0.0);
+                if (u_src_inside == 1 && insideDish(uv)) {
+                    for (int j = 0; j < u_live_count; j++) {
+                        int i = j * u_live_stride;
+                        vec4 s = texelFetch(u_samples, ivec2(i % ${SAMPLE_TEX_W}, i / ${SAMPLE_TEX_W}), 0);
+                        float d2 = max(length(uv - s.xy), u_min_d2);
+                        acc += c_mul(s.zw, green(u_k * d2));
+                    }
+                }
+                return acc * u_norm;
+            }
+
+            vec2 directField(vec2 uv) {
+                if (segBlocked(u_src, uv)) return vec2(0.0);
+                return green(u_k * max(length(uv - u_src), 0.004));
+            }
+
+            // Scaled so the direct field has intensity 1 at distance 0.25, for every wavelength.
+            vec2 fieldAt(ivec2 ip, bool withDirect) {
+                vec2 uv = pixelToUV(vec2(ip) + 0.5);
+                vec2 psi = reflectedField(ip, uv);
+                if (withDirect) psi += directField(uv);
+                return u_exposure * psi;
+            }
+
+            void main() {
+                if (u_mode == 1) {
+                    ivec2 base = ivec2(int(gl_FragCoord.x) * 2, int(gl_FragCoord.y));
+                    vec2 a = fieldAt(base, true);
+                    vec2 b = base.x + 1 < int(u_resolution.x) ? fieldAt(base + ivec2(1, 0), true) : vec2(0.0);
+                    fragColor = vec4(a, b);
+                    return;
+                }
+
+                ivec2 ip = ivec2(gl_FragCoord.xy);
+                vec2 uv = pixelToUV(gl_FragCoord.xy);
+                vec2 psi = fieldAt(ip, u_hide_direct == 0);
+
+                // Time evolution of a single-frequency field is one global phase rotation, e^(-i w t),
+                // so the sum over the mirror never has to be redone just to animate it.
+                vec2 rot = c_exp(-u_time_phase);
+                psi = vec2(psi.x * rot.x - psi.y * rot.y, psi.x * rot.y + psi.y * rot.x);
+
+                float intensity = dot(psi, psi);
+                float phase = atan(psi.y, psi.x);
+
+                vec3 color;
+                if (u_show_phase == 1) {
+                    color = phaseToColor(phase, intensity);
+                } else {
+                    color = vec3(1.0 - exp(-intensity * 1.5));
+                }
+
+                // --- Draw Physical Objects ---
+
+                // Mirror: reflecting face in teal, absorbing back in grey
+                if (abs(uv.x) <= 1.0) {
+                    float g = (uv.y - mirrorF(uv.x)) * inversesqrt(1.0 + mirrorDF(uv.x) * mirrorDF(uv.x));
+                    if (abs(g) < 0.0035) {
+                        color = mix(color, vec3(0.0, 1.0, 0.8), 0.85);
+                    } else if (g < 0.0 && g > -0.009) {
+                        color = mix(color, vec3(0.3), 0.85);
+                    }
+                }
+
+                // Focal point targets (red crosshairs)
+                for (int n = 0; n < 2; n++) {
+                    if (n >= u_n_foci) break;
+                    vec2 F = n == 0 ? u_foci.xy : u_foci.zw;
+                    if (abs(uv.x - F.x) < 0.01 && abs(uv.y - F.y) < 0.002 ||
+                        abs(uv.y - F.y) < 0.01 && abs(uv.x - F.x) < 0.002) {
+                        color = mix(color, vec3(1.0, 0.2, 0.4), 0.7);
+                    }
+                }
+
+                // Light source (with a gold ring when pinned)
+                float ds = length(uv - u_src);
+                if (ds < 0.012) {
+                    color = vec3(1.0);
+                } else if (u_pinned == 1 && ds > 0.016 && ds < 0.02) {
+                    color = vec3(1.0, 0.82, 0.4);
+                }
+
+                fragColor = vec4(color, 1.0);
+            }
+        `;
+
+        // --- WebGL Compilation Boilerplate ---
+
+        function createShader(type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                const log = gl.getShaderInfoLog(shader);
+                gl.deleteShader(shader);
+                throw new Error('Shader compile failed: ' + log);
+            }
+            return shader;
+        }
+
+        function createProgram(fsSource) {
+            const program = gl.createProgram();
+            gl.attachShader(program, createShader(gl.VERTEX_SHADER, vertexShaderSource));
+            gl.attachShader(program, createShader(gl.FRAGMENT_SHADER, fsSource));
+            gl.linkProgram(program);
+            if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+                throw new Error('Program link failed: ' + gl.getProgramInfoLog(program));
+            }
+            const uniforms = {};
+            const n = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS);
+            for (let i = 0; i < n; i++) {
+                const name = gl.getActiveUniform(program, i).name;
+                uniforms[name] = gl.getUniformLocation(program, name);
+            }
+            return { program, uniforms };
+        }
+
+        const accProg = createProgram(accumulateShaderSource);
+        const drawProg = createProgram(fragmentShaderSource);
+        const vao = gl.createVertexArray();
+
+        function floatTexture(w, h, data) {
+            const tex = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, tex);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, w, h, 0, gl.RGBA, gl.FLOAT, data || null);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            return tex;
+        }
+
+        function framebufferFor(tex) {
+            const fbo = gl.createFramebuffer();
+            gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+            if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+                throw new Error('Float framebuffer incomplete');
+            }
+            return fbo;
+        }
+
+        // --- State ---
+
+        const ui = {
+            shape: document.getElementById('shape'),
+            wavelength: document.getElementById('wavelength'),
+            wlVal: document.getElementById('wl-val'),
+            showPhase: document.getElementById('show-phase'),
+            hideDirect: document.getElementById('hide-direct'),
+            showPaths: document.getElementById('show-paths'),
+            npaths: document.getElementById('npaths'),
+            npVal: document.getElementById('np-val'),
+            toFocus: document.getElementById('to-focus'),
+            collapse: document.getElementById('collapse'),
+            container: document.getElementById('ui-container')
+        };
+
+        const state = {
+            shapeIndex: 0,
+            k: 0,
+            L: 0,               // mirror arc length
+            N: 0,               // mirror samples in a converged image
+            chunks: 0,          // number of interleaved chunks
+            order: [],          // chunk order (bit-reversed, so every prefix covers the mirror evenly)
+            chunkIndex: 0,
+            processed: 0,
+            mirror: null,       // Float64Array of sample x, y pairs
+            sampleData: null,
+            sampleTex: null,
+            sampleRows: 0,
+            src: SHAPES[0].foci[0].slice(),
+            pinned: true,       // starts on the focus; click to release
+            geomDirty: true,
+            srcDirty: true,
+            pathsPending: true,
+            pathsNote: '',
+            width: 0,
+            height: 0,
+            acc: [null, null],
+            accFbo: [null, null],
+            cur: 0,
+            packTex: null,
+            packFbo: null,
+            packBuf: null,
+            lost: false
+        };
+
+        function currentShape() {
+            return SHAPES[state.shapeIndex];
+        }
+
+        function insideDish(p) {
+            return Math.abs(p[0]) <= 1 && p[1] > currentShape().f(p[0]);
+        }
+
+        // --- Mirror sampling: evenly spaced in arc length, count scaled with 1/wavelength ---
+
+        function rebuildGeometry() {
+            const shape = currentShape();
+            const lambda = parseFloat(ui.wavelength.value);
+            state.k = TAU / lambda;
+
+            // Arc-length table along the mirror, x from -1 to 1
+            const T = 20000;
+            const xs = new Float64Array(T + 1);
+            const ss = new Float64Array(T + 1);
+            let s = 0;
+            xs[0] = -1;
+            for (let i = 1; i <= T; i++) {
+                const x0 = -1 + 2 * (i - 1) / T;
+                const x1 = -1 + 2 * i / T;
+                s += Math.hypot(1, shape.fp(0.5 * (x0 + x1))) * (x1 - x0);
+                xs[i] = x1;
+                ss[i] = s;
+            }
+            state.L = s;
+
+            // Neighbouring samples may differ in path length by up to 2*ds, so keep k*2*ds <= pi/2.
+            const needed = Math.ceil(4 * state.k * state.L / Math.PI);
+            let chunks = 1;
+            while (chunks * SAMPLES_PER_FRAME < needed && chunks < MAX_CHUNKS) chunks *= 2;
+            state.chunks = chunks;
+            state.N = chunks * SAMPLES_PER_FRAME;
+
+            const bits = Math.round(Math.log2(chunks));
+            state.order = [];
+            for (let i = 0; i < chunks; i++) {
+                let r = 0;
+                for (let b = 0; b < bits; b++) if (i & (1 << b)) r |= 1 << (bits - 1 - b);
+                state.order.push(r);
+            }
+
+            state.mirror = new Float64Array(state.N * 2);
+            let seg = 0;
+            for (let i = 0; i < state.N; i++) {
+                const target = (i + 0.5) * state.L / state.N;
+                while (seg < T - 1 && ss[seg + 1] < target) seg++;
+                const t = (target - ss[seg]) / (ss[seg + 1] - ss[seg]);
+                const x = xs[seg] + t * (xs[seg + 1] - xs[seg]);
+                state.mirror[2 * i] = x;
+                state.mirror[2 * i + 1] = shape.f(x);
+            }
+
+            state.sampleRows = Math.ceil(state.N / SAMPLE_TEX_W);
+            state.sampleData = new Float32Array(SAMPLE_TEX_W * state.sampleRows * 4);
+            if (state.sampleTex) gl.deleteTexture(state.sampleTex);
+            state.sampleTex = floatTexture(SAMPLE_TEX_W, state.sampleRows, null);
+        }
+
+        // Reflection by physical optics on a perfect mirror (the field is zero on its surface):
+        //   psi_reflected(P) = -2 * sum_i G(|P - M_i|) * dpsi_in/dn(M_i) * ds
+        // The source -> mirror factor depends only on the source, so it is computed once per sample
+        // here in double precision; the GPU then only multiplies by G for the mirror -> pixel leg.
+        function uploadSamples() {
+            const shape = currentShape();
+            const k = state.k;
+            const ds = state.L / state.N;
+            const [sx, sy] = state.src;
+            const data = state.sampleData;
+            for (let i = 0; i < state.N; i++) {
+                const mx = state.mirror[2 * i];
+                const my = state.mirror[2 * i + 1];
+                // Unit normal pointing into the reflecting (concave) side
+                let nx = -shape.fp(mx), ny = 1;
+                const nn = Math.hypot(nx, ny);
+                nx /= nn;
+                ny /= nn;
+                const d1 = Math.max(Math.hypot(mx - sx, my - sy), 1e-4);
+                const cosIn = ((mx - sx) * nx + (my - sy) * ny) / d1;
+                // dG/dd = -(i k / 4) H1(1)(k d) = (k/4) (Y1 - i J1)
+                const kd = k * d1;
+                const dGre = 0.25 * k * besselY1(kd);
+                const dGim = -0.25 * k * besselJ1(kd);
+                data[4 * i] = mx;
+                data[4 * i + 1] = my;
+                data[4 * i + 2] = -2 * dGre * cosIn * ds;
+                data[4 * i + 3] = -2 * dGim * cosIn * ds;
+            }
+            gl.bindTexture(gl.TEXTURE_2D, state.sampleTex);
+            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, SAMPLE_TEX_W, state.sampleRows, gl.RGBA, gl.FLOAT, data);
+        }
+
+        function allocateTargets(w, h) {
+            state.width = w;
+            state.height = h;
+            if (!floatRT) return;
+            for (const tex of [state.acc[0], state.acc[1], state.packTex]) if (tex) gl.deleteTexture(tex);
+            for (const fbo of [state.accFbo[0], state.accFbo[1], state.packFbo]) if (fbo) gl.deleteFramebuffer(fbo);
+            try {
+                for (let i = 0; i < 2; i++) {
+                    state.acc[i] = floatTexture(w, h, null);
+                    state.accFbo[i] = framebufferFor(state.acc[i]);
+                }
+                const pw = Math.ceil(w / 2);
+                state.packTex = floatTexture(pw, h, null);
+                state.packFbo = framebufferFor(state.packTex);
+                state.packBuf = new Float32Array(pw * h * 4);
+            } catch (err) {
+                // This GPU cannot render into float textures: fall back to the coarse per-frame sum.
+                console.warn(err);
+                floatRT = false;
+                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            }
+        }
+
+        function resetAccumulation() {
+            state.chunkIndex = 0;
+            state.processed = 0;
+            state.pathsPending = true;
+            state.pathsNote = '';
+            octx.clearRect(0, 0, overlay.width, overlay.height);
+            if (!floatRT) return;
+            gl.clearColor(0, 0, 0, 0);
+            for (let i = 0; i < 2; i++) {
+                gl.bindFramebuffer(gl.FRAMEBUFFER, state.accFbo[i]);
+                gl.clear(gl.COLOR_BUFFER_BIT);
+            }
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        }
+
+        function converged() {
+            return floatRT && state.chunkIndex >= state.chunks;
+        }
+
+        // --- GPU passes ---
+
+        function setShared(u) {
+            gl.uniform1i(u.u_shape, state.shapeIndex);
+            gl.uniform2f(u.u_resolution, state.width, state.height);
+            gl.uniform1f(u.u_k, state.k);
+            // Half a sample spacing: keeps the discrete sum finite right next to the mirror.
+            gl.uniform1f(u.u_min_d2, 0.5 * state.L / state.N);
+            gl.uniform1i(u.u_src_inside, insideDish(state.src) ? 1 : 0);
+        }
+
+        function accumulateChunk() {
+            const u = accProg.uniforms;
+            gl.useProgram(accProg.program);
+            gl.bindVertexArray(vao);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, state.accFbo[1 - state.cur]);
+            gl.viewport(0, 0, state.width, state.height);
+            setShared(u);
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, state.acc[state.cur]);
+            gl.uniform1i(u.u_prev, 0);
+            gl.activeTexture(gl.TEXTURE1);
+            gl.bindTexture(gl.TEXTURE_2D, state.sampleTex);
+            gl.uniform1i(u.u_samples, 1);
+            gl.uniform1i(u.u_offset, state.order[state.chunkIndex]);
+            gl.uniform1i(u.u_stride, state.chunks);
+            gl.uniform1i(u.u_count, SAMPLES_PER_FRAME);
+            gl.drawArrays(gl.TRIANGLES, 0, 3);
+            state.cur = 1 - state.cur;
+            state.chunkIndex++;
+            state.processed += SAMPLES_PER_FRAME;
+        }
+
+        function drawField(mode, timePhase) {
+            const u = drawProg.uniforms;
+            gl.useProgram(drawProg.program);
+            gl.bindVertexArray(vao);
+            setShared(u);
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, floatRT ? state.acc[state.cur] : state.sampleTex);
+            gl.uniform1i(u.u_acc, 0);
+            gl.activeTexture(gl.TEXTURE1);
+            gl.bindTexture(gl.TEXTURE_2D, state.sampleTex);
+            gl.uniform1i(u.u_samples, 1);
+            gl.uniform2f(u.u_src, state.src[0], state.src[1]);
+            const kr = state.k * EXPOSURE_DISTANCE;
+            gl.uniform1f(u.u_exposure, 1 / (0.25 * Math.hypot(besselJ0(kr), besselY0(kr))));
+            if (floatRT) {
+                gl.uniform1i(u.u_live, 0);
+                gl.uniform1f(u.u_norm, state.processed > 0 ? state.N / state.processed : 0);
+            } else {
+                gl.uniform1i(u.u_live, 1);
+                gl.uniform1i(u.u_live_count, SAMPLES_PER_FRAME);
+                gl.uniform1i(u.u_live_stride, state.chunks);
+                gl.uniform1f(u.u_norm, state.chunks);
+            }
+            gl.uniform1f(u.u_time_phase, timePhase);
+            gl.uniform1i(u.u_mode, mode);
+            gl.uniform1i(u.u_hide_direct, ui.hideDirect.checked ? 1 : 0);
+            gl.uniform1i(u.u_show_phase, ui.showPhase.checked ? 1 : 0);
+            gl.uniform1i(u.u_pinned, state.pinned ? 1 : 0);
+            const foci = currentShape().foci;
+            const f2 = foci[1] || foci[0];
+            gl.uniform4f(u.u_foci, foci[0][0], foci[0][1], f2[0], f2[1]);
+            gl.uniform1i(u.u_n_foci, foci.length);
+            gl.drawArrays(gl.TRIANGLES, 0, 3);
+        }
+
+        // --- Pilot-wave (de Broglie-Bohm) paths ---
+        // For a single-frequency field the paths follow the phase gradient, Im(conj(psi) grad psi) / |psi|^2.
+
+        function readFullField() {
+            const pw = Math.ceil(state.width / 2);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, state.packFbo);
+            gl.viewport(0, 0, pw, state.height);
+            drawField(1, 0);
+            gl.readPixels(0, 0, pw, state.height, gl.RGBA, gl.FLOAT, state.packBuf);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            return { buf: state.packBuf, pw, W: state.width, H: state.height };
+        }
+
+        function computePaths() {
+            octx.clearRect(0, 0, overlay.width, overlay.height);
+            state.pathsNote = '';
+            if (!ui.showPaths.checked) return;
+            const W = state.width, H = state.height, md = Math.min(W, H);
+            const lambdaPx = parseFloat(ui.wavelength.value) * md;
+            if (lambdaPx < 12) {
+                state.pathsNote = 'paths need a wavelength of at least 12 px';
+                return;
+            }
+            const { buf, pw } = readFullField();
+
+            function value(ix, iy) {
+                const o = (iy * pw + (ix >> 1)) * 4 + (ix & 1) * 2;
+                return [buf[o], buf[o + 1]];
+            }
+            // Bilinear field at continuous pixel coordinates (pixel centres at integers)
+            function psi(x, y) {
+                if (x < 1 || y < 1 || x > W - 2 || y > H - 2) return null;
+                const x0 = Math.floor(x), y0 = Math.floor(y);
+                const fx = x - x0, fy = y - y0;
+                const a = value(x0, y0), b = value(x0 + 1, y0), c = value(x0, y0 + 1), d = value(x0 + 1, y0 + 1);
+                const w00 = (1 - fx) * (1 - fy), w10 = fx * (1 - fy), w01 = (1 - fx) * fy, w11 = fx * fy;
+                return [a[0] * w00 + b[0] * w10 + c[0] * w01 + d[0] * w11,
+                        a[1] * w00 + b[1] * w10 + c[1] * w01 + d[1] * w11];
+            }
+            function flow(x, y) {
+                const c = psi(x, y), xp = psi(x + 1, y), xm = psi(x - 1, y), yp = psi(x, y + 1), ym = psi(x, y - 1);
+                if (!c || !xp || !xm || !yp || !ym) return null;
+                const gx = [(xp[0] - xm[0]) / 2, (xp[1] - xm[1]) / 2];
+                const gy = [(yp[0] - ym[0]) / 2, (yp[1] - ym[1]) / 2];
+                const vx = c[0] * gx[1] - c[1] * gx[0];
+                const vy = c[0] * gy[1] - c[1] * gy[0];
+                const n = Math.hypot(vx, vy);
+                if (!(n > 1e-12)) return null;
+                return [vx / n, vy / n, c[0] * c[0] + c[1] * c[1]];
+            }
+            const toUV = (x, y) => [(x + 0.5 - 0.5 * W) / md, (y + 0.5 - 0.5 * H) / md];
+
+            const count = parseInt(ui.npaths.value, 10);
+            const r0 = 0.02 * md;
+            const sx = state.src[0] * md + 0.5 * W - 0.5;
+            const sy = state.src[1] * md + 0.5 * H - 0.5;
+            const startInside = insideDish(state.src);
+            const h = 0.5;
+            let drawn = 0;
+
+            octx.strokeStyle = 'rgba(255, 209, 102, 0.85)';
+            octx.lineWidth = 1.2;
+            for (let m = 0; m < count; m++) {
+                const th = TAU * (m + 0.5) / count;
+                let x = sx + r0 * Math.cos(th), y = sy + r0 * Math.sin(th);
+                if (insideDish(toUV(x, y)) !== startInside) continue;
+                const start = flow(x, y);
+                if (!start) continue;
+                const i0 = start[2];
+                octx.beginPath();
+                octx.moveTo(x + 0.5, H - (y + 0.5));
+                for (let step = 0; step < 16000; step++) {
+                    const a = flow(x, y);
+                    if (!a || a[2] < 1e-4 * i0) break;
+                    const b = flow(x + 0.5 * h * a[0], y + 0.5 * h * a[1]);
+                    if (!b) break;
+                    x += h * b[0];
+                    y += h * b[1];
+                    if (insideDish(toUV(x, y)) !== startInside) break;  // reached the mirror
+                    if (step % 3 === 0) octx.lineTo(x + 0.5, H - (y + 0.5));
+                }
+                octx.stroke();
+                drawn++;
+            }
+            state.pathsNote = drawn + ' pilot-wave paths';
+        }
+
+        // --- Input ---
+
+        function clientToUV(clientX, clientY) {
+            const r = canvas.getBoundingClientRect();
+            const md = Math.min(r.width, r.height);
+            const fx = clientX - r.left;
+            const fy = r.height - (clientY - r.top);  // WebGL y points up
+            return [(fx - 0.5 * r.width) / md, (fy - 0.5 * r.height) / md];
+        }
+
+        function setSource(p) {
+            if (Math.abs(p[0] - state.src[0]) < 1e-6 && Math.abs(p[1] - state.src[1]) < 1e-6) return;
+            state.src = p;
+            state.srcDirty = true;
+        }
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (!state.pinned) setSource(clientToUV(e.clientX, e.clientY));
+        });
+        canvas.addEventListener('click', (e) => {
+            state.pinned = !state.pinned;
+            setSource(clientToUV(e.clientX, e.clientY));
+        });
+        function onTouch(e) {
+            e.preventDefault();
+            const t = e.touches[0];
+            if (t) setSource(clientToUV(t.clientX, t.clientY));
+        }
+        canvas.addEventListener('touchstart', onTouch, { passive: false });
+        canvas.addEventListener('touchmove', onTouch, { passive: false });
+
+        ui.wavelength.addEventListener('input', (e) => {
+            ui.wlVal.innerText = e.target.value;
+            state.geomDirty = true;
+        });
+        ui.shape.addEventListener('change', () => {
+            state.shapeIndex = parseInt(ui.shape.value, 10);
+            state.src = currentShape().foci[0].slice();
+            state.pinned = true;
+            state.geomDirty = true;
+        });
+        ui.toFocus.addEventListener('click', () => {
+            setSource(currentShape().foci[0].slice());
+            state.pinned = true;
+        });
+        ui.showPaths.addEventListener('change', () => { state.pathsPending = true; });
+        ui.npaths.addEventListener('input', (e) => {
+            ui.npVal.innerText = e.target.value;
+            state.pathsPending = true;
+        });
+        ui.collapse.addEventListener('click', () => {
+            const c = ui.container.classList.toggle('collapsed');
+            ui.collapse.textContent = c ? 'Show text' : 'Hide text';
+        });
+
+        canvas.addEventListener('webglcontextlost', (e) => {
+            e.preventDefault();
+            state.lost = true;
+            statusEl.textContent = 'The GPU reset this page. Reload to continue.';
+        });
+
+        // --- Main Render Loop ---
+
+        let lastStatus = 0;
+
+        function updateStatus(now) {
+            if (now - lastStatus < 250) return;
+            lastStatus = now;
+            const step = 2 * state.k * state.L / state.N;
+            let line1 = 'mirror samples ' + state.N.toLocaleString() + ' · max phase step ' + step.toFixed(2) + ' rad';
+            let line2;
+            if (!floatRT) {
+                line2 = 'live mode (no float render targets) · coarse';
+            } else if (converged()) {
+                line2 = 'converged';
+            } else {
+                line2 = 'refining ' + Math.round(100 * state.chunkIndex / state.chunks) + '%';
+            }
+            if (state.pathsNote) line2 += ' · ' + state.pathsNote;
+            let line3 = state.pinned ? 'source pinned (click to release)' : 'source follows mouse (click to pin)';
+            if (!insideDish(state.src)) line3 += ' · source is behind the mirror: its back absorbs';
+            statusEl.textContent = line1 + '\n' + line2 + '\n' + line3;
+            statusEl.style.whiteSpace = 'pre-line';
+        }
+
+        function render(time) {
+            if (state.lost) return;
+            const w = canvas.clientWidth, h = canvas.clientHeight;
+            if (w === 0 || h === 0) {
+                // Hidden or collapsed page: nothing to draw yet.
+                requestAnimationFrame(render);
+                return;
+            }
+            if (canvas.width !== w || canvas.height !== h || state.width !== w || state.height !== h) {
+                canvas.width = w;
+                canvas.height = h;
+                overlay.width = w;
+                overlay.height = h;
+                allocateTargets(w, h);
+                state.srcDirty = true;
+            }
+            if (state.geomDirty) {
+                rebuildGeometry();
+                state.geomDirty = false;
+                state.srcDirty = true;
+            }
+            if (state.srcDirty) {
+                uploadSamples();
+                resetAccumulation();
+                state.srcDirty = false;
+            }
+
+            if (floatRT && !converged()) accumulateChunk();
+
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            gl.viewport(0, 0, w, h);
+            const timePhase = (0.15 * state.k * time * 0.001) % TAU;
+            drawField(0, timePhase);
+
+            if (converged() && state.pathsPending) {
+                state.pathsPending = false;
+                computePaths();
+            }
+            updateStatus(time);
+            requestAnimationFrame(render);
+        }
+
+        // Debug/test hook: exposes internals without changing behaviour.
+        window.__raytracer = {
+            state, readFullField, insideDish, SHAPES, besselJ0, besselY0,
+            get floatRT() { return floatRT; }
+        };
+
+        requestAnimationFrame(render);
+    </script>
+</body>
+</html>
