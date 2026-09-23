@@ -1,0 +1,2132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Deterministic Path-Sum Renderer</title>
+    <style>
+        :root { color-scheme: dark; }
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #050505;
+            color: #eee;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+        }
+        canvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            cursor: grab;
+            touch-action: none;
+        }
+        canvas.dragging { cursor: grabbing; }
+        #ui-container {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            box-sizing: border-box;
+            width: 400px;
+            max-width: calc(100vw - 32px);
+            background: rgba(10, 15, 20, 0.85);
+            padding: 18px 20px;
+            border: 1px solid #0055ff;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 85, 255, 0.3);
+            backdrop-filter: blur(10px);
+            max-height: calc(100vh - 32px);
+            overflow-y: auto;
+            z-index: 2;
+        }
+        h1 {
+            font-size: 1.15rem;
+            margin: 0 0 10px 0;
+            color: #00ccff;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        p {
+            font-size: 0.8rem;
+            color: #aaa;
+            line-height: 1.45;
+            margin: 0 0 10px 0;
+        }
+        strong { color: #fff; }
+        .highlight { color: #ff3366; font-weight: bold; }
+        .paths { color: #ffd166; }
+        .approx { font-size: 0.74rem; color: #888; font-style: italic; }
+        .control-group {
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        label {
+            display: flex;
+            align-items: center;
+            font-size: 0.85rem;
+            margin-bottom: 5px;
+            cursor: pointer;
+        }
+        .val-display {
+            margin-left: auto;
+            color: #00ccff;
+            font-family: Consolas, 'Courier New', monospace;
+        }
+        input[type=range] {
+            width: 100%;
+            accent-color: #00ccff;
+            cursor: pointer;
+            margin: 0 0 6px 0;
+        }
+        input[type=checkbox] {
+            margin: 0 10px 0 0;
+            accent-color: #00ccff;
+            cursor: pointer;
+        }
+        .note {
+            font-size: 0.74rem;
+            color: #888;
+            font-style: italic;
+            margin: -2px 0 4px 0;
+        }
+        .row { display: flex; gap: 8px; flex-wrap: wrap; }
+        button {
+            background: #0a1622;
+            color: #e0e0e0;
+            border: 1px solid #00ccff;
+            border-radius: 4px;
+            padding: 5px 9px;
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+        button:hover { background: #0f2233; }
+        #status {
+            margin-top: 10px;
+            font-size: 0.74rem;
+            color: #7fd6f0;
+            font-family: Consolas, 'Courier New', monospace;
+            line-height: 1.45;
+            white-space: pre-line;
+        }
+        #ui-container.collapsed .text { display: none; }
+        @media (max-width: 600px), (max-height: 520px) {
+            #ui-container { max-height: 42vh; padding: 12px 14px; }
+            h1 { font-size: 1rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="glcanvas"></canvas>
+
+    <div id="ui-container">
+        <h1>3D Deterministic Path-Sum Renderer</h1>
+        <p class="text"><strong>PROBABILITY DOESN'T EXIST (pilot-wave view):</strong> there are no random numbers anywhere in this engine. Instead of Monte Carlo rays it evaluates the <strong style="color:#00ccff">Feynman sum over paths</strong> directly: every point of the dish, evenly spaced, passes on the amplitude it receives from the light, and the complex phases add at every point in space.</p>
+        <p class="text">The amplitude &psi; is a one-photon QED amplitude in the scalar approximation (one field component, one frequency). By default the fog shows |&psi;|&sup2; of its <strong>reflected part</strong>; tick <em>Show direct field</em> for the total. Where neighbouring paths have the same length their phases agree and reinforce; that is where the beam comes from. The field is computed once on a 3D grid, refined until it converges, then reused every frame.</p>
+        <p class="text"><strong class="paths">Gold lines: pilot-wave paths</strong> (de Broglie&ndash;Bohm). Each photon follows the energy flow of its wave from wherever it starts; the apparent randomness is only our ignorance of that start. The paths always follow the total field (direct + reflected), whatever the fog shows. Averaged photon paths of this kind were measured in 2011 (Kocsis et al., <em>Science</em>). Paths never cross.</p>
+        <p class="text approx">Approximations: scalar field (no polarisation); the mirror is physical optics (a perfect mirror, one bounce, no edge corrections), reflecting on its open side only; the reflected field is stored on a grid, so &lambda; &ge; 0.1.</p>
+        <p class="text"><span class="highlight">Drag</span> to orbit, wheel or pinch to zoom, <span class="highlight">Shift+drag</span> moves the light. Put the light on the <span class="highlight">red focus</span> to form a beam.</p>
+
+        <div class="control-group">
+            <label>Light X <span class="val-display" id="val-lx">0.00</span></label>
+            <input type="range" id="lightX" min="-1" max="1" step="0.01" value="0">
+            <label>Light Y (focus &minus;0.75) <span class="val-display" id="val-ly">-0.75</span></label>
+            <input type="range" id="lightY" min="-1.5" max="1.5" step="0.01" value="-0.75">
+            <div class="note">Off the focus the path lengths no longer agree, so the beam defocuses.</div>
+            <label>Light Z <span class="val-display" id="val-lz">0.00</span></label>
+            <input type="range" id="lightZ" min="-1" max="1" step="0.01" value="0">
+        </div>
+        <div class="control-group">
+            <label>Wavelength (&lambda;) <span class="val-display" id="val-wl">0.15</span></label>
+            <input type="range" id="wavelength" min="0.1" max="0.5" step="0.01" value="0.15">
+            <div class="note">0.1 to 0.5, so the field grid has at least 4 cells per wavelength. Shorter waves need more mirror samples. Between grid points the reflection is interpolated in magnitude and phase: exact for a single travelling wave (the beam), but where several reflected waves cross, fringes finer than the grid are smoothed (typically by 8% in brightness at &lambda; 0.15, 14% at 0.1).</div>
+        </div>
+        <div class="control-group">
+            <label><input type="checkbox" id="show-direct"> Show direct field (not only the reflection)</label>
+            <label><input type="checkbox" id="show-phase"> Colour by phase</label>
+            <label><input type="checkbox" id="animate"> Animate phase (e<sup>&minus;i&omega;t</sup>)</label>
+            <div class="note">Only the global phase turns, nothing is recomputed. Without phase colour this shows the instantaneous wave, whose time average is |&psi;|&sup2;.</div>
+            <label><input type="checkbox" id="show-paths" checked> <span class="paths">Show pilot-wave paths</span></label>
+            <label>Paths <span class="val-display" id="val-np">64</span></label>
+            <input type="range" id="npaths" min="16" max="128" step="8" value="64">
+            <label><input type="checkbox" id="drag-light"> Dragging moves the light</label>
+        </div>
+        <div class="row">
+            <button id="to-focus">Light &rarr; focus</button>
+            <button id="reset-cam">Reset camera</button>
+            <button id="collapse">Hide text</button>
+        </div>
+        <div id="status"></div>
+    </div>
+
+    <script>
+    'use strict';
+
+    // ==== BEGIN PHYSICS CORE ====
+    // Pure functions with no DOM or GL. test3d/run_tests.mjs extracts this block verbatim and tests it.
+    const Core = (() => {
+        const TAU = 2 * Math.PI;
+        const FOUR_PI = 4 * Math.PI;
+        const RIM_TERM = Math.pow(5, 1.5) - 1;          // (1 + 4 r^2)^(3/2) - 1 at the rim r = 1
+        const DISH_AREA = Math.PI / 6 * RIM_TERM;        // area of y = x^2 + z^2 - 1 for r <= 1
+        const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+        const FOCUS = [0, -0.75, 0];                     // 1/(4a) above the vertex (0, -1, 0)
+        const SAMPLES_PER_PASS = 128;                    // M: mirror samples added per voxel per pass
+        const MAX_SAMPLES = 65536;
+        const DIRECT_MIN_D = 0.01;
+        const G_REF = 1 / (FOUR_PI * 0.25);              // |G(0.25)|: fixed exposure reference
+        const NEAR = 0.05, FAR = 40;                     // depth mapping shared by the raymarcher and the lines
+        const BOX_MIN = [-1.1, -1.05, -1.1];
+        const BOX_MAX = [1.1, 2.0, 1.1];
+
+        // The open (lit, concave) side of the dish's surface: y > x^2 + z^2 - 1. It is convex, so a
+        // straight line between two points on this side never crosses the surface, and any mirror
+        // point seen from this side is seen from its reflecting face.
+        function litSide(p) {
+            return p[1] > p[0] * p[0] + p[2] * p[2] - 1;
+        }
+
+        // Exact test: does the segment a -> b cross the mirror (the surface y = x^2 + z^2 - 1 where
+        // r <= 1)? Along the segment, y - x^2 - z^2 + 1 is a quadratic in t.
+        function segmentBlocked(a, b) {
+            const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2];
+            const A = -(dx * dx + dz * dz);
+            const B = dy - 2 * (a[0] * dx + a[2] * dz);
+            const C = a[1] - a[0] * a[0] - a[2] * a[2] + 1;
+            const roots = [];
+            if (Math.abs(A) < 1e-14) {
+                if (Math.abs(B) > 1e-14) roots.push(-C / B);
+            } else {
+                const disc = B * B - 4 * A * C;
+                if (disc >= 0) {
+                    const s = Math.sqrt(disc);
+                    const q = -0.5 * (B + (B >= 0 ? s : -s));
+                    roots.push(q / A);
+                    if (q !== 0) roots.push(C / q);
+                }
+            }
+            for (const t of roots) {
+                if (t > 1e-9 && t < 1 - 1e-9) {
+                    const x = a[0] + t * dx, z = a[2] + t * dz;
+                    if (x * x + z * z <= 1) return true;
+                }
+            }
+            return false;
+        }
+
+        // Mirror samples scale with the wavelength: neighbouring samples ~sqrt(A/N) apart may differ
+        // in path length by up to twice that, so keep k * 2 * sqrt(A/N) <= pi/2.
+        function samplePlan(k) {
+            const needed = DISH_AREA * Math.pow(4 * k / Math.PI, 2);
+            let passes = 1;
+            while (passes * SAMPLES_PER_PASS < needed && passes * SAMPLES_PER_PASS < MAX_SAMPLES) passes *= 2;
+            const N = passes * SAMPLES_PER_PASS;
+            const spacing = Math.sqrt(DISH_AREA / N);
+            return { N, passes, M: SAMPLES_PER_PASS, needed, spacing, maxPhaseStep: 2 * k * spacing, dmin: 0.5 * spacing };
+        }
+
+        // Bit-reversed pass order: every prefix of passes covers the mirror evenly.
+        function bitReversedOrder(n) {
+            const bits = Math.round(Math.log2(n));
+            const out = new Array(n);
+            for (let i = 0; i < n; i++) {
+                let r = 0;
+                for (let b = 0; b < bits; b++) if (i & (1 << b)) r |= 1 << (bits - 1 - b);
+                out[i] = r;
+            }
+            return out;
+        }
+
+        // Radius enclosing the fraction u of the dish's area: A(r) / A = u.
+        function latticeRadius(u) {
+            return Math.sqrt((Math.pow(1 + u * RIM_TERM, 2 / 3) - 1) / 4);
+        }
+
+        // Deterministic equal-area Fibonacci lattice on the curved dish: x, y, z, then the unit normal
+        // pointing into the lit side, n ~ (-2x, 1, -2z). Every sample carries the weight A / N.
+        function mirrorLattice(N) {
+            const out = new Float64Array(6 * N);
+            for (let i = 0; i < N; i++) {
+                const r = latticeRadius((i + 0.5) / N);
+                const th = (i * GOLDEN_ANGLE) % TAU;
+                const x = r * Math.cos(th), z = r * Math.sin(th);
+                const inv = 1 / Math.sqrt(1 + 4 * r * r);
+                const o = 6 * i;
+                out[o] = x; out[o + 1] = r * r - 1; out[o + 2] = z;
+                out[o + 3] = -2 * x * inv; out[o + 4] = inv; out[o + 5] = -2 * z * inv;
+            }
+            return out;
+        }
+
+        // Scalar Green's function G(d) = e^{ikd} / (4 pi d), phase reduced in double precision.
+        function greenAt(d, k) {
+            const ph = (k * d) % TAU, a = 1 / (FOUR_PI * d);
+            return [a * Math.cos(ph), a * Math.sin(ph)];
+        }
+
+        // Physical optics for a perfect mirror (field = 0 on the surface):
+        //   u_s(P) = -2 * sum_i G(|P - M_i|) (du_inc/dn)(M_i) dA_i,
+        //   du_inc/dn = (ik - 1/d1) G(d1) ((M - S)/d1 . n),  n pointing into the lit side.
+        // Returns c with u_s contribution = c * e^{ik d2} / d2, i.e. c = -2 (du/dn) dA / (4 pi).
+        function poCoefficient(mx, my, mz, nx, ny, nz, dA, S, k, dmin) {
+            const vx = mx - S[0], vy = my - S[1], vz = mz - S[2];
+            const d1 = Math.max(Math.sqrt(vx * vx + vy * vy + vz * vz), dmin);
+            const cosn = (vx * nx + vy * ny + vz * nz) / d1;
+            const g = greenAt(d1, k);
+            const dre = (-g[0] / d1 - k * g[1]) * cosn;
+            const dim = (k * g[0] - g[1] / d1) * cosn;
+            const f = -2 * dA / FOUR_PI;
+            return [f * dre, f * dim];
+        }
+
+        // Does the light S reach mirror sample i on its reflecting face? It must face that side and
+        // nothing else of the dish may be in the way. From the open side every sample is reached (that
+        // side is convex); from beside the rim part of the face is reached over the rim.
+        function sampleLit(mirror, i, S, inside) {
+            if (inside) return true;
+            const o = 6 * i;
+            const mx = mirror[o], my = mirror[o + 1], mz = mirror[o + 2];
+            const nx = mirror[o + 3], ny = mirror[o + 4], nz = mirror[o + 5];
+            if ((S[0] - mx) * nx + (S[1] - my) * ny + (S[2] - mz) * nz <= 0) return false;   // its back faces the light
+            const e = 1e-7;
+            return !segmentBlocked(S, [mx + e * nx, my + e * ny, mz + e * nz]);
+        }
+
+        // Coefficients of every sample (zero where the light does not reach the reflecting face: the
+        // back absorbs). Optional `out` is reused; optional `stats` receives the number of lit samples.
+        function mirrorCoefficients(mirror, N, S, k, dmin, out, stats) {
+            if (!out || out.length !== 2 * N) out = new Float64Array(2 * N);
+            const dA = DISH_AREA / N;
+            const inside = litSide(S);
+            let lit = 0;
+            for (let i = 0; i < N; i++) {
+                const o = 6 * i;
+                if (!sampleLit(mirror, i, S, inside)) {
+                    out[2 * i] = 0;
+                    out[2 * i + 1] = 0;
+                    continue;
+                }
+                const c = poCoefficient(mirror[o], mirror[o + 1], mirror[o + 2],
+                    mirror[o + 3], mirror[o + 4], mirror[o + 5], dA, S, k, dmin);
+                out[2 * i] = c[0];
+                out[2 * i + 1] = c[1];
+                lit++;
+            }
+            if (stats) stats.lit = lit;
+            return out;
+        }
+
+        // Double-precision reference of what the GPU sums: sum_i c_i e^{ik d2} / max(d2, dmin).
+        function reflectedField(P, mirror, coef, N, k, dmin) {
+            let re = 0, im = 0;
+            for (let i = 0; i < N; i++) {
+                const o = 6 * i;
+                const dx = P[0] - mirror[o], dy = P[1] - mirror[o + 1], dz = P[2] - mirror[o + 2];
+                const d = Math.max(Math.sqrt(dx * dx + dy * dy + dz * dz), dmin);
+                const ph = (k * d) % TAU;
+                const er = Math.cos(ph) / d, ei = Math.sin(ph) / d;
+                const cr = coef[2 * i], ci = coef[2 * i + 1];
+                re += cr * er - ci * ei;
+                im += cr * ei + ci * er;
+            }
+            return [re, im];
+        }
+
+        // Direct field from the light S, zero where the dish is in the way (its back absorbs).
+        function directField(P, S, k) {
+            if (segmentBlocked(S, P)) return [0, 0];
+            const dx = P[0] - S[0], dy = P[1] - S[1], dz = P[2] - S[2];
+            return greenAt(Math.max(Math.sqrt(dx * dx + dy * dy + dz * dz), DIRECT_MIN_D), k);
+        }
+
+        // Field grid stored as a 2D atlas of y-slices: slice iy is tile (iy % tilesX, iy / tilesX).
+        function gridSpec(n, tilesX, tilesY) {
+            const cell = [0, 1, 2].map(a => (BOX_MAX[a] - BOX_MIN[a]) / n);
+            return { nx: n, ny: n, nz: n, tilesX, tilesY, atlasW: tilesX * n, atlasH: tilesY * n,
+                     min: BOX_MIN.slice(), max: BOX_MAX.slice(), cell };
+        }
+
+        function voxelCenter(spec, ix, iy, iz) {
+            return [spec.min[0] + (ix + 0.5) * spec.cell[0],
+                    spec.min[1] + (iy + 0.5) * spec.cell[1],
+                    spec.min[2] + (iz + 0.5) * spec.cell[2]];
+        }
+
+        // The reflected sum is also evaluated on a thin shell just behind the mirror surface (the
+        // physical-optics integral is continuous across it), so trilinear interpolation and central
+        // differences near the mirror see a smooth field. Band: the largest change of
+        // y - (x^2 + z^2 - 1) over two cells along every axis anywhere in the grid.
+        function reflectionBand(spec) {
+            const rmax = Math.max(Math.abs(spec.min[0]), Math.abs(spec.max[0]), Math.abs(spec.min[2]), Math.abs(spec.max[2]));
+            const [cx, cy, cz] = spec.cell;
+            return 2 * cy + 4 * rmax * (cx + cz) + 4 * (cx * cx + cz * cz);
+        }
+
+        function atlasPixel(spec, ix, iy, iz) {
+            return [(iy % spec.tilesX) * spec.nx + ix, Math.floor(iy / spec.tilesX) * spec.nz + iz];
+        }
+
+        // Blends the 8 voxels around a point (weights w, values re + i im stored with their magnitude
+        // mag and phase arg) in magnitude and phase: the magnitude trilinearly, the phase as the
+        // magnitude-weighted mean of the corner phases around the phase of the plain complex average.
+        // Exact for a travelling wave in any direction. Plain complex interpolation of a wave that turns
+        // k * cell ~ 1 rad from voxel to voxel would dip by cos^2(k cell / 2) (23% at lambda 0.15)
+        // between voxels. The display shader (reflectedAt) does exactly the same.
+        function polarBlend(w, re, im, mag, arg) {
+            let ar = 0, ai = 0, m = 0;
+            for (let c = 0; c < 8; c++) {
+                ar += w[c] * re[c];
+                ai += w[c] * im[c];
+                m += w[c] * mag[c];
+            }
+            if (!(m > 0)) return [0, 0];
+            const ref = Math.atan2(ai, ar);
+            let num = 0;
+            for (let c = 0; c < 8; c++) {
+                let d = arg[c] - ref;
+                d -= TAU * Math.floor(d / TAU + 0.5);
+                num += w[c] * mag[c] * d;
+            }
+            const ph = ref + num / m;
+            return [m * Math.cos(ph), m * Math.sin(ph)];
+        }
+
+        // Sampler over an atlas read back as RGBA floats. Default: channels 0, 1 are one complex field,
+        // interpolated trilinearly. polar = true: the page's layout (re, im, magnitude, phase), blended
+        // in magnitude and phase as the display does.
+        function makeGridSampler(spec, buf, scale, polar = false) {
+            const { nx, ny, nz, tilesX, atlasW, min, cell } = spec;
+            const w = new Float64Array(8), re = new Float64Array(8), im = new Float64Array(8);
+            const mag = new Float64Array(8), arg = new Float64Array(8);
+            return function (p) {
+                const gx = (p[0] - min[0]) / cell[0] - 0.5;
+                const gy = (p[1] - min[1]) / cell[1] - 0.5;
+                const gz = (p[2] - min[2]) / cell[2] - 0.5;
+                if (!(gx >= -0.5 && gy >= -0.5 && gz >= -0.5 && gx <= nx - 0.5 && gy <= ny - 0.5 && gz <= nz - 0.5)) return null;
+                const ix = Math.min(Math.max(Math.floor(gx), 0), nx - 2);
+                const iy = Math.min(Math.max(Math.floor(gy), 0), ny - 2);
+                const iz = Math.min(Math.max(Math.floor(gz), 0), nz - 2);
+                const fx = Math.min(Math.max(gx - ix, 0), 1);
+                const fy = Math.min(Math.max(gy - iy, 0), 1);
+                const fz = Math.min(Math.max(gz - iz, 0), 1);
+                for (let c = 0; c < 8; c++) {
+                    const bx = c & 1, by = (c >> 1) & 1, bz = c >> 2;
+                    const y = iy + by;
+                    const o = (((Math.floor(y / tilesX) * nz + iz + bz) * atlasW) + (y % tilesX) * nx + ix + bx) * 4;
+                    w[c] = (bx ? fx : 1 - fx) * (by ? fy : 1 - fy) * (bz ? fz : 1 - fz);
+                    re[c] = buf[o];
+                    im[c] = buf[o + 1];
+                    mag[c] = buf[o + 2];
+                    arg[c] = buf[o + 3];
+                }
+                if (polar) {
+                    const v = polarBlend(w, re, im, mag, arg);
+                    return [v[0] * scale, v[1] * scale];
+                }
+                let sr = 0, si = 0;
+                for (let c = 0; c < 8; c++) { sr += w[c] * re[c]; si += w[c] * im[c]; }
+                return [sr * scale, si * scale];
+            };
+        }
+
+        // --- Pilot-wave paths. A "field" here maps a point to { psi: [re, im], grad: [[re, im] x 3] },
+        // or null outside its domain. ---
+
+        // The direct field with its exact gradient: grad G = (ik - 1/d) G (p - S) / d.
+        // occlude = false gives the unobstructed wave (used when both the light and p are on the open
+        // side, where nothing blocks it).
+        function directFieldWithGradient(S, k, occlude = true) {
+            const zero = { psi: [0, 0], grad: [[0, 0], [0, 0], [0, 0]] };
+            return function (p) {
+                if (occlude && segmentBlocked(S, p)) return zero;
+                const v = [p[0] - S[0], p[1] - S[1], p[2] - S[2]];
+                const d = Math.max(Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]), DIRECT_MIN_D);
+                const g = greenAt(d, k);
+                const fr = -g[0] / d - k * g[1], fi = k * g[0] - g[1] / d;
+                return { psi: g, grad: [[fr * v[0] / d, fi * v[0] / d], [fr * v[1] / d, fi * v[1] / d], [fr * v[2] / d, fi * v[2] / d]] };
+            };
+        }
+
+        // Gradient of a sampled field (e.g. the stored grid) by central differences over +-gh.
+        // Where the wave is travelling (consistent phase steps on both sides) the difference is
+        // taken in log|psi| and in phase, which is exact for a plane wave; across a node, where the
+        // phase jumps, it falls back to the plain central difference of psi.
+        function differencedField(psi, gh) {
+            return function (p) {
+                const c = psi(p);
+                if (!c) return null;
+                const ac = c[0] * c[0] + c[1] * c[1];
+                const q = [p[0], p[1], p[2]];
+                const grad = [];
+                for (let a = 0; a < 3; a++) {
+                    const h = gh[a];
+                    q[a] = p[a] + h;
+                    const u = psi(q);
+                    q[a] = p[a] - h;
+                    const w = psi(q);
+                    q[a] = p[a];
+                    if (!u || !w) return null;
+                    const au = u[0] * u[0] + u[1] * u[1], aw = w[0] * w[0] + w[1] * w[1];
+                    let g = null;
+                    if (au > 0 && aw > 0 && ac > 0) {
+                        const a1 = Math.atan2(u[1] * c[0] - u[0] * c[1], u[0] * c[0] + u[1] * c[1]);   // arg(u conj c)
+                        const a2 = Math.atan2(c[1] * w[0] - c[0] * w[1], c[0] * w[0] + c[1] * w[1]);   // arg(c conj w)
+                        if (Math.abs(a1) < Math.PI / 2 && Math.abs(a2) < Math.PI / 2 && Math.abs(a1 - a2) < Math.PI / 4) {
+                            const dl = 0.25 * Math.log(au / aw) / h, dp = (a1 + a2) / (2 * h);
+                            g = [c[0] * dl - c[1] * dp, c[1] * dl + c[0] * dp];
+                        }
+                    }
+                    grad.push(g || [(u[0] - w[0]) / (2 * h), (u[1] - w[1]) / (2 * h)]);
+                }
+                return { psi: c, grad };
+            };
+        }
+
+        function sumFields(fa, fb) {
+            return function (p) {
+                const a = fa(p);
+                if (!a) return null;
+                const b = fb(p);
+                if (!b) return null;
+                return { psi: [a.psi[0] + b.psi[0], a.psi[1] + b.psi[1]],
+                         grad: a.grad.map((g, i) => [g[0] + b.grad[i][0], g[1] + b.grad[i][1]]) };
+            };
+        }
+
+        // Pilot-wave (de Broglie-Bohm) direction for a single-frequency scalar field: the energy flow
+        // Im(conj(psi) grad psi) / |psi|^2, the gradient of the phase. d is null where nothing flows.
+        function flowDir(field, p) {
+            const f = field(p);
+            if (!f) return null;
+            const cr = f.psi[0], ci = f.psi[1];
+            const v = f.grad.map(g => cr * g[1] - ci * g[0]);
+            const n = Math.hypot(v[0], v[1], v[2]);
+            return { d: n > 0 ? [v[0] / n, v[1] / n, v[2] / n] : null, I: cr * cr + ci * ci };
+        }
+
+        // RK2 (midpoint) integration of a path along the flow, parametrised by arc length.
+        // Stops at nodes (|psi|^2 < minRel * start), where inside() fails, or after maxSteps.
+        function traceStreamline(field, start, opts) {
+            const h = opts.h, maxSteps = opts.maxSteps || 4000;
+            const minRel = opts.minRel === undefined ? 1e-4 : opts.minRel;
+            const inside = opts.inside || (() => true);
+            const points = [start[0], start[1], start[2]];
+            const f0 = flowDir(field, start);
+            if (!f0) return { points, steps: 0, reason: 'boundary' };
+            if (!f0.d) return { points, steps: 0, reason: 'no-flow' };
+            const Imin = minRel * f0.I;
+            let p = [start[0], start[1], start[2]], reason = 'max-steps', steps = 0;
+            for (; steps < maxSteps; steps++) {
+                const a = steps === 0 ? f0 : flowDir(field, p);
+                if (!a) { reason = 'boundary'; break; }
+                if (a.I < Imin) { reason = 'node'; break; }
+                if (!a.d) { reason = 'no-flow'; break; }
+                const mid = [p[0] + 0.5 * h * a.d[0], p[1] + 0.5 * h * a.d[1], p[2] + 0.5 * h * a.d[2]];
+                const b = flowDir(field, mid);
+                if (!b) { reason = 'boundary'; break; }
+                if (!b.d) { reason = 'no-flow'; break; }
+                const next = [p[0] + h * b.d[0], p[1] + h * b.d[1], p[2] + h * b.d[2]];
+                if (!inside(next)) { reason = 'exit'; break; }
+                p = next;
+                points.push(p[0], p[1], p[2]);
+            }
+            return { points, steps, reason };
+        }
+
+        // Deterministic, evenly spread directions (Fibonacci sphere, y as the polar axis).
+        function fibonacciSphere(n) {
+            const out = [];
+            for (let m = 0; m < n; m++) {
+                const y = 1 - 2 * (m + 0.5) / n;
+                const rho = Math.sqrt(Math.max(0, 1 - y * y));
+                const ph = (m * GOLDEN_ANGLE) % TAU;
+                out.push([rho * Math.cos(ph), y, rho * Math.sin(ph)]);
+            }
+            return out;
+        }
+
+        // Distance t > 0 at which the ray S + t d (from a point S outside the open side) enters it, or
+        // -1 if it never does. Along the ray y - x^2 - z^2 + 1 = A t^2 + B t + C, with C < 0 at S.
+        function openSideEntry(S, d) {
+            const A = -(d[0] * d[0] + d[2] * d[2]);
+            const B = d[1] - 2 * (S[0] * d[0] + S[2] * d[2]);
+            const C = S[1] - S[0] * S[0] - S[2] * S[2] + 1;
+            if (Math.abs(A) < 1e-14) return B > 1e-14 ? -C / B : -1;
+            const disc = B * B - 4 * A * C;
+            if (disc <= 0) return -1;
+            const t = (-B + Math.sqrt(disc)) / (2 * A);   // A < 0: the smaller root, where the ray enters
+            return t > 0 ? t : -1;
+        }
+
+        // Starting points of the pilot-wave paths: n evenly spread directions around the light.
+        // A light on the open side starts them on a small sphere of radius r0 around it. From a light
+        // beside the rim only the direct wave exists until the open side, so each photon travels in a
+        // straight line (lead) to where its ray enters over the rim, and starts there; rays that meet
+        // the dish's back are absorbed. The number of directions is scaled so that about n paths enter.
+        // inside(p) is the region the paths are traced in (open side, inside the grid box).
+        function pathStarts(S, n, r0, inside, step) {
+            if (litSide(S)) {
+                return fibonacciSphere(n).map(d => ({ start: [S[0] + r0 * d[0], S[1] + r0 * d[1], S[2] + r0 * d[2]], lead: [] }))
+                    .filter(s => inside(s.start));
+            }
+            const enter = m => {
+                const out = [];
+                for (const d of fibonacciSphere(m)) {
+                    const t = openSideEntry(S, d);
+                    if (t < 0) continue;
+                    const ex = S[0] + t * d[0], ez = S[2] + t * d[2];
+                    if (ex * ex + ez * ez <= 1) continue;          // meets the dish from behind
+                    const ts = t + step;
+                    const start = [S[0] + ts * d[0], S[1] + ts * d[1], S[2] + ts * d[2]];
+                    if (!inside(start)) continue;
+                    const lead = r0 < ts ? [S[0] + r0 * d[0], S[1] + r0 * d[1], S[2] + r0 * d[2]] : [];
+                    out.push({ start, lead });
+                }
+                return out;
+            };
+            const probe = enter(256).length;
+            if (!probe) return [];
+            return enter(Math.min(32 * n, Math.max(n, Math.round(n * 256 / probe))));
+        }
+
+        // --- Camera: one model for the raymarcher and the line drawing ---
+        function normalize(v) {
+            const n = Math.hypot(v[0], v[1], v[2]);
+            return [v[0] / n, v[1] / n, v[2] / n];
+        }
+
+        function cameraBasis(theta, phi, dist, target) {
+            const ro = [target[0] + dist * Math.cos(phi) * Math.sin(theta),
+                        target[1] + dist * Math.sin(phi),
+                        target[2] + dist * Math.cos(phi) * Math.cos(theta)];
+            const fwd = normalize([target[0] - ro[0], target[1] - ro[1], target[2] - ro[2]]);
+            const right = normalize([-fwd[2], 0, fwd[0]]);          // cross(fwd, +y)
+            const up = [right[1] * fwd[2] - right[2] * fwd[1],       // cross(right, fwd)
+                        right[2] * fwd[0] - right[0] * fwd[2],
+                        right[0] * fwd[1] - right[1] * fwd[0]];
+            return { ro, fwd, right, up };
+        }
+
+        // The ray through window pixel (fx, fy) (GL convention, origin bottom-left):
+        // uv = (fragCoord - 0.5 res) / min(res), rd = normalize(fwd + right uv.x + up uv.y).
+        function rayDir(cam, fx, fy, W, H) {
+            const md = Math.min(W, H);
+            const ux = (fx - 0.5 * W) / md, uy = (fy - 0.5 * H) / md;
+            return normalize([cam.fwd[0] + cam.right[0] * ux + cam.up[0] * uy,
+                              cam.fwd[1] + cam.right[1] * ux + cam.up[1] * uy,
+                              cam.fwd[2] + cam.right[2] * ux + cam.up[2] * uy]);
+        }
+
+        function viewCoords(cam, P) {
+            const d = [P[0] - cam.ro[0], P[1] - cam.ro[1], P[2] - cam.ro[2]];
+            const dot = v => d[0] * v[0] + d[1] * v[1] + d[2] * v[2];
+            return [dot(cam.right), dot(cam.up), dot(cam.fwd)];
+        }
+
+        // Window depth for a point zc in front of the camera (standard perspective near/far mapping).
+        function depthFromViewZ(zc) {
+            const ndc = (FAR + NEAR) / (FAR - NEAR) - 2 * FAR * NEAR / ((FAR - NEAR) * zc);
+            return 0.5 * ndc + 0.5;
+        }
+
+        // Clip coordinates exactly as the line vertex shader computes them.
+        function projectClip(cam, P, W, H) {
+            const [xc, yc, zc] = viewCoords(cam, P);
+            const md = Math.min(W, H);
+            return [xc * 2 * md / W, yc * 2 * md / H,
+                    zc * (FAR + NEAR) / (FAR - NEAR) - 2 * FAR * NEAR / (FAR - NEAR), zc];
+        }
+
+        function clipToWindow(clip, W, H) {
+            const x = clip[0] / clip[3], y = clip[1] / clip[3], z = clip[2] / clip[3];
+            return [(x + 1) * 0.5 * W, (y + 1) * 0.5 * H, 0.5 * z + 0.5];
+        }
+
+        return {
+            TAU, FOUR_PI, DISH_AREA, RIM_TERM, GOLDEN_ANGLE, FOCUS, SAMPLES_PER_PASS, MAX_SAMPLES,
+            DIRECT_MIN_D, G_REF, NEAR, FAR, BOX_MIN, BOX_MAX,
+            litSide, segmentBlocked, samplePlan, bitReversedOrder, latticeRadius, mirrorLattice,
+            greenAt, poCoefficient, sampleLit, mirrorCoefficients, reflectedField, directField,
+            gridSpec, voxelCenter, reflectionBand, atlasPixel, polarBlend, makeGridSampler, directFieldWithGradient,
+            differencedField, sumFields, flowDir, traceStreamline,
+            fibonacciSphere, openSideEntry, pathStarts, cameraBasis, rayDir, viewCoords, depthFromViewZ, projectClip, clipToWindow
+        };
+    })();
+    // ==== END PHYSICS CORE ====
+
+    const canvas = document.getElementById('glcanvas');
+    const statusEl = document.getElementById('status');
+    const ui = {
+        lightX: document.getElementById('lightX'),
+        lightY: document.getElementById('lightY'),
+        lightZ: document.getElementById('lightZ'),
+        valLX: document.getElementById('val-lx'),
+        valLY: document.getElementById('val-ly'),
+        valLZ: document.getElementById('val-lz'),
+        wavelength: document.getElementById('wavelength'),
+        valWL: document.getElementById('val-wl'),
+        showDirect: document.getElementById('show-direct'),
+        showPhase: document.getElementById('show-phase'),
+        animate: document.getElementById('animate'),
+        showPaths: document.getElementById('show-paths'),
+        npaths: document.getElementById('npaths'),
+        valNP: document.getElementById('val-np'),
+        dragLight: document.getElementById('drag-light'),
+        toFocus: document.getElementById('to-focus'),
+        resetCam: document.getElementById('reset-cam'),
+        collapse: document.getElementById('collapse'),
+        container: document.getElementById('ui-container')
+    };
+
+    const TAU = Core.TAU;
+    const SAMPLE_TEX_W = 2048;          // texels per row of the mirror-sample texture (2 texels per sample)
+    const MAX_CANVAS = 1600;
+    const FOG_STEP = 0.022;             // raymarch step through the field grid
+    const WAVE_SPEED = 0.15;            // phase-animation speed in scene units per second
+    const LIGHT_RANGE = [[-1, 1], [-1.5, 1.5], [-1, 1]];
+    const CAM_DEFAULT = { theta: 0.62, phi: 0.55, dist: 4.8, target: [0, 0.3, 0] };
+    const GRIDS = {
+        rt128: { spec: Core.gridSpec(128, 16, 8), kind: 'rt', label: 'float render targets' },
+        tf128: { spec: Core.gridSpec(128, 16, 8), kind: 'tf', label: 'transform-feedback fallback' },
+        tf64:  { spec: Core.gridSpec(64, 8, 8), kind: 'tf', label: 'COARSE fallback: 64³ grid, fine fringes not resolved' }
+    };
+    const forced = new URLSearchParams(location.search).get('backend');   // testing: rt | tf | coarse
+
+    const state = {
+        lambda: 0.15, k: TAU / 0.15,
+        plan: null, order: null, mirror: null, coef: null,
+        src: Core.FOCUS.slice(), srcLit: true, srcInside: true, litFraction: 1, mirrorN: 0,
+        cam: { theta: CAM_DEFAULT.theta, phi: CAM_DEFAULT.phi, dist: CAM_DEFAULT.dist, target: CAM_DEFAULT.target.slice() },
+        geomDirty: true, srcDirty: true, redraw: true,
+        pass: 0, passesNeeded: 1, passesPerFrame: 1,
+        refineStart: 0, refineMs: 0, fieldVersion: 0, lastDisplay: 0,
+        backend: '', backendNote: '',
+        paths: { dirty: true, drawn: 0, note: '', cacheVersion: -1, readMs: 0, traceMs: 0, steps: 0, reasons: {}, mirrorHits: 0 },
+        lost: false, error: '', fps: 0
+    };
+
+    // --- WebGL setup ---
+
+    const gl = canvas.getContext('webgl2', { antialias: false, depth: true, alpha: false });
+    const G = {};   // every GL object, rebuilt after a context restore
+
+    const glf = x => Number(x).toPrecision(9);   // JS number -> GLSL float literal
+
+    const FULLSCREEN_VS = `#version 300 es
+        void main() {
+            // One oversized triangle covers the whole viewport.
+            vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+            gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+        }
+    `;
+
+    const GLSL_COMMON = `
+        #define PI 3.14159265358979
+        #define TAU 6.28318530717959
+
+        // The lit (concave) side of the dish's surface y = x^2 + z^2 - 1. This region is convex.
+        bool litSide(vec3 p) {
+            return p.y > p.x * p.x + p.z * p.z - 1.0;
+        }
+
+        // Exact test: does the segment a -> b cross the mirror (that surface where r <= 1)?
+        bool segBlocked(vec3 a, vec3 b) {
+            vec3 D = b - a;
+            float A = -(D.x * D.x + D.z * D.z);
+            float B = D.y - 2.0 * (a.x * D.x + a.z * D.z);
+            float C = a.y - a.x * a.x - a.z * a.z + 1.0;
+            float t0 = -1.0;
+            float t1 = -1.0;
+            if (abs(A) < 1e-12) {
+                if (abs(B) > 1e-12) t0 = -C / B;
+            } else {
+                float disc = B * B - 4.0 * A * C;
+                if (disc >= 0.0) {
+                    float s = sqrt(disc);
+                    float q = -0.5 * (B + (B >= 0.0 ? s : -s));
+                    t0 = q / A;
+                    if (q != 0.0) t1 = C / q;
+                }
+            }
+            if (t0 > 1e-5 && t0 < 1.0 - 1e-5) {
+                vec3 p = a + t0 * D;
+                if (dot(p.xz, p.xz) <= 1.0) return true;
+            }
+            if (t1 > 1e-5 && t1 < 1.0 - 1e-5) {
+                vec3 p = a + t1 * D;
+                if (dot(p.xz, p.xz) <= 1.0) return true;
+            }
+            return false;
+        }
+    `;
+
+    // One pass adds M mirror samples to every voxel's reflected-field sum. Shared by the float
+    // render-target path (fragment shader) and the transform-feedback path (vertex shader).
+    const COMPUTE_BODY = `
+        uniform sampler2D u_samples;   // per sample: texel 0 = mirror point xyz, texel 1 = coefficient (re, im)
+        uniform ivec2 u_base;          // first texel of this pass's block of samples
+        uniform int u_count;
+        uniform int u_first;           // first pass: start the sums from zero
+        uniform int u_src_lit;         // the light reaches (part of) the reflecting face
+        uniform float u_k;
+        uniform float u_dmin;
+        uniform ivec3 u_grid;
+        uniform int u_tiles_x;
+        uniform vec3 u_box_min;
+        uniform vec3 u_cell;
+        uniform float u_band;          // shell behind the mirror where the reflected sum is continued
+
+        // channels: (reflected re, im, magnitude, phase) of the running sum. The magnitude and phase
+        // are what the display interpolates between voxels (see reflectedAt); computing them here costs
+        // one atan per voxel per pass, next to the 128 sample terms.
+        vec4 accumulateVoxel(ivec2 ip, vec4 prev) {
+            int tx = ip.x / u_grid.x;
+            int ty = ip.y / u_grid.z;
+            int iy = ty * u_tiles_x + tx;
+            if (iy >= u_grid.y) return vec4(0.0);
+            ivec3 iv = ivec3(ip.x - tx * u_grid.x, iy, ip.y - ty * u_grid.z);
+            vec3 p = u_box_min + (vec3(iv) + 0.5) * u_cell;
+            vec2 acc = u_first == 1 ? vec2(0.0) : prev.xy;
+            if (u_src_lit == 1 && p.y - (p.x * p.x + p.z * p.z - 1.0) > -u_band) {
+                vec2 part = vec2(0.0);   // this pass's terms, summed apart for float precision
+                for (int j = 0; j < u_count; j++) {
+                    ivec2 t = ivec2(u_base.x + 2 * j, u_base.y);
+                    vec3 m = texelFetch(u_samples, t, 0).xyz;
+                    vec2 c = texelFetch(u_samples, ivec2(t.x + 1, t.y), 0).xy;
+                    float d = max(length(p - m), u_dmin);
+                    float ph = mod(u_k * d, TAU);
+                    vec2 e = vec2(cos(ph), sin(ph)) / d;
+                    part += vec2(c.x * e.x - c.y * e.y, c.x * e.y + c.y * e.x);
+                }
+                acc += part;
+            }
+            float mag = length(acc);
+            return vec4(acc, mag, mag > 0.0 ? atan(acc.y, acc.x) : 0.0);
+        }
+    `;
+
+    const ACCUM_FS = `#version 300 es
+        precision highp float;
+        precision highp int;
+        precision highp sampler2D;
+        ${GLSL_COMMON}
+        ${COMPUTE_BODY}
+        uniform sampler2D u_prev;
+        out vec4 fragColor;
+        void main() {
+            ivec2 ip = ivec2(gl_FragCoord.xy);
+            vec4 prev = u_first == 1 ? vec4(0.0) : texelFetch(u_prev, ip, 0);
+            fragColor = accumulateVoxel(ip, prev);
+        }
+    `;
+
+    const TF_VS = `#version 300 es
+        precision highp float;
+        precision highp int;
+        precision highp sampler2D;
+        ${GLSL_COMMON}
+        ${COMPUTE_BODY}
+        uniform int u_atlas_w;
+        in vec4 a_prev;
+        out vec4 v_out;
+        void main() {
+            ivec2 ip = ivec2(gl_VertexID % u_atlas_w, gl_VertexID / u_atlas_w);
+            v_out = accumulateVoxel(ip, a_prev);
+            gl_Position = vec4(0.0, 0.0, 0.0, 1.0);
+            gl_PointSize = 1.0;
+        }
+    `;
+
+    const TF_FS = `#version 300 es
+        precision highp float;
+        out vec4 fragColor;
+        void main() { fragColor = vec4(0.0); }
+    `;
+
+    const DISPLAY_FS = `#version 300 es
+        precision highp float;
+        precision highp int;
+        precision highp sampler2D;
+        ${GLSL_COMMON}
+        uniform sampler2D u_field;
+        uniform ivec3 u_grid;
+        uniform int u_tiles_x;
+        uniform vec3 u_box_min;
+        uniform vec3 u_box_max;
+        uniform vec3 u_cell;
+        uniform vec2 u_res;
+        uniform vec3 u_cam;
+        uniform vec3 u_fwd;
+        uniform vec3 u_right;
+        uniform vec3 u_up;
+        uniform vec3 u_src;
+        uniform int u_src_lit;         // the light reaches (part of) the reflecting face
+        uniform int u_src_inside;      // the light is on the open side: nothing there is in its shadow
+        uniform float u_norm;          // N / samples processed so far
+        uniform float u_k;
+        uniform int u_show_direct;
+        uniform int u_show_phase;
+        uniform int u_instant;         // show 2 Re(psi e^{-iwt})^2 instead of |psi|^2
+        uniform int u_need_phase;      // direct field, phase colour or animation on: psi's phase is shown
+        uniform vec2 u_rot;            // e^{-i w t}
+        uniform float u_step;
+        uniform float u_step_ratio;
+        uniform float u_inv_i0;        // 1 / |G(0.25)|^2
+        out vec4 fragColor;
+
+        const float NEAR = ${glf(Core.NEAR)};
+        const float FAR = ${glf(Core.FAR)};
+        const float BULB_R = 0.04;
+        const float EXPOSURE = 2.6;
+        const float NO_HIT = 1e9;
+
+        // The reflected field at p from the 8 voxels around it (Core.polarBlend does the same in JS):
+        // magnitude trilinearly, phase as the magnitude-weighted mean of the corner phases around the
+        // phase of the plain complex average. Exact for a travelling wave in any direction; plain complex
+        // interpolation would dim such a wave between voxels by up to cos^2(k cell / 2).
+        vec2 reflectedAt(vec3 p) {
+            vec3 g = (p - u_box_min) / u_cell - 0.5;
+            ivec3 i0 = clamp(ivec3(floor(g)), ivec3(0), u_grid - 2);
+            vec3 f = clamp(g - vec3(i0), 0.0, 1.0);
+            float wm[8];      // weight * magnitude of each corner
+            float ang[8];     // phase of each corner
+            vec2 avg = vec2(0.0);
+            float mag = 0.0;
+            for (int c = 0; c < 8; c++) {
+                ivec3 o = ivec3(c & 1, (c >> 1) & 1, c >> 2);
+                int y = i0.y + o.y;
+                ivec2 t = ivec2((y % u_tiles_x) * u_grid.x + i0.x + o.x, (y / u_tiles_x) * u_grid.z + i0.z + o.z);
+                vec4 v = texelFetch(u_field, t, 0);
+                vec3 wf = mix(1.0 - f, f, vec3(o));
+                float w = wf.x * wf.y * wf.z;
+                avg += w * v.xy;
+                wm[c] = w * v.z;
+                ang[c] = v.w;
+                mag += wm[c];
+            }
+            // Below 1e-3 of |G(0.25)| the reflection is invisible, even as a fringe on the direct wave.
+            if (mag * u_norm <= ${glf(1e-3 * Core.G_REF)}) return vec2(0.0);
+            // Only |psi|^2 of the reflection is shown: its phase is not needed.
+            if (u_need_phase == 0) return vec2(mag, 0.0);
+            float ref = atan(avg.y, avg.x + 1e-30);
+            float num = 0.0;
+            for (int c = 0; c < 8; c++) {
+                float d = ang[c] - ref;
+                d -= TAU * floor(d * ${glf(1 / (2 * Math.PI))} + 0.5);
+                num += wm[c] * d;
+            }
+            float ph = ref + num / mag;
+            return mag * vec2(cos(ph), sin(ph));
+        }
+
+        // Nearest hit with the dish y = x^2 + z^2 - 1, r <= 1 (a thin two-sided shell).
+        float hitDish(vec3 ro, vec3 rd) {
+            float A = -(rd.x * rd.x + rd.z * rd.z);
+            float B = rd.y - 2.0 * (ro.x * rd.x + ro.z * rd.z);
+            float C = ro.y - ro.x * ro.x - ro.z * ro.z + 1.0;
+            float t0 = -1.0;
+            float t1 = -1.0;
+            if (abs(A) < 1e-9) {
+                if (abs(B) > 1e-9) t0 = -C / B;
+            } else {
+                float disc = B * B - 4.0 * A * C;
+                if (disc >= 0.0) {
+                    float s = sqrt(disc);
+                    float q = -0.5 * (B + (B >= 0.0 ? s : -s));
+                    t0 = q / A;
+                    if (q != 0.0) t1 = C / q;
+                }
+            }
+            float best = NO_HIT;
+            if (t0 > 1e-4) {
+                vec3 p = ro + t0 * rd;
+                if (dot(p.xz, p.xz) <= 1.0) best = t0;
+            }
+            if (t1 > 1e-4 && t1 < best) {
+                vec3 p = ro + t1 * rd;
+                if (dot(p.xz, p.xz) <= 1.0) best = t1;
+            }
+            return best;
+        }
+
+        float hitSphere(vec3 ro, vec3 rd, vec3 c, float r) {
+            vec3 oc = ro - c;
+            float b = dot(oc, rd);
+            float h = b * b - (dot(oc, oc) - r * r);
+            if (h < 0.0) return NO_HIT;
+            h = sqrt(h);
+            float t = -b - h;
+            if (t < 1e-4) t = -b + h;
+            return t > 1e-4 ? t : NO_HIT;
+        }
+
+        vec2 boxHit(vec3 ro, vec3 rd) {
+            vec3 s = vec3(abs(rd.x) > 1e-6 ? rd.x : 1e-6,
+                          abs(rd.y) > 1e-6 ? rd.y : 1e-6,
+                          abs(rd.z) > 1e-6 ? rd.z : 1e-6);
+            vec3 ta = (u_box_min - ro) / s;
+            vec3 tb = (u_box_max - ro) / s;
+            vec3 tn = min(ta, tb);
+            vec3 tf = max(ta, tb);
+            return vec2(max(max(tn.x, tn.y), tn.z), min(min(tf.x, tf.y), tf.z));
+        }
+
+        // 4x4 ordered dither: a fixed, deterministic start offset per pixel instead of a random jitter.
+        float bayer4(vec2 fc) {
+            ivec2 p = ivec2(fc) & ivec2(3);
+            const int B[16] = int[16](0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
+            return (float(B[p.y * 4 + p.x]) + 0.5) / 16.0;
+        }
+
+        // The direct wave, evaluated exactly (no grid) wherever the display needs it.
+        vec2 directWave(vec3 p) {
+            float d = max(length(p - u_src), ${glf(Core.DIRECT_MIN_D)});
+            float ph = mod(u_k * d, TAU);
+            return vec2(cos(ph), sin(ph)) / (4.0 * PI * d);
+        }
+
+        float depthOf(float zc) {
+            float ndc = (FAR + NEAR) / (FAR - NEAR) - 2.0 * FAR * NEAR / ((FAR - NEAR) * zc);
+            return clamp(0.5 * ndc + 0.5, 0.0, 1.0);
+        }
+
+        vec3 fogColour(float q) {
+            vec3 c = vec3(0.05, 0.3, 0.9) * q;                        // blue envelope
+            c = mix(c, vec3(0.2, 0.8, 1.0), smoothstep(0.5, 1.5, q));  // cyan core
+            return mix(c, vec3(1.0), smoothstep(1.5, 3.0, q));         // white-hot centre
+        }
+
+        vec3 phaseColour(float phase, float q) {
+            float h = phase / TAU + 0.5;
+            vec3 rgb = clamp(abs(mod(h * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
+            vec3 c = rgb * min(q, 2.0);
+            return mix(c, vec3(1.0), smoothstep(3.0, 8.0, q));
+        }
+
+        void main() {
+            vec2 uv = (gl_FragCoord.xy - 0.5 * u_res) / min(u_res.x, u_res.y);
+            vec3 ro = u_cam;
+            vec3 rd = normalize(u_fwd + u_right * uv.x + u_up * uv.y);
+
+            // 1. Solid objects, intersected analytically
+            float tDish = hitDish(ro, rd);
+            float tBulb = hitSphere(ro, rd, u_src, BULB_R);
+            float tSolid = min(tDish, tBulb);
+            vec3 col = vec3(0.02, 0.03, 0.05);
+            if (tSolid < NO_HIT) {
+                vec3 p = ro + rd * tSolid;
+                if (tBulb <= tDish) {
+                    col = vec3(1.0, 1.0, 0.8) * 1.5;
+                } else {
+                    vec3 nIn = normalize(vec3(-2.0 * p.x, 1.0, -2.0 * p.z));
+                    bool inner = dot(rd, nIn) < 0.0;
+                    vec3 n = inner ? nIn : -nIn;
+                    vec3 l = normalize(vec3(1.0, 2.0, 1.0));
+                    float diff = max(dot(n, l), 0.0);
+                    float rim = 1.0 - max(dot(n, -rd), 0.0);
+                    float r = length(p.xz);
+                    if (inner) {
+                        // reflecting face: metallic, with instrument rings
+                        col = vec3(0.1, 0.15, 0.2) * diff + vec3(0.1, 0.3, 0.5) * pow(rim, 3.0);
+                        col *= 0.8 + 0.2 * smoothstep(0.8, 1.0, sin(r * 40.0));
+                        if (u_src_lit == 1 && dot(u_src - p, n) > 0.0 &&
+                            (u_src_inside == 1 || !segBlocked(u_src, p + 1e-3 * n))) {
+                            float s = max(dot(reflect(rd, n), normalize(u_src - p)), 0.0);
+                            col += vec3(1.0, 0.9, 0.7) * pow(s, 150.0) * 0.8;
+                        }
+                    } else {
+                        // back of the dish: matte and absorbing
+                        col = vec3(0.045, 0.05, 0.055) * (0.35 + diff) + vec3(0.04, 0.05, 0.06) * pow(rim, 3.0);
+                    }
+                    col *= mix(1.0, 1.7, smoothstep(0.985, 1.0, r));
+                }
+            }
+
+            // 2. Fog: |psi|^2 read from the precomputed field grid, front to back up to the solid hit
+            vec4 vol = vec4(0.0);
+            vec2 tb = boxHit(ro, rd);
+            float tEnd = min(tb.y, tSolid);
+            if (tb.x < tEnd) {
+                float t = max(tb.x, 0.0) + u_step * bayer4(gl_FragCoord.xy);
+                for (int i = 0; i < 400; i++) {
+                    if (t >= tEnd || vol.a > 0.985) break;
+                    vec3 p = ro + rd * t;
+                    bool lit = litSide(p);
+                    vec2 psi = vec2(0.0);
+                    if (lit && u_src_lit == 1) psi = reflectedAt(p) * u_norm;   // nothing is reflected behind the mirror
+                    if (u_show_direct == 1 && ((u_src_inside == 1 && lit) || !segBlocked(u_src, p))) psi += directWave(p);
+                    psi = vec2(psi.x * u_rot.x - psi.y * u_rot.y, psi.x * u_rot.y + psi.y * u_rot.x);
+                    float I = u_instant == 1 ? 2.0 * psi.x * psi.x : dot(psi, psi);
+                    float q = EXPOSURE * I * u_inv_i0;
+                    if (q > 1e-4) {
+                        vec3 c = u_show_phase == 1 ? phaseColour(atan(psi.y, psi.x), q) : fogColour(q);
+                        float a = 1.0 - pow(1.0 - 0.12 * (1.0 - exp(-1.2 * q)), u_step_ratio);
+                        vol.rgb += (1.0 - vol.a) * a * c;
+                        vol.a += (1.0 - vol.a) * a;
+                    }
+                    t += u_step;
+                }
+            }
+
+            // 3. Glow around the bulb when nothing solid hides it
+            vec3 halo = vec3(0.0);
+            float tc = dot(u_src - ro, rd);
+            if (tc > 0.0 && tc < tDish) {
+                vec3 off = u_src - ro - rd * tc;
+                float d2 = dot(off, off);
+                halo = vec3(1.0, 0.92, 0.75) * (0.6 * exp(-d2 / 0.0035) + 0.05 / (1.0 + d2 / 0.004));
+            }
+
+            vec3 finalCol = col * (1.0 - vol.a) + vol.rgb + halo;
+            finalCol = finalCol / (finalCol + vec3(1.0));
+            finalCol = pow(finalCol, vec3(1.0 / 2.2));
+            fragColor = vec4(finalCol, 1.0);
+            gl_FragDepth = tSolid < NO_HIT ? depthOf(tSolid * dot(rd, u_fwd)) : 1.0;
+        }
+    `;
+
+    // Lines use the same camera as the raymarcher: pixel = uv * min(res) + res / 2, uv = (xc, yc) / zc.
+    const LINE_VS = `#version 300 es
+        precision highp float;
+        in vec3 a_pos;
+        uniform vec3 u_cam;
+        uniform vec3 u_fwd;
+        uniform vec3 u_right;
+        uniform vec3 u_up;
+        uniform vec2 u_res;
+        void main() {
+            vec3 d = a_pos - u_cam;
+            float xc = dot(d, u_right);
+            float yc = dot(d, u_up);
+            float zc = dot(d, u_fwd);
+            float md = min(u_res.x, u_res.y);
+            gl_Position = vec4(xc * 2.0 * md / u_res.x, yc * 2.0 * md / u_res.y,
+                               zc * ${glf((Core.FAR + Core.NEAR) / (Core.FAR - Core.NEAR))} - ${glf(2 * Core.FAR * Core.NEAR / (Core.FAR - Core.NEAR))}, zc);
+        }
+    `;
+
+    const LINE_FS = `#version 300 es
+        precision highp float;
+        uniform vec4 u_color;
+        out vec4 fragColor;
+        void main() { fragColor = u_color; }
+    `;
+
+    function createShader(type, source) {
+        const shader = gl.createShader(type);
+        gl.shaderSource(shader, source);
+        gl.compileShader(shader);
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+            const log = gl.getShaderInfoLog(shader);
+            gl.deleteShader(shader);
+            throw new Error('shader compile failed: ' + log);
+        }
+        return shader;
+    }
+
+    // On any failure every GL object made so far is deleted before the error is passed on, so a failed
+    // fallback stage leaks nothing.
+    function createProgram(vsSource, fsSource, varyings) {
+        const vs = createShader(gl.VERTEX_SHADER, vsSource);
+        let fs;
+        try {
+            fs = createShader(gl.FRAGMENT_SHADER, fsSource);
+        } catch (err) {
+            gl.deleteShader(vs);
+            throw err;
+        }
+        const program = gl.createProgram();
+        gl.attachShader(program, vs);
+        gl.attachShader(program, fs);
+        if (varyings) gl.transformFeedbackVaryings(program, varyings, gl.INTERLEAVED_ATTRIBS);
+        gl.linkProgram(program);
+        gl.deleteShader(vs);
+        gl.deleteShader(fs);
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+            const log = gl.getProgramInfoLog(program);
+            gl.deleteProgram(program);
+            throw new Error('program link failed: ' + log);
+        }
+        const found = {};
+        const n = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS);
+        for (let i = 0; i < n; i++) {
+            const name = gl.getActiveUniform(program, i).name;
+            found[name] = gl.getUniformLocation(program, name);
+        }
+        // Uniforms the compiler removed come back as null, which WebGL ignores.
+        const uniforms = new Proxy(found, { get: (o, key) => (key in o ? o[key] : null) });
+        return { program, uniforms };
+    }
+
+    function floatTexture(w, h) {
+        const tex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, w, h, 0, gl.RGBA, gl.FLOAT, null);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        return tex;
+    }
+
+    // First GL error since the last call, or 0. A lost context is not a failure of the code: it reports
+    // 0 then, and the webglcontextlost / webglcontextrestored handlers take over.
+    function drainErrors() {
+        if (gl.isContextLost()) return 0;
+        let e, first = 0;
+        for (let i = 0; i < 16 && (e = gl.getError()) !== gl.NO_ERROR; i++) {
+            if (!first && e !== gl.CONTEXT_LOST_WEBGL) first = e;
+        }
+        return first;
+    }
+
+    function setComputeUniforms(u, spec, passIndex) {
+        const texel = 2 * passIndex * Core.SAMPLES_PER_PASS;
+        gl.uniform1i(u.u_samples, 1);
+        gl.uniform2i(u.u_base, texel % SAMPLE_TEX_W, Math.floor(texel / SAMPLE_TEX_W));
+        gl.uniform1i(u.u_count, Core.SAMPLES_PER_PASS);
+        gl.uniform1i(u.u_first, passIndex === 0 ? 1 : 0);
+        gl.uniform1i(u.u_src_lit, state.srcLit ? 1 : 0);
+        gl.uniform1f(u.u_k, state.k);
+        gl.uniform1f(u.u_dmin, state.plan.dmin);
+        gl.uniform3i(u.u_grid, spec.nx, spec.ny, spec.nz);
+        gl.uniform1i(u.u_tiles_x, spec.tilesX);
+        gl.uniform3f(u.u_box_min, spec.min[0], spec.min[1], spec.min[2]);
+        gl.uniform3f(u.u_cell, spec.cell[0], spec.cell[1], spec.cell[2]);
+        gl.uniform1f(u.u_band, Core.reflectionBand(spec));
+    }
+
+    // --- Field backends: both keep the complex field on the GPU, accumulate it pass by pass,
+    // and hand the display pass a RGBA32F atlas of y-slices. ---
+
+    // Asynchronous read-back: the copy is queued on the GPU and fenced, and the data is fetched
+    // only once the fence has passed, so the page never stalls waiting for the GPU.
+    function fencedRead(buffer, target) {
+        const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+        gl.flush();
+        return {
+            ready() {
+                if (!sync) return true;
+                const s = gl.clientWaitSync(sync, 0, 0);
+                return s === gl.ALREADY_SIGNALED || s === gl.CONDITION_SATISFIED || s === gl.WAIT_FAILED;
+            },
+            finish(dst) {
+                gl.bindBuffer(target, buffer);
+                gl.getBufferSubData(target, 0, dst);
+                gl.bindBuffer(target, null);
+                if (sync) gl.deleteSync(sync);
+            },
+            cancel() { if (sync) gl.deleteSync(sync); }
+        };
+    }
+
+    // Preferred: ping-pong float render targets (needs EXT_color_buffer_float).
+    function createRTBackend(def) {
+        const spec = def.spec;
+        if (!gl.getExtension('EXT_color_buffer_float')) throw new Error('EXT_color_buffer_float unavailable');
+        const prog = createProgram(FULLSCREEN_VS, ACCUM_FS);
+        const tex = [], fbo = [];
+        // Declared before anything can fail: dispose() reads them on the failure paths below.
+        let cur = 0, pbo = null, done = 0;   // done: passes summed so far
+        const px = new Float32Array(4);
+        function dispose() {
+            tex.forEach(t => gl.deleteTexture(t));
+            fbo.forEach(f => gl.deleteFramebuffer(f));
+            if (pbo) gl.deleteBuffer(pbo);
+            gl.deleteProgram(prog.program);
+        }
+        for (let i = 0; i < 2; i++) {
+            tex.push(floatTexture(spec.atlasW, spec.atlasH));
+            const f = gl.createFramebuffer();
+            gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex[i], 0);
+            const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+            fbo.push(f);
+            if (status !== gl.FRAMEBUFFER_COMPLETE) {
+                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+                dispose();
+                throw new Error('float framebuffer incomplete');
+            }
+        }
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        if (drainErrors()) { dispose(); throw new Error('could not allocate the float field'); }
+        return {
+            def, spec,
+            reset() {
+                done = 0;
+                gl.clearColor(0, 0, 0, 0);
+                for (const f of fbo) {
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+                    gl.clear(gl.COLOR_BUFFER_BIT);
+                }
+                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            },
+            pass(passIndex) {
+                const u = prog.uniforms;
+                gl.useProgram(prog.program);
+                gl.bindVertexArray(G.vao);
+                gl.bindFramebuffer(gl.FRAMEBUFFER, fbo[1 - cur]);
+                gl.viewport(0, 0, spec.atlasW, spec.atlasH);
+                gl.disable(gl.BLEND);
+                gl.disable(gl.DEPTH_TEST);
+                gl.activeTexture(gl.TEXTURE0);
+                gl.bindTexture(gl.TEXTURE_2D, tex[cur]);
+                gl.uniform1i(u.u_prev, 0);
+                gl.activeTexture(gl.TEXTURE1);
+                gl.bindTexture(gl.TEXTURE_2D, G.sampleTex);
+                setComputeUniforms(u, spec, passIndex);
+                gl.drawArrays(gl.TRIANGLES, 0, 3);
+                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+                cur = 1 - cur;
+                done++;
+            },
+            // The texture the display reads, and how many passes it holds (always all of them here).
+            texture() { return { tex: tex[cur], passes: done }; },
+            startRead() {
+                if (!pbo) {
+                    pbo = gl.createBuffer();
+                    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo);
+                    gl.bufferData(gl.PIXEL_PACK_BUFFER, spec.atlasW * spec.atlasH * 16, gl.STREAM_READ);
+                } else {
+                    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo);
+                }
+                gl.bindFramebuffer(gl.FRAMEBUFFER, fbo[cur]);
+                gl.readPixels(0, 0, spec.atlasW, spec.atlasH, gl.RGBA, gl.FLOAT, 0);
+                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+                gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+                return fencedRead(pbo, gl.PIXEL_PACK_BUFFER);
+            },
+            readTexel(x, y) {
+                gl.bindFramebuffer(gl.FRAMEBUFFER, fbo[cur]);
+                gl.readPixels(x, y, 1, 1, gl.RGBA, gl.FLOAT, px);
+                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+                return Array.from(px);
+            },
+            dispose
+        };
+    }
+
+    // Fallback without float render targets: transform feedback writes the sums to buffers.
+    function createTFBackend(def) {
+        const spec = def.spec;
+        const nVox = spec.atlasW * spec.atlasH;
+        const prog = createProgram(TF_VS, TF_FS, ['v_out']);
+        const loc = gl.getAttribLocation(prog.program, 'a_prev');
+        const bufs = [], vaos = [];
+        for (let i = 0; i < 2; i++) {
+            const b = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, b);
+            gl.bufferData(gl.ARRAY_BUFFER, nVox * 16, gl.DYNAMIC_COPY);
+            const v = gl.createVertexArray();
+            gl.bindVertexArray(v);
+            if (loc >= 0) {
+                gl.enableVertexAttribArray(loc);
+                gl.vertexAttribPointer(loc, 4, gl.FLOAT, false, 0, 0);
+            }
+            bufs.push(b);
+            vaos.push(v);
+        }
+        gl.bindVertexArray(null);
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+        const tf = gl.createTransformFeedback();
+        const tex = floatTexture(spec.atlasW, spec.atlasH);
+        if (drainErrors()) { dispose(); throw new Error('could not allocate the field buffers'); }
+        let cur = 0, texStale = true, done = 0, shown = 0;   // passes summed; passes in the display texture
+        const px = new Float32Array(4);
+        function dispose() {
+            bufs.forEach(b => gl.deleteBuffer(b));
+            vaos.forEach(v => gl.deleteVertexArray(v));
+            gl.deleteTransformFeedback(tf);
+            gl.deleteTexture(tex);
+            gl.deleteProgram(prog.program);
+        }
+        return {
+            def, spec,
+            reset() { texStale = true; done = 0; shown = 0; },
+            pass(passIndex) {
+                const u = prog.uniforms;
+                gl.useProgram(prog.program);
+                gl.bindVertexArray(vaos[cur]);
+                gl.activeTexture(gl.TEXTURE1);
+                gl.bindTexture(gl.TEXTURE_2D, G.sampleTex);
+                setComputeUniforms(u, spec, passIndex);
+                gl.uniform1i(u.u_atlas_w, spec.atlasW);
+                gl.enable(gl.RASTERIZER_DISCARD);
+                gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, tf);
+                gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, bufs[1 - cur]);
+                gl.beginTransformFeedback(gl.POINTS);
+                gl.drawArrays(gl.POINTS, 0, nVox);
+                gl.endTransformFeedback();
+                gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, null);
+                gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, null);
+                gl.bindBuffer(gl.TRANSFORM_FEEDBACK_BUFFER, null);
+                gl.disable(gl.RASTERIZER_DISCARD);
+                gl.bindVertexArray(null);
+                cur = 1 - cur;
+                texStale = true;
+                done++;
+            },
+            // The display reads a texture, filled from the sums only when a draw needs it. Copying
+            // 32 MB out of a buffer that transform feedback has just written is slow on some drivers
+            // (about 0.2 s through ANGLE on D3D11), so while the sums refine the texture is refreshed
+            // only when the number of passes has doubled, and once more when they are complete. The
+            // display normalises by the passes the texture actually holds.
+            texture(total) {
+                if (texStale && done > 0 && (done >= total || done >= 2 * shown)) {
+                    gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, bufs[cur]);
+                    gl.bindTexture(gl.TEXTURE_2D, tex);
+                    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, spec.atlasW, spec.atlasH, gl.RGBA, gl.FLOAT, 0);
+                    gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, null);
+                    texStale = false;
+                    shown = done;
+                }
+                return { tex, passes: shown };
+            },
+            startRead() {
+                return fencedRead(bufs[cur], gl.COPY_READ_BUFFER);
+            },
+            readTexel(x, y) {
+                gl.bindBuffer(gl.ARRAY_BUFFER, bufs[cur]);
+                gl.getBufferSubData(gl.ARRAY_BUFFER, (y * spec.atlasW + x) * 16, px);
+                gl.bindBuffer(gl.ARRAY_BUFFER, null);
+                return Array.from(px);
+            },
+            dispose
+        };
+    }
+
+    function backendChain() {
+        if (forced === 'tf') return ['tf128', 'tf64'];
+        if (forced === 'coarse') return ['tf64'];
+        return ['rt128', 'tf128', 'tf64'];
+    }
+
+    // Creates the first backend in the chain that works, starting at position `from`.
+    function selectBackend(from, reason) {
+        const chain = backendChain();
+        const notes = reason ? [reason] : [];
+        for (let i = from; i < chain.length; i++) {
+            const def = GRIDS[chain[i]];
+            try {
+                const b = def.kind === 'rt' ? createRTBackend(def) : createTFBackend(def);
+                b.chainIndex = i;
+                b.verified = false;
+                state.backend = def.label;
+                state.backendNote = notes.join('; ');
+                return b;
+            } catch (err) {
+                console.warn(chain[i] + ':', err);
+                notes.push(chain[i] + ': ' + err.message);
+                drainErrors();
+            }
+        }
+        throw new Error('this GPU can compute the field neither with float render targets nor with transform feedback (' + notes.join('; ') + ')');
+    }
+
+    function initGL() {
+        for (const key of Object.keys(G)) delete G[key];
+        G.vao = gl.createVertexArray();
+        G.display = createProgram(FULLSCREEN_VS, DISPLAY_FS);
+        G.line = createProgram(LINE_VS, LINE_FS);
+        const lineLoc = gl.getAttribLocation(G.line.program, 'a_pos');
+        const makeLineVao = () => {
+            const buf = gl.createBuffer();
+            const vao = gl.createVertexArray();
+            gl.bindVertexArray(vao);
+            gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+            gl.enableVertexAttribArray(lineLoc);
+            gl.vertexAttribPointer(lineLoc, 3, gl.FLOAT, false, 0, 0);
+            gl.bindVertexArray(null);
+            gl.bindBuffer(gl.ARRAY_BUFFER, null);
+            return { buf, vao, capacity: 0 };
+        };
+        G.paths = makeLineVao();
+        G.pathRanges = [];
+        G.focus = makeLineVao();
+        const f = Core.FOCUS, a = 0.07;
+        gl.bindBuffer(gl.ARRAY_BUFFER, G.focus.buf);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+            f[0] - a, f[1], f[2], f[0] + a, f[1], f[2],
+            f[0], f[1] - a, f[2], f[0], f[1] + a, f[2],
+            f[0], f[1], f[2] - a, f[0], f[1], f[2] + a]), gl.STATIC_DRAW);
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+        G.sampleTex = null;
+        G.sampleData = null;
+        G.sampleCap = 0;
+        G.readBuf = null;
+        G.pendingRead = null;
+        G.pathJob = null;
+        G.passFences = [];
+        state.mirrorN = 0;
+        G.backend = selectBackend(0, '');
+    }
+
+    // --- Mirror samples ---
+
+    function rebuildGeometry() {
+        state.lambda = parseFloat(ui.wavelength.value);
+        state.k = TAU / state.lambda;
+        state.plan = Core.samplePlan(state.k);
+        state.order = Core.bitReversedOrder(state.plan.passes);
+        // The lattice depends only on N, which changes at a few wavelengths: reuse it and the texture.
+        if (state.mirrorN !== state.plan.N) {
+            state.mirror = Core.mirrorLattice(state.plan.N);
+            state.mirrorN = state.plan.N;
+        }
+        const rows = Math.max(1, Math.ceil(2 * state.plan.N / SAMPLE_TEX_W));
+        if (!G.sampleTex || rows > G.sampleCap) {
+            if (G.sampleTex) gl.deleteTexture(G.sampleTex);
+            G.sampleTex = floatTexture(SAMPLE_TEX_W, rows);
+            G.sampleData = new Float32Array(SAMPLE_TEX_W * rows * 4);
+            G.sampleCap = rows;
+        }
+        G.sampleRows = rows;
+        state.geomDirty = false;
+        state.srcDirty = true;
+    }
+
+    // The source -> mirror leg depends only on the source, so each sample's complex coefficient is
+    // computed once here in double precision. Samples are laid out pass by pass (bit-reversed), so a
+    // pass reads one contiguous block of texels.
+    function rebuildSource(now) {
+        const { N, passes, M, dmin } = state.plan;
+        state.srcInside = Core.litSide(state.src);
+        const stats = {};
+        state.coef = Core.mirrorCoefficients(state.mirror, N, state.src, state.k, dmin, state.coef, stats);
+        state.litFraction = stats.lit / N;
+        state.srcLit = stats.lit > 0;          // the light reaches at least part of the reflecting face
+        const data = G.sampleData;
+        for (let p = 0; p < passes; p++) {
+            const c = state.order[p];
+            for (let j = 0; j < M; j++) {
+                const i = c + j * passes;
+                const o = 8 * (p * M + j);
+                data[o] = state.mirror[6 * i];
+                data[o + 1] = state.mirror[6 * i + 1];
+                data[o + 2] = state.mirror[6 * i + 2];
+                data[o + 3] = 0;
+                data[o + 4] = state.coef[2 * i];
+                data[o + 5] = state.coef[2 * i + 1];
+                data[o + 6] = 0;
+                data[o + 7] = 0;
+            }
+        }
+        gl.bindTexture(gl.TEXTURE_2D, G.sampleTex);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, SAMPLE_TEX_W, G.sampleRows, gl.RGBA, gl.FLOAT, data);
+        state.passesNeeded = state.srcLit ? passes : 1;   // with the light behind the dish nothing reflects
+        state.srcDirty = false;
+        resetAccumulation(now);
+    }
+
+    function resetAccumulation(now) {
+        if (G.pendingRead) {
+            G.pendingRead.handle.cancel();
+            G.pendingRead = null;
+        }
+        state.pass = 0;
+        state.passesPerFrame = 1;   // restart gently: an interaction never queues a large, soon-discarded batch
+        state.refineStart = now;
+        state.refineMs = 0;
+        state.fieldVersion++;
+        invalidatePaths();
+        G.pathRanges = [];
+        G.backend.reset();
+    }
+
+    function converged() {
+        return state.pass >= state.passesNeeded;
+    }
+
+    // Every batch of passes ends with a fence. At most MAX_IN_FLIGHT batches are queued on the GPU at
+    // once (the second keeps the GPU busy while the page notices that the first has finished), so work
+    // never piles up in the GPU queue, whatever the GPU's speed. Collects the finished batches and
+    // adapts the batch size: the GPU ran dry (every batch done at the first look) -> twice as many
+    // passes; a batch still running after three looks -> half as many. The result is identical,
+    // only the pace changes.
+    const MAX_IN_FLIGHT = 2;
+    function collectFences() {
+        const q = G.passFences;
+        while (q.length) {
+            const f = q[0];
+            const s = gl.clientWaitSync(f.sync, 0, 0);
+            if (s === gl.TIMEOUT_EXPIRED) {
+                f.waits++;
+                if (f.waits === 3) state.passesPerFrame = Math.max(1, state.passesPerFrame >> 1);
+                return;
+            }
+            gl.deleteSync(f.sync);
+            q.shift();
+            if (!q.length && f.waits === 0) state.passesPerFrame = Math.min(state.passesPerFrame * 2, 32);
+        }
+    }
+
+    // New samples (a new light or wavelength) are uploaded only when nothing is in flight.
+    function computeIdle() {
+        return G.passFences.length === 0;
+    }
+
+    function runPasses(now) {
+        if (G.passFences.length >= MAX_IN_FLIGHT) return;
+        const n = Math.min(state.passesPerFrame, state.passesNeeded - state.pass);
+        for (let i = 0; i < n; i++) {
+            G.backend.pass(state.pass);
+            state.pass++;
+            if (!G.backend.verified) {
+                // Check the first pass of a new backend once; on failure drop to the next one.
+                const err = drainErrors();
+                if (err) {
+                    const from = G.backend.chainIndex + 1;
+                    G.backend.dispose();
+                    G.backend = selectBackend(from, GRIDS[backendChain()[from - 1]].label + ' failed (GL error ' + err + ')');
+                    resetAccumulation(now);
+                    return;
+                }
+                G.backend.verified = true;
+            }
+        }
+        const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+        if (sync) G.passFences.push({ sync, waits: 0 });
+        gl.flush();
+        if (converged()) state.refineMs = now - state.refineStart;
+    }
+
+    // --- Pilot-wave paths, integrated through the stored field ---
+
+    // Returns true once the paths are done (or not wanted). The field is read back asynchronously and
+    // the paths are traced a few at a time, so neither step stalls the page.
+    function updatePaths(now) {
+        if (!ui.showPaths.checked || !state.srcLit) {
+            clearPaths(ui.showPaths.checked ? 'no paths: the light does not reach the reflecting face' : '');
+            return true;
+        }
+        if (state.paths.cacheVersion !== state.fieldVersion) {
+            const spec = G.backend.spec;
+            const need = spec.atlasW * spec.atlasH * 4;
+            if (!G.readBuf || G.readBuf.length !== need) G.readBuf = new Float32Array(need);
+            if (!G.pendingRead) {
+                G.pendingRead = { handle: G.backend.startRead(), version: state.fieldVersion, t0: now };
+                state.paths.note = 'reading the field for the paths';
+                return false;
+            }
+            if (!G.pendingRead.handle.ready()) return false;
+            const t0 = performance.now();
+            G.pendingRead.handle.finish(G.readBuf);
+            state.paths.readMs = performance.now() - t0;
+            state.paths.readLatencyMs = now - G.pendingRead.t0;
+            state.paths.cacheVersion = G.pendingRead.version;
+            G.pendingRead = null;
+            return false;   // trace from the next frame on
+        }
+        if (!G.pathJob) G.pathJob = startPathJob();
+        return continuePathJob(G.pathJob, 12);
+    }
+
+    function clearPaths(note) {
+        G.pathJob = null;
+        G.pathRanges = [];
+        state.paths.dirty = false;
+        state.paths.drawn = 0;
+        state.paths.reasons = {};
+        state.paths.mirrorHits = 0;
+        state.paths.note = note;
+    }
+
+    function invalidatePaths() {
+        G.pathJob = null;
+        state.paths.dirty = true;
+        state.paths.note = '';
+    }
+
+    function startPathJob() {
+        const spec = G.backend.spec;
+        // Paths follow the total physical field (reflected + direct), whatever the display shows:
+        // the stored reflected grid (blended in magnitude and phase as the display does, gradient by
+        // central differences) plus the exact direct field.
+        const cell = spec.cell;
+        const refl = Core.makeGridSampler(spec, G.readBuf, state.plan.passes / state.pass, true);
+        const S = state.src.slice();
+        // Paths stay on the open side. From a light there nothing on that side is in its shadow, so the
+        // unobstructed direct wave is used (just outside it only feeds the difference stencil, matching
+        // the continued reflected field there). From a light beside the rim, part of the open side lies
+        // in the shadow of the dish's back, so the direct wave is occluded exactly.
+        const direct = Core.directFieldWithGradient(S, state.k, !state.srcInside);
+        const field = Core.sumFields(Core.differencedField(refl, cell), direct);
+        const r0 = Math.max(0.06, 2.5 * Math.max(cell[0], cell[1], cell[2]));
+        const inBox = p => p[0] > spec.min[0] && p[0] < spec.max[0] && p[1] > spec.min[1] &&
+                           p[1] < spec.max[1] && p[2] > spec.min[2] && p[2] < spec.max[2];
+        const h = 0.5 * Math.min(cell[0], cell[1], cell[2]);
+        const opts = { h, maxSteps: 4000, minRel: 1e-4, inside: p => Core.litSide(p) && inBox(p) };
+        const starts = Core.pathStarts(S, parseInt(ui.npaths.value, 10), r0, opts.inside, h);
+        G.pathRanges = [];
+        state.paths.drawn = 0;
+        state.paths.steps = 0;
+        state.paths.reasons = {};
+        state.paths.mirrorHits = 0;
+        state.paths.ends = [];
+        state.paths.traceMs = 0;
+        return { field, opts, starts, next: 0, verts: new Float32Array(3 * 256 * Math.max(1, starts.length)), count: 0, uploaded: 0 };
+    }
+
+    // Appends a path's vertices to the job's preallocated array (grown by doubling when needed).
+    function appendVerts(job, pts) {
+        const need = job.count + pts.length;
+        if (need > job.verts.length) {
+            const grown = new Float32Array(Math.max(need, 2 * job.verts.length));
+            grown.set(job.verts.subarray(0, job.count));
+            job.verts = grown;
+        }
+        job.verts.set(pts, job.count);
+        job.count = need;
+    }
+
+    // Uploads only the vertices added since the last upload; the GPU buffer is reallocated only when
+    // it has to grow.
+    function uploadVerts(job) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, G.paths.buf);
+        if (G.paths.capacity < job.verts.length) {
+            gl.bufferData(gl.ARRAY_BUFFER, job.verts.byteLength, gl.DYNAMIC_DRAW);
+            G.paths.capacity = job.verts.length;
+            job.uploaded = 0;
+        }
+        if (job.count > job.uploaded) {
+            gl.bufferSubData(gl.ARRAY_BUFFER, 4 * job.uploaded, job.verts, job.uploaded, job.count - job.uploaded);
+            job.uploaded = job.count;
+        }
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    }
+
+    function continuePathJob(job, budgetMs) {
+        const t0 = performance.now();
+        const before = job.next;
+        while (job.next < job.starts.length && (job.next === before || performance.now() - t0 < budgetMs)) {
+            const s = job.starts[job.next++];
+            const res = Core.traceStreamline(job.field, s.start, job.opts);
+            state.paths.steps += res.steps;
+            state.paths.reasons[res.reason] = (state.paths.reasons[res.reason] || 0) + 1;
+            const n = res.points.length / 3;
+            if (res.reason === 'exit' && Math.hypot(res.points[3 * n - 3], res.points[3 * n - 1]) <= 1) state.paths.mirrorHits++;
+            state.paths.ends.push({ reason: res.reason, steps: res.steps, start: s.start.map(v => +v.toFixed(3)),
+                                    end: res.points.slice(3 * n - 3).map(v => +v.toFixed(3)) });
+            const total = n + s.lead.length / 3;   // a straight lead from the bulb, for lights beside the rim
+            if (total < 2) continue;
+            G.pathRanges.push([job.count / 3, total]);
+            if (s.lead.length) appendVerts(job, s.lead);
+            appendVerts(job, res.points);
+            state.paths.drawn++;
+        }
+        uploadVerts(job);
+        state.paths.traceMs += performance.now() - t0;
+        const done = job.next >= job.starts.length;
+        state.paths.note = state.paths.drawn + ' pilot-wave paths' + (done ? '' : ' (tracing)') +
+            (state.srcInside ? '' : ', entering over the rim') +
+            (state.paths.mirrorHits ? ' · ' + state.paths.mirrorHits + ' stop at the mirror, where the approximations are least accurate' : '');
+        if (done) {
+            G.pathJob = null;
+            state.paths.dirty = false;
+        }
+        return done;
+    }
+
+    // --- Drawing ---
+
+    function fitCanvas() {
+        const cw = canvas.clientWidth, ch = canvas.clientHeight;
+        if (!cw || !ch) return false;   // hidden or collapsed page: nothing to draw into yet
+        const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+        let w = cw * dpr, h = ch * dpr;
+        const s = Math.min(1, MAX_CANVAS / Math.max(w, h));
+        w = Math.max(1, Math.round(w * s));
+        h = Math.max(1, Math.round(h * s));
+        if (canvas.width !== w || canvas.height !== h) {
+            canvas.width = w;
+            canvas.height = h;
+            state.redraw = true;
+        }
+        return true;
+    }
+
+    function camera() {
+        const c = state.cam;
+        return Core.cameraBasis(c.theta, c.phi, c.dist, c.target);
+    }
+
+    function setCameraUniforms(u, cam, W, H) {
+        gl.uniform3f(u.u_cam, cam.ro[0], cam.ro[1], cam.ro[2]);
+        gl.uniform3f(u.u_fwd, cam.fwd[0], cam.fwd[1], cam.fwd[2]);
+        gl.uniform3f(u.u_right, cam.right[0], cam.right[1], cam.right[2]);
+        gl.uniform3f(u.u_up, cam.up[0], cam.up[1], cam.up[2]);
+        gl.uniform2f(u.u_res, W, H);
+    }
+
+    function draw(now) {
+        const W = canvas.width, H = canvas.height;
+        const spec = G.backend.spec;
+        const cam = camera();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.viewport(0, 0, W, H);
+        gl.enable(gl.DEPTH_TEST);
+        gl.depthFunc(gl.ALWAYS);
+        gl.depthMask(true);
+        gl.disable(gl.BLEND);
+
+        const u = G.display.uniforms;
+        gl.useProgram(G.display.program);
+        gl.bindVertexArray(G.vao);
+        gl.activeTexture(gl.TEXTURE0);
+        const field = G.backend.texture(state.passesNeeded);
+        gl.bindTexture(gl.TEXTURE_2D, field.tex);
+        gl.uniform1i(u.u_field, 0);
+        gl.uniform3i(u.u_grid, spec.nx, spec.ny, spec.nz);
+        gl.uniform1i(u.u_tiles_x, spec.tilesX);
+        gl.uniform3f(u.u_box_min, spec.min[0], spec.min[1], spec.min[2]);
+        gl.uniform3f(u.u_box_max, spec.max[0], spec.max[1], spec.max[2]);
+        gl.uniform3f(u.u_cell, spec.cell[0], spec.cell[1], spec.cell[2]);
+        setCameraUniforms(u, cam, W, H);
+        gl.uniform3f(u.u_src, state.src[0], state.src[1], state.src[2]);
+        gl.uniform1i(u.u_src_lit, state.srcLit ? 1 : 0);
+        gl.uniform1i(u.u_src_inside, state.srcInside ? 1 : 0);
+        gl.uniform1f(u.u_norm, field.passes > 0 ? state.plan.passes / field.passes : 0);   // N / samples in the texture
+        gl.uniform1f(u.u_k, state.k);
+        gl.uniform1i(u.u_show_direct, ui.showDirect.checked ? 1 : 0);
+        gl.uniform1i(u.u_show_phase, ui.showPhase.checked ? 1 : 0);
+        const animating = ui.animate.checked;
+        gl.uniform1i(u.u_instant, animating && !ui.showPhase.checked ? 1 : 0);
+        gl.uniform1i(u.u_need_phase, animating || ui.showPhase.checked || ui.showDirect.checked ? 1 : 0);
+        // A single frequency evolves as one global phase e^{-i w t}: nothing is recomputed to animate it.
+        const wt = animating ? (WAVE_SPEED * state.k * now * 0.001) % TAU : 0;
+        gl.uniform2f(u.u_rot, Math.cos(wt), -Math.sin(wt));
+        gl.uniform1f(u.u_step, FOG_STEP);
+        gl.uniform1f(u.u_step_ratio, FOG_STEP / 0.06);
+        gl.uniform1f(u.u_inv_i0, 1 / (Core.G_REF * Core.G_REF));
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+        // Lines, hidden behind the dish by the depth the raymarcher wrote
+        gl.depthFunc(gl.LEQUAL);
+        gl.depthMask(false);
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        const lu = G.line.uniforms;
+        gl.useProgram(G.line.program);
+        setCameraUniforms(lu, cam, W, H);
+        gl.uniform4f(lu.u_color, 1.0, 0.2, 0.4, 0.95);
+        gl.bindVertexArray(G.focus.vao);
+        gl.drawArrays(gl.LINES, 0, 6);
+        if (ui.showPaths.checked && G.pathRanges.length) {
+            gl.uniform4f(lu.u_color, 1.0, 0.82, 0.4, 0.85);
+            gl.bindVertexArray(G.paths.vao);
+            for (const [first, count] of G.pathRanges) gl.drawArrays(gl.LINE_STRIP, first, count);
+        }
+        gl.bindVertexArray(null);
+        gl.depthMask(true);
+        gl.disable(gl.BLEND);
+    }
+
+    // --- Status line ---
+
+    let lastStatus = 0;
+    function updateStatus(now, force) {
+        if (!force && now - lastStatus < 200) return;
+        lastStatus = now;
+        const lines = [];
+        if (state.plan) {
+            const p = state.plan;
+            const n = G.backend ? G.backend.spec.nx : 0;
+            lines.push('mirror samples ' + p.N.toLocaleString() + ' · max phase step ' + p.maxPhaseStep.toFixed(2) +
+                       ' rad · grid ' + n + '³');
+            let l2 = G.backend ? G.backend.def.label : '';
+            if (converged()) l2 += ' · converged' + (state.refineMs ? ' in ' + (state.refineMs / 1000).toFixed(1) + ' s' : '');
+            else l2 += ' · refining ' + Math.floor(100 * state.pass / state.passesNeeded) + '%';
+            lines.push(l2);
+            if (state.backendNote) lines.push('(' + state.backendNote + ')');
+            if (state.paths.note) lines.push(state.paths.note);
+            const s = state.src;
+            let l4 = 'light (' + s.map(v => v.toFixed(2)).join(', ') + ')';
+            if (!state.srcLit) l4 += ' · behind the dish: its back absorbs, nothing reflects';
+            else if (!state.srcInside) l4 += ' · beside the rim: reaches ' + Math.round(100 * state.litFraction) + '% of the reflecting face over the rim';
+            else if (Math.hypot(s[0] - Core.FOCUS[0], s[1] - Core.FOCUS[1], s[2] - Core.FOCUS[2]) < 0.005) l4 += ' · at the focus';
+            lines.push(l4);
+        }
+        if (state.error) lines.push('error: ' + state.error);
+        statusEl.textContent = lines.join('\n');
+    }
+
+    // --- Frame loop: renders on demand, so an idle converged picture costs nothing ---
+
+    let rafPending = false;
+    function requestFrame() {
+        if (gl && !rafPending && !state.lost && !state.error) {
+            rafPending = true;
+            requestAnimationFrame(frame);
+        }
+    }
+
+    function frame(now) {
+        rafPending = false;
+        if (state.lost || state.error) return;
+        if (gl.isContextLost()) return;   // lost before its event arrived: the handlers take over
+        let more = false;
+        try {
+            const visible = fitCanvas();
+            // A new wavelength or light is applied only while no batch of passes is in flight (the
+            // latest setting wins), and no passes for the old one are queued meanwhile, so dragging
+            // a slider never piles work up on the GPU.
+            collectFences();
+            const idle = computeIdle();
+            if (idle && state.geomDirty) rebuildGeometry();
+            if (idle && state.srcDirty) rebuildSource(now);
+            const refining = !converged();
+            if (refining && !state.geomDirty && !state.srcDirty) runPasses(now);
+            if (converged() && state.paths.dirty && !state.srcDirty && !state.geomDirty) {
+                const before = state.paths.drawn;
+                if (updatePaths(now) || state.paths.drawn !== before) state.redraw = true;
+            }
+            // While refining, the preview is redrawn about 10 times a second so the GPU spends most
+            // of its time on the sum; any interaction (state.redraw) still draws at once.
+            const previewDue = refining && (now - state.lastDisplay > 100 || converged());
+            if (visible && (state.redraw || previewDue || ui.animate.checked)) {
+                draw(now);
+                state.redraw = false;
+                state.lastDisplay = now;
+            }
+            // Keep going while there is work. Drawing only counts while the canvas has a size: a
+            // hidden page goes idle, and the resize observers wake it up again.
+            more = !converged() || state.paths.dirty || state.geomDirty || state.srcDirty || G.passFences.length > 0 ||
+                   (visible && (ui.animate.checked || state.redraw));
+        } catch (err) {
+            console.error(err);
+            state.error = err && err.message ? err.message : String(err);
+        }
+        updateStatus(now, !more);
+        if (more) requestFrame();
+    }
+
+    function redraw() {
+        state.redraw = true;
+        requestFrame();
+    }
+
+    // --- Input ---
+
+    function setLight(p, fromSliders) {
+        const q = p.map((v, a) => Math.min(LIGHT_RANGE[a][1], Math.max(LIGHT_RANGE[a][0], v)));
+        if (q.every((v, a) => Math.abs(v - state.src[a]) < 1e-9)) return;
+        state.src = q;
+        if (!fromSliders) {
+            ui.lightX.value = q[0];
+            ui.lightY.value = q[1];
+            ui.lightZ.value = q[2];
+        }
+        ui.valLX.textContent = q[0].toFixed(2);
+        ui.valLY.textContent = q[1].toFixed(2);
+        ui.valLZ.textContent = q[2].toFixed(2);
+        state.srcDirty = true;
+        redraw();
+    }
+
+    // A slider changes only its own axis: the others keep their exact values (a Shift+drag leaves the
+    // light between the sliders' 0.01 steps, and touching one slider must not snap the other axes).
+    [ui.lightX, ui.lightY, ui.lightZ].forEach((el, axis) => el.addEventListener('input', () => {
+        const p = state.src.slice();
+        p[axis] = parseFloat(el.value);
+        setLight(p, true);
+    }));
+
+    ui.wavelength.addEventListener('input', () => {
+        ui.valWL.textContent = parseFloat(ui.wavelength.value).toFixed(2);
+        state.geomDirty = true;
+        redraw();
+    });
+    for (const el of [ui.showDirect, ui.showPhase, ui.animate]) el.addEventListener('change', redraw);
+    ui.showPaths.addEventListener('change', () => { invalidatePaths(); redraw(); });
+    ui.npaths.addEventListener('input', () => {
+        ui.valNP.textContent = ui.npaths.value;
+        invalidatePaths();
+        redraw();
+    });
+    ui.toFocus.addEventListener('click', () => setLight(Core.FOCUS.slice(), false));
+    ui.resetCam.addEventListener('click', () => {
+        Object.assign(state.cam, { theta: CAM_DEFAULT.theta, phi: CAM_DEFAULT.phi, dist: CAM_DEFAULT.dist, target: CAM_DEFAULT.target.slice() });
+        redraw();
+    });
+    ui.collapse.addEventListener('click', () => {
+        const c = ui.container.classList.toggle('collapsed');
+        ui.collapse.textContent = c ? 'Show text' : 'Hide text';
+    });
+    if (window.matchMedia('(max-width: 600px), (max-height: 520px)').matches) {
+        ui.container.classList.add('collapsed');   // small screens: controls first, text on request
+        ui.collapse.textContent = 'Show text';
+    }
+
+    const pointers = new Map();
+    let dragMode = 'orbit', pinchDist = 0;
+
+    function pinchSpan() {
+        const [a, b] = [...pointers.values()];
+        return Math.hypot(a.x - b.x, a.y - b.y);
+    }
+
+    canvas.addEventListener('pointerdown', (e) => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;   // left button only
+        canvas.setPointerCapture(e.pointerId);
+        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (pointers.size === 1) dragMode = (e.shiftKey || ui.dragLight.checked) ? 'light' : 'orbit';
+        if (pointers.size === 2) { dragMode = 'pinch'; pinchDist = pinchSpan(); }
+        canvas.classList.add('dragging');
+    });
+
+    canvas.addEventListener('pointermove', (e) => {
+        const prev = pointers.get(e.pointerId);
+        if (!prev) return;
+        if (e.pointerType === 'mouse' && e.buttons === 0) { endPointer(e); return; }   // released where we did not see it
+        const dx = e.clientX - prev.x, dy = e.clientY - prev.y;
+        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (dragMode === 'pinch') {
+            if (pointers.size < 2) return;
+            const span = pinchSpan();
+            if (pinchDist > 0 && span > 0) zoomBy(pinchDist / span);
+            pinchDist = span;
+        } else if (dragMode === 'light') {
+            // Move the light in the plane facing the camera, at the light's own depth.
+            const cam = camera();
+            const zc = Math.max(0.2, Core.viewCoords(cam, state.src)[2]);
+            const s = zc / Math.min(canvas.clientWidth, canvas.clientHeight);
+            const p = state.src.map((v, a) => v + (cam.right[a] * dx - cam.up[a] * dy) * s);
+            setLight(p, false);
+        } else {
+            state.cam.theta -= dx * 0.01;
+            state.cam.phi = Math.max(-1.45, Math.min(1.45, state.cam.phi + dy * 0.01));
+            redraw();
+        }
+    });
+
+    function endPointer(e) {
+        if (!pointers.delete(e.pointerId)) return;
+        if (pointers.size === 0) canvas.classList.remove('dragging');
+        if (pointers.size === 1) dragMode = 'orbit';
+    }
+    canvas.addEventListener('pointerup', endPointer);
+    canvas.addEventListener('pointercancel', endPointer);
+    canvas.addEventListener('lostpointercapture', endPointer);
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    function zoomBy(f) {
+        state.cam.dist = Math.max(1.8, Math.min(10, state.cam.dist * f));
+        redraw();
+    }
+    canvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const scale = e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? 400 : 1;
+        zoomBy(Math.exp(e.deltaY * scale * 0.001));
+    }, { passive: false });
+
+    window.addEventListener('resize', redraw);
+    if (window.ResizeObserver) new ResizeObserver(redraw).observe(canvas);   // also wakes a page that had no size
+
+    canvas.addEventListener('webglcontextlost', (e) => {
+        e.preventDefault();
+        state.lost = true;
+        statusEl.textContent = 'The GPU reset this page; waiting for it to come back (or reload).';
+    });
+    canvas.addEventListener('webglcontextrestored', () => {
+        try {
+            state.lost = false;
+            state.error = '';   // anything that failed while the context was gone is retried from scratch
+            initGL();
+            state.geomDirty = true;
+            state.paths.cacheVersion = -1;
+            redraw();
+        } catch (err) {
+            state.error = err.message || String(err);
+            updateStatus(performance.now(), true);
+        }
+    });
+
+    // --- Start ---
+
+    // Browsers may restore control values on reload: start from what the controls actually show.
+    function syncFromControls() {
+        state.src = [parseFloat(ui.lightX.value), parseFloat(ui.lightY.value), parseFloat(ui.lightZ.value)];
+        ui.valLX.textContent = state.src[0].toFixed(2);
+        ui.valLY.textContent = state.src[1].toFixed(2);
+        ui.valLZ.textContent = state.src[2].toFixed(2);
+        ui.valWL.textContent = parseFloat(ui.wavelength.value).toFixed(2);
+        ui.valNP.textContent = ui.npaths.value;
+    }
+    syncFromControls();
+
+    if (!gl) {
+        // Also stops every control from starting a frame (requestFrame checks gl and state.error).
+        state.error = 'WebGL 2 is not available in this browser, so the field cannot be computed.';
+        statusEl.textContent = state.error;
+    } else {
+        try {
+            initGL();
+            requestFrame();
+        } catch (err) {
+            console.error(err);
+            state.error = err.message || String(err);
+            updateStatus(0, true);
+        }
+    }
+
+    // Read-only test hook: inspect state and compare the GPU field with a double-precision reference.
+    window.__raytracer3d = Object.freeze({
+        state,
+        Core,
+        backend: () => (G.backend ? { label: G.backend.def.label, spec: G.backend.spec } : null),
+        converged,
+        gpuInfo() {
+            if (!gl) return null;
+            const ext = gl.getExtension('WEBGL_debug_renderer_info');
+            return {
+                renderer: ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER),
+                colorBufferFloat: !!gl.getExtension('EXT_color_buffer_float')
+            };
+        },
+        // GPU value of voxel (ix, iy, iz), normalised: [reflected re, im, magnitude, phase]
+        readVoxel(ix, iy, iz) {
+            const spec = G.backend.spec;
+            const [x, y] = Core.atlasPixel(spec, ix, iy, iz);
+            const v = G.backend.readTexel(x, y);
+            const norm = state.pass > 0 ? state.plan.passes / state.pass : 0;
+            return [v[0] * norm, v[1] * norm, v[2] * norm, v[3]];
+        },
+        // Double-precision JS reference for the same voxel, from the same samples, in the same layout
+        referenceVoxel(ix, iy, iz) {
+            const spec = G.backend.spec;
+            const P = Core.voxelCenter(spec, ix, iy, iz);
+            const g = P[1] - (P[0] * P[0] + P[2] * P[2] - 1);
+            const r = state.srcLit && g > -Core.reflectionBand(spec)
+                ? Core.reflectedField(P, state.mirror, state.coef, state.plan.N, state.k, state.plan.dmin) : [0, 0];
+            const m = Math.hypot(r[0], r[1]);
+            return [r[0], r[1], m, m > 0 ? Math.atan2(r[1], r[0]) : 0];
+        },
+        // The reflected field at any point as the display interpolates it, from GPU voxels (read one by one)
+        displayedReflection(P) {
+            const spec = G.backend.spec;
+            const g = [0, 1, 2].map(a => (P[a] - spec.min[a]) / spec.cell[a] - 0.5);
+            const n = [spec.nx, spec.ny, spec.nz];
+            const i0 = g.map((v, a) => Math.min(Math.max(Math.floor(v), 0), n[a] - 2));
+            const f = g.map((v, a) => Math.min(Math.max(v - i0[a], 0), 1));
+            const w = [], re = [], im = [], mag = [], arg = [];
+            for (let c = 0; c < 8; c++) {
+                const b = [c & 1, (c >> 1) & 1, c >> 2];
+                const v = this.readVoxel(i0[0] + b[0], i0[1] + b[1], i0[2] + b[2]);
+                w.push(b.reduce((acc, bit, a) => acc * (bit ? f[a] : 1 - f[a]), 1));
+                re.push(v[0]); im.push(v[1]); mag.push(v[2]); arg.push(v[3]);
+            }
+            return Core.polarBlend(w, re, im, mag, arg);
+        },
+        project(P) {
+            const W = canvas.width, H = canvas.height;
+            return Core.clipToWindow(Core.projectClip(camera(), P, W, H), W, H);
+        },
+        pathRanges: () => (G.pathRanges ? G.pathRanges.map(r => r.slice()) : [])
+    });
+    </script>
+</body>
+</html>
