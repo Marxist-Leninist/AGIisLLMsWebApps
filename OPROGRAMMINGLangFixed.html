@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>O Language Interpreter - Mobile Friendly</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <!-- Style -->
+    <style>
+        /* Basic styles for the page */
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1e1e1e;
+            font-family: Arial, sans-serif;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+        #editor {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        #code-editor {
+            flex: 1;
+            padding: 10px;
+            box-sizing: border-box;
+            background-color: #252526;
+            color: #d4d4d4;
+            border: none;
+            resize: none;
+            font-family: 'Courier New', monospace;
+            font-size: 16px;
+            outline: none;
+            width: 100%;
+            height: 50%;
+        }
+        #output {
+            flex: 1;
+            padding: 10px;
+            box-sizing: border-box;
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            overflow-y: auto;
+            white-space: pre-wrap; /* keep the '\n' between results: one result per line */
+            font-family: 'Courier New', monospace;
+            font-size: 16px;
+            border-top: 1px solid #333;
+            width: 100%;
+            height: 50%;
+        }
+        #run-button {
+            padding: 15px;
+            background-color: #007acc;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            font-size: 18px;
+            outline: none;
+            width: 100%;
+        }
+        #run-button:hover {
+            background-color: #005f9e;
+        }
+        @media (min-width: 768px) {
+            /* For larger screens, display editor and output side by side */
+            #editor {
+                flex-direction: row;
+            }
+            #code-editor, #output {
+                height: auto;
+                width: 50%;
+            }
+            #output {
+                border-left: 1px solid #333;
+                border-top: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="editor">
+        <textarea id="code-editor" placeholder="Write your O code here...">x = 5; y = 10; z = if x &lt; y: x * 2 else: y / 2; result = x &lt; y &lt; 20</textarea>
+        <div id="output"></div>
+    </div>
+    <button id="run-button">Run</button>
+
+    <!-- Script -->
+    <script>
+        (function() {
+            // Reference to editor elements
+            const codeEditor = document.getElementById('code-editor');
+            const runButton = document.getElementById('run-button');
+            const outputDiv = document.getElementById('output');
+
+            // Adjust the font size based on screen width
+            function adjustFontSize() {
+                const screenWidth = window.innerWidth;
+                if (screenWidth < 480) {
+                    codeEditor.style.fontSize = '18px';
+                    outputDiv.style.fontSize = '18px';
+                    runButton.style.fontSize = '20px';
+                } else if (screenWidth < 768) {
+                    codeEditor.style.fontSize = '16px';
+                    outputDiv.style.fontSize = '16px';
+                    runButton.style.fontSize = '18px';
+                } else {
+                    codeEditor.style.fontSize = '14px';
+                    outputDiv.style.fontSize = '14px';
+                    runButton.style.fontSize = '16px';
+                }
+            }
+
+            // Call adjustFontSize on load and resize
+            window.addEventListener('load', adjustFontSize);
+            window.addEventListener('resize', adjustFontSize);
+
+            // Error codes
+            const ErrorCode = {
+                // Lexer errors
+                LEXER_INVALID_CHARACTER: 1001,
+                LEXER_UNEXPECTED_EOF: 1002,
+
+                // Parser errors
+                PARSER_UNEXPECTED_TOKEN: 2001,
+                PARSER_INVALID_FACTOR: 2002,
+                PARSER_MISSING_COLON: 2003,
+                PARSER_MISSING_ELSE: 2004,
+                PARSER_INVALID_ASSIGNMENT_TARGET: 2005,
+                PARSER_UNEXPECTED_EOF: 2006,
+
+                // Interpreter errors
+                INTERPRETER_UNDEFINED_VARIABLE: 3001,
+                INTERPRETER_DIVISION_BY_ZERO: 3002,
+                INTERPRETER_INVALID_OPERATION: 3003,
+                INTERPRETER_TYPE_MISMATCH: 3004,
+
+                // General errors
+                GENERAL_UNEXPECTED_ERROR: 9001
+            };
+
+            // Custom exception class
+            class InterpreterException {
+                constructor(code, message) {
+                    this.code = code;
+                    this.message = message;
+                }
+                toString() {
+                    return `Error ${this.code}: ${this.message}`;
+                }
+            }
+
+            // Token types
+            const TokenType = {
+                IDENTIFIER: 'IDENTIFIER',
+                NUMBER: 'NUMBER',
+                PLUS: 'PLUS',
+                MINUS: 'MINUS',
+                MULTIPLY: 'MULTIPLY',
+                DIVIDE: 'DIVIDE',
+                LPAREN: 'LPAREN',
+                RPAREN: 'RPAREN',
+                EQUALS: 'EQUALS',
+                EOF_TOKEN: 'EOF_TOKEN',
+                SEMICOLON: 'SEMICOLON',
+                BITWISE_AND: 'BITWISE_AND',
+                BITWISE_OR: 'BITWISE_OR',
+                BITWISE_XOR: 'BITWISE_XOR',
+                LEFT_SHIFT: 'LEFT_SHIFT',
+                RIGHT_SHIFT: 'RIGHT_SHIFT',
+                GREATER_THAN: 'GREATER_THAN',
+                LESS_THAN: 'LESS_THAN',
+                GREATER_EQUAL: 'GREATER_EQUAL',
+                LESS_EQUAL: 'LESS_EQUAL',
+                EQUAL_EQUAL: 'EQUAL_EQUAL',
+                NOT_EQUAL: 'NOT_EQUAL',
+                IF: 'IF',
+                ELSE: 'ELSE',
+                COLON: 'COLON'
+            };
+
+            // AST node types
+            const ASTNodeType = {
+                BINARY_OP: 'BINARY_OP',
+                NUMBER: 'NUMBER',
+                VARIABLE: 'VARIABLE',
+                ASSIGNMENT: 'ASSIGNMENT',
+                IF_ELSE: 'IF_ELSE',
+                CHAINED_COMPARISON: 'CHAINED_COMPARISON'
+            };
+
+            // Token structure
+            class Token {
+                constructor(type, value) {
+                    this.type = type;
+                    this.value = value;
+                }
+            }
+
+            // AST node structure
+            class ASTNode {
+                constructor(type) {
+                    this.type = type;
+                    this.value = null;
+                    this.left = null;
+                    this.right = null;
+                    this.extra = null; // For else part in if-else
+                    this.chain = [];   // For chained comparisons
+                    this.operators = []; // For chained comparisons
+                }
+            }
+
+            // Lexer implementation
+            class Lexer {
+                constructor(input) {
+                    this.input = input;
+                    this.position = 0;
+                }
+
+                peek() {
+                    if (this.position < this.input.length) {
+                        return this.input[this.position];
+                    }
+                    return '\0';
+                }
+
+                getNextToken() {
+                    while (this.position < this.input.length && /\s/.test(this.input[this.position])) {
+                        this.position++;
+                    }
+
+                    if (this.position >= this.input.length) {
+                        return new Token(TokenType.EOF_TOKEN, '');
+                    }
+
+                    let currentChar = this.input[this.position];
+
+                    if (/\d/.test(currentChar) || (currentChar === '-' && /\d/.test(this.peek()))) {
+                        let start = this.position;
+                        if (currentChar === '-') {
+                            this.position++;
+                        }
+                        while (this.position < this.input.length && (/[\d\.]/.test(this.input[this.position]))) {
+                            this.position++;
+                        }
+                        let numberText = this.input.slice(start, this.position);
+                        // A number may contain at most one decimal point (reject 1.2.3, 1..9)
+                        if (numberText.indexOf('.') !== numberText.lastIndexOf('.')) {
+                            throw new InterpreterException(ErrorCode.LEXER_INVALID_CHARACTER, 'Invalid number literal: ' + numberText);
+                        }
+                        return new Token(TokenType.NUMBER, numberText);
+                    }
+
+                    if (/[a-zA-Z_]/.test(currentChar)) {
+                        let start = this.position;
+                        while (this.position < this.input.length && /[a-zA-Z0-9_]/.test(this.input[this.position])) {
+                            this.position++;
+                        }
+                        let identifier = this.input.slice(start, this.position);
+                        if (identifier === 'if') return new Token(TokenType.IF, 'if');
+                        if (identifier === 'else') return new Token(TokenType.ELSE, 'else');
+                        return new Token(TokenType.IDENTIFIER, identifier);
+                    }
+
+                    this.position++;
+
+                    switch (currentChar) {
+                        case '+': return new Token(TokenType.PLUS, '+');
+                        case '-': return new Token(TokenType.MINUS, '-');
+                        case '*': return new Token(TokenType.MULTIPLY, '*');
+                        case '/': return new Token(TokenType.DIVIDE, '/');
+                        case '(': return new Token(TokenType.LPAREN, '(');
+                        case ')': return new Token(TokenType.RPAREN, ')');
+                        case '=':
+                            if (this.input[this.position] === '=') {
+                                this.position++;
+                                return new Token(TokenType.EQUAL_EQUAL, '==');
+                            }
+                            return new Token(TokenType.EQUALS, '=');
+                        case ';': return new Token(TokenType.SEMICOLON, ';');
+                        case '&': return new Token(TokenType.BITWISE_AND, '&');
+                        case '|': return new Token(TokenType.BITWISE_OR, '|');
+                        case '^': return new Token(TokenType.BITWISE_XOR, '^');
+                        case '>':
+                            if (this.input[this.position] === '=') {
+                                this.position++;
+                                return new Token(TokenType.GREATER_EQUAL, '>=');
+                            }
+                            if (this.input[this.position] === '>') {
+                                this.position++;
+                                return new Token(TokenType.RIGHT_SHIFT, '>>');
+                            }
+                            return new Token(TokenType.GREATER_THAN, '>');
+                        case '<':
+                            if (this.input[this.position] === '=') {
+                                this.position++;
+                                return new Token(TokenType.LESS_EQUAL, '<=');
+                            }
+                            if (this.input[this.position] === '<') {
+                                this.position++;
+                                return new Token(TokenType.LEFT_SHIFT, '<<');
+                            }
+                            return new Token(TokenType.LESS_THAN, '<');
+                        case '!':
+                            if (this.input[this.position] === '=') {
+                                this.position++;
+                                return new Token(TokenType.NOT_EQUAL, '!=');
+                            }
+                            throw new InterpreterException(ErrorCode.LEXER_INVALID_CHARACTER, 'Invalid character: !');
+                        case ':': return new Token(TokenType.COLON, ':');
+                        default:
+                            throw new InterpreterException(ErrorCode.LEXER_INVALID_CHARACTER, 'Invalid character: ' + currentChar);
+                    }
+                }
+            }
+
+            // Operator precedence, lowest to highest (same order as Python):
+            //   comparisons (chained)  <  |  <  ^  <  &  <  << >>  <  + -  <  * /  <  unary
+            // Comparisons are parsed by comparison(), * / by term(), unary +/- by factor();
+            // this table ranks the binary operators in between.
+            const BinaryPrecedence = new Map([
+                [TokenType.BITWISE_OR, 1],
+                [TokenType.BITWISE_XOR, 2],
+                [TokenType.BITWISE_AND, 3],
+                [TokenType.LEFT_SHIFT, 4],
+                [TokenType.RIGHT_SHIFT, 4],
+                [TokenType.PLUS, 5],
+                [TokenType.MINUS, 5]
+            ]);
+
+            // Parser implementation
+            class Parser {
+                constructor(tokens) {
+                    this.tokens = tokens;
+                    this.position = 0;
+                    // An empty program has no tokens: start at end of input instead of undefined
+                    this.currentToken = tokens.length > 0 ? tokens[0] : new Token(TokenType.EOF_TOKEN, '');
+                }
+
+                // Look one token ahead without consuming anything
+                peekNextToken() {
+                    if (this.position + 1 < this.tokens.length) {
+                        return this.tokens[this.position + 1];
+                    }
+                    return new Token(TokenType.EOF_TOKEN, '');
+                }
+
+                eat(tokenType) {
+                    if (this.currentToken.type === tokenType) {
+                        this.position++;
+                        if (this.position < this.tokens.length) {
+                            this.currentToken = this.tokens[this.position];
+                        } else {
+                            this.currentToken = new Token(TokenType.EOF_TOKEN, '');
+                        }
+                    } else if (this.currentToken.type === TokenType.EOF_TOKEN) {
+                        throw new InterpreterException(ErrorCode.PARSER_UNEXPECTED_EOF, 'Unexpected end of input');
+                    } else {
+                        throw new InterpreterException(ErrorCode.PARSER_UNEXPECTED_TOKEN, 'Unexpected token: ' + this.currentToken.value);
+                    }
+                }
+
+                factor() {
+                    let token = this.currentToken;
+                    if (token.type === TokenType.PLUS || token.type === TokenType.MINUS) {
+                        this.eat(token.type);
+                        let node = this.factor();
+                        if (token.type === TokenType.MINUS) {
+                            let newNode = new ASTNode(ASTNodeType.BINARY_OP);
+                            newNode.value = '-';
+                            newNode.left = new ASTNode(ASTNodeType.NUMBER);
+                            newNode.left.value = '0';
+                            newNode.right = node;
+                            return newNode;
+                        }
+                        return node;
+                    }
+                    if (token.type === TokenType.NUMBER) {
+                        this.eat(TokenType.NUMBER);
+                        let node = new ASTNode(ASTNodeType.NUMBER);
+                        node.value = token.value;
+                        return node;
+                    } else if (token.type === TokenType.LPAREN) {
+                        this.eat(TokenType.LPAREN);
+                        let node = this.expr();
+                        this.eat(TokenType.RPAREN);
+                        return node;
+                    } else if (token.type === TokenType.IDENTIFIER) {
+                        this.eat(TokenType.IDENTIFIER);
+                        let node = new ASTNode(ASTNodeType.VARIABLE);
+                        node.value = token.value;
+                        return node;
+                    } else if (token.type === TokenType.IF) {
+                        return this.ifElseStatement();
+                    }
+                    throw new InterpreterException(ErrorCode.PARSER_INVALID_FACTOR, 'Invalid factor: Unexpected token "' + token.value + '"');
+                }
+
+                term() {
+                    let node = this.factor();
+                    while (this.currentToken.type === TokenType.MULTIPLY || this.currentToken.type === TokenType.DIVIDE) {
+                        let token = this.currentToken;
+                        this.eat(token.type);
+                        let newNode = new ASTNode(ASTNodeType.BINARY_OP);
+                        newNode.value = token.value;
+                        newNode.left = node;
+                        newNode.right = this.factor();
+                        node = newNode;
+                    }
+                    return node;
+                }
+
+                // Binary operators between comparison and term, parsed by precedence climbing:
+                // only operators binding at least as tightly as minPrecedence are taken here,
+                // and the right operand only takes tighter ones, so each level is left-associative.
+                binary(minPrecedence) {
+                    let node = this.term();
+                    while (BinaryPrecedence.has(this.currentToken.type) && BinaryPrecedence.get(this.currentToken.type) >= minPrecedence) {
+                        let token = this.currentToken;
+                        let precedence = BinaryPrecedence.get(token.type);
+                        this.eat(token.type);
+                        let newNode = new ASTNode(ASTNodeType.BINARY_OP);
+                        newNode.value = token.value;
+                        newNode.left = node;
+                        newNode.right = this.binary(precedence + 1);
+                        node = newNode;
+                    }
+                    return node;
+                }
+
+                comparison() {
+                    let node = this.binary(1);
+
+                    let comparisons = [];
+                    let operators = [];
+
+                    while ([TokenType.GREATER_THAN, TokenType.LESS_THAN, TokenType.GREATER_EQUAL, TokenType.LESS_EQUAL, TokenType.EQUAL_EQUAL, TokenType.NOT_EQUAL].includes(this.currentToken.type)) {
+                        let token = this.currentToken;
+                        this.eat(token.type);
+                        operators.push(token.value);
+                        comparisons.push(node);
+                        node = this.binary(1);
+                    }
+
+                    if (comparisons.length === 0) {
+                        return node;
+                    }
+
+                    comparisons.push(node);
+
+                    if (comparisons.length === 2) {
+                        let newNode = new ASTNode(ASTNodeType.BINARY_OP);
+                        newNode.value = operators[0];
+                        newNode.left = comparisons[0];
+                        newNode.right = comparisons[1];
+                        return newNode;
+                    }
+
+                    let chainedNode = new ASTNode(ASTNodeType.CHAINED_COMPARISON);
+                    chainedNode.chain = comparisons;
+                    chainedNode.operators = operators;
+                    return chainedNode;
+                }
+
+                expr() {
+                    if (this.currentToken.type === TokenType.IF) {
+                        return this.ifElseStatement();
+                    }
+
+                    return this.comparison();
+                }
+
+                ifElseStatement() {
+                    this.eat(TokenType.IF);
+                    let condition = this.expr();
+                    if (this.currentToken.type !== TokenType.COLON) {
+                        throw new InterpreterException(ErrorCode.PARSER_MISSING_COLON, "Expected ':' after if condition");
+                    }
+                    this.eat(TokenType.COLON);
+                    let ifBody = this.expr();
+                    let elseBody = null;
+                    if (this.currentToken.type === TokenType.ELSE) {
+                        this.eat(TokenType.ELSE);
+                        if (this.currentToken.type !== TokenType.COLON) {
+                            throw new InterpreterException(ErrorCode.PARSER_MISSING_COLON, "Expected ':' after else");
+                        }
+                        this.eat(TokenType.COLON);
+                        elseBody = this.expr();
+                    }
+                    let node = new ASTNode(ASTNodeType.IF_ELSE);
+                    node.left = condition;
+                    node.right = ifBody;
+                    if (elseBody) {
+                        node.extra = elseBody;
+                    }
+                    return node;
+                }
+
+                statement() {
+                    let node;
+                    if (this.currentToken.type === TokenType.IF) {
+                        node = this.ifElseStatement();
+                    } else if (this.currentToken.type === TokenType.IDENTIFIER && this.peekNextToken().type === TokenType.EQUALS) {
+                        // Only "name = expr" is an assignment; "x * 2" etc. is an expression statement
+                        node = new ASTNode(ASTNodeType.VARIABLE);
+                        node.value = this.currentToken.value;
+                        this.eat(TokenType.IDENTIFIER);
+                        this.eat(TokenType.EQUALS);
+                        let newNode = new ASTNode(ASTNodeType.ASSIGNMENT);
+                        newNode.left = node;
+                        newNode.right = this.expr();
+                        node = newNode;
+                    } else {
+                        node = this.expr();
+                    }
+                    return node;
+                }
+
+                parse() {
+                    let statements = [];
+                    while (this.currentToken.type !== TokenType.EOF_TOKEN) {
+                        statements.push(this.statement());
+                        if (this.currentToken.type === TokenType.SEMICOLON) {
+                            this.eat(TokenType.SEMICOLON);
+                        } else if (this.currentToken.type !== TokenType.EOF_TOKEN) {
+                            throw new InterpreterException(ErrorCode.PARSER_UNEXPECTED_TOKEN, 'Expected ";" or end of input, got: ' + this.currentToken.value);
+                        }
+                    }
+                    return statements;
+                }
+            }
+
+            // Interpreter implementation
+            class Interpreter {
+                constructor() {
+                    // A Map, not {}: names like toString or __proto__ must not hit Object.prototype
+                    this.symbolTable = new Map();
+                }
+
+                interpret(node) {
+                    if (node.type === ASTNodeType.NUMBER) {
+                        return parseFloat(node.value);
+                    }
+
+                    if (node.type === ASTNodeType.VARIABLE) {
+                        if (this.symbolTable.has(node.value)) {
+                            return this.symbolTable.get(node.value);
+                        }
+                        throw new InterpreterException(ErrorCode.INTERPRETER_UNDEFINED_VARIABLE, 'Undefined variable: ' + node.value);
+                    }
+
+                    if (node.type === ASTNodeType.ASSIGNMENT) {
+                        let varName = node.left.value;
+                        let value = this.interpret(node.right);
+                        this.symbolTable.set(varName, value);
+                        return value;
+                    }
+
+                    if (node.type === ASTNodeType.IF_ELSE) {
+                        let condition = this.interpret(node.left);
+                        if (condition !== 0) {
+                            return this.interpret(node.right);
+                        } else if (node.extra) {
+                            return this.interpret(node.extra);
+                        }
+                        return 0;
+                    }
+
+                    if (node.type === ASTNodeType.CHAINED_COMPARISON) {
+                        // Evaluate each operand once, left to right, stopping at the first false link
+                        let left = this.interpret(node.chain[0]);
+                        for (let i = 0; i < node.operators.length; i++) {
+                            let right = this.interpret(node.chain[i + 1]);
+                            let result;
+                            switch (node.operators[i]) {
+                                case '>': result = left > right; break;
+                                case '<': result = left < right; break;
+                                case '>=': result = left >= right; break;
+                                case '<=': result = left <= right; break;
+                                case '==': result = left == right; break;
+                                case '!=': result = left != right; break;
+                                default:
+                                    throw new InterpreterException(ErrorCode.INTERPRETER_INVALID_OPERATION, 'Invalid comparison operator');
+                            }
+                            if (!result) return 0;
+                            left = right;
+                        }
+                        return 1;
+                    }
+
+                    if (node.type === ASTNodeType.BINARY_OP) {
+                        let left = this.interpret(node.left);
+                        let right = this.interpret(node.right);
+                        switch (node.value) {
+                            case '+': return left + right;
+                            case '-': return left - right;
+                            case '*': return left * right;
+                            case '/':
+                                if (right === 0) throw new InterpreterException(ErrorCode.INTERPRETER_DIVISION_BY_ZERO, 'Division by zero');
+                                return left / right;
+                            case '&': return left & right;
+                            case '|': return left | right;
+                            case '^': return left ^ right;
+                            case '<<': return left << right;
+                            case '>>': return left >> right;
+                            case '>': return left > right ? 1 : 0;
+                            case '<': return left < right ? 1 : 0;
+                            case '>=': return left >= right ? 1 : 0;
+                            case '<=': return left <= right ? 1 : 0;
+                            case '==': return left == right ? 1 : 0;
+                            case '!=': return left != right ? 1 : 0;
+                            default:
+                                throw new InterpreterException(ErrorCode.INTERPRETER_INVALID_OPERATION, 'Invalid operation');
+                        }
+                    }
+
+                    throw new InterpreterException(ErrorCode.INTERPRETER_INVALID_OPERATION, 'Invalid operation');
+                }
+            }
+
+            // Function to run the code
+            function runCode() {
+                // Clear previous output
+                outputDiv.textContent = '';
+
+                // Get code from the editor
+                const input = codeEditor.value;
+
+                try {
+                    // Lexical Analysis
+                    let lexer = new Lexer(input);
+                    let tokens = [];
+                    let token = lexer.getNextToken();
+                    while (token.type !== TokenType.EOF_TOKEN) {
+                        tokens.push(token);
+                        token = lexer.getNextToken();
+                    }
+
+                    // Parsing
+                    let parser = new Parser(tokens);
+                    let statements = parser.parse();
+
+                    // Interpretation
+                    let interpreter = new Interpreter();
+                    for (let stmt of statements) {
+                        let result = interpreter.interpret(stmt);
+                        outputDiv.textContent += result + '\n';
+                    }
+                } catch (error) {
+                    if (error instanceof InterpreterException) {
+                        outputDiv.textContent += error.toString() + '\n';
+                    } else {
+                        let wrapped = new InterpreterException(ErrorCode.GENERAL_UNEXPECTED_ERROR, 'Unexpected error: ' + error.message);
+                        outputDiv.textContent += wrapped.toString() + '\n';
+                        console.error(error);
+                    }
+                }
+            }
+
+            // Event Listener for Run Button
+            runButton.addEventListener('click', runCode);
+        })();
+    </script>
+</body>
+</html>
