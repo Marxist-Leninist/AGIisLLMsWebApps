@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Pioneer 6 RF Lab — Classical vs RL Transformer</title>
+  <meta name="description" content="Physics-grounded Pioneer 6 radio-link simulation with an actually trained transformer and live REINFORCE adaptation.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <div class="eyebrow">PIONEER 6 · RF / INFORMATION THEORY LAB</div>
+      <h1>Weak-signal revival, <span>classical vs RL transformer</span></h1>
+    </div>
+    <div class="status-stack">
+      <div id="modelStatus" class="pill amber"><i></i> loading trained checkpoint</div>
+      <div id="runStatus" class="pill"><i></i> simulation paused</div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero-grid">
+      <article class="scene-card">
+        <canvas id="spaceCanvas" width="1200" height="680" aria-label="Pioneer 6 radio link visualization"></canvas>
+        <div class="scene-overlay top-left">
+          <div class="micro">HISTORICAL CARRIER MODEL</div>
+          <div class="bigmono">2.2920214 <small>GHz</small></div>
+          <div>8 W · 11.2 dBi spacecraft antenna</div>
+        </div>
+        <div class="scene-overlay bottom-left">
+          <b>Visual geometry is not spatially to scale.</b><br>
+          Link budget, light time, free-space loss, thermal noise and aperture gain are.
+        </div>
+        <div class="scene-overlay bottom-right">
+          <div><span id="distanceLabel">0.260</span> AU</div>
+          <div><span id="lightTimeLabel">129.7</span> s one-way</div>
+        </div>
+      </article>
+
+      <article class="waterfall-card panel">
+        <div class="panel-head">
+          <div><div class="eyebrow">RECEIVED WATERFALL</div><h2>Same photons, two receivers</h2></div>
+          <div class="legend"><span class="l-signal"></span>carrier <span class="l-rfi"></span>RFI</div>
+        </div>
+        <canvas id="waterfall" width="640" height="520" aria-label="synthetic RF waterfall"></canvas>
+        <div class="waterfall-meta">
+          <div><label>C/N₀</label><strong id="cn0">—</strong><span>dB-Hz</span></div>
+          <div><label>Rx power</label><strong id="rxPower">—</strong><span>dBm</span></div>
+          <div><label>Capacity</label><strong id="capacity">—</strong><span>bit/s</span></div>
+          <div><label>8 b/s BER</label><strong id="ber">—</strong><span>AWGN</span></div>
+        </div>
+      </article>
+    </section>
+
+    <section class="compare-grid">
+      <article class="receiver classical panel">
+        <div class="receiver-title">
+          <div><div class="eyebrow">BASELINE</div><h2>Classical de-drift + matched energy</h2></div>
+          <div id="classicLock" class="lock">SEARCH</div>
+        </div>
+        <div class="scoreline"><span>Chosen drift</span><b id="classicDrift">—</b></div>
+        <div class="scoreline"><span>Frame reward</span><b id="classicReward">—</b></div>
+        <div class="scoreline"><span>Lock-quality EMA</span><b id="classicEMA">—</b></div>
+        <p>Temporal-median RFI removal, candidate de-drift grid and winsorised matched-energy score. No learned target structure.</p>
+      </article>
+
+      <article class="receiver neural panel glow">
+        <div class="receiver-title">
+          <div><div class="eyebrow">ACTUAL TRAINED MODEL</div><h2>Transformer + live REINFORCE actor</h2></div>
+          <div id="neuralLock" class="lock hot">TRAIN</div>
+        </div>
+        <div class="scoreline"><span>Chosen drift</span><b id="neuralDrift">—</b></div>
+        <div class="scoreline"><span>Frame reward</span><b id="neuralReward">—</b></div>
+        <div class="scoreline"><span>Online reward EMA</span><b id="neuralEMA">—</b></div>
+        <div class="scoreline"><span>Policy entropy</span><b id="entropy">—</b></div>
+        <div class="scoreline"><span>Online updates</span><b id="rlSteps">0</b></div>
+        <p>The transformer encoder was trained offline on synthetic weak-signal/RFI channels. Its actor head keeps learning live from simulated lock/frame reward.</p>
+      </article>
+
+      <article class="panel benchmark">
+        <div class="eyebrow">HELD-OUT CHECKPOINT TEST</div>
+        <h2>Training has to earn the badge</h2>
+        <div class="bench-row"><span>Structured RFI · transformer</span><b id="benchNN">—</b></div>
+        <div class="bench-row"><span>Structured RFI · classical</span><b id="benchClassic">—</b></div>
+        <div class="bench-row"><span>Clean channel · transformer</span><b id="benchCleanNN">—</b></div>
+        <div class="bench-row"><span>Clean channel · classical</span><b id="benchCleanClassic">—</b></div>
+        <div id="benchVerdict" class="verdict">checkpoint pending</div>
+      </article>
+    </section>
+
+    <section class="lab-grid">
+      <article class="panel controls">
+        <div class="panel-head"><div><div class="eyebrow">PHYSICS CONTROLS</div><h2>Move the wall</h2></div></div>
+
+        <label class="slider">Earth range <output id="oDistance">0.26 AU</output>
+          <input id="distance" type="range" min="0.05" max="1.5" value="0.26" step="0.01">
+        </label>
+        <label class="slider">Dish diameter <output id="oDish">3.0 m</output>
+          <input id="dish" type="range" min="1" max="25" value="3" step="0.25">
+        </label>
+        <label class="slider">Coherent elements <output id="oElements">1</output>
+          <input id="elements" type="range" min="1" max="96" value="1" step="1">
+        </label>
+        <label class="slider">System temperature <output id="oTemp">120 K</output>
+          <input id="temp" type="range" min="35" max="800" value="120" step="5">
+        </label>
+        <label class="slider">Analysis bandwidth <output id="oBw">20 Hz</output>
+          <input id="bandwidth" type="range" min="1" max="250" value="20" step="1">
+        </label>
+        <label class="slider">RFI severity <output id="oRfi">70%</output>
+          <input id="rfi" type="range" min="0" max="1" value="0.70" step="0.01">
+        </label>
+        <label class="slider">Online RL learning rate <output id="oLr">0.010</output>
+          <input id="lr" type="range" min="0" max="0.04" value="0.010" step="0.001">
+        </label>
+
+        <div class="buttons">
+          <button id="runBtn" class="primary">Start live pass</button>
+          <button id="domainBtn">Inject domain shift</button>
+          <button id="resetBtn">Reset online actor</button>
+        </div>
+        <label class="toggle"><input id="online" type="checkbox" checked><span></span> live reward updates</label>
+      </article>
+
+      <article class="panel limits">
+        <div class="eyebrow">LINK LIMITS</div><h2>Physics does not negotiate</h2>
+        <div class="limit-grid">
+          <div><label>Equivalent aperture</label><strong id="eqAperture">—</strong></div>
+          <div><label>Array mass ratio*</label><strong id="massRatio">—</strong></div>
+          <div><label>10 dB carrier time</label><strong id="coherentTime">—</strong></div>
+          <div><label>Round-trip light time</label><strong id="rtt">—</strong></div>
+          <div><label>Eb/N₀ @ 8 b/s</label><strong id="ebn0">—</strong></div>
+          <div><label>Shannon ceiling</label><strong id="shannon">—</strong></div>
+        </div>
+        <p class="footnote">*Generic structural scaling M∝D<sup>2.7</sup>, normalized to an equivalent single aperture. It is an engineering scaling illustration, not a bill of materials.</p>
+        <canvas id="history" width="900" height="260" aria-label="receiver reward history"></canvas>
+      </article>
+
+      <article class="panel sandbox">
+        <div class="eyebrow">TRANSMIT / RECEIVE EXPERIMENT</div><h2>Closed-loop sandbox only</h2>
+        <div class="mode-switch">
+          <button id="rxMode" class="selected">Receive</button>
+          <button id="txMode">Synthetic transmit</button>
+        </div>
+        <div id="modeCopy" class="mode-copy">
+          Receiver compares blind classical search with the learned policy on the same simulated RF frame.
+        </div>
+        <div class="packet">
+          <span>SIM FRAME</span>
+          <code id="packetBits">10110100 01101001 11001010</code>
+          <b id="packetState">waiting</b>
+        </div>
+        <p>The transmit view models propagation and a generic training/loopback frame. It deliberately contains no real spacecraft command words or operational uplink procedure.</p>
+      </article>
+    </section>
+
+    <section class="panel methods">
+      <div class="eyebrow">WHAT IS REAL / WHAT IS SYNTHETIC</div>
+      <div class="methods-grid">
+        <div><b>Historical inputs</b><p>Pioneer 6 mass 62.14 kg; S-band downlink around 2292 MHz; 8 W transmitter; 11.2 dBi spacecraft antenna; telemetry rates down to 8 bit/s; spin near 60 rpm.</p></div>
+        <div><b>Physics</b><p>Friis free-space path loss, parabolic-aperture gain, Boltzmann thermal noise, C/N₀, Eb/N₀, BPSK AWGN BER, Shannon capacity and finite light time.</p></div>
+        <div><b>Learned part</b><p>24×16 log-power waterfall → one-layer multi-head transformer → 9 drift actions. Offline warm-start + REINFORCE fine-tune; browser continues REINFORCE on the actor head.</p></div>
+        <div><b>Simulation boundary</b><p>RFI, frame/pilot envelope, oscillator drift and online rewards are stochastic synthetic data. No claim is made that Pioneer 6 is currently transmitting.</p></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>Physics-grounded research sandbox · checkpoint seed 260923</span>
+    <span>NASA historical values are cited in METHODS.md</span>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
