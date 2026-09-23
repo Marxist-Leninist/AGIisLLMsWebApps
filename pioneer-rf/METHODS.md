@@ -1,91 +1,106 @@
-# Pioneer 6 RF Lab — methods and provenance
+# Pioneer RF Lab — Methods and validation
 
-## Purpose
+## Scope
 
-This page is a research sandbox for comparing a classical weak-carrier receiver with an actually trained transformer policy. It does **not** assert that Pioneer 6 is transmitting today. The "Synthetic transmit" mode is closed-loop simulation only and intentionally does not implement real spacecraft command words or operational uplink procedure.
+This is a browser simulation for receive-side weak-signal work and a closed synthetic transmit/loopback experiment. It does **not** encode or transmit Pioneer spacecraft commands.
 
-## Historical inputs used
+## Historical spacecraft values
 
-- NASA Science, *Pioneer 06*: launch 16 Dec 1965; spacecraft mass 62.14 kg; heliocentric mission; last contact 8 Dec 2000.
-  https://science.nasa.gov/mission/pioneer-6/
-- NASA/JPL telecommunications historical survey, NASA-CR-164003, tables 2–3: Pioneer 6 S-band telemetry range 8–512 bit/s, collinear broadside array gain 11.2 dBi, S-band spacecraft transmitter power 8 W.
-  https://ntrs.nasa.gov/citations/19810010458
-- DSN historical report for the 1969–70 Pioneer 6/7 solar experiment gives a Pioneer 6 downlink frequency of 2292.021400 MHz for the cited pass.
-  https://ntrs.nasa.gov/citations/19730016111
-- NASA Pioneer telemetry documentation describes 8, 16, 64, 256 and 512 bit/s modes and the low-rate frame formats.
-  https://ntrs.nasa.gov/citations/19690003869
+The simulation uses these historical inputs for Pioneer 6:
 
-The browser uses 2292.0214 MHz as a historical reference carrier, not a promise about the frequency or existence of a present-day signal.
+- Spacecraft mass: **62.14 kg (137 lb)**. NASA Science lists 62.14 kg and identifies the final contact as 8 December 2000.
+- Spin stabilization: approximately **60 rpm**.
+- S-band downlink: approximately **2292 MHz**. A NASA/JPL Pioneer 6/7 telemetry requirements table gives Pioneer 6A as **2292.037037 MHz**.
+- Spacecraft RF output: approximately **8 W**.
+- Telemetry rates: **512, 256, 64, 16, and 8 bit/s**.
 
-## Physical model
+Primary references:
 
-For user-selected Earth-spacecraft range R, receive aperture diameter D and coherent element count N:
+1. NASA Science, *Pioneer 06*: https://science.nasa.gov/mission/pioneer-6/
+2. NASA Technical Reports Server, *Pioneer 6 through 8* (DSN mission support requirements), NTRS 19920003902: https://ntrs.nasa.gov/search.jsp?R=19920003902
+3. NASA/JPL telemetry requirements table, NTRS 19730009155: https://ntrs.nasa.gov/api/citations/19730009155/downloads/19730009155.pdf
+4. NASA Technical Reports Server, *Tracking and data system support for the Pioneer project — Pioneer 6 extended mission*, NTRS 19710009937: https://ntrs.nasa.gov/citations/19710009937
+5. IEEE Spectrum, April 1966, contemporary interplanetary communications comparison, listing Pioneer VI at 2292 MHz and 8 W.
 
-- wavelength: lambda = c / f
-- receive aperture gain: G_r = eta (pi D / lambda)^2 N
-- free-space received power: P_r = P_t G_t G_r (lambda / 4 pi R)^2 / L
-- noise density: N_0 = k T_sys
-- carrier-to-noise density: C/N0 = P_r / N_0
-- Eb/N0 = C/N0 / R_b
-- bandwidth SNR = P_r / (k T_sys B)
-- Shannon capacity: C = B log2(1 + SNR)
-- one-way light time = R / c
+The **11.2 dBi spacecraft transmit-gain default** is an engineering assumption used for the sandbox link budget, not claimed here as an independently verified spacecraft-state measurement for the final 2000 contact.
 
-The uncoded BPSK BER display is the ideal AWGN expression. RFI and oscillator effects are simulated separately, so the BER number is a reference, not a total field BER prediction.
+## Link physics
 
-The array mass comparison uses a generic structural scaling M proportional to D^2.7. It is included only to illustrate why many small apertures can move engineering difficulty from structure into timing/correlation. It is not a hardware mass estimate.
+The page computes:
 
-## Synthetic learned-receiver channel
+- parabolic receiving-aperture gain
+- Friis free-space propagation
+- received carrier power
+- Boltzmann thermal-noise density, `N0 = kT`
+- `C/N0`
+- `Eb/N0` for the selected telemetry rate
+- uncoded coherent BPSK AWGN bit-error probability
+- finite-bandwidth Shannon capacity, `B log2(1 + S/N)`
+- one-way and round-trip light time
 
-Each training example is a 24 x 16 log-power waterfall. The generator adds:
+The default 2028-style range is an **experimental range input**, not an ephemeris claim made by this page. Orbit/pointing prediction belongs in a separate ephemeris model.
 
-1. exponential thermal-noise power,
-2. a weak drifting target ridge selected from 9 drift classes,
-3. a repeated six-step synthetic pilot/frame envelope on the target,
-4. strong stationary narrowband interferers,
-5. an often-stronger moving decoy on another allowed drift class,
-6. moving off-grid interference, and
-7. broadband impulsive bursts.
+Array gain is modeled as ideal coherent combination: N equal elements add N times receiving power (equivalent diameter scales as sqrt(N)). The mass comparison uses the illustrative scaling `M ∝ D^2.7`; it is not a mechanical design estimate.
 
-The target pilot is synthetic. Its purpose is to test whether a learned receiver can exploit repeated structure that a blind carrier-only de-drift search ignores. If the exact target waveform were known and supplied to an optimal classical matched filter in stationary Gaussian noise, the matched filter remains the correct optimum. The page does not claim neural networks violate that result.
+## Learned receiver
 
-## Transformer
+The trained input is a **24 × 16 log-power waterfall**. Synthetic training examples include:
 
-train_receiver.py trains the checkpoint in trained_weights.json.
+- exponential thermal-power noise
+- a drifting narrow carrier
+- stationary narrowband RFI
+- off-grid moving interferers
+- impulsive broadband bursts
+- a stronger on-grid moving decoy
+- a six-step repeated pilot/frame envelope on the target
 
 Architecture:
 
-- 24 time tokens x 16 spectral features
-- linear input projection
-- sinusoidal time position encoding
+- linear 16 → 24 channel projection
+- sinusoidal time positions
 - one 4-head self-attention block
-- GELU feed-forward block
-- LayerNorm residual paths
-- time-preserving flattened transformer representation
+- 48-wide feed-forward sublayer
+- flattened 24 × 24 time-indexed representation
 - 9-action drift policy head
 
-Training:
+Training is two-stage:
 
-1. AdamW supervised warm-start on randomized synthetic channels.
-2. REINFORCE fine-tuning. A sampled drift action receives dense reward exp(-0.85 * error^2), approximating coherence loss from imperfect de-drift.
-3. Held-out evaluation against the classical comparator.
-4. Browser continuation: transformer encoder is frozen; the actor head keeps updating with REINFORCE from simulated lock/frame reward. Its online adapter uses an L2-normalized frozen-transformer embedding plus a small weight-decay anchor, limiting catastrophic drift. The web UI exposes update count, reward EMA and policy entropy.
+1. supervised warm start on randomly generated channel realizations
+2. REINFORCE policy fine-tuning, where reward decays with residual drift error
 
-Seed: 260923.
+The browser loads the exported trained weights. During the live run the transformer encoder remains frozen and the policy head continues **online REINFORCE** updates from the simulated frame/lock reward. The online learner is therefore real parameter adaptation, not an animation.
 
 ## Classical comparator
 
-The baseline receives exactly the same 24 x 16 normalized waterfall. It performs:
+The classical receiver receives the exact same waterfall. It performs:
 
-1. temporal-median subtraction per frequency bin,
-2. a grid search over the same nine de-drift slopes and possible intercepts,
-3. 80th-percentile winsorisation to reduce burst sensitivity,
-4. maximum matched-energy selection.
+1. temporal-median subtraction per frequency bin
+2. nine candidate de-drift searches
+3. intercept sweep
+4. winsorised matched-energy integration to limit impulsive RFI
 
-This is a credible blind weak-carrier baseline, but it is deliberately **not** given the synthetic six-step target pilot. The learned model's acceptance test is therefore specifically: can training exploit target structure and reject structured RFI better than blind carrier-energy search?
+This is deliberately a capable blind carrier detector rather than a strawman. It does not know the synthetic six-step target pilot envelope.
 
-## Acceptance rule
+## Accepted checkpoint
 
-The UI reads the benchmark embedded in the checkpoint. It marks the checkpoint accepted only when held-out exact drift-class accuracy under structured RFI is higher for the transformer than the classical comparator. Clean-channel results remain visible because the classical method can and should remain very strong in its ideal regime.
+Seed: **260923**
 
-No benchmark number is hard-coded in the page.
+Held-out structured-RFI set:
+- transformer exact drift-bin accuracy: **70.56%**
+- classical exact drift-bin accuracy: **33.33%**
+- transformer within ±1 bin: **93.89%**
+- classical within ±1 bin: **41.11%**
+
+Held-out cleaner set:
+- transformer exact drift-bin accuracy: **87.38%**
+- classical exact drift-bin accuracy: **75.69%**
+- transformer within ±1 bin: **99.38%**
+- classical within ±1 bin: **89.54%**
+
+The first trained checkpoint was rejected because the classical pipeline still won exact classification. The deployed checkpoint is the later model that preserved time-indexed transformer features so the repeated target structure was learnable.
+
+## Interpretation
+
+The learned receiver does **not** beat thermal noise or Shannon capacity. Its gain comes from using structure that the blind classical comparator does not exploit and from adapting its search policy under non-Gaussian interference. In pure idealized AWGN with a perfectly specified signal, a matched filter remains the appropriate optimum reference.
+
+The simulation therefore demonstrates a realistic boundary: ML can improve estimation and interference rejection when there is exploitable signal/channel structure, but it cannot manufacture information that never reached the antenna.

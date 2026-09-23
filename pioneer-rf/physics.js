@@ -5,7 +5,7 @@ export const C = 299792458;
 export const K_B = 1.380649e-23;
 export const AU = 149597870700;
 export const PIONEER = Object.freeze({
-  downlinkHz: 2292.0214e6, // historical Pioneer 6 channel value used in 1969-70 DSN docs
+  downlinkHz: 2292.037037e6, // historical Pioneer 6 channel value used in 1969-70 DSN docs
   txPowerW: 8,
   txGainDb: 11.2,
   massKg: 62.14,
