@@ -69,7 +69,7 @@ Training:
 1. AdamW supervised warm-start on randomized synthetic channels.
 2. REINFORCE fine-tuning. A sampled drift action receives dense reward exp(-0.85 * error^2), approximating coherence loss from imperfect de-drift.
 3. Held-out evaluation against the classical comparator.
-4. Browser continuation: transformer encoder is frozen; the actor head keeps updating with REINFORCE from simulated lock/frame reward. The web UI exposes update count, reward EMA and policy entropy.
+4. Browser continuation: transformer encoder is frozen; the actor head keeps updating with REINFORCE from simulated lock/frame reward. Its online adapter uses an L2-normalized frozen-transformer embedding plus a small weight-decay anchor, limiting catastrophic drift. The web UI exposes update count, reward EMA and policy entropy.
 
 Seed: 260923.
 
