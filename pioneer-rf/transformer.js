@@ -121,11 +121,17 @@ export class RFTransformerPolicy {
     return x.flat();
   }
 
+  adapterEmbedding(emb){
+    let n=0; for(const v of emb)n+=v*v; n=Math.sqrt(n)+1e-8;
+    return emb.map(v=>v/n);
+  }
+
   logitsFromEmbedding(emb){
     const base=linear(emb,this.w["cls.weight"],this.w["cls.bias"]);
+    const ae=this.adapterEmbedding(emb);
     for(let c=0;c<base.length;c++){
       base[c]+=this.deltaB[c];
-      for(let j=0;j<emb.length;j++) base[c]+=this.deltaW[c][j]*emb[j];
+      for(let j=0;j<ae.length;j++) base[c]+=this.deltaW[c][j]*ae[j];
     }
     return base;
   }
@@ -146,6 +152,7 @@ export class RFTransformerPolicy {
 
   reinforce(observation,reward,learningRate=this.lr){
     const {action,probs,embedding}=observation;
+    const ae=this.adapterEmbedding(embedding);
     const adv=reward-this.baseline;
     if(this.trainOnline){
       // Gradient ASCENT on advantage * log pi(a|s), actor head only.
@@ -153,10 +160,9 @@ export class RFTransformerPolicy {
       for(let c=0;c<probs.length;c++){
         const g=((c===action?1:0)-probs[c])*adv;
         this.deltaB[c]=clamp(this.deltaB[c]+learningRate*g,-1.2,1.2);
-        for(let j=0;j<embedding.length;j++){
-          this.deltaW[c][j]=clamp(
-            this.deltaW[c][j]+learningRate*g*embedding[j],-0.45,0.45
-          );
+        for(let j=0;j<ae.length;j++){
+          const next=(1-learningRate*0.02)*this.deltaW[c][j]+learningRate*g*ae[j];
+          this.deltaW[c][j]=clamp(next,-0.65,0.65);
         }
       }
       this.steps++;
