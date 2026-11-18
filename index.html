@@ -317,135 +317,35 @@
         // Update the current year in the footer
         document.getElementById('current-year').textContent = new Date().getFullYear();
 
-        // We keep the existing GitHub logic but remove any artificial capping on file count
-        const GITHUB_API_URL = 'https://api.github.com/repos/Marxist-Leninist/AGIisLLMsWebApps/contents/';
-        const GITHUB_COMMITS_API_URL = 'https://api.github.com/repos/Marxist-Leninist/AGIisLLMsWebApps/commits?per_page=1&path=';
-
         const appList = document.getElementById('app-list');
         const searchInput = document.getElementById('search-input');
         const sortBySelect = document.getElementById('sort-by');
+        let appListData = [];
 
-        let appListData = []; 
-        let originalAppListData = []; 
-
-        // Fetching entire file listing from GitHub (no limit or capping)
-        function fetchAppListFromGitHub() {
-            fetch(GITHUB_API_URL)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok');
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    // we do not artificially limit; we just filter for 'type=file'
-                    const allFiles = data.filter(item => item.type === 'file' && item.name.toLowerCase() !== 'index.html');
-
-                    const appFilesPromises = allFiles.map((item, index) => tryProcessFile(item, index));
-                    return Promise.all(appFilesPromises);
-                })
-                .then(appData => {
-                    appData = appData.filter(d => d !== null);
-                    appListData = appData;
-                    originalAppListData = [...appData];
-                    localStorage.setItem('appListData', JSON.stringify(appListData));
-
-                    // Default sorting to random
-                    sortBySelect.value = 'random';
-                    applySorting();
-                })
-                .catch(error => {
-                    console.error('Error fetching file list from GitHub:', error);
-                    // attempt to load from local cache
-                    const cachedAppData = localStorage.getItem('appListData');
-                    if (cachedAppData) {
-                        appListData = JSON.parse(cachedAppData);
-                        originalAppListData = [...appListData];
-                        sortBySelect.value = 'random';
-                        applySorting();
-                    } else {
-                        displayOfflineMessage();
-                    }
-                });
+        function validateCatalogue(data) {
+            return Array.isArray(data) && data.length > 0 && data.every(app =>
+                typeof app.filename === 'string' && typeof app.displayName === 'string' &&
+                !app.filename.startsWith('/') && !app.filename.includes('..') &&
+                !app.filename.includes(':') && app.filename.endsWith('.html'));
         }
 
-        async function tryProcessFile(item, originalIndex) {
-            let filename = item.name;
-            let url = item.download_url;
-
-            // We'll attempt to confirm if it's HTML
-            let isHtml = filename.toLowerCase().endsWith('.html');
-            if (!isHtml) {
-                // Check HEAD
-                const headResp = await fetch(url, { method: 'HEAD' });
-                if (!headResp.ok) return null;
-
-                const contentType = headResp.headers.get('content-type') || '';
-                if (contentType.includes('text/html')) {
-                    filename += '.html';
-                    isHtml = true;
-                } else {
-                    return null;
-                }
+        async function fetchAppList() {
+            try {
+                const response = await fetch('apps.json', { signal: AbortSignal.timeout(10000) });
+                if (!response.ok) throw new Error('Catalogue unavailable');
+                const data = await response.json();
+                if (!validateCatalogue(data)) throw new Error('Invalid catalogue');
+                appListData = data;
+                // Storage may be blocked or full. That must not hide a valid catalogue.
+                try { localStorage.setItem('appListData', JSON.stringify(data)); } catch (_) {}
+            } catch (error) {
+                try {
+                    const cached = JSON.parse(localStorage.getItem('appListData'));
+                    if (validateCatalogue(cached)) appListData = cached;
+                } catch (_) {}
+                if (!appListData.length) { displayOfflineMessage(); return; }
             }
-
-            // If it's HTML, we fetch a "displayName" by parsing <title>, also fetch commit date
-            const [displayName, commitDate] = await Promise.all([fetchDisplayName(url, filename), fetchLastCommitDate(item.path)]);
-            return { filename, displayName, commitDate, originalIndex };
-        }
-
-        function fetchDisplayName(url, filename) {
-            return fetch(url)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok when fetching ' + filename);
-                    }
-                    return response.text();
-                })
-                .then(htmlText => {
-                    let displayName = '';
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(htmlText, 'text/html');
-                    const titleElement = doc.querySelector('title');
-                    if (titleElement && titleElement.textContent.trim() !== '') {
-                        displayName = titleElement.textContent.trim();
-                    } else {
-                        // fallback
-                        displayName = filename.replace('.html', '');
-                        displayName = displayName.replace(/[-_]/g, ' ');
-                        displayName = splitCamelCase(displayName);
-                        displayName = capitalizeWords(displayName);
-                    }
-                    return displayName;
-                })
-                .catch(error => {
-                    console.error('Error fetching or parsing ' + filename + ':', error);
-                    let displayName = filename.replace('.html', '');
-                    displayName = displayName.replace(/[-_]/g, ' ');
-                    displayName = splitCamelCase(displayName);
-                    displayName = capitalizeWords(displayName);
-                    return displayName;
-                });
-        }
-
-        function fetchLastCommitDate(path) {
-            return fetch(GITHUB_COMMITS_API_URL + encodeURIComponent(path))
-                .then(response => {
-                    if (!response.ok) {
-                        return null;
-                    }
-                    return response.json();
-                })
-                .then(commitsData => {
-                    if (Array.isArray(commitsData) && commitsData.length > 0 && commitsData[0].commit && commitsData[0].commit.author && commitsData[0].commit.author.date) {
-                        return commitsData[0].commit.author.date;
-                    }
-                    return null;
-                })
-                .catch(error => {
-                    console.error('Error fetching commit date for ' + path + ':', error);
-                    return null;
-                });
+            applySorting();
         }
 
         function populateAppList(appData) {
@@ -466,7 +366,7 @@
                 const listItem = document.createElement('li');
                 
                 const link = document.createElement('a');
-                link.href = filename;
+                link.href = filename.split('/').map(encodeURIComponent).join('/');
                 link.textContent = displayName;
 
                 // Show filename
@@ -483,7 +383,7 @@
         }
 
         function filterAppList(query) {
-            const filteredAppData = appListData.filter(app => app.displayName.toLowerCase().includes(query));
+            const filteredAppData = appListData.filter(app => app.displayName.toLowerCase().includes(query) || app.filename.toLowerCase().includes(query));
             populateAppList(filteredAppData);
         }
 
@@ -571,8 +471,8 @@
             applySorting();
         });
 
-        // Initiate fetch from GitHub right away
-        fetchAppListFromGitHub();
+        // One same-origin request; no GitHub rate limits or per-file fan-out.
+        fetchAppList();
     </script>
 </body>
 </html>
